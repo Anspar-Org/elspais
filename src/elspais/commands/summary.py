@@ -265,7 +265,7 @@ def render_section(
     data = compute_summary(
         graph, config, SummaryRequest(inputs.scope, inputs.values, inputs.treat_active)
     )
-    return _render(data, fmt, config).rstrip("\n"), 0
+    return render_summary(data, fmt, config).rstrip("\n"), 0
 
 
 # Implements: REQ-d00279-C
@@ -363,7 +363,7 @@ def run(args: argparse.Namespace) -> int:
     # facts are stated, never what they are (REQ-d00282-D).
     _stamp_values(data, request.values)
 
-    content = _render(data, fmt, config)
+    content = render_summary(data, fmt, config)
     sys.stdout.write(content)
 
     return 0
@@ -373,11 +373,12 @@ def _pct(num: int, denom: int) -> float:
     return round(num / denom * 100, 1) if denom > 0 else 0.0
 
 
-# Implements: REQ-d00282-E
+# Implements: REQ-d00282-E, REQ-d00298-B
 # Every format renders from one resolved value list carried on the payload, so
 # a selection means the same thing in the artifact a reader checks and in the
-# one they file.
-def _render(data: dict, fmt: str, config: dict | None = None) -> str:
+# one they file. The ONE rendering of a summary payload: the command prints
+# through here and an export downloads through here.
+def render_summary(data: dict, fmt: str, config: dict | None = None) -> str:
     from elspais.utilities.report_meta import report_metadata
 
     data["meta"] = report_metadata()

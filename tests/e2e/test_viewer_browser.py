@@ -17,6 +17,7 @@ failing-step identification are visible in the viewer.
 """
 
 import os
+import re
 import shutil
 import signal
 import socket
@@ -289,6 +290,46 @@ class TestViewerInteraction:
         # Check that some detail content appeared (panel, modal, or new content)
         body_text = page.text_content("body") or ""
         assert len(body_text.strip()) > 100, "Expected detail content after clicking a requirement"
+
+
+class TestViewerExport:
+    """Validates REQ-d00298: a report downloads from the served page."""
+
+    # Verifies: REQ-d00298-A, REQ-d00298-F
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00298_A_export_control_downloads_the_chosen_report(self, page, viewer_url):
+        """Choosing a report and a format in the toolbar and pressing Download
+        fetches an attachment named for that report and format."""
+        page.goto(viewer_url, wait_until="networkidle")
+        page.select_option("#export-report", "trace")
+        page.select_option("#export-format", "markdown")
+        with page.expect_download() as download_info:
+            page.click("#btn-export")
+        download = download_info.value
+        assert re.match(r"^trace-\d{8}-\d{6}\.md$", download.suggested_filename), (
+            download.suggested_filename
+        )
+        # The page is still the viewer: a download is not a navigation away.
+        assert page.query_selector("#export-control") is not None
+
+    # Verifies: REQ-d00298-E
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00298_E_formats_listed_are_the_ones_the_report_offers(self, page, viewer_url):
+        """Switching to a report that offers no CSV drops CSV from the list,
+        so a reader cannot ask for a format the route will refuse."""
+        page.goto(viewer_url, wait_until="networkidle")
+        page.select_option("#export-report", "trace")
+        trace_formats = page.eval_on_selector_all(
+            "#export-format option", "opts => opts.map(o => o.value)"
+        )
+        assert trace_formats == ["markdown", "csv", "pdf"]
+        page.select_option("#export-report", "gaps")
+        gaps_formats = page.eval_on_selector_all(
+            "#export-format option", "opts => opts.map(o => o.value)"
+        )
+        assert gaps_formats == ["markdown", "pdf"]
 
 
 # ---------------------------------------------------------------------------

@@ -1068,15 +1068,7 @@ def render_section(
         )
 
     fmt = getattr(args, "format", "markdown")
-    formatters = {
-        "text": format_markdown,
-        "markdown": format_markdown,
-        "csv": format_csv,
-        "html": format_html,
-        "json": format_json,
-    }
-    formatter = formatters.get(fmt)
-    if not formatter:
+    if fmt not in TABLE_FORMATTERS:
         return f"Error: Unknown format '{fmt}'", 1
 
     # Implements: REQ-d00282-A+F
@@ -1084,30 +1076,67 @@ def render_section(
     # and refuses the same selections -- a report is never produced under a
     # selection honoured in part.
     from elspais.commands._edges import report_inputs_from_args
+    from elspais.commands._requests import TraceRequest
 
     try:
         inputs = report_inputs_from_args(args, config, OFFERED_VALUES, identity_key=IDENTITY_VALUE)
     except UnofferedValues as err:
         return f"Error: {err}", 1
+    request = TraceRequest(
+        scope=inputs.scope, values=inputs.values, treat_active=inputs.treat_active
+    )
+    return render_trace(graph, config, request, fmt, preset), 0
+
+
+# Implements: REQ-p00084-C+D
+# The formats a table of requirements renders in, each by the one formatter
+# that streams it. Every path that renders a table reads this map, so a format
+# offered on one path is offered on all of them.
+TABLE_FORMATTERS = {
+    "text": format_markdown,
+    "markdown": format_markdown,
+    "csv": format_csv,
+    "html": format_html,
+    "json": format_json,
+}
+
+
+# Implements: REQ-d00298-B
+def render_trace(
+    graph: FederatedGraph,
+    config: dict | None,
+    request: TraceRequest,
+    fmt: str,
+    preset: ReportPreset | None = None,
+) -> str:
+    """The table this request asks for, rendered in one format.
+
+    The ONE composition of a table from a request: a section composed with
+    others and an export from the viewer both come through here, so the rows
+    and the disclosure they state are the ones the command states. Without a
+    preset it is the command's default one.
+    """
+    if preset is None:
+        preset = REPORT_PRESETS[DEFAULT_PRESET]
+    formatter = TABLE_FORMATTERS[fmt]
     # Implements: REQ-d00282-E
     # The preset default is applied here at render time; the request-shaped
     # `None` (nothing named) is never widened before this point.
-    values = inputs.values or _default_values(preset)
+    values = request.values or _default_values(preset)
 
     # Implements: REQ-p00084-A+B+D, REQ-d00279-C
     # A section composed with others honours the same scope it honours alone.
     from elspais.commands._scope import scope_disclosure
     from elspais.graph.scope import scoped_requirements
 
-    result = scoped_requirements(graph, inputs.scope, config)
+    result = scoped_requirements(graph, request.scope, config)
     scope_ids = None if len(result.ids) == result.population else result.ids
     # Implements: REQ-p00084-C+D
     # The disclosure goes THROUGH the formatter rather than ahead of it, so a
     # composed section declares its scope in the shape of the format it is
     # rendered in -- a bare line ahead of a CSV or JSON section is neither.
     scope_lines = scope_disclosure(result)
-    lines = list(formatter(graph, preset, scope_ids, values, config, scope_lines))
-    return "\n".join(lines), 0
+    return "\n".join(formatter(graph, preset, scope_ids, values, config, scope_lines))
 
 
 # Implements: REQ-p00084-C+D
@@ -1151,16 +1180,9 @@ def _render_table_from_graph(
     scope_lines: Sequence[str] | None = None,
 ) -> int:
     """Render table or JSON formats using graph-based formatters. Returns exit code."""
-    formatters = {
-        "text": format_markdown,
-        "markdown": format_markdown,
-        "csv": format_csv,
-        "html": format_html,
-        # JSON is included here so UAT dimension (which always uses the graph) can
-        # route through this function for all formats including JSON.
-        "json": format_json,
-    }
-    formatter = formatters.get(fmt)
+    # JSON is in the table so the UAT dimension (which always uses the graph)
+    # can route through this function for all formats including JSON.
+    formatter = TABLE_FORMATTERS.get(fmt)
     if not formatter:
         print(f"Error: Unknown format '{fmt}'", file=sys.stderr)
         return 1

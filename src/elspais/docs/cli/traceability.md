@@ -264,6 +264,33 @@ Journey verdicts: `pass` (all steps have a passing test, none failed), `fail`
   `--embed-content`       Embed full markdown in HTML (offline viewing)
   `--path DIR`            Path to repository root (default: auto-detect)
 
+### Exporting a report from the viewer
+
+The served viewer downloads any report it can show as a document. The
+toolbar's Export control names the report (`trace`, `summary`, `gaps`,
+`checks`) and a format, and Download fetches it:
+
+  GET /api/export/{report}?format=markdown|csv|pdf
+
+The route takes exactly the query the matching `/api/run/{report}` route
+takes, plus `format`. It is read by the same code, so the download states
+what the on-screen report states: a `--scope` name is expanded where the
+invocation was received and nowhere else, and a value the report does not
+offer is refused with the same 400 the run route gives. The page sends the
+header's level selection as `scope_level=` when it narrows the estate.
+
+A markdown or CSV download is byte for byte what `elspais <report> --format
+markdown` or `--format csv` renders for the same inputs. A PDF is that
+markdown converted by `pandoc --pdf-engine=xelatex`; when either tool is
+absent the export is refused with a 409 naming what to install, and a
+conversion that fails is a 500 carrying the converter's output -- never a
+short or empty file. A format the report does not offer (CSV for `gaps` or
+`checks`, which list findings rather than columns) is refused with a 400
+naming the formats it does offer.
+
+The response is an attachment named `<report>-<YYYYMMDD-HHMMSS>.<md|csv|pdf>`
+with the matching content type.
+
 ## graph Command
 
 Export the full traceability graph as JSON:

@@ -2188,6 +2188,77 @@ function initShareSlider() {
 // accident rather than by decision.
 {# Implements: REQ-d00267-C #}
 // =====================================================================
+// Report export
+// =====================================================================
+
+// The formats each report offers, as the server rendered them onto the
+// control. Read from the control rather than held here, because the offer is
+// the server's to state (REQ-d00298-E).
+function exportOffers() {
+    var control = document.getElementById('export-control');
+    if (!control || !control.dataset.offers) return {};
+    try { return JSON.parse(control.dataset.offers); } catch (e) { return {}; }
+}
+
+{# Implements: REQ-d00298-E #}
+// Re-list the formats when the report changes, keeping the chosen format
+// where the new report offers it.
+function onExportReportChange() {
+    var reportSel = document.getElementById('export-report');
+    var formatSel = document.getElementById('export-format');
+    if (!reportSel || !formatSel) return;
+    var offered = exportOffers()[reportSel.value] || [];
+    var previous = formatSel.value;
+    formatSel.innerHTML = '';
+    for (var i = 0; i < offered.length; i++) {
+        var opt = document.createElement('option');
+        opt.value = offered[i];
+        opt.textContent = offered[i];
+        formatSel.appendChild(opt);
+    }
+    if (offered.indexOf(previous) >= 0) formatSel.value = previous;
+}
+
+{# Implements: REQ-d00298-C #}
+// The page's level selection as the scope the run routes already read. Only a
+// narrowing is sent: every level on is the whole estate, which is what the
+// route reads when no scope arrives. Status and namespace are not sent -- the
+// route resolves what it is given, and a filter it does not read would be a
+// filter the download silently ignored.
+function exportScopeParams() {
+    var params = [];
+    var group = filterGroups.level;
+    if (group && typeof LEVELS !== 'undefined') {
+        var on = group.serialize().on;
+        if (on.length > 0 && on.length < LEVELS.length) {
+            params.push('scope_level=' + encodeURIComponent(on.join(',')));
+        }
+    }
+    return params;
+}
+
+{# Implements: REQ-d00298-A, REQ-d00298-C #}
+// The URL one download is fetched from: the report's export route, the chosen
+// format, and the page's narrowing spelled the way the on-screen route reads it.
+function exportUrl() {
+    var reportSel = document.getElementById('export-report');
+    var formatSel = document.getElementById('export-format');
+    if (!reportSel || !formatSel || !formatSel.value) return null;
+    var params = ['format=' + encodeURIComponent(formatSel.value)].concat(exportScopeParams());
+    return '/api/export/' + encodeURIComponent(reportSel.value) + '?' + params.join('&');
+}
+
+{# Implements: REQ-d00298-A #}
+// Navigating to an attachment downloads it and leaves the page where it is;
+// a refusal (an unoffered format, missing tooling) arrives as the route's
+// JSON, which the browser shows in place of a file.
+function exportReport() {
+    var url = exportUrl();
+    if (!url) { showToast('Choose a report and a format to export', 'error'); return; }
+    window.location.assign(url);
+}
+
+// =====================================================================
 
 // A tab that will not close looks the same whether this handler armed and its
 // dialog never rendered or the page never got as far as deciding. The state

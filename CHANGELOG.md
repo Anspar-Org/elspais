@@ -4,6 +4,12 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **A report is exported from the viewer (REQ-d00298)** -- `GET /api/export/{report}?format=markdown|csv|pdf` downloads `trace`, `summary`, `gaps` or `checks` as a document, and the served page's toolbar gains an Export control that fetches it. The route takes exactly the query the matching `/api/run/{report}` route takes, read by the same builder, so what downloads is what was shown; a markdown or CSV download is byte for byte what the command line renders for the same inputs, and a PDF is that markdown converted by pandoc.
+
+  An export is refused rather than delivered short: a format the report does not offer is a 400 naming the offered set, a missing converter is a 409 naming what to install, and a conversion that fails is a 500 carrying its output. The attachment is named for its report and format.
+
 ### Changed
 
 - **Breaking: every recorded test result is now a result of its own (REQ-d00294-A+B)** — each reporter spelled its own result identifier out of the test name alone, so the records for one test collapsed into a single node and every verdict but one was lost with nothing reported. A suite run across a fleet of devices kept a single verdict, however many devices ran it.

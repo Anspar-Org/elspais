@@ -896,3 +896,37 @@ H and I are E read honestly. A namespace is what a reference resolves through, s
 - 2026-09-12 | 008983e5 | - | Michael Lewis (<michael@anspar.org>) | Active; G and H narrowed to the namespace, the one identity
 
 *End* *Associate Registration Outcome* | **Hash**: 008983e5
+
+---
+
+## REQ-d00298: Report Export
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00280
+
+A report shown in the viewer is read on a screen and then filed somewhere else: attached to a review, committed beside the requirements, handed to an auditor. This requirement covers what a reader receives when they ask the viewer for a report as a document, and how that document relates to the one the command line produces.
+
+### Assertions
+
+A. A report the viewer can show SHALL be exportable from the viewer in each format the same report offers on the command line.
+
+B. An export SHALL state the same values, for the same inputs, as the command-line report rendered in that format.
+
+C. The meaning of an export's inputs SHALL be decided at the edge that received them, the same way the displayed report's inputs are.
+
+D. When the tooling an export format needs is unavailable, the export SHALL be refused with a reason naming what is missing, and an export SHALL never be delivered short or empty.
+
+E. An export requested in a format the report does not offer SHALL be refused naming the formats it does offer.
+
+F. A delivered export SHALL identify its report and its format.
+
+### Rationale
+
+A and B are what make the viewer's report worth filing. The viewer shows a report a reader has narrowed and regenerated until it says what they need, and a document that then states something else -- a different column, a different rounding, a scope silently widened -- is a document nobody can vouch for. Tying the export to the command-line rendering rather than to a rendering of its own is what lets one reading, whichever surface produced it, stand for the other.
+
+C is REQ-d00280-D read from this side. A viewer receives what a browser sent, which is already a finished selection, and reading it the way the on-screen report reads it is what keeps the two from drifting apart when either edge changes. D is what keeps a refusal honest: a document format that needs a converter cannot be produced without it, and an empty or truncated file that downloads successfully is worse than a refusal, because it looks like the report it is not. E is the same disposition toward a format a report does not offer -- a findings listing has no columns to lay out as a spreadsheet, and a reader told which formats exist can ask for one of them. F is what lets a filed export be found again: a download that says only that it is a file has lost the one thing a reader needs to know about it.
+
+### Changelog
+
+- 2026-09-17 | 071538b7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+
+*End* *Report Export* | **Hash**: 071538b7
