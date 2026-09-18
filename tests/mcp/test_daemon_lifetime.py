@@ -1,4 +1,5 @@
-# Verifies: REQ-o00074-A+B+C+D+E+G+H+I+J+K+M+N+O, REQ-o00075-B, REQ-o00076-E, REQ-p00083-A+C+D+H
+# Verifies: REQ-o00074-A+B+C+D+E+G+H+I+J+K+M+N+O, REQ-o00075-B, REQ-o00076-E, REQ-p00083-A+C+D+H,
+# REQ-o00079-B
 """Daemon lifetime tests, verifying REQ-o00074 (Background Daemon Lifetime).
 
 A daemon started on behalf of a client is bound to that client at the
@@ -2154,3 +2155,211 @@ class TestStoppingDaemonStopsAdvertising:
         info = get_daemon_info(tmp_path)
         assert daemon_is_stopping(info), "a later publish erased the stopping mark"
         assert info["clients"] == [{"kind": "pid", "id": 4242}]
+
+
+# ---------------------------------------------------------------------------
+# A process whose clients are pages: watched with no pid at all (REQ-o00079)
+# ---------------------------------------------------------------------------
+
+
+class TestPagesAreTheOnlyClients:
+    """Validates REQ-o00079-B: a viewer serving browser sessions is bound by
+    the client-liveness rule over the streams its pages hold, with no process
+    identifier recorded at all. The rule binds from the start — before the
+    first page connects — keeps the process while a stream is held, and ends
+    it once none is.
+    """
+
+    # Verifies: REQ-o00079-B
+    def test_REQ_o00079_B_no_pid_and_no_stream_ends_the_process(self, capsys):
+        """Validates REQ-o00079-B: the interval before the first page connects
+        is inside the rule. A process nothing holds ends at its first check,
+        rather than waiting for a client that may never come."""
+        exits: list[str] = []
+        wd = ClientWatchdog(
+            client_pid=None,
+            pending_fn=lambda: (0, 0),
+            alive_fn=lambda pid: pytest.fail("no pid was recorded, none should be tested"),
+            exit_fn=lambda: exits.append("exit"),
+            stop_fn=_ok_stop,
+            extra_liveness_fn=lambda: 0,
+        )
+        assert wd.clients() == []
+        assert wd.check_once() is Decision.EXIT_CLEAN
+        assert exits == ["exit"]
+
+    # Verifies: REQ-o00079-B
+    def test_REQ_o00079_B_held_page_stream_keeps_the_process(self):
+        """Validates REQ-o00079-B: while a page holds its stream the rule is
+        not the cause of the process's ending; once the last stream goes it
+        is."""
+        held = {"count": 1}
+        exits: list[str] = []
+        wd = ClientWatchdog(
+            client_pid=None,
+            pending_fn=lambda: (0, 0),
+            alive_fn=lambda pid: False,
+            exit_fn=lambda: exits.append("exit"),
+            stop_fn=_ok_stop,
+            extra_liveness_fn=lambda: held["count"],
+        )
+        assert wd.check_once() is Decision.KEEP
+        assert wd.has_live_client() is True
+        held["count"] = 2
+        assert wd.check_once() is Decision.KEEP
+        held["count"] = 0
+        assert wd.has_live_client() is False
+        assert wd.check_once() is Decision.EXIT_CLEAN
+        assert exits == ["exit"]
+
+    # Verifies: REQ-o00079-B
+    def test_REQ_o00079_B_pages_gone_with_held_changes_persists_before_ending(self, capsys):
+        """Validates REQ-o00079-B: the ending persists the changes the process
+        holds, by the same grace rule a daemon follows — the pages closing
+        says nothing about the worth of the work."""
+        clock = _Clock()
+        stops: list[str] = []
+        exits: list[str] = []
+
+        def _stop():
+            stops.append("stop")
+            return _ok_stop()
+
+        wd = ClientWatchdog(
+            client_pid=None,
+            pending_fn=lambda: (2, 7),
+            grace_seconds=100.0,
+            alive_fn=lambda pid: False,
+            exit_fn=lambda: exits.append("exit"),
+            clock=clock,
+            stop_fn=_stop,
+            extra_liveness_fn=lambda: 0,
+        )
+        assert wd.check_once() is Decision.WAIT_GRACE
+        assert stops == [] and exits == []
+        clock.now += 100.0
+        assert wd.check_once() is Decision.EXIT_SAVE
+        assert stops == ["stop"] and exits == ["exit"]
+
+    # Verifies: REQ-o00079-B
+    def test_REQ_o00079_B_unreadable_stream_source_keeps_the_process(self, capsys):
+        """Validates REQ-o00079-B: with no pid to fall back on, a stream
+        source that cannot answer is the process's only instrument; its
+        failure is inconclusive and keeps the process, as REQ-o00074-E
+        already requires for a daemon."""
+
+        def _boom() -> int:
+            raise RuntimeError("tracker unavailable")
+
+        wd = ClientWatchdog(
+            client_pid=None,
+            pending_fn=lambda: (0, 0),
+            alive_fn=lambda pid: False,
+            exit_fn=lambda: pytest.fail("terminated on a failed liveness check"),
+            stop_fn=_ok_stop,
+            extra_liveness_fn=_boom,
+        )
+        assert wd.check_once() is Decision.KEEP
+        assert "tracker unavailable" in capsys.readouterr().err
+
+    # Verifies: REQ-o00074-B
+    def test_REQ_o00074_B_page_streams_reach_the_state_record_with_no_pid(self, tmp_path):
+        """Validates REQ-o00074-B: the record names the sessions holding the
+        process even though no pid was ever recorded, so an operator asking
+        why a viewer is still running finds the pages keeping it up."""
+        from elspais.mcp.daemon import record_daemon_clients, write_daemon_json
+
+        write_daemon_json(repo_root=tmp_path, pid=111, port=222, server_type="viewer")
+        wd = ClientWatchdog(
+            client_pid=None,
+            pending_fn=lambda: (0, 0),
+            alive_fn=lambda pid: False,
+            exit_fn=lambda: pytest.fail("terminated while a session was held"),
+            stop_fn=_ok_stop,
+            extra_liveness_fn=lambda: 2,
+            publish_fn=lambda pids, held: record_daemon_clients(tmp_path, pids, held),
+        )
+        assert wd.check_once() is Decision.KEEP
+        info = json.loads((tmp_path / ".elspais" / "daemon.json").read_text())
+        assert info["clients"] == [{"kind": "session", "count": 2}]
+        assert "client_pid" not in info or info["client_pid"] is None
+
+
+class TestOneWiringForEveryServingProcess:
+    """Validates REQ-o00079-B and REQ-o00074-E: the daemon and a viewer
+    serving browser sessions are wired to the holder by one builder, so the
+    lifetime rule reads the same tracker, the same pending count and the
+    same shutdown routine wherever it applies.
+    """
+
+    def _shared(self, tmp_path):
+        from elspais.mcp.shared_state import SharedServerState
+
+        graph = MagicMock()
+        graph.mutation_log.tail.return_value = []
+        graph.mutation_log.revision = 0
+        return SharedServerState(graph=graph, working_dir=tmp_path)
+
+    # Verifies: REQ-o00079-B
+    def test_REQ_o00079_B_builder_reads_the_published_tracker(self, tmp_path, monkeypatch):
+        """Validates REQ-o00079-B: the streams counted are the ones the app
+        published, looked up at check time — so a tracker published after the
+        watchdog was built is still the one read."""
+        from elspais.server.client_watch import build_client_watchdog
+        from elspais.server.session_track import HeldSessionTracker
+
+        monkeypatch.setenv("_ELSPAIS_CLIENT_CHECK_INTERVAL", "0.25")
+        monkeypatch.setenv("_ELSPAIS_CLIENT_GRACE", "3")
+        shared = self._shared(tmp_path)
+        exits: list[str] = []
+        wd = build_client_watchdog(
+            shared,
+            client_pid=None,
+            repo_root=tmp_path,
+            trigger="no browser session was holding the viewer",
+            exit_fn=lambda: exits.append("exit"),
+        )
+        assert shared["watchdog"] is wd
+        assert wd._interval == 0.25 and wd._grace == 3.0
+
+        tracker = HeldSessionTracker()
+        shared["session_tracker"] = tracker
+        tracker._enter()
+        assert wd.check_once() is Decision.KEEP
+        tracker._leave()
+        assert wd.check_once() is Decision.EXIT_CLEAN
+        assert exits == ["exit"]
+
+    # Verifies: REQ-o00074-E
+    def test_REQ_o00074_E_builder_records_the_pid_it_is_given(self, tmp_path):
+        """Validates REQ-o00074-E: the same builder serves a daemon started
+        for a client, recording that client as it always did."""
+        from elspais.server.client_watch import build_client_watchdog
+
+        shared = self._shared(tmp_path)
+        wd = build_client_watchdog(
+            shared, client_pid=os.getpid(), repo_root=tmp_path, trigger="test"
+        )
+        assert wd.clients() == [os.getpid()]
+        assert wd.check_once() is Decision.KEEP
+
+    # Verifies: REQ-p00083-A
+    def test_REQ_p00083_A_builder_stops_through_the_one_shutdown_routine(self, tmp_path):
+        """Validates REQ-p00083-A: the ending the builder wires is the
+        process's shutdown routine, so the work is accounted for and the
+        refusal flag raised before the process is signalled."""
+        from elspais.server.client_watch import build_client_watchdog
+
+        shared = self._shared(tmp_path)
+        exits: list[str] = []
+        wd = build_client_watchdog(
+            shared,
+            client_pid=None,
+            repo_root=tmp_path,
+            trigger="test",
+            exit_fn=lambda: exits.append("exit"),
+        )
+        assert wd.check_once() is Decision.EXIT_CLEAN
+        assert exits == ["exit"]
+        assert shared.shutdown_finalized is True
+        assert shared.is_shutting_down is True

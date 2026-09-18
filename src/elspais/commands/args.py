@@ -453,6 +453,9 @@ class ViewerArgs:
     path: Path | None = None
     """Path to repository root (default: auto-detect from cwd)."""
 
+    session_lifetime: bool = False
+    """Stop the server, saving held changes, once no browser tab holds it open."""
+
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
 

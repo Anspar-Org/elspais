@@ -702,3 +702,34 @@ Assertion E exists because a change is rarely one file. An editor writing out a 
 - 2026-08-18 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: state what a serving process owes its clients when its program code changes beneath it
 
 *End* *Serving From the Installed Program* | **Hash**: 3488ba9c
+
+## REQ-o00079: Serving a Browser Session
+
+**Level**: ops | **Status**: Active | **Implements**: REQ-o00074
+
+Where a process serves its working tree to a browser page, the page SHALL be a client of that process in the sense REQ-o00074 gives the word, and what the process learns about the tree SHALL reach the page without the page having to ask.
+
+### Assertions
+
+A. A page served by the process SHALL hold a client handle for as long as it is open, of the kind whose disappearance the process observes without the page's cooperation.
+
+B. A process started to serve such sessions SHALL be bound by the client-liveness rule of REQ-o00074-E over the handles of assertion A, including in the interval before the first page connects: it ends, persisting the changes it holds, once no handle is held, and that rule is not the cause of its ending while one is.
+
+C. A change to what the process serves — a change applied to the graph, or a rebuild of it — SHALL be announced to the page over the handle it holds rather than discovered by the page asking at intervals, and the process SHALL announce itself over that handle at a regular interval whether or not anything changed.
+
+D. The count of pending changes the page shows SHALL be established only from the process's answer to a request for that count (REQ-d00267), never from an announcement.
+
+E. Where the handle is lost, or no announcement arrives within the interval the process undertakes to announce itself, the page SHALL re-establish the count as it would after an announcement, so that a process which has stopped answering is presented as one.
+
+### Rationale
+
+A process started to serve a browser page has no process identifier for its client: the page runs inside a browser the process did not start and cannot signal. What it can hold is a connection, and REQ-o00074 already admits a connection the client holds open as a handle, since the transport reports its close whether or not the client meant to close it. Assertion A makes the page hold one for its whole life, and B applies the existing lifetime rule to it rather than writing a second one — the same rule that spares a daemon while a client remains, and ends it once none does, decides when a process serving pages ends. It binds before the first page connects too, because a process started for a session that never arrives is otherwise a process nothing can end.
+
+A handle the page holds for its whole life is also the channel over which the process can speak first. A page that discovers changes by asking at intervals learns of them late, and every interval it does not ask is one in which a dead process still looks alive; the same handle, announced over at a regular interval, answers both. Assertion D keeps the count of pending changes where REQ-d00267 put it: an announcement says that something changed, and the count endpoint says how much is pending, and a page that read the count out of an announcement would present a number nobody was asked for. Assertion E is what keeps the count honest once the channel goes quiet — silence past the promised interval, or a lost handle, is treated as the failed request it would have been, so the page shows that it cannot ask rather than a number it can no longer confirm.
+
+### Changelog
+
+- 2026-09-17 | 39871cb2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-18 | - | - | Michael Lewis (<michael@anspar.org>) | State what a process serving a browser page owes the session holding it
+
+*End* *Serving a Browser Session* | **Hash**: 39871cb2
