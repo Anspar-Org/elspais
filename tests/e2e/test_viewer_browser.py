@@ -301,7 +301,8 @@ class TestViewerExport:
     def test_REQ_d00298_A_export_control_downloads_the_chosen_report(self, page, viewer_url):
         """Choosing a report and a format in the toolbar and pressing Download
         fetches an attachment named for that report and format."""
-        page.goto(viewer_url, wait_until="networkidle")
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_selector("#btn-export", timeout=_PAGE_LOAD_TIMEOUT)
         page.select_option("#export-report", "trace")
         page.select_option("#export-format", "markdown")
         with page.expect_download() as download_info:
@@ -319,7 +320,8 @@ class TestViewerExport:
     def test_REQ_d00298_E_formats_listed_are_the_ones_the_report_offers(self, page, viewer_url):
         """Switching to a report that offers no CSV drops CSV from the list,
         so a reader cannot ask for a format the route will refuse."""
-        page.goto(viewer_url, wait_until="networkidle")
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_selector("#btn-export", timeout=_PAGE_LOAD_TIMEOUT)
         page.select_option("#export-report", "trace")
         trace_formats = page.eval_on_selector_all(
             "#export-format option", "opts => opts.map(o => o.value)"
@@ -341,8 +343,8 @@ class TestViewerExport:
         reads, and only to a report that reads one: the checks listing reads
         no scope, so sending it one would narrow nothing while looking as if
         it had."""
-        page.goto(viewer_url, wait_until="networkidle")
-        page.wait_for_selector("#stat-level-prd")
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_function(_FILTERS_READY, timeout=_PAGE_LOAD_TIMEOUT)
         page.click("#stat-level-prd", modifiers=["Shift"])
         page.wait_for_timeout(300)
         page.select_option("#export-report", "trace")
@@ -2874,8 +2876,12 @@ class TestScopeMembershipAgreesWithAuthority:
         Were the client never shown some requirement, it could hide it under
         every scope and still look equivalent.
         """
-        page.goto(viewer_url, wait_until="domcontentloaded")
-        page.wait_for_function(_FILTERS_READY, timeout=30_000)
+        # The index over this repository's own estate may carry a full rebuild
+        # (the mutation tests before this one wrote spec files), so the page
+        # load gets the same allowance its neighbours get, not the fixture's
+        # default.
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_function(_FILTERS_READY, timeout=_PAGE_LOAD_TIMEOUT)
 
         client = _client_scope_membership(page)
         authority = _authority_scope_membership(page, viewer_url)
@@ -2897,8 +2903,12 @@ class TestScopeMembershipAgreesWithAuthority:
         than spelled out here, so the comparison keeps deciding something as the
         estate's levels and statuses change.
         """
-        page.goto(viewer_url, wait_until="domcontentloaded")
-        page.wait_for_function(_FILTERS_READY, timeout=30_000)
+        # The index over this repository's own estate may carry a full rebuild
+        # (the mutation tests before this one wrote spec files), so the page
+        # load gets the same allowance its neighbours get, not the fixture's
+        # default.
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_function(_FILTERS_READY, timeout=_PAGE_LOAD_TIMEOUT)
 
         vocab = page.evaluate(_VOCABULARY)
         carried_levels = sorted(
