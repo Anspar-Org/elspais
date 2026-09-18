@@ -3176,7 +3176,9 @@ class TestViewerUnderBasePath:
             assert resp.status == 200
             assert f'URL_PREFIX = "{_BASE_PATH}"' in resp.read().decode()
         # The address the command announces is the one a browser can use.
-        assert f"Starting trace-edit server at {base_url}" in _server_output(log_path)
+        # The whole log, not its tail: the line is the first thing the
+        # server wrote, and every request since has added a line below it.
+        assert f"Starting trace-edit server at {base_url}" in log_path.read_text(errors="replace")
 
     # Verifies: REQ-d00295-D
     @pytest.mark.browser
