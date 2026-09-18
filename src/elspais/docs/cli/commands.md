@@ -458,14 +458,23 @@ also serves MCP tools at `/mcp` for AI agent integration.
   $ elspais viewer --static         # Generate static HTML file
   $ elspais viewer --server         # Start server without opening browser
   $ elspais viewer --path /my/repo  # Specify repository root
+  $ elspais viewer --base-path /w/abc   # Serve everything under a prefix
 
 **Options:**
 
   `--static`          Generate static HTML file instead of live server
   `--server`          Start server without opening browser
   `--port PORT`       Server port (default: 5001)
+  `--base-path PATH`  URL prefix the server sits under (default: none)
   `--embed-content`   Embed full markdown in HTML for offline viewing
   `--path DIR`        Path to repository root (default: auto-detect)
+
+`--base-path` mounts the whole server — the page, the API and the `/mcp`
+agent surface — under a prefix, for a router that places each workspace's
+viewer under a path of its own. The page builds every URL it requests under
+that prefix, and the address printed at startup carries it. The prefix is
+empty, or begins with `/` and does not end with one; anything else is
+refused. With no prefix the server is exactly what it is without the flag.
 
 ## graph
 

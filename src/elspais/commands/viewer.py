@@ -121,6 +121,16 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
         return 1
 
     from elspais.config import get_config
+    from elspais.server.app import validate_base_path
+
+    # Implements: REQ-d00295-E
+    # Refused before the graph is built: a malformed prefix is known now,
+    # and building first would spend seconds on an answer already decided.
+    try:
+        base_path = validate_base_path(getattr(args, "base_path", "") or "")
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
 
     explicit_path = getattr(args, "path", None)
     repo_root = Path(explicit_path).resolve() if explicit_path else Path.cwd().resolve()
@@ -133,7 +143,8 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
         repo_root=repo_root,
         config=config,
     )
-    app = create_app(state)
+    # Implements: REQ-d00295-A
+    app = create_app(state, base_path=base_path)
 
     port = getattr(args, "port", None) or 5001
     quiet = getattr(args, "quiet", False)
@@ -190,7 +201,10 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
                 )
                 port = _find_free_port(port)
 
-    url = f"http://127.0.0.1:{port}"
+    # Implements: REQ-d00295-A
+    # The address a browser reaches the page at: under the prefix, the root
+    # answers nothing.
+    url = f"http://127.0.0.1:{port}{base_path}"
 
     if not quiet:
         print(f"Starting trace-edit server at {url}", file=sys.stderr)

@@ -85,3 +85,34 @@ Multi-repo federation users need visibility into which repos are current and whi
 - 2026-04-23 | b4fae1d0 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
 *End* *Server Federation and Staleness* | **Hash**: a8300f60
+
+---
+
+## REQ-d00295: Viewer Served Under a Configured Prefix
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00010
+
+The viewer server SHALL serve its whole surface under a configured path prefix, so that a router placing each workspace under a path of its own reaches the viewer, the page and the agent surface at that path.
+
+### Assertions
+
+A. When a prefix is configured, every route the server exposes SHALL answer under that prefix and at no other path.
+
+B. Every URL the served page requests SHALL carry the configured prefix.
+
+C. With no prefix configured, the server SHALL serve exactly what it serves without this capability: the same routes at the same paths and the same page.
+
+D. The agent surface SHALL be reachable under the same prefix as the page.
+
+E. A prefix that is not empty and does not take the form of a path beginning with a slash and ending without one SHALL be refused with a message naming that form.
+
+### Rationale
+
+A hosted deployment runs one viewer per workspace behind a single router that tells them apart by the leading part of the path. A viewer that assumed it owned the root of the site would answer only the first workspace. The prefix is configured on the viewer rather than rewritten by the router, because the page builds URLs of its own and a rewriting router cannot reach into a script.
+
+### Changelog
+
+- 2026-09-17 | cd69f63b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-18 | - | - | Michael Lewis (<michael@anspar.org>) | Initial version
+
+*End* *Viewer Served Under a Configured Prefix* | **Hash**: cd69f63b

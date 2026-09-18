@@ -4,6 +4,10 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **The viewer mounts under a base path (REQ-d00295)** — `elspais viewer --base-path /w/abc` serves the page, the API and the `/mcp` agent surface under that prefix and nothing at the root, so a router placing each workspace's viewer under a path of its own reaches all three there. The page builds every URL it requests under the prefix, and the address printed at startup carries it. A prefix is empty, or begins with `/` and does not end with one; anything else is refused naming that form. Without the flag the server is exactly what it was.
+
 ### Changed
 
 - **Breaking: every recorded test result is now a result of its own (REQ-d00294-A+B)** — each reporter spelled its own result identifier out of the test name alone, so the records for one test collapsed into a single node and every verdict but one was lost with nothing reported. A suite run across a fleet of devices kept a single verdict, however many devices ran it.

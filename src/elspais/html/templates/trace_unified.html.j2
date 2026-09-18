@@ -161,6 +161,9 @@ body {
 
 <script>
 const MODE = '{{ mode }}';
+{# Implements: REQ-d00295-B #}
+{# The prefix every URL this page requests is built under; empty at the root. #}
+var URL_PREFIX = {{ url_prefix|tojson }};
 
 {% include "partials/js/_utils.js.j2" %}
 
