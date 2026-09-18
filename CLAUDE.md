@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Also read**: `AGENT_DESIGN_PRINCIPLES.md` for architectural directives and mandatory practices.
+**Also read**: `AGENT_DESIGN_PRINCIPLES.md` for architectural directives and mandatory practices, and `AGENT-ONBOARDING.md` for how to drive the tool itself — which surface answers which question, and the MCP tool for each task.
 
 ## Overview
 
@@ -115,6 +115,8 @@ An extension the map does not name has NO pattern, so a keyword in it is read no
 
 - **ALWAYS** use a sub-agent to write tests (unless you are the sub-agent)
 - **ALWAYS** update user-facing surfaces when adding/modifying CLI features: `src/elspais/docs/cli/*.md`, `docs/configuration.md`, `src/elspais/commands/init.py` templates, CLI help/epilog text, and shell completion
+- **ALWAYS** find a requirement with elspais, NEVER by grepping the spec files. Use MCP `search()` / `scoped_search()` / `discover_requirements()`, or `elspais search` on the CLI — one scorer (`mcp/search.py`) backs all of them. They traverse the traceability graph and rank by field-weighted relevance; grep matches strings in whichever files you thought to look at, which is how a thematic near-miss gets mistaken for the right requirement. `discover_requirements()` additionally prunes ancestors superseded by more specific descendants, so it answers "which DEV/OPS requirement actually covers this" rather than handing back the PRD above it. To find the code already serving a requirement, read its edges (MCP `get_requirement`/`get_subtree`) rather than grepping for the ID. grep is for confirming a string in a file these have already pointed you at.
+- The query grammar is the same everywhere: an AND of OR-groups, precedence parentheses > `OR` > implicit AND, plus `"phrases"`, `-exclusion` and `=exact`. **Do NOT shorten a query to make it match.** Put each CONCEPT in its own parenthesised group with its synonyms inside — `(coverage OR measure) (immediate OR rolled)` — which is what finds a requirement whose exact wording you do not know. A query returning nothing is usually the SCOPE, not the query: widen the OR-groups or drop `scope_id`, rather than discarding the terms that describe what you are looking for.
 
 ## Testing
 

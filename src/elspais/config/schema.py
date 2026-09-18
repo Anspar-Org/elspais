@@ -118,7 +118,7 @@ class ComponentConfig(_StrictModel):
         return value
 
 
-# Implements: REQ-d00251-E, REQ-d00251-K, REQ-d00251-M
+# Implements: REQ-d00251-E, REQ-d00251-K, REQ-d00251-M, REQ-d00081-B
 class AssertionConfig(_StrictModel):
     label_style: str = "uppercase"
     max_count: int = 26
@@ -474,7 +474,7 @@ class ReferenceSeverityConfig(_StrictModel):
     undeclared: SeverityValue = "warning"
 
 
-# Implements: REQ-d00212-P, REQ-d00285-D
+# Implements: REQ-d00212-P, REQ-d00285-D, REQ-d00212-O
 class RulesConfig(_StrictModel):
     hierarchy: HierarchyConfig = Field(default_factory=HierarchyConfig)
     format: FormatConfig = Field(default_factory=FormatConfig)

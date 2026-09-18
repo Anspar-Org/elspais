@@ -126,6 +126,7 @@ _RESERVED_SECTION_HEADINGS = re.compile(
 )
 
 
+# Implements: REQ-o00062-U
 def _refuse_heading_hostile(heading: str) -> None:
     if "\n" in heading or "\r" in heading:
         raise ValueError("Section heading must not contain a line break")
@@ -277,6 +278,7 @@ class UnboundCitation:
     targets: tuple[str, ...]
 
 
+# Implements: REQ-d00274-G
 def _keyword_as_written(raw_text: str) -> str:
     """The *Traceability* keyword a citation used, as its author spelled it.
 
@@ -1643,6 +1645,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # Implements: REQ-p00017-B
     @staticmethod
     def _journeys_validating(node: GraphNode) -> list[GraphNode]:
         """The journeys whose metadata cites *node* or one of its assertions.
@@ -3849,6 +3852,7 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # Implements: REQ-d00131-L
     def reconstruct_journey_body(self, node_id: str) -> MutationEntry:
         """Reconstruct a journey's body from its structured fields.
 
@@ -4291,7 +4295,7 @@ class GraphBuilder:
                 )
             )
 
-    # Implements: REQ-d00129-A, REQ-d00129-B
+    # Implements: REQ-d00129-A, REQ-d00129-B, REQ-p00050-E
     def _add_requirement(self, content: ParsedContent) -> None:
         """Add a requirement node and its assertions."""
         data = content.parsed_data
@@ -5243,7 +5247,7 @@ class GraphBuilder:
                 )
         return faults
 
-    # Implements: REQ-p00014-B, REQ-p00014-C, REQ-d00069-H
+    # Implements: REQ-p00014-B, REQ-p00014-C, REQ-d00069-H, REQ-p00014-L
     def _instantiate_satisfies_templates(self) -> None:
         """Clone template subtrees for each Satisfies declaration.
 

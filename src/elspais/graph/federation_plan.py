@@ -439,6 +439,7 @@ def plan_federation(
     return planned
 
 
+# Implements: REQ-p00015-C, REQ-d00202-M
 def refuse_unreadable(plan: list[PlannedRepo]) -> None:
     """Refuse a plan holding a declaration whose repository could not be read.
 

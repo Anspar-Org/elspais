@@ -1377,7 +1377,7 @@ def annotate_journey_verification(graph: FederatedGraph) -> None:
         journey.set_metric("journey_verification", v)
 
 
-# Implements: REQ-p00061-A
+# Implements: REQ-p00061-A, REQ-d00069-F
 def annotate_coverage(
     graph: FederatedGraph, credit: CoverageCreditConfig | CreditPolicy | None = None
 ) -> None:
@@ -1455,7 +1455,7 @@ def annotate_coverage(
         # different (non-failing) test does not inherit the red standing.
         verified_failing_labels: set[str] = set()
 
-        # Implements: REQ-d00069-B, REQ-d00084-D
+        # Implements: REQ-d00069-B, REQ-d00069-E, REQ-d00084-D
         # Compute TEST (VERIFIES) coverage contributions via shared helper.
         # These use dedicated TEST_* sources so they feed only the `tested`
         # dimension -- a test that Verifies an assertion is NOT evidence the
