@@ -19,8 +19,8 @@ from elspais.commands.trace import (
     ReportPreset,
     _format_row,
     _render_json_from_data,
-    _render_table_from_graph,
     compute_trace,
+    render_trace,
 )
 from elspais.graph.aggregation import MEASURES
 from elspais.graph.values import figure_cell
@@ -52,17 +52,16 @@ class TestTraceCommand:
         ids=["markdown", "html", "csv"],
     )
     def test_trace_table_format_output(
-        self, canonical_federated_graph, fmt, expected_marker, capsys
+        self, canonical_federated_graph, canonical_config, fmt, expected_marker
     ):
         """Test trace command produces correct table output for each format."""
         preset = ReportPreset(
             name="standard",
             values=list(REPORT_PRESETS["standard"].values),
         )
-        result = _render_table_from_graph(canonical_federated_graph, fmt, preset)
-        assert result == 0
-
-        content = capsys.readouterr().out
+        content = render_trace(
+            canonical_federated_graph, canonical_config, TraceRequest(), fmt, preset
+        )
         assert expected_marker in content
         assert "REQ-p00001" in content
 
@@ -254,13 +253,12 @@ class TestTraceReportPresets:
         preset,
         should_have,
         should_not_have,
-        capsys,
+        canonical_config,
     ):
         """Test --preset produces expected CSV columns."""
         p = self._make_preset(preset)
-        result = _render_table_from_graph(canonical_federated_graph, "csv", p)
-        assert result == 0
-        header = capsys.readouterr().out.split("\n")[0]
+        out = render_trace(canonical_federated_graph, canonical_config, TraceRequest(), "csv", p)
+        header = out.split("\n")[0]
         for col in should_have:
             assert col in header, f"Missing column: {col}"
         for col in should_not_have:
@@ -327,15 +325,16 @@ class TestTraceReportPresets:
         assert "minimal" in captured.err
 
     # Verifies: REQ-d00084-B
-    def test_report_default_is_standard(self, canonical_federated_graph, capsys):
+    def test_report_default_is_standard(self, canonical_federated_graph, canonical_config):
         """Test that no --preset defaults to standard."""
-        default_preset = self._make_preset("standard")
-        _render_table_from_graph(canonical_federated_graph, "csv", default_preset)
-        default_header = capsys.readouterr().out.split("\n")[0]
+        default_header = render_trace(
+            canonical_federated_graph, canonical_config, TraceRequest(), "csv"
+        ).split("\n")[0]
 
         standard_preset = self._make_preset("standard")
-        _render_table_from_graph(canonical_federated_graph, "csv", standard_preset)
-        standard_header = capsys.readouterr().out.split("\n")[0]
+        standard_header = render_trace(
+            canonical_federated_graph, canonical_config, TraceRequest(), "csv", standard_preset
+        ).split("\n")[0]
 
         assert default_header == standard_header
 
@@ -377,9 +376,11 @@ class TestLcovTestedTrace:
         # is vacuously true — log a note but don't fail the overall test.
         _ = has_lcov_node  # informational; not asserted to avoid brittleness
 
-    def test_lcov_tested_assertion_expansion_no_keyerror(self, canonical_federated_graph):
+    def test_lcov_tested_assertion_expansion_no_keyerror(
+        self, canonical_federated_graph, canonical_config
+    ):
         """--assertions mode must not raise KeyError for lcov_tested."""
-        from elspais.commands.trace import REPORT_PRESETS, ReportPreset, _render_table_from_graph
+        from elspais.commands.trace import REPORT_PRESETS, ReportPreset, render_trace
 
         preset = ReportPreset(
             name="standard",
@@ -387,8 +388,10 @@ class TestLcovTestedTrace:
             include_assertions=True,
         )
         # Must not raise KeyError when lcov_tested is among the stated values
-        result = _render_table_from_graph(canonical_federated_graph, "csv", preset)
-        assert result == 0
+        out = render_trace(
+            canonical_federated_graph, canonical_config, TraceRequest(), "csv", preset
+        )
+        assert "lcov" in out.lower()
 
     def test_lcov_tested_in_standard_preset(self):
         """lcov_tested is a value the standard and full presets state."""

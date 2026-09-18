@@ -277,7 +277,16 @@ takes, plus `format`. It is read by the same code, so the download states
 what the on-screen report states: a `--scope` name is expanded where the
 invocation was received and nowhere else, and a value the report does not
 offer is refused with the same 400 the run route gives. The page sends the
-header's level selection as `scope_level=` when it narrows the estate.
+header's level selection as `scope_level=` when it narrows the estate, and
+only to a report that reads a scope (`checks` lists findings and reads none).
+A page with no level selected shows nothing, and a scope cannot say
+"nothing", so Download refuses with a message rather than exporting the
+whole estate.
+
+The page fetches the download rather than navigating to it, so a refusal is
+shown as a message on the page -- the reader keeps their filters -- and a
+download raises no leave-page warning however much unsaved work the page
+holds.
 
 A markdown or CSV download is byte for byte what `elspais <report> --format
 markdown` or `--format csv` renders for the same inputs. A PDF is that

@@ -255,9 +255,12 @@ def test_the_served_page_lists_the_offer_the_route_accepts(client):
     import json
 
     from elspais.server.export import export_offers
+    from elspais.server.routes_api import EXPORT_REQUEST_BUILDERS
 
     html = client.get("/").text
     match = re.search(r"data-offers='([^']+)'", html)
     assert match, "export control missing from the served page"
-    assert json.loads(match.group(1)) == export_offers()
+    assert json.loads(match.group(1)) == export_offers(EXPORT_REQUEST_BUILDERS)
+    select = re.search(r'<select id="export-report".*?</select>', html, re.DOTALL).group(0)
+    assert re.findall(r'<option value="([^"]+)"', select) == list(EXPORT_REQUEST_BUILDERS)
     assert 'id="btn-export"' in html

@@ -1130,9 +1130,11 @@ def trace_request_from_params(params: Mapping[str, str]) -> TraceRequest:
     return TraceRequest(scope=inputs.scope, values=inputs.values, treat_active=inputs.treat_active)
 
 
-# Implements: REQ-d00298-C
-# The reports an export can be asked for, each with the ONE reader of its
-# query the on-screen route uses.
+# Implements: REQ-d00298-A, REQ-d00298-C
+# The reports an export can be asked for, in the order a page lists them, each
+# with the ONE reader of its query the on-screen route uses. This is the one
+# spelling of the exportable set: the route, its refusal and the page's offer
+# all read it.
 EXPORT_REQUEST_BUILDERS: dict[str, Callable[[Mapping[str, str]], Any]] = {
     "trace": trace_request_from_params,
     "summary": summary_request_from_params,
@@ -1213,7 +1215,6 @@ async def api_export(request: Request) -> Response:
     from starlette.concurrency import run_in_threadpool
 
     from elspais.server.export import (
-        EXPORT_REPORTS,
         MEDIA_TYPES,
         PDF_FORMAT,
         RenderFailed,
@@ -1232,7 +1233,7 @@ async def api_export(request: Request) -> Response:
             {
                 "error": "unknown_report",
                 "message": f"no exportable report named '{report}'; "
-                f"exportable reports are {', '.join(EXPORT_REPORTS)}",
+                f"exportable reports are {', '.join(EXPORT_REQUEST_BUILDERS)}",
             },
             status_code=404,
         )

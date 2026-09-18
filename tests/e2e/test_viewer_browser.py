@@ -353,6 +353,81 @@ class TestViewerExport:
         page.select_option("#export-report", "checks")
         assert page.evaluate("exportUrl()") == "/api/export/checks?format=markdown"
 
+        # No level on is a page showing nothing. The toggle keeps the last
+        # level on, so the state arrives only through restored filter state;
+        # a scope cannot say "nothing", so the export has no URL and is
+        # refused rather than widened to the whole estate. A report reading
+        # no scope is unaffected.
+        page.evaluate(
+            "() => { filterGroups.level.restore({on: []}); filterGroups.level.render(); }"
+        )
+        assert page.evaluate("exportUrl()") == "/api/export/checks?format=markdown"
+        page.select_option("#export-report", "trace")
+        assert page.evaluate("exportUrl()") is None
+        page.click("#btn-export")
+        toast = page.wait_for_selector(".toast.error", timeout=5_000)
+        assert "no level" in toast.text_content().lower()
+        assert page.query_selector("#export-control") is not None
+
+    # Verifies: REQ-d00298-A
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00298_A_download_raises_no_leave_page_warning_over_pending_work(
+        self, page, viewer_url
+    ):
+        """The page holds pending work, so leaving it warns. A download is
+        not a departure: it is fetched in place, and no dialog is raised.
+        Registered before the click, because the dialog the old navigation
+        raised came with the click itself."""
+        dialogs: list[str] = []
+        page.on("dialog", lambda d: (dialogs.append(d.type), d.dismiss()))
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_selector("#btn-export", timeout=_PAGE_LOAD_TIMEOUT)
+        page.evaluate("() => { editState.mutationCount = 1; }")
+        assert page.evaluate("unloadWarningState().willWarnOnClose") is True, (
+            "precondition: the page must be one that warns before it is left"
+        )
+        page.select_option("#export-report", "summary")
+        page.select_option("#export-format", "csv")
+        with page.expect_download() as download_info:
+            page.click("#btn-export")
+        download = download_info.value
+        assert re.match(r"^summary-\d{8}-\d{6}\.csv$", download.suggested_filename), (
+            download.suggested_filename
+        )
+        assert dialogs == [], f"a download raised a dialog: {dialogs}"
+        assert page.url.rstrip("/") == viewer_url.rstrip("/")
+        assert page.query_selector("#export-control") is not None
+
+    # Verifies: REQ-d00298-E
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00298_E_a_refusal_is_shown_on_the_page_not_in_its_place(self, page, viewer_url):
+        """A format the report does not offer is refused by the route; the
+        refusal reaches the reader as a message on the page they were on,
+        naming the formats offered, rather than as the route's JSON where the
+        page used to be. The control lists only offered formats, so the
+        unoffered one is put into the list by hand."""
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_selector("#btn-export", timeout=_PAGE_LOAD_TIMEOUT)
+        page.select_option("#export-report", "gaps")
+        page.evaluate(
+            """() => {
+                const sel = document.getElementById('export-format');
+                const opt = document.createElement('option');
+                opt.value = 'csv'; opt.textContent = 'csv';
+                sel.appendChild(opt);
+            }"""
+        )
+        page.select_option("#export-format", "csv")
+        assert page.evaluate("exportUrl()") == "/api/export/gaps?format=csv"
+        page.click("#btn-export")
+        toast = page.wait_for_selector(".toast.error", timeout=5_000)
+        text = toast.text_content()
+        assert "markdown" in text and "pdf" in text, text
+        assert page.url.rstrip("/") == viewer_url.rstrip("/")
+        assert page.query_selector("#export-control") is not None
+
 
 # ---------------------------------------------------------------------------
 # Pipe-table rendering fixture + browser test

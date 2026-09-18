@@ -13,17 +13,13 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
-
-# The reports the viewer can show and therefore export, in the order a page
-# lists them.
-EXPORT_REPORTS: tuple[str, ...] = ("trace", "summary", "gaps", "checks")
 
 # The document formats an export renders directly. The machine formats a
 # report also offers (json, junit, sarif) are what the run routes already
@@ -101,12 +97,16 @@ def reads_scope(report: str) -> bool:
     return report in VALUE_SECTIONS
 
 
-def export_offers() -> dict[str, dict[str, Any]]:
-    """Every exportable report, the formats it offers and whether it reads a
-    scope, for a page to show and to send only what the route will read."""
+def export_offers(reports: Iterable[str]) -> dict[str, dict[str, Any]]:
+    """Each named report, the formats it offers and whether it reads a scope,
+    for a page to show and to send only what the route will read.
+
+    The names come from the route's own table of report readers, so the set a
+    page lists is the set the route serves and is spelled nowhere else.
+    """
     return {
         report: {"formats": list(offered_formats(report)), "scoped": reads_scope(report)}
-        for report in EXPORT_REPORTS
+        for report in reports
     }
 
 

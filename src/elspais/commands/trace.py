@@ -1091,7 +1091,8 @@ def render_section(
 # Implements: REQ-p00084-C+D
 # The formats a table of requirements renders in, each by the one formatter
 # that streams it. Every path that renders a table reads this map, so a format
-# offered on one path is offered on all of them.
+# offered on one path is offered on all of them. JSON is here so the UAT
+# dimension, which always renders from the graph, has a formatter too.
 TABLE_FORMATTERS = {
     "text": format_markdown,
     "markdown": format_markdown,
@@ -1111,10 +1112,10 @@ def render_trace(
 ) -> str:
     """The table this request asks for, rendered in one format.
 
-    The ONE composition of a table from a request: a section composed with
-    others and an export from the viewer both come through here, so the rows
-    and the disclosure they state are the ones the command states. Without a
-    preset it is the command's default one.
+    The ONE composition of a table from a request: the command's own run, a
+    section composed with others and an export from the viewer all come
+    through here, so the rows and the disclosure they state are one rendering.
+    Without a preset it is the command's default one.
     """
     if preset is None:
         preset = REPORT_PRESETS[DEFAULT_PRESET]
@@ -1170,27 +1171,6 @@ def _render_json_from_data(
     print(json.dumps(payload, indent=2))
 
 
-def _render_table_from_graph(
-    graph: FederatedGraph,
-    fmt: str,
-    preset: ReportPreset,
-    scope_ids: frozenset[str] | None = None,
-    values: Sequence[str] | None = None,
-    config: dict | None = None,
-    scope_lines: Sequence[str] | None = None,
-) -> int:
-    """Render table or JSON formats using graph-based formatters. Returns exit code."""
-    # JSON is in the table so the UAT dimension (which always uses the graph)
-    # can route through this function for all formats including JSON.
-    formatter = TABLE_FORMATTERS.get(fmt)
-    if not formatter:
-        print(f"Error: Unknown format '{fmt}'", file=sys.stderr)
-        return 1
-    for line in formatter(graph, preset, scope_ids, values, config, scope_lines):
-        print(line)
-    return 0
-
-
 # Implements: REQ-d00282-A+F
 def _resolve_inputs_or_report(
     args: argparse.Namespace,
@@ -1223,6 +1203,9 @@ def run(args: argparse.Namespace) -> int:
     from elspais.config import get_config
 
     fmt = getattr(args, "format", "markdown")
+    if fmt not in TABLE_FORMATTERS:
+        print(f"Error: Unknown format '{fmt}'", file=sys.stderr)
+        return 1
     spec_dir = getattr(args, "spec_dir", None)
     # --targets marks provenance on the rendered graph; force a local
     # build (bypassing any cached daemon graph) so the fresh set actually
@@ -1283,14 +1266,10 @@ def run(args: argparse.Namespace) -> int:
         scope=inputs.scope, values=inputs.values, treat_active=inputs.treat_active
     )
     # Implements: REQ-d00282-E
-    # The preset default is this caller's to apply, not the request's to carry:
     # `inputs.values` stays None where nothing was named, so a serving process
-    # can still tell "asked for nothing" from "asked for everything".
-    values = inputs.values or _default_values(preset)
-
-    # Implements: REQ-p00084-A+D, REQ-d00279-C
-    from elspais.commands._scope import scope_disclosure
-    from elspais.graph.scope import scoped_requirements
+    # can still tell "asked for nothing" from "asked for everything"; the
+    # preset default is applied where the report is rendered, never carried.
+    render_json = fmt == "json" and dimension != "uat"
 
     if skip_daemon:
         # Custom spec_dir (or a target selection): build graph directly
@@ -1301,15 +1280,10 @@ def run(args: argparse.Namespace) -> int:
             config_path=config_path,
             fresh_targets=fresh_targets,
         )
-        if fmt == "json" and dimension != "uat":
+        if render_json:
             data = compute_trace(graph, config, request)
-            _render_json_from_data(data, preset, values)
-        else:
-            result = scoped_requirements(graph, request.scope, config)
-            ids = None if len(result.ids) == result.population else result.ids
-            return _render_table_from_graph(
-                graph, fmt, preset, ids, values, config, scope_disclosure(result)
-            )
+            _render_json_from_data(data, preset, request.values or _default_values(preset))
+            return 0
     else:
         data = _engine.call(
             "/api/run/trace",
@@ -1317,19 +1291,18 @@ def run(args: argparse.Namespace) -> int:
             compute_trace,
             config_path=config_path,
         )
-
         # Implements: REQ-d00084-A
-        if fmt == "json" and dimension != "uat":
-            _render_json_from_data(data, preset, values)
-        else:
-            # For non-JSON formats we need the graph to stream through formatters.
-            graph = _engine.get_graph()
-            result = scoped_requirements(graph, request.scope, config)
-            ids = None if len(result.ids) == result.population else result.ids
-            return _render_table_from_graph(
-                graph, fmt, preset, ids, values, config, scope_disclosure(result)
-            )
+        if render_json:
+            _render_json_from_data(data, preset, request.values or _default_values(preset))
+            return 0
+        # A table streams through the formatters, which need the graph.
+        graph = _engine.get_graph()
 
+    # Implements: REQ-p00084-A+D, REQ-d00279-C
+    # The table is the one composition every surface renders through, so the
+    # rows and the scope disclosure the command prints are the ones a composed
+    # section and a viewer export state.
+    print(render_trace(graph, config, request, fmt, preset))
     return 0
 
 
