@@ -467,6 +467,11 @@ also serves MCP tools at `/mcp` for AI agent integration.
   `--embed-content`   Embed full markdown in HTML for offline viewing
   `--path DIR`        Path to repository root (default: auto-detect)
 
+The served viewer also exports any report it can show -- `trace`, `summary`,
+`gaps`, `checks` -- as markdown, CSV or PDF through `GET
+/api/export/{report}?format=...`, reading the same query the `/api/run`
+route reads. See `elspais docs traceability`.
+
 ## graph
 
 Export the traceability graph structure as JSON.

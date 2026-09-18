@@ -557,9 +557,9 @@ class TestTheDisclosureSurvivesEveryRendering:
 
     @staticmethod
     def _rendered(graph, config, fmt: str, treat_active: tuple[str, ...]) -> str:
-        from elspais.commands.summary import _render
+        from elspais.commands.summary import render_summary
 
-        return _render(_summary(graph, config, treat_active), fmt, config)
+        return render_summary(_summary(graph, config, treat_active), fmt, config)
 
     @pytest.mark.parametrize("fmt", SUMMARY_FORMATS)
     # Verifies: REQ-p00085-B

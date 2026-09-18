@@ -32,6 +32,7 @@ def render_pdf(
     cover: Path | None = None,
     resource_paths: list[Path] | None = None,
     unfetched: list[str] | None = None,
+    converter_output: list[str] | None = None,
 ) -> int:
     """Render Markdown content to PDF via pandoc.
 
@@ -50,6 +51,11 @@ def render_pdf(
             resource and still exits successfully, so a caller that
             reports on document completeness cannot learn about the
             omission from the return code alone.
+        converter_output: Collector extended with everything the converter
+            wrote to stderr. Supplied by a caller answering a request rather
+            than a terminal (the viewer's export route), so the cause of a
+            failure reaches whoever asked; when it is supplied nothing is
+            printed here.
 
     Returns:
         0 on success, non-zero on failure.
@@ -58,7 +64,11 @@ def render_pdf(
     if template is None:
         template = _find_bundled_template()
     if not template.exists():
-        print(f"Error: LaTeX template not found: {template}", file=sys.stderr)
+        message = f"Error: LaTeX template not found: {template}"
+        if converter_output is not None:
+            converter_output.append(message)
+        else:
+            print(message, file=sys.stderr)
         return 1
 
     # Write markdown to temp file
@@ -123,12 +133,16 @@ def render_pdf(
                 if name not in unfetched:
                     unfetched.append(name)
 
+        if converter_output is not None:
+            converter_output.append(stderr)
+
         if result.returncode != 0:
             # The whole stream matters when the run failed: the cause is
             # usually in the engine's output, not pandoc's own lines.
-            if stderr:
-                print(stderr.rstrip("\n"), file=sys.stderr)
-            print("Error: pandoc failed.", file=sys.stderr)
+            if converter_output is None:
+                if stderr:
+                    print(stderr.rstrip("\n"), file=sys.stderr)
+                print("Error: pandoc failed.", file=sys.stderr)
             return result.returncode
 
         # On success, echo only pandoc's own diagnostics. The LaTeX engine
@@ -136,9 +150,10 @@ def render_pdf(
         # burying the one line that reports a dropped image in sixty lines
         # of font chatter discloses nothing.
         # Implements: REQ-p00080-K
-        for line in stderr.splitlines():
-            if line.startswith("[WARNING]") or line.startswith("[ERROR]"):
-                print(line, file=sys.stderr)
+        if converter_output is None:
+            for line in stderr.splitlines():
+                if line.startswith("[WARNING]") or line.startswith("[ERROR]"):
+                    print(line, file=sys.stderr)
 
         return 0
 

@@ -13,13 +13,13 @@ from __future__ import annotations
 import functools
 import json
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import date as date_type
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from elspais.config.schema import ElspaisConfig
 from elspais.graph import FILE_ID_PREFIX, NodeKind
@@ -75,6 +75,15 @@ from elspais.mcp.server import (
 from elspais.utilities.git import get_author_info
 from elspais.utilities.spec_paths import file_id_for_reference
 from elspais.view_model import build_levels, build_namespaces, build_statuses
+
+if TYPE_CHECKING:
+    from elspais.commands._requests import (
+        AnalysisRequest,
+        ChecksRequest,
+        GapsRequest,
+        SummaryRequest,
+        TraceRequest,
+    )
 
 
 def _st(request: Request) -> Any:
@@ -1044,16 +1053,21 @@ def _request_or_400(build: Callable[[], Any]) -> Any | JSONResponse:
         return JSONResponse({"error": "unoffered_values", "message": str(exc)}, status_code=400)
 
 
-async def api_run_checks(request: Request) -> JSONResponse:
-    """GET /api/run/checks - Run health checks and return structured report."""
-    from elspais.commands._requests import ChecksRequest
-    from elspais.commands.health import compute_checks
+# Implements: REQ-d00282-F, REQ-d00298-C
+# The request each report is asked for, read off the query a browser sent.
+# Module-level rather than a closure inside each route, because the on-screen
+# report and its export are two routes reading one query the same way: a
+# builder written inside one handler is a builder the other cannot reach, and
+# two readers of one query is where "what downloads is what was shown" starts
+# to fail. Each builder reads a finished selection -- a declared name was
+# expanded at the edge that had a config (REQ-d00280-D) -- and judges it
+# against its own report's offer, nothing more.
 
-    state = _st(request)
-    from elspais.commands._requests import treat_active_from_params
 
-    params = dict(request.query_params)
-    checks_request = ChecksRequest(
+def checks_request_from_params(params: Mapping[str, str]) -> ChecksRequest:
+    from elspais.commands._requests import ChecksRequest, treat_active_from_params
+
+    return ChecksRequest(
         spec_only=params.get("spec_only") == "true",
         code_only=params.get("code_only") == "true",
         tests_only=params.get("tests_only") == "true",
@@ -1061,6 +1075,80 @@ async def api_run_checks(request: Request) -> JSONResponse:
         lenient=params.get("lenient") == "true",
         treat_active=treat_active_from_params(params),
     )
+
+
+def summary_request_from_params(params: Mapping[str, str]) -> SummaryRequest:
+    from elspais.commands._edges import report_inputs_from_params
+    from elspais.commands._requests import SummaryRequest
+    from elspais.commands.summary import IDENTITY_VALUE, OFFERED_VALUES
+
+    inputs = report_inputs_from_params(params, OFFERED_VALUES, IDENTITY_VALUE)
+    return SummaryRequest(
+        scope=inputs.scope, values=inputs.values, treat_active=inputs.treat_active
+    )
+
+
+def gaps_request_from_params(params: Mapping[str, str]) -> GapsRequest:
+    from elspais.commands._edges import report_inputs_from_params
+    from elspais.commands._requests import GapsRequest
+    from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES
+
+    command = params.get("command", "gaps")
+    inputs = report_inputs_from_params(
+        params, COMMAND_VALUES.get(command, OFFERED_VALUES), identity_key=""
+    )
+    return GapsRequest(
+        scope=inputs.scope,
+        values=inputs.values,
+        command=command,
+        treat_active=inputs.treat_active,
+    )
+
+
+def analysis_request_from_params(params: Mapping[str, str]) -> AnalysisRequest:
+    from elspais.commands._edges import report_inputs_from_params
+    from elspais.commands._requests import AnalysisRequest
+
+    # This report offers no values -- a caller who wrote one is refused
+    # rather than handed a report the selection could not narrow.
+    inputs = report_inputs_from_params(params, (), identity_key="")
+    return AnalysisRequest(
+        scope=inputs.scope,
+        values=inputs.values,
+        top=int(params.get("top", "10")),
+        include_code=params.get("include_code", "false") == "true",
+        weights=params.get("weights"),
+    )
+
+
+def trace_request_from_params(params: Mapping[str, str]) -> TraceRequest:
+    from elspais.commands._edges import report_inputs_from_params
+    from elspais.commands._requests import TraceRequest
+    from elspais.commands.trace import OFFERED_VALUES
+
+    inputs = report_inputs_from_params(params, OFFERED_VALUES, identity_key="id")
+    return TraceRequest(scope=inputs.scope, values=inputs.values, treat_active=inputs.treat_active)
+
+
+# Implements: REQ-d00298-A, REQ-d00298-C
+# The reports an export can be asked for, in the order a page lists them, each
+# with the ONE reader of its query the on-screen route uses. This is the one
+# spelling of the exportable set: the route, its refusal and the page's offer
+# all read it.
+EXPORT_REQUEST_BUILDERS: dict[str, Callable[[Mapping[str, str]], Any]] = {
+    "trace": trace_request_from_params,
+    "summary": summary_request_from_params,
+    "gaps": gaps_request_from_params,
+    "checks": checks_request_from_params,
+}
+
+
+async def api_run_checks(request: Request) -> JSONResponse:
+    """GET /api/run/checks - Run health checks and return structured report."""
+    from elspais.commands.health import compute_checks
+
+    state = _st(request)
+    checks_request = checks_request_from_params(dict(request.query_params))
     result = compute_checks(state.graph, state.config, checks_request)
     return JSONResponse(result)
 
@@ -1068,20 +1156,11 @@ async def api_run_checks(request: Request) -> JSONResponse:
 # Implements: REQ-d00282-F
 async def api_run_summary(request: Request) -> JSONResponse:
     """GET /api/run/summary - Coverage summary data."""
-    from elspais.commands._edges import report_inputs_from_params
-    from elspais.commands._requests import SummaryRequest
-    from elspais.commands.summary import IDENTITY_VALUE, OFFERED_VALUES, compute_summary
+    from elspais.commands.summary import compute_summary
 
     state = _st(request)
     params = dict(request.query_params)
-
-    def _build() -> SummaryRequest:
-        inputs = report_inputs_from_params(params, OFFERED_VALUES, IDENTITY_VALUE)
-        return SummaryRequest(
-            scope=inputs.scope, values=inputs.values, treat_active=inputs.treat_active
-        )
-
-    built = _request_or_400(_build)
+    built = _request_or_400(lambda: summary_request_from_params(params))
     if isinstance(built, JSONResponse):
         return built
     return JSONResponse(compute_summary(state.graph, state.config, built))
@@ -1089,26 +1168,11 @@ async def api_run_summary(request: Request) -> JSONResponse:
 
 async def api_run_gaps(request: Request) -> JSONResponse:
     """GET /api/run/gaps - Traceability coverage gaps."""
-    from elspais.commands._edges import report_inputs_from_params
-    from elspais.commands._requests import GapsRequest
-    from elspais.commands.gaps import COMMAND_VALUES, OFFERED_VALUES, compute_gaps
+    from elspais.commands.gaps import compute_gaps
 
     state = _st(request)
     params = dict(request.query_params)
-    command = params.get("command", "gaps")
-
-    def _build() -> GapsRequest:
-        inputs = report_inputs_from_params(
-            params, COMMAND_VALUES.get(command, OFFERED_VALUES), identity_key=""
-        )
-        return GapsRequest(
-            scope=inputs.scope,
-            values=inputs.values,
-            command=command,
-            treat_active=inputs.treat_active,
-        )
-
-    built = _request_or_400(_build)
+    built = _request_or_400(lambda: gaps_request_from_params(params))
     if isinstance(built, JSONResponse):
         return built
     return JSONResponse(compute_gaps(state.graph, state.config, built))
@@ -1116,26 +1180,11 @@ async def api_run_gaps(request: Request) -> JSONResponse:
 
 async def api_run_analysis(request: Request) -> JSONResponse:
     """GET /api/run/analysis - Foundation analysis report."""
-    from elspais.commands._edges import report_inputs_from_params
-    from elspais.commands._requests import AnalysisRequest
     from elspais.commands.analysis_cmd import compute_analysis
 
     state = _st(request)
     params = dict(request.query_params)
-
-    def _build() -> AnalysisRequest:
-        # This report offers no values -- a caller who wrote one is refused
-        # rather than handed a report the selection could not narrow.
-        inputs = report_inputs_from_params(params, (), identity_key="")
-        return AnalysisRequest(
-            scope=inputs.scope,
-            values=inputs.values,
-            top=int(params.get("top", "10")),
-            include_code=params.get("include_code", "false") == "true",
-            weights=params.get("weights"),
-        )
-
-    built = _request_or_400(_build)
+    built = _request_or_400(lambda: analysis_request_from_params(params))
     if isinstance(built, JSONResponse):
         return built
     return JSONResponse(compute_analysis(state.graph, state.config, built))
@@ -1144,23 +1193,90 @@ async def api_run_analysis(request: Request) -> JSONResponse:
 # Implements: REQ-d00282-F
 async def api_run_trace(request: Request) -> JSONResponse:
     """GET /api/run/trace - Traceability matrix data as JSON."""
-    from elspais.commands._edges import report_inputs_from_params
-    from elspais.commands._requests import TraceRequest
-    from elspais.commands.trace import OFFERED_VALUES, compute_trace
+    from elspais.commands.trace import compute_trace
 
     state = _st(request)
     params = dict(request.query_params)
-
-    def _build() -> TraceRequest:
-        inputs = report_inputs_from_params(params, OFFERED_VALUES, identity_key="id")
-        return TraceRequest(
-            scope=inputs.scope, values=inputs.values, treat_active=inputs.treat_active
-        )
-
-    built = _request_or_400(_build)
+    built = _request_or_400(lambda: trace_request_from_params(params))
     if isinstance(built, JSONResponse):
         return built
     return JSONResponse(compute_trace(state.graph, state.config, built))
+
+
+# Implements: REQ-d00298-A, REQ-d00298-C, REQ-d00298-D, REQ-d00298-E, REQ-d00298-F
+async def api_export(request: Request) -> Response:
+    """GET /api/export/{report}?format=... - The report as a document to download.
+
+    Takes exactly the query the matching `/api/run/{report}` takes, read by the
+    same builder, plus `format`. The graph is read on the event loop like
+    every other read route, so a write serialized there is never seen half
+    applied; only the pandoc run, a pure text-to-bytes step, leaves the loop.
+    """
+    from starlette.concurrency import run_in_threadpool
+
+    from elspais.server.export import (
+        MEDIA_TYPES,
+        PDF_FORMAT,
+        RenderFailed,
+        ToolingUnavailable,
+        UnofferedFormat,
+        download_filename,
+        export_document,
+        markdown_to_pdf,
+        offered_formats,
+    )
+
+    report = request.path_params["report"]
+    builder = EXPORT_REQUEST_BUILDERS.get(report)
+    if builder is None:
+        return JSONResponse(
+            {
+                "error": "unknown_report",
+                "message": f"no exportable report named '{report}'; "
+                f"exportable reports are {', '.join(EXPORT_REQUEST_BUILDERS)}",
+            },
+            status_code=404,
+        )
+    params = dict(request.query_params)
+    fmt = params.get("format")
+    if not fmt:
+        return JSONResponse(
+            {
+                "error": "format_required",
+                "message": f"'{report}' offers {', '.join(offered_formats(report))}; "
+                "name one as format=",
+                "offered": list(offered_formats(report)),
+            },
+            status_code=400,
+        )
+    built = _request_or_400(lambda: builder(params))
+    if isinstance(built, JSONResponse):
+        return built
+    state = _st(request)
+    try:
+        text = export_document(state.graph, state.config, report, built, fmt)
+        if fmt == PDF_FORMAT:
+            body = await run_in_threadpool(markdown_to_pdf, text, report.capitalize())
+        else:
+            body = text.encode("utf-8")
+    except UnofferedFormat as exc:
+        return JSONResponse(
+            {"error": "unoffered_format", "message": str(exc), "offered": list(exc.offered)},
+            status_code=400,
+        )
+    except ToolingUnavailable as exc:
+        return JSONResponse(
+            {"error": "tooling_unavailable", "message": str(exc), "tool": exc.tool},
+            status_code=409,
+        )
+    except RenderFailed as exc:
+        return JSONResponse({"error": "render_failed", "message": str(exc)}, status_code=500)
+    filename = download_filename(report, fmt)
+    return Response(
+        content=body,
+        media_type=MEDIA_TYPES[fmt],
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ─────────────────────────────────────────────────────────────────

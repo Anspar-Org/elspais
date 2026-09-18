@@ -94,7 +94,7 @@ def _numbers_under(figure) -> list[float]:
 
 def _summary_stated(data: dict, fmt: str) -> list[str]:
     """What one summary rendering states, by the same reading."""
-    out = summary_cmd._render(dict(data), fmt, None)
+    out = summary_cmd.render_summary(dict(data), fmt, None)
     if fmt == "csv":
         return next(csv.reader(io.StringIO(out)))
     if fmt == "markdown":
@@ -137,7 +137,8 @@ def _stated_paths(row: dict) -> list[str]:
 def _summary_stated_keys(data: dict, fmt: str) -> list[str]:
     """The value keys one summary rendering states, however it spells them."""
     if fmt == "json":
-        return _stated_paths(json.loads(summary_cmd._render(dict(data), fmt, None))["levels"][0])
+        rendered = summary_cmd.render_summary(dict(data), fmt, None)
+        return _stated_paths(json.loads(rendered)["levels"][0])
     by_word = {summary_cmd.header_for(key, None): key for key in summary_cmd.OFFERED_VALUES}
     return [by_word[word] for word in _summary_stated(data, fmt)]
 
@@ -266,7 +267,7 @@ class TestOneSelectionOneValueSet:
         needs to check a figure (REQ-d00258-P) went missing from the format
         that dropped the companions."""
         payload = {**coverage_payload, "values": ["level", "implemented"]}
-        rows = list(csv.reader(io.StringIO(summary_cmd._render(payload, "csv", None))))
+        rows = list(csv.reader(io.StringIO(summary_cmd.render_summary(payload, "csv", None))))
         assert rows[0] == ["Level", "Implemented"]
         assert rows[1] == ["PRD", "0/4 (0.0%)"]
 
@@ -336,7 +337,7 @@ class TestValuesAreStatedInTheOrderNamed:
         into a fixed opening.
         """
         payload = {**one_group, "values": list(values)}
-        out = summary_cmd._render(payload, "text", None)
+        out = summary_cmd.render_summary(payload, "text", None)
         for value in values:
             assert _TEXT_TOKEN[value] in out, f"{value} not stated: {out}"
         positions = [out.index(_TEXT_TOKEN[value]) for value in values]
@@ -349,7 +350,7 @@ class TestValuesAreStatedInTheOrderNamed:
         cannot be attributed to what it is a fact about is not a report."""
         payload = {**one_group, "values": list(values)}
         for fmt in ("text", "csv", "markdown", "json"):
-            assert "PRD" in summary_cmd._render(dict(payload), fmt, None), fmt
+            assert "PRD" in summary_cmd.render_summary(dict(payload), fmt, None), fmt
 
 
 # ---------------------------------------------------------------------------
@@ -365,7 +366,7 @@ class TestAbsenceIsNotZero:
         and nothing covering them. Read as the same 0 they call for opposite
         actions."""
         payload = {**coverage_payload, "values": ["level", "implemented"]}
-        out = summary_cmd._render(payload, fmt, None)
+        out = summary_cmd.render_summary(payload, fmt, None)
         ops_line = next(ln for ln in out.splitlines() if "OPS" in ln)
         prd_line = next(ln for ln in out.splitlines() if "PRD" in ln)
         assert "0/4 (0.0%)" in prd_line
@@ -377,7 +378,7 @@ class TestAbsenceIsNotZero:
         """Text states it once for the group rather than printing a row of
         marks: every figure in the row is absent for the same one reason."""
         payload = {**coverage_payload, "values": ["level", "implemented"]}
-        lines = summary_cmd._render(payload, "text", None).splitlines()
+        lines = summary_cmd.render_summary(payload, "text", None).splitlines()
         prd = lines[lines.index("  PRD:") + 1]
         ops = lines[lines.index("  OPS:") + 1]
         assert "0/4 (0.0%)" in prd
@@ -391,7 +392,7 @@ class TestAbsenceIsNotZero:
         payload = {**coverage_payload, "values": ["level", "implemented", "tested"]}
         levels = {
             lv["level"]: lv
-            for lv in json.loads(summary_cmd._render(payload, "json", None))["levels"]
+            for lv in json.loads(summary_cmd.render_summary(payload, "json", None))["levels"]
         }
         # A figure a group does not have is null OUTRIGHT, not an object whose
         # every number is null: there is no figure to decompose.
@@ -410,10 +411,8 @@ class TestAbsenceIsNotZero:
         number anywhere beneath the figure, and a group whose evidence is
         genuinely absent states the zero it computed.
         """
-        levels = {
-            lv["level"]: lv
-            for lv in json.loads(summary_cmd._render(coverage_payload, "json", None))["levels"]
-        }
+        rendered = summary_cmd.render_summary(coverage_payload, "json", None)
+        levels = {lv["level"]: lv for lv in json.loads(rendered)["levels"]}
         assert _numbers_under(levels["OPS"]["implemented"]) == [], levels["OPS"]["implemented"]
         # A real group's zeros are real answers and stay as computed.
         assert levels["PRD"]["implemented"]["count"] == 0.0
@@ -661,7 +660,7 @@ def _trace_json(graph, values: list[str]) -> dict:
 
 def _summary_json(row: dict, values: list[str]) -> dict:
     payload = {"levels": [row], "excluded": {}, "integrations": [], "values": values}
-    return json.loads(summary_cmd._render(payload, "json", None))["levels"][0]
+    return json.loads(summary_cmd.render_summary(payload, "json", None))["levels"][0]
 
 
 class TestAFigureDecomposesIntoItsScalars:
@@ -864,11 +863,11 @@ class TestScalarsStateOneValueSetInEveryFormat:
         for fmt in ("csv", "markdown"):
             assert _summary_stated(payload, fmt) == expected, fmt
         assert _summary_stated(payload, "json") == ["level", "implemented", "tested"]
-        row = json.loads(summary_cmd._render(dict(payload), "json", None))["levels"][0]
+        row = json.loads(summary_cmd.render_summary(dict(payload), "json", None))["levels"][0]
         assert [_at(row, v) for v in values[1:]] == [1.0, 1 / 3, 2]
         # The text rendering states them too: a selection that meant one thing
         # on screen and another in the filed artifact is the divergence E ends.
-        text = summary_cmd._render(dict(payload), "text", None)
+        text = summary_cmd.render_summary(dict(payload), "text", None)
         for value in values[1:]:
             assert summary_cmd.header_for(value, None) in text, value
 
@@ -881,7 +880,7 @@ class TestScalarsStateOneValueSetInEveryFormat:
         levels = {
             lv["level"]: lv
             for lv in json.loads(
-                summary_cmd._render({**coverage_payload, "values": values}, "json", None)
+                summary_cmd.render_summary({**coverage_payload, "values": values}, "json", None)
             )["levels"]
         }
         assert levels["OPS"]["implemented"][part] is None
@@ -894,7 +893,7 @@ class TestScalarsStateOneValueSetInEveryFormat:
     # Verifies: REQ-d00282-M
     def test_a_cell_with_no_scalar_to_state_is_not_a_zero(self, coverage_payload):
         payload = {**coverage_payload, "values": ["level", "implemented.count"]}
-        out = summary_cmd._render(payload, "csv", None)
+        out = summary_cmd.render_summary(payload, "csv", None)
         rows = {r[0]: r[1] for r in csv.reader(io.StringIO(out)) if r}
         assert rows["PRD"] == "0"
         assert rows["OPS"] == summary_cmd.ABSENT_FIGURE
@@ -1712,7 +1711,7 @@ class TestALineFigureSurvivesAnAssertionLessGroup:
             "integrations": [],
             "values": ["level", "code_tested"],
         }
-        out = summary_cmd._render(dict(payload), fmt, None)
+        out = summary_cmd.render_summary(dict(payload), fmt, None)
         if fmt == "json":
             assert json.loads(out)["levels"][0]["code_tested"]["count"] == 16.0
         else:

@@ -67,6 +67,31 @@
             <div class="toolbar-actions">
                 <button class="btn" onclick="clearAllFilters()" title="Clear all filters">Clear</button>
                 <span class="counter" id="edit-counter" title=""></span>
+                {% if mode == 'edit' %}
+                {# Implements: REQ-d00298-A, REQ-d00298-E #}
+                {# Served pages only: an export is a route, and a static page has none. #}
+                {# The offer is the server's own, carried on the control rather than #}
+                {# spelled again in script, so the formats a page lists are the ones #}
+                {# the route accepts, and a narrowing is sent only to a report that #}
+                {# reads one. #}
+                <span class="export-control" id="export-control"
+                      data-offers='{{ export_offers | tojson }}'
+                      data-help="Download the selected report as a document. The download states what the command line states for the same inputs; the level filter narrows it.">
+                    <label class="export-label" for="export-report">Export</label>
+                    <select id="export-report" onchange="onExportReportChange()" title="Report to export">
+                        {% for report in export_offers %}
+                        <option value="{{ report }}">{{ report }}</option>
+                        {% endfor %}
+                    </select>
+                    <select id="export-format" title="Format to export as">
+                        {% for fmt in export_offers[export_offers | first].formats %}
+                        <option value="{{ fmt }}">{{ fmt }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn" id="btn-export" onclick="exportReport()"
+                            title="Download the report in the chosen format">Download</button>
+                </span>
+                {% endif %}
             </div>
         </div>
 

@@ -25,7 +25,7 @@ import tyro
 
 from elspais.cli import _to_namespace
 from elspais.commands import analysis_cmd, summary, trace
-from elspais.commands._requests import ReportInputs
+from elspais.commands._requests import ReportInputs, TraceRequest
 from elspais.commands._scope import (
     scope_disclosure,
     scope_from_args,
@@ -223,20 +223,18 @@ class TestTraceReachesTheArtifactNotTheTerminal:
 
     # Verifies: REQ-p00084-D
     @pytest.mark.parametrize("fmt", TABLE_FORMATS)
-    def test_table_rendering_writes_the_disclosure_to_stdout(
-        self, canonical_federated_graph, canonical_config, standard_preset, scoped, capsys, fmt
+    def test_composed_table_carries_the_disclosure_in_every_format(
+        self, canonical_federated_graph, canonical_config, standard_preset, scoped, fmt
     ):
-        """`--output` redirects stdout alone, so a disclosure printed to stderr
-        never reaches the file the reader keeps."""
-        ids, lines = scoped
-        rc = trace._render_table_from_graph(
-            canonical_federated_graph, fmt, standard_preset, ids, None, canonical_config, lines
+        """The one composition every surface prints or serves states the
+        scope in the body of the table, whatever format it is rendered in."""
+        _, lines = scoped
+        request = TraceRequest(scope=scope_from_args(_scope_args(), canonical_config))
+        out = trace.render_trace(
+            canonical_federated_graph, canonical_config, request, fmt, standard_preset
         )
-        assert rc == 0
-        captured = capsys.readouterr()
         for line in lines:
-            assert line in captured.out
-            assert line not in captured.err
+            assert line in out
 
     # Verifies: REQ-p00084-D
     def test_daemon_payload_json_path_writes_the_disclosure_to_stdout(
