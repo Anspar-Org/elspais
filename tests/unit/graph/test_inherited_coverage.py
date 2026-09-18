@@ -370,3 +370,135 @@ def test_satisfier_rollup_with_multi_template_satisfaction(tmp_path: Path) -> No
     assert abs(rollup.covered_fraction - 0.75) < 0.001, (
         f"expected covered_fraction=0.75, got {rollup.covered_fraction!r}"
     )
+
+
+def _build_subtree(tmp_path: Path):
+    """Library template LIB-p00001 refined by template LIB-p00002; app satisfies the root.
+
+    Library CODE implements the refiner's assertion only, so of the two
+    template assertions the app inherits, one is covered. The app's own
+    assertion has no covering CODE.
+    """
+    from elspais.graph.factory import build_graph
+
+    library = tmp_path / "library"
+    app = tmp_path / "app"
+    library.mkdir()
+    app.mkdir()
+
+    _write(
+        library,
+        ".elspais.toml",
+        """
+        version = 5
+        [project]
+        name = "library"
+        namespace = "LIB"
+        [levels.prd]
+        rank = 1
+        letter = "p"
+        implements = ["prd"]
+        [scanning.spec]
+        directories = ["spec"]
+        [scanning.code]
+        directories = ["src"]
+        [scanning.test]
+        enabled = false
+        directories = []
+        """,
+    )
+    _write(
+        library,
+        "spec/prd-library.md",
+        """
+        # LIB-p00001: Action Dispatch
+
+        **Level**: PRD | **Status**: Approved | **Template**
+
+        ### Assertions
+
+        A. SHALL parse.
+
+        *End* *Action Dispatch*
+
+        # LIB-p00002: Dispatch Authorization
+
+        **Level**: PRD | **Status**: Approved | **Template**
+        **Refines**: LIB-p00001
+
+        ### Assertions
+
+        A. SHALL authorize.
+
+        *End* *Dispatch Authorization*
+        """,
+    )
+    _write(
+        library,
+        "src/lib.py",
+        """
+        # Implements: LIB-p00002-A
+        def authorize(p):
+            return p
+        """,
+    )
+    _git_init(library)
+
+    _write(
+        app,
+        ".elspais.toml",
+        """
+        version = 5
+        [project]
+        name = "app"
+        namespace = "APP"
+        [levels.prd]
+        rank = 1
+        letter = "p"
+        implements = ["prd"]
+        [scanning.spec]
+        directories = ["spec"]
+        [scanning.code]
+        directories = []
+        [scanning.test]
+        enabled = false
+        directories = []
+        [associates.library]
+        path = "../library"
+        namespace = "LIB"
+        """,
+    )
+    _write(
+        app,
+        "spec/prd-app.md",
+        """
+        # APP-p00001: Concrete Action
+
+        **Level**: PRD | **Status**: Approved
+        **Satisfies**: LIB-p00001
+
+        ### Assertions
+
+        A. SHALL be admin-only.
+
+        *End* *Concrete Action*
+        """,
+    )
+    _git_init(app)
+
+    return build_graph(repo_root=app, scan_code=True, scan_tests=False)
+
+
+# Verifies: REQ-p00014-K
+def test_satisfier_rollup_counts_every_clone_in_the_subtree(tmp_path: Path) -> None:
+    """The rollup reads the refiner clone's assertions, not the cloned root's alone."""
+    from elspais.graph.metrics import satisfier_rollup
+
+    fed = _build_subtree(tmp_path)
+    satisfier = fed.find_by_id("APP-p00001")
+    assert satisfier is not None
+    assert fed.find_by_id("APP-p00001::LIB-p00002-A") is not None
+
+    rollup = satisfier_rollup(satisfier)
+    assert rollup.total == 3, f"own + root + refiner assertions, got total={rollup.total}"
+    assert rollup.covered == 1, f"only the refiner's assertion is covered, got {rollup.covered}"
