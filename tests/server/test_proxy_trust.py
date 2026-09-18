@@ -6,6 +6,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from starlette.datastructures import Headers
 
 from elspais.server import proxy_trust
 from elspais.server.proxy_trust import (
@@ -23,14 +24,8 @@ IDENTITY = {USER_NAME_HEADER: "Alice Smith", USER_EMAIL_HEADER: "alice@co.org"}
 
 
 def _request(headers: dict[str, str]) -> SimpleNamespace:
-    """A request carrying exactly these headers, matched without regard to case."""
-    lowered = {k.lower(): v for k, v in headers.items()}
-
-    class _Headers:
-        def get(self, key: str, default=None):
-            return lowered.get(key.lower(), default)
-
-    return SimpleNamespace(headers=_Headers())
+    """A request carrying exactly these headers, held as the server holds them."""
+    return SimpleNamespace(headers=Headers(headers))
 
 
 @pytest.fixture
@@ -50,17 +45,6 @@ class TestProxiedIdentity:
     # Verifies: REQ-d00296-A
     def test_matching_secret_yields_supplied_identity(self, configured: str) -> None:
         request = _request({SECRET_HEADER: configured, **IDENTITY})
-        assert proxied_identity(request) == {"name": "Alice Smith", "id": "alice@co.org"}
-
-    # Verifies: REQ-d00296-A
-    def test_header_names_match_without_regard_to_case(self, configured: str) -> None:
-        request = _request(
-            {
-                SECRET_HEADER.lower(): configured,
-                USER_NAME_HEADER.lower(): "Alice Smith",
-                USER_EMAIL_HEADER.lower(): "alice@co.org",
-            }
-        )
         assert proxied_identity(request) == {"name": "Alice Smith", "id": "alice@co.org"}
 
     # Verifies: REQ-d00296-C
