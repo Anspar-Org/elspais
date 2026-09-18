@@ -4,6 +4,14 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **The author of a request is the identity its session established (REQ-d00296)** — a viewer server serving many people through an authenticating proxy named the machine, not the person, so every comment and every changelog row from every user carried one identity. The proxy now supplies the user with each request in `X-Elspais-User-Name` and `X-Elspais-User-Email`, and the server believes them only when the request also carries, in `X-Elspais-Proxy-Secret`, the value it was started with in `ELSPAIS_PROXY_SECRET`. A request without that proof is attributed to the server's own identity, exactly as before, so a local viewer is unchanged; with no secret in the environment the headers are never believed. The secret is per process rather than a switch because the server listens on the local interface and a shared host runs every workspace as one OS user. `X-Elspais-Git-Token` is read and trusted under the same proof; the git operations that consult it are documented with those operations, and none does yet.
+
+### Fixed
+
+- **A save with a changelog reason wrote no changelog row** — the rows owed to the Active requirements a save changed were looked up after the files were written, and a successful write had already cleared the record they were looked up in. The set is now taken before the write, and so is the author who signs the rows: a save that cannot establish one is refused before the safety branch and the write, leaving the files and the pending mutations exactly as they were, where before it changed the tree, emptied the mutation log and then reported failure. A save requested through the viewer now leaves the served graph agreeing with disk, as one requested through the MCP save tool does, so a second save no longer renders the requirement from memory over the row the first one wrote.
+
 ### Changed
 
 - **A template may be refined by another template (REQ-p00014-B+G+H+M)** — the builder refused every `Refines:` against a template, whoever declared it, so the template-to-template edge that forms a template subtree could not exist and a cross-cutting obligation decomposed into a root and its provisions was unrepresentable. A `Satisfies:` cloned the root and its assertions alone.

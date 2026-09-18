@@ -77,7 +77,8 @@ content down (like GitHub PR inline comments).
 
 - Flat list, chronological (newest at bottom)
 - Author format: `Name (email) . YYYY-MM-DD` — matches CHANGELOG entry pattern
-- Author identity from `get_author_info()` (same as changelog: `gh` primary, `git` fallback,
+- Author identity is the one a trusted proxy supplied with the request (REQ-d00296),
+  else the server's own from `get_author_info()` (`gh` primary, `git` fallback,
   controlled by `[changelog].id_source` config)
 - `[Resolve]` button per comment, visible only in Edit Mode
 - `[Reply...]` textarea at bottom, visible only in Edit Mode
@@ -316,7 +317,10 @@ class CommentThread:
 | `/api/comments/card`     | GET    | `?node_id=REQ-p00001`              | All comments for a card (all anchors with that node prefix) |
 | `/api/comments/orphaned` | GET    | —                                   | Return orphaned comments             |
 
-Author fields are auto-populated server-side via `get_author_info()`.
+Author fields are populated server-side: the identity a trusted proxy supplied
+with the request where the request carries the shared secret (REQ-d00296,
+`server/proxy_trust.py`), else `get_author_info()`. Nothing in the payload
+names an author.
 
 ---
 

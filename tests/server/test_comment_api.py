@@ -1,17 +1,20 @@
-# Verifies: REQ-d00231-A+B+C+D+E
+# Verifies: REQ-d00231-A+B+C+D+E, REQ-d00296-A+B+C+D
 """Tests for comment API endpoints (/api/comment/*, /api/comments/*)."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from starlette.testclient import TestClient
 
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph, RepoEntry
 from elspais.graph.relations import EdgeKind
+from elspais.server import proxy_trust
 from elspais.server.app import create_app
 from elspais.server.state import AppState
 
@@ -299,5 +302,120 @@ class TestAuthorServerSide:
         assert resp.status_code == 200
         comment = resp.json()["comment"]
         # Author must come from server-side get_author_info, not the client
+        assert comment["author"] == "Alice Smith"
+        assert comment["author_id"] == "alice@co.org"
+
+
+# ---------------------------------------------------------------------------
+# TestAuthorFromTrustedProxy (REQ-d00296)
+# ---------------------------------------------------------------------------
+
+PROXY_SECRET = "shared-with-the-hub"
+PROXIED_HEADERS = {
+    "X-Elspais-Proxy-Secret": PROXY_SECRET,
+    "X-Elspais-User-Name": "Bob Jones",
+    "X-Elspais-User-Email": "bob@co.org",
+}
+SERVER_AUTHOR = {"name": "Alice Smith", "id": "alice@co.org"}
+
+
+class TestAuthorFromTrustedProxy:
+    """Validates REQ-d00296: the author of an annotation made through a request
+    is the identity a trusted proxy supplied with it, else the server's own.
+    """
+
+    @pytest.fixture
+    def secret_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(proxy_trust, "_SECRET", PROXY_SECRET)
+
+    @pytest.fixture
+    def secret_unconfigured(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(proxy_trust, "_SECRET", None)
+
+    @staticmethod
+    def _add(client: TestClient, headers: dict[str, str]) -> dict:
+        with patch("elspais.server.routes_api.get_author_info", return_value=SERVER_AUTHOR):
+            resp = client.post(
+                "/api/comment/add",
+                json={"anchor": "REQ-p00001#A", "text": "From a session"},
+                headers=headers,
+            )
+        assert resp.status_code == 200, resp.text
+        return resp.json()["comment"]
+
+    # Verifies: REQ-d00296-A
+    def test_REQ_d00296_A_trusted_identity_names_the_author(
+        self, tmp_path: Path, secret_configured: None
+    ) -> None:
+        client, _ = _make_app(tmp_path)
+        comment = self._add(client, PROXIED_HEADERS)
+        assert comment["author"] == "Bob Jones"
+        assert comment["author_id"] == "bob@co.org"
+
+    # Verifies: REQ-d00296-A
+    @pytest.mark.parametrize("route", ["reply", "resolve"])
+    def test_REQ_d00296_A_reply_and_resolve_name_the_session_user(
+        self, tmp_path: Path, secret_configured: None, route: str
+    ) -> None:
+        client, root = _make_app(tmp_path)
+        parent = self._add(client, PROXIED_HEADERS)
+        follow_up_headers = {
+            **PROXIED_HEADERS,
+            "X-Elspais-User-Name": "Carol Nguyen",
+            "X-Elspais-User-Email": "carol@co.org",
+        }
+        body = (
+            {"parent_id": parent["id"], "text": "Agreed"}
+            if route == "reply"
+            else {"comment_id": parent["id"]}
+        )
+        with patch("elspais.server.routes_api.get_author_info", return_value=SERVER_AUTHOR):
+            resp = client.post(f"/api/comment/{route}", json=body, headers=follow_up_headers)
+        assert resp.status_code == 200, resp.text
+        jsonl = root / ".elspais" / "comments" / "spec" / "auth.md.json"
+        events = [json.loads(line) for line in jsonl.read_text().splitlines() if line.strip()]
+        assert events[-1]["event"] == route
+        assert events[-1]["author"] == "Carol Nguyen"
+        assert events[-1]["author_id"] == "carol@co.org"
+
+    # Verifies: REQ-d00296-B, REQ-d00296-C
+    @pytest.mark.parametrize(
+        "secret_header",
+        [
+            pytest.param({}, id="secret-missing"),
+            pytest.param({"X-Elspais-Proxy-Secret": "wrong"}, id="secret-wrong"),
+        ],
+    )
+    def test_REQ_d00296_C_identity_without_proof_falls_back_to_server(
+        self, tmp_path: Path, secret_configured: None, secret_header: dict[str, str]
+    ) -> None:
+        client, _ = _make_app(tmp_path)
+        headers = {k: v for k, v in PROXIED_HEADERS.items() if k != "X-Elspais-Proxy-Secret"}
+        comment = self._add(client, {**headers, **secret_header})
+        assert comment["author"] == "Alice Smith"
+        assert comment["author_id"] == "alice@co.org"
+
+    # Verifies: REQ-d00296-D
+    def test_REQ_d00296_D_unconfigured_secret_ignores_headers(
+        self, tmp_path: Path, secret_unconfigured: None
+    ) -> None:
+        client, _ = _make_app(tmp_path)
+        comment = self._add(client, PROXIED_HEADERS)
+        assert comment["author"] == "Alice Smith"
+        assert comment["author_id"] == "alice@co.org"
+
+    # Verifies: REQ-d00296-B
+    def test_REQ_d00296_B_empty_identity_headers_fall_back_to_server(
+        self, tmp_path: Path, secret_configured: None
+    ) -> None:
+        client, _ = _make_app(tmp_path)
+        comment = self._add(
+            client,
+            {
+                "X-Elspais-Proxy-Secret": PROXY_SECRET,
+                "X-Elspais-User-Name": "",
+                "X-Elspais-User-Email": "",
+            },
+        )
         assert comment["author"] == "Alice Smith"
         assert comment["author_id"] == "alice@co.org"

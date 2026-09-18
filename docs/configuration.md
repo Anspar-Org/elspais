@@ -723,7 +723,7 @@ The one thing that differs is disclosure -- a repository whose configuration
 was assembled with a local file is reported as locally overridden, per
 repository rather than per value.
 
-Two variables the tool reads directly, neither of which is a setting:
+Variables the tool reads directly from the environment, none of which is a setting:
 
 `ELSPAIS_VERSION` pins the minimum CLI version.
 
@@ -740,6 +740,17 @@ back to the other checks" — and the daemon reports that once on stderr rather
 than silently falling through. The name this override was once written under,
 `ELSPAIS_SPAWNER_PID`, is not read; a session that sets only that one is told
 so once on stderr and named the variable that is read.
+
+`ELSPAIS_PROXY_SECRET` is the value a viewer server shares with an
+authenticating proxy in front of it. A request carrying the same value in
+`X-Elspais-Proxy-Secret` is believed about who sent it, and the user named
+by `X-Elspais-User-Name` and `X-Elspais-User-Email` becomes the author of
+the comments and changelog rows that request produces. `X-Elspais-Git-Token`
+is read and trusted under the same proof; the git operations that consult it
+are documented with those operations, and none does yet. The value is read
+once when the server starts. With none set, nothing in those headers is believed, so a
+local viewer names its own user as before. See `elspais docs commands` under
+`viewer` for the full rule.
 
 ## Minimal Configuration Examples
 

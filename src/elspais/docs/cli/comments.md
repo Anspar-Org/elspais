@@ -82,4 +82,14 @@ In Edit Mode, expanded threads show **Reply** and **Resolve** buttons. Reply add
 | GET    | `/api/comments/card`      | Get all threads for a card (node)  |
 | GET    | `/api/comments/orphaned`  | Get orphaned threads               |
 
-Author identity is resolved server-side via `get_author_info` -- it is never supplied by the client.
+The author of a comment, reply or resolution is the identity established for
+the request's session: the one a trusted proxy supplied with the request, or,
+where none was, the server's own identity. The server's own is looked up in
+order: when `[changelog] id_source` is `gh`, the GitHub user `gh` is logged
+in as, provided that profile carries both a name and an email; otherwise --
+`id_source` is `git`, `gh` is absent or not logged in, or the profile lacks
+either field -- the `user.name` and `user.email` in git config. A client
+cannot name an author directly: anything in the request body is ignored, and
+an identity in the request headers counts only when the request also carries
+the secret the server shares with its proxy. See `elspais docs commands`
+under `viewer` for `ELSPAIS_PROXY_SECRET` and the headers.

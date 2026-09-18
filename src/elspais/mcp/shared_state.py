@@ -335,14 +335,24 @@ def report_shutdown_outcome(outcome: dict[str, Any], trigger: str) -> None:
 
 
 # Implements: REQ-d00132-A, REQ-d00132-B, REQ-p00083-A, REQ-p00083-C, REQ-p00083-H
+# Implements: REQ-d00296-A, REQ-d00296-B, REQ-o00074-K
 def persist_pending(
     state: SharedServerState,
     message: str | None = None,
     save_branch: bool = False,
     automatic: bool = False,
     trigger: str = "",
+    author: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Write pending in-memory mutations to the spec files. Never raises.
+
+    ``author`` is the identity already established for the request that
+    asked for the save, where a trusted proxy supplied one; a changelog
+    row written for this save then names that person rather than whoever
+    the process runs as. Left out, the process resolves its own author,
+    and does so before anything is written: a save that would owe a
+    changelog row it cannot sign is refused with the files and the
+    pending mutations exactly as they were.
 
     Callers reach this either because a client asked for a save or
     because the daemon is stopping with no client left to ask. The two
@@ -366,6 +376,10 @@ def persist_pending(
         _get_active_mutated_reqs,
         _validate_config,
     )
+    from elspais.utilities.changelog_author import (
+        AuthorResolutionError,
+        resolve_changelog_author,
+    )
     from elspais.utilities.patterns import build_resolver
 
     graph = state.get("graph")
@@ -375,11 +389,13 @@ def persist_pending(
     config = state.get("config", {})
 
     pending = len(graph.mutation_log.tail(0))
+    # Taken before the write: a successful write clears the mutation log,
+    # and the changelog rows owed to these requirements are written after it.
+    active_mutated = _get_active_mutated_reqs(graph)
 
     typed_config = _validate_config(config) if isinstance(config, dict) else config
     changelog_enforce = typed_config.changelog.hash_current
     if changelog_enforce and not message:
-        active_mutated = _get_active_mutated_reqs(graph)
         if active_mutated:
             if not automatic:
                 ids = ", ".join(sorted(active_mutated))
@@ -397,6 +413,18 @@ def persist_pending(
             # leaving an Active requirement changed on disk with no
             # changelog row would leave the tree failing its own checks.
             message = f"Saved automatically by the daemon ({trigger or 'no client present'})"
+
+    # The rows those requirements are owed are written after the files,
+    # but whoever signs them has to be known before: a successful write
+    # empties the mutation log, and a save refused after it would have
+    # changed the tree while reporting that it had not. Resolved here,
+    # before the safety branch and the write, a refusal leaves nothing
+    # behind and the pending work still in hand.
+    if changelog_enforce and message and active_mutated and author is None:
+        try:
+            author = resolve_changelog_author(typed_config.changelog)
+        except AuthorResolutionError as exc:
+            return {"success": False, "code": "save_failed", "error": str(exc)}
 
     if save_branch:
         from elspais.utilities.git import create_safety_branch
@@ -417,14 +445,9 @@ def persist_pending(
     except Exception as exc:
         return {"success": False, "code": "save_failed", "error": f"save failed: {exc!r}"}
 
-    if result.get("success") and changelog_enforce and message:
-        cl_result = _add_changelog_for_active_mutations(graph, working_dir, config, message)
-        if not cl_result.get("success", True):
-            return {
-                "success": False,
-                "code": "save_failed",
-                "error": cl_result.get("error", "Changelog author resolution failed"),
-            }
+    if result.get("success") and changelog_enforce and message and active_mutated:
+        assert author is not None  # resolved above, before the write
+        _add_changelog_for_active_mutations(graph, working_dir, active_mutated, message, author)
 
     if result.get("success"):
         files = result.get("saved_count") or 0
