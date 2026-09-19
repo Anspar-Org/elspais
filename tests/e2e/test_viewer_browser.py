@@ -3388,3 +3388,233 @@ class TestBrowserSessionBoundLifetime:
                 )
             finally:
                 _end_viewer(proc)
+
+
+# ---------------------------------------------------------------------------
+# Base-path fixture + browser tests: the viewer served under a prefix
+# ---------------------------------------------------------------------------
+
+_BASE_PATH = "/w/abc"
+
+
+def _copy_project(src: Path, dest: Path) -> None:
+    """Copy a fixture project into ``dest`` and make it a git repository."""
+    for item in src.iterdir():
+        if item.is_dir():
+            shutil.copytree(item, dest / item.name)
+        else:
+            shutil.copy2(item, dest / item.name)
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "test",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "test",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    subprocess.run(["git", "init"], cwd=dest, capture_output=True, env=env)
+    subprocess.run(["git", "add", "."], cwd=dest, capture_output=True, env=env)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=dest, capture_output=True, env=env)
+
+
+@pytest.fixture(scope="session")
+def prefixed_viewer(tmp_path_factory):
+    """A viewer started with ``--base-path`` over its own copy of the
+    viewer-tables project. Yields ``(root_url, prefixed_url, log_path,
+    project_dir)``.
+
+    Its own project, not this repository: a viewer serving a directory
+    stops whichever daemon already serves it, and the session fixture over
+    the repository would be the casualty.
+    """
+    elspais_bin = resolve_elspais()
+    if elspais_bin is None:
+        pytest.skip("elspais CLI not found on PATH")
+
+    src = REPO_ROOT / "tests" / "fixtures" / "viewer-tables"
+    if not src.exists():
+        pytest.skip(f"viewer-tables fixture not present at {src}")
+    dest = tmp_path_factory.mktemp("viewer-prefixed-run")
+    _copy_project(src, dest)
+
+    port = _find_free_port()
+    root_url = f"http://127.0.0.1:{port}"
+    base_url = root_url + _BASE_PATH
+
+    proc, log_path = _spawn_viewer(
+        [
+            elspais_bin,
+            "viewer",
+            "--server",
+            "--port",
+            str(port),
+            "--base-path",
+            _BASE_PATH,
+            "--path",
+            str(dest),
+        ],
+        cwd=str(dest),
+    )
+
+    try:
+        _wait_for_server(base_url, proc=proc, log_path=log_path)
+        yield root_url, base_url, log_path, dest
+    finally:
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(f"{base_url}/api/shutdown", method="POST")
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
+
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                proc.wait(timeout=5)
+
+
+@pytest.fixture()
+def page_prefixed(prefixed_viewer):
+    """Launch headless Chromium against the prefixed viewer."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        pg = context.new_page()
+        pg.set_default_timeout(10_000)
+        yield pg
+        browser.close()
+
+
+class TestViewerUnderBasePath:
+    """Validates REQ-d00295: a viewer started under a prefix serves the page
+    there, the page requests everything under it, and the agent surface sits
+    beside it."""
+
+    # Verifies: REQ-d00295-A, REQ-d00295-B
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00295_B_a_card_loads_with_every_request_under_the_prefix(
+        self, page_prefixed, prefixed_viewer
+    ):
+        root_url, base_url, _log, _dir = prefixed_viewer
+        requested: list[str] = []
+        page_prefixed.on(
+            "request",
+            lambda request: (
+                requested.append(request.url) if request.url.startswith(root_url) else None
+            ),
+        )
+
+        page_prefixed.goto(base_url, wait_until="networkidle")
+        page_prefixed.evaluate("() => window.openCard('REQ-p00001')")
+        card = page_prefixed.locator("#card-stack-body").filter(has_text="REQ-p00001")
+        card.wait_for(state="visible", timeout=10_000)
+
+        paths = [url[len(root_url) :] for url in requested]
+        api_paths = [p for p in paths if "/api/" in p]
+        assert any(p.startswith(f"{_BASE_PATH}/api/node/") for p in api_paths), api_paths
+        outside = [p for p in paths if not p.startswith(_BASE_PATH)]
+        assert outside == [], f"requests escaped the prefix: {outside}"
+
+    # Verifies: REQ-d00295-A
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00295_A_the_root_answers_nothing_and_the_address_names_the_prefix(
+        self, prefixed_viewer
+    ):
+        import urllib.error
+        import urllib.request
+
+        root_url, base_url, log_path, _dir = prefixed_viewer
+        with pytest.raises(urllib.error.HTTPError) as refused:
+            urllib.request.urlopen(f"{root_url}/api/status", timeout=5)
+        assert refused.value.code == 404
+        with urllib.request.urlopen(f"{base_url}/", timeout=5) as resp:
+            assert resp.status == 200
+            assert f'URL_PREFIX = "{_BASE_PATH}"' in resp.read().decode()
+        # The address the command announces is the one a browser can use.
+        # The whole log, not its tail: the line is the first thing the
+        # server wrote, and every request since has added a line below it.
+        assert f"Starting trace-edit server at {base_url}" in log_path.read_text(errors="replace")
+
+    # Verifies: REQ-d00295-D
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00295_D_an_agent_reaches_mcp_under_the_prefix(self, prefixed_viewer):
+        pytest.importorskip("mcp")
+        import asyncio
+
+        from mcp import ClientSession
+        from mcp.client.streamable_http import streamablehttp_client
+
+        _root, base_url, _log, _dir = prefixed_viewer
+
+        async def scenario() -> list[str]:
+            async with streamablehttp_client(f"{base_url}/mcp") as (read, write, _sid):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    tools = await session.list_tools()
+                    return [tool.name for tool in tools.tools]
+
+        names = asyncio.run(asyncio.wait_for(scenario(), 60))
+        assert "get_requirement" in names, names
+
+    # Verifies: REQ-d00295-F
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00295_F_the_page_keeps_its_state_under_the_prefix(
+        self, page_prefixed, prefixed_viewer
+    ):
+        """The state cookie is scoped to the prefix, so another workspace's
+        page on the same host, under another prefix, neither sends nor
+        reads it."""
+        _root, base_url, _log, _dir = prefixed_viewer
+        page_prefixed.goto(base_url, wait_until="networkidle")
+        page_prefixed.evaluate("() => window.openCard('REQ-p00001')")
+        card = page_prefixed.locator("#card-stack-body").filter(has_text="REQ-p00001")
+        card.wait_for(state="visible", timeout=10_000)
+
+        cookies = {c["name"]: c for c in page_prefixed.context.cookies()}
+        assert "elspais_trace_state" in cookies, sorted(cookies)
+        assert cookies["elspais_trace_state"]["path"] == _BASE_PATH
+
+    # Verifies: REQ-d00295-I
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00295_I_the_page_keeps_its_state_at_the_root_without_a_prefix(
+        self, page, viewer_url
+    ):
+        """With no prefix the state cookie keeps the scope it always had,
+        the root of the host, so a viewer started without the flag reads
+        the state it wrote before the flag existed."""
+        page.goto(viewer_url, wait_until="networkidle")
+        page.evaluate("() => window.openCard('REQ-p00001')")
+        card = page.locator("#card-stack-body").filter(has_text="REQ-p00001")
+        card.wait_for(state="visible", timeout=10_000)
+
+        cookies = {c["name"]: c for c in page.context.cookies()}
+        assert "elspais_trace_state" in cookies, sorted(cookies)
+        assert cookies["elspais_trace_state"]["path"] == "/"
+
+    # Verifies: REQ-o00076-E
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_o00076_E_a_command_locating_the_viewer_reaches_it_under_the_prefix(
+        self, prefixed_viewer
+    ):
+        """The record a prefixed viewer leaves names the prefix, and the
+        unsaved-work probe every command runs through it gets an answer
+        rather than the 404 of the root."""
+        from elspais.mcp.daemon import get_daemon_info, get_daemon_mutation_count
+
+        _root, _base, _log, project_dir = prefixed_viewer
+        info = get_daemon_info(project_dir)
+        assert info is not None, "the viewer left no record"
+        assert info["type"] == "viewer"
+        assert info["base_path"] == _BASE_PATH
+        assert get_daemon_mutation_count(info) == 0

@@ -145,8 +145,9 @@ same helpers -- there is no softer path around the protocol:
   reason says so with its own status and `code`: **400** with
   `changelog_message_required` when an Active requirement changed and no
   changelog reason was given, **500** with `save_failed` when the write
-  itself failed. Neither is fixed by re-reading and retrying, which is
-  what 409 asks for.
+  itself failed or when the changelog author could not be established --
+  in which case nothing was written and the pending work is still held.
+  Neither is fixed by re-reading and retrying, which is what 409 asks for.
 - Successful mutations return the new `version`.
 - `/api/dirty` returns the pending `mutation_count` and the `tip`.
 - The history routes `/api/save`, `/api/revert`, and `/api/reload`

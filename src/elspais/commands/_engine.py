@@ -69,25 +69,15 @@ def call(
     return result
 
 
-def _build_daemon_source(port: int) -> dict[str, Any]:
-    """Build graph_source dict for a server result."""
-    source: dict[str, Any] = {"port": port}
-    try:
-        from elspais.config import find_git_root
-        from elspais.mcp.daemon import get_daemon_info
-
-        repo_root = find_git_root()
-        if repo_root:
-            info = get_daemon_info(repo_root)
-            if info:
-                source["type"] = info.get("type", "daemon")
-                source["started_at"] = info.get("started_at", "")
-            else:
-                source["type"] = "daemon"
-        else:
-            source["type"] = "daemon"
-    except Exception:
-        source["type"] = "daemon"
+def _build_daemon_source(info: dict) -> dict[str, Any]:
+    """Build graph_source dict from the record of the server that answered."""
+    source: dict[str, Any] = {
+        "port": info["port"],
+        "type": info.get("type", "daemon"),
+        "started_at": info.get("started_at", ""),
+    }
+    if info.get("base_path"):
+        source["base_path"] = info["base_path"]
     return source
 
 
@@ -103,7 +93,7 @@ def _try_daemon(
 
     Returns (result_dict, source_info) or None.
     """
-    from elspais.commands._daemon_client import _get_daemon_port, _try_port
+    from elspais.commands._daemon_client import _get_daemon_record, _try_server
     from elspais.config import find_git_root
 
     repo_root = find_git_root()
@@ -111,8 +101,8 @@ def _try_daemon(
         return None
 
     # 1. Try existing server (viewer or daemon — both use daemon.json)
-    port = _get_daemon_port()
-    if port:
+    record = _get_daemon_record()
+    if record:
         # A server that has committed to stopping still answers and still
         # refuses everything, so it is replaced rather than reused — and
         # only once it has actually gone, since a second process for one
@@ -128,9 +118,9 @@ def _try_daemon(
         if daemon_is_stopping(outgoing):
             if not replace_stopping_daemon(repo_root, outgoing):
                 return None
-            port = None
+            record = None
 
-    if port:
+    if record:
         # Implements: REQ-p00004-J, REQ-p00015-G, REQ-o00076-I, REQ-o00076-J
         # What differs, and whether a difference may be acted on, are both
         # asked through the one authority in mcp/daemon.py, which
@@ -164,12 +154,12 @@ def _try_daemon(
                 from elspais.mcp.daemon import stop_daemon
 
                 stop_daemon(repo_root)
-                port = None
+                record = None
 
-        if port:
-            result = _try_port(port, endpoint, params, "GET")
+        if record:
+            result = _try_server(record, endpoint, params, "GET")
             if result is not None:
-                source = _build_daemon_source(port)
+                source = _build_daemon_source(record)
                 if difference.version:
                     from elspais import __version__
 
@@ -187,10 +177,15 @@ def _try_daemon(
     try:
         from elspais.mcp.daemon import ensure_daemon
 
-        port = ensure_daemon(repo_root)
-        result = _try_port(port, endpoint, params, "GET")
+        ensure_daemon(repo_root)
+        # The record, not the port ensure_daemon returns: the record is
+        # what says where the server answers.
+        record = _get_daemon_record()
+        if record is None:
+            return None
+        result = _try_server(record, endpoint, params, "GET")
         if result is not None:
-            source = _build_daemon_source(port)
+            source = _build_daemon_source(record)
             return result, source
     except Exception:
         pass

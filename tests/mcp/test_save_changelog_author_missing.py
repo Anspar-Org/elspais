@@ -1,101 +1,130 @@
-# Verifies: REQ-d00132-A, REQ-d00231-E
-"""Tests that MCP ``save_mutations`` reports a failure when changelog author
-cannot be resolved for an Active mutation.
+# Verifies: REQ-d00132-A, REQ-o00074-K, REQ-d00296-A, REQ-d00296-B
+"""Tests for the author a save signs its changelog rows with.
 
-Validates REQ-d00132-A (render-based save reports errors rather than
-silently dropping data) and REQ-d00231-E (author identity resolved
-server-side, never from client input).
+A save touching an Active requirement owes each such requirement a
+changelog row, and the row needs an author. These tests run
+``persist_pending`` against a process whose own author cannot be
+resolved and prove two things: a save that would have to sign a row it
+cannot sign is refused before anything reaches disk, with the pending
+work still in hand; and a save handed the identity a trusted proxy
+supplied with the request signs with that identity and never consults
+the process's own.
 """
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
-from unittest.mock import patch
 
-from elspais.config import get_config
-from elspais.graph import NodeKind
-from elspais.graph.factory import build_graph
-from elspais.mcp.server import _add_changelog_for_active_mutations
+import pytest
+
+from elspais.mcp.daemon import read_automatic_save
+from elspais.mcp.shared_state import persist_pending
+from elspais.server.state import AppState
+
+SPEC_FILE = Path("spec") / "prd-core.md"
+ACTIVE_REQ = "REQ-p00001"
+SUPPLIED_AUTHOR = {"name": "Bob Jones", "id": "bob@co.org"}
 
 
-def _make_project(tmp_path: Path) -> tuple[Path, Path]:
-    """Create a minimal project with an Active requirement."""
-    config_path = tmp_path / ".elspais.toml"
-    config_path.write_text(
-        'version = 5\n[project]\nname = "test"\nnamespace = "REQ"\n'
-        "[scanning.spec]\n"
-        'directories = ["spec"]\n'
-        "[changelog]\n"
-        "hash_current = true\n"
+@pytest.fixture
+def hht_project(tmp_path: Path) -> Path:
+    """A throwaway copy of the hht-like fixture the save paths may write to."""
+    src = Path(__file__).parent.parent / "fixtures" / "hht-like"
+    dest = tmp_path / "project"
+    shutil.copytree(src, dest)
+    return dest
+
+
+@pytest.fixture
+def unresolvable_process_author(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Leave the process with no author of its own to sign a changelog row.
+
+    The session's conftest pins the git author variables to a test
+    identity, and the machine running the suite may hold a real one in
+    ``gh`` or git config, so both routes are closed: the variables are
+    removed and the raw lookup answers with nothing. The real resolver
+    then raises its real error.
+    """
+    monkeypatch.delenv("GIT_AUTHOR_NAME", raising=False)
+    monkeypatch.delenv("GIT_AUTHOR_EMAIL", raising=False)
+    monkeypatch.setattr(
+        "elspais.utilities.changelog_author._lookup_raw",
+        lambda _id_source: ("", ""),
     )
-    spec_dir = tmp_path / "spec"
-    spec_dir.mkdir()
-    req_file = spec_dir / "requirements.md"
-    req_file.write_text(
-        "# REQ-d00001: Test Req\n"
-        "\n"
-        "**Level**: DEV | **Status**: Active | **Implements**: -\n"
-        "\n"
-        "## Assertions\n"
-        "\n"
-        "A. The system SHALL do X.\n"
-        "\n"
-        "*End* *Test Req* | **Hash**: 00000000\n"
-        "---\n"
-    )
-    return tmp_path, config_path
 
 
-class TestSaveMutationsFailsWhenAuthorMissing:
-    """``_add_changelog_for_active_mutations`` must surface an error
-    (instead of silently dropping the changelog entry) when the configured
-    changelog author identity is unresolvable for an Active mutation.
+@pytest.mark.usefixtures("unresolvable_process_author")
+class TestSaveRefusedWhenProcessAuthorUnresolvable:
+    """A save owing a changelog row nobody can sign is refused whole.
+
+    The refusal comes before the safety branch and before any file is
+    written, so the spec file, the mutation log and the automatic-save
+    record are exactly as they were: the work is retained, and there is
+    no record of a save that did not happen.
     """
 
-    def test_save_mutations_returns_error_when_author_unresolvable(self, tmp_path: Path):
-        from elspais.utilities.changelog_author import AuthorResolutionError
+    # Verifies: REQ-d00132-A, REQ-o00074-K
+    @pytest.mark.parametrize(
+        "save_kwargs",
+        [
+            pytest.param({"message": "retitled by the session"}, id="client"),
+            pytest.param(
+                {"automatic": True, "trigger": "no recorded client was running"},
+                id="automatic",
+            ),
+        ],
+    )
+    def test_refusal_leaves_files_and_pending_work_untouched(
+        self, hht_project: Path, save_kwargs: dict
+    ):
+        state = AppState.from_config(repo_root=hht_project)
+        spec_path = hht_project / SPEC_FILE
+        before = spec_path.read_bytes()
 
-        project, config_path = _make_project(tmp_path)
-        graph = build_graph(
-            spec_dirs=[project / "spec"],
-            config_path=config_path,
-            repo_root=project,
-            scan_code=False,
-            scan_tests=False,
+        state.graph.update_title(ACTIVE_REQ, "User Authentication (retitled)")
+        assert len(state.graph.mutation_log) == 1
+
+        result = persist_pending(state.shared, **save_kwargs)
+
+        assert result["success"] is False, result
+        assert result["code"] == "save_failed", result
+        assert "author_name" in result["error"], result["error"]
+
+        assert spec_path.read_bytes() == before, "a refused save changed the spec file"
+        assert len(state.graph.mutation_log) == 1, "a refused save dropped the pending work"
+        after = spec_path.read_text()
+        assert "## Changelog" not in after
+        assert "(retitled)" not in after
+        assert read_automatic_save(hht_project) is None, (
+            "a save that did not happen left a record of itself"
         )
 
-        # Mutate an Active requirement so save_mutations would need a
-        # changelog entry.
-        node = next(n for n in graph.nodes_by_kind(NodeKind.REQUIREMENT) if n.id == "REQ-d00001")
-        graph.update_title(node.id, "Updated Title")
 
-        config = get_config(config_path)
+@pytest.mark.usefixtures("unresolvable_process_author")
+class TestSuppliedIdentitySignsTheRow:
+    """An identity handed in with the request is the one the row names.
 
-        spec_file = project / "spec" / "requirements.md"
-        before = spec_file.read_text()
+    The process author is left unresolvable for this test too, so the
+    save can only succeed if the supplied identity was used and the
+    process's own was never consulted.
+    """
 
-        with patch(
-            "elspais.utilities.changelog_author.resolve_changelog_author",
-            side_effect=AuthorResolutionError(missing=["author_name"]),
-        ):
-            result = _add_changelog_for_active_mutations(graph, project, config, "Updated title")
+    # Verifies: REQ-d00296-A, REQ-d00296-B
+    def test_row_names_the_supplied_author(self, hht_project: Path):
+        state = AppState.from_config(repo_root=hht_project)
+        spec_path = hht_project / SPEC_FILE
 
-        # _add_changelog_for_active_mutations must now return a dict that
-        # the save_mutations caller can propagate as success=False.
-        assert isinstance(result, dict), (
-            f"Expected dict result on author failure, got: {type(result).__name__}"
-        )
-        assert result.get("success") is False, (
-            f"Expected success=False on author resolution failure. Got: {result!r}"
-        )
-        error_msg = result.get("error", "") or ""
-        assert "author_name" in error_msg, (
-            f"Error message should name the missing field. Got: {error_msg!r}"
+        state.graph.update_title(ACTIVE_REQ, "User Authentication (retitled)")
+
+        result = persist_pending(
+            state.shared,
+            message="retitled by the session",
+            author=SUPPLIED_AUTHOR,
         )
 
-        # No changelog section should have been added on disk.
-        after = spec_file.read_text()
-        assert "## Changelog" not in after, (
-            "Spec file should not have gained a Changelog section when the author lookup failed."
-        )
-        assert after == before, "Spec file content should be unchanged on failure"
+        assert result.get("success"), result
+        assert len(state.graph.mutation_log) == 0, "a successful save left the work pending"
+        after = spec_path.read_text()
+        assert "User Authentication (retitled)" in after, "the save did not reach disk"
+        assert "Bob Jones (<bob@co.org>) | retitled by the session" in after, after

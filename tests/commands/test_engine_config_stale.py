@@ -51,9 +51,13 @@ def _run_try_daemon(tmp_path, info, try_port_fn, mutation_count=0):
         return True
 
     started = []
+    # Starting a daemon writes a fresh record, so what the record names
+    # moves with the start; the stub moves it the same way.
+    current = {"info": info}
 
     def mock_ensure(repo_root, ttl_minutes=None):
         started.append(repo_root)
+        current["info"] = _daemon_info(config_hash="fresh", port=54321)
         return 54321
 
     probes = []
@@ -64,9 +68,8 @@ def _run_try_daemon(tmp_path, info, try_port_fn, mutation_count=0):
 
     with (
         patch("elspais.config.find_git_root", return_value=tmp_path),
-        patch("elspais.commands._daemon_client._get_daemon_port", return_value=info["port"]),
-        patch("elspais.commands._daemon_client._try_port", side_effect=try_port_fn),
-        patch("elspais.mcp.daemon.get_daemon_info", return_value=info),
+        patch("elspais.commands._daemon_client._try_server", side_effect=try_port_fn),
+        patch("elspais.mcp.daemon.get_daemon_info", side_effect=lambda _root: current["info"]),
         patch("elspais.mcp.daemon.get_daemon_mutation_count", side_effect=mock_count),
         patch("elspais.mcp.daemon.stop_daemon", side_effect=mock_stop),
         patch("elspais.mcp.daemon.ensure_daemon", side_effect=mock_ensure),
@@ -83,8 +86,8 @@ def test_stale_config_clean_daemon_restarts(tmp_path: Path):
 
     calls = []
 
-    def try_port(port, endpoint, params, method):
-        calls.append((port, endpoint))
+    def try_port(record, endpoint, params, method):
+        calls.append((record["port"], endpoint))
         return {"healthy": True}
 
     result, stopped, started, probes = _run_try_daemon(tmp_path, info, try_port, mutation_count=0)
@@ -107,7 +110,7 @@ def test_stale_config_dirty_daemon_warns_and_serves(tmp_path: Path, capsys):
     _make_project(tmp_path)
     info = _daemon_info(config_hash="stale_hash_value_")
 
-    def try_port(port, endpoint, params, method):
+    def try_port(record, endpoint, params, method):
         return {"healthy": True}
 
     result, stopped, started, _ = _run_try_daemon(tmp_path, info, try_port, mutation_count=2)
@@ -133,7 +136,7 @@ def test_fresh_config_daemon_reused_without_restart(tmp_path: Path):
 
     info = _daemon_info(config_hash=compute_config_hash(config_path))
 
-    def try_port(port, endpoint, params, method):
+    def try_port(record, endpoint, params, method):
         return {"healthy": True}
 
     result, stopped, started, probes = _run_try_daemon(tmp_path, info, try_port)

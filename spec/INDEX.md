@@ -151,7 +151,7 @@
 | REQ-d00228 | Comment JSONL Storage                                         | prd-features.md         | 7415991a |
 | REQ-d00229 | Comment Promotion Engine                                      | prd-features.md         | ec366878 |
 | REQ-d00230 | Comment Graph Integration                                     | prd-features.md         | 1eb4899c |
-| REQ-d00231 | Comment API Endpoints                                         | prd-features.md         | 639d0eb5 |
+| REQ-d00231 | Comment API Endpoints                                         | prd-features.md         | 15c0e4d6 |
 | REQ-d00232 | Comment UI Anchors and Margin Column                          | prd-features.md         | 34656218 |
 | REQ-d00233 | Comment Inline Threads and Comment Mode                       | prd-features.md         | fd4019ef |
 | REQ-d00234 | Lost Comments Card                                            | prd-features.md         | 0bd322d3 |
@@ -214,6 +214,8 @@
 | REQ-d00292 | Viewer Coverage Presentation                                  | dev-graph-core.md       | db9415cd |
 | REQ-d00293 | Configurable Viewer Presentation                              | dev-graph-core.md       | 31848b5c |
 | REQ-d00294 | A Result Is Its Own Record                                    | dev-graph-core.md       | 66e2737b |
+| REQ-d00295 | Viewer Served Under a Configured Prefix                       | dev-traceview-review.md | b3c8493f |
+| REQ-d00296 | Request Identity From a Trusted Proxy                         | prd-features.md         | fe4f3620 |
 
 ## User Journeys
 

@@ -11,6 +11,7 @@ State is stored on ``app.state.app_state`` as an ``AppState`` instance.
 from __future__ import annotations
 
 import contextlib
+import re
 import sys
 from pathlib import Path
 
@@ -99,15 +100,54 @@ from elspais.server.routes_git import (
 from elspais.server.routes_ui import _extract_viewer_config, index
 from elspais.server.state import AppState
 
+# One or more segments, each introduced by a single slash and made of
+# unreserved ASCII characters only: the form the page, a router and the
+# mount all spell identically. A space, a "?", a "#" or a "%" is spelt
+# differently by each, so one such prefix would name a different path in
+# each; a "." or ".." segment is normalised away by the client before the
+# request arrives, to the same effect.
+_BASE_PATH_FORM = re.compile(r"^(?:/[A-Za-z0-9._~-]+)+$")
+_BASE_PATH_DESCRIPTION = (
+    "empty, or one or more path segments each introduced by a single '/' and "
+    "made only of ASCII letters and digits, '-', '_', '.' and '~', with no "
+    "segment being '.' or '..' (for example '/w/abc')"
+)
+
+
+# Implements: REQ-d00295-E
+def validate_base_path(base_path: str) -> str:
+    """Return ``base_path`` when it has the one accepted form, else raise.
+
+    The refusal names that form; it is the one message both the viewer
+    command and the application factory give.
+    """
+    if base_path == "":
+        return base_path
+    if _BASE_PATH_FORM.match(base_path) and not any(
+        segment in (".", "..") for segment in base_path.split("/")[1:]
+    ):
+        return base_path
+    raise ValueError(
+        f"base path {base_path!r} is not accepted: it must be {_BASE_PATH_DESCRIPTION}"
+    )
+
 
 class DetachedGuardMiddleware:
-    """Block mutation endpoints when in detached HEAD (read-only) mode."""
+    """Block mutation endpoints when in detached HEAD (read-only) mode.
 
-    def __init__(self, app):
+    The check is a string test on the request path, so it is told the
+    prefix the routes are mounted under: under ``/w/abc`` the mutation
+    routes answer at ``/w/abc/api/mutate/...`` and nowhere else, and a path
+    that merely contains the prefix further along is not one of them.
+    """
+
+    def __init__(self, app, base_path: str = ""):
         self.app = app
+        self._mutate_prefix = base_path + "/api/mutate/"
 
+    # Implements: REQ-d00295-A
     async def __call__(self, scope, receive, send):
-        if scope["type"] == "http" and scope["path"].startswith("/api/mutate/"):
+        if scope["type"] == "http" and scope["path"].startswith(self._mutate_prefix):
             request = Request(scope, receive)
             state = request.app.state.app_state
             if state.is_detached:
@@ -125,11 +165,14 @@ class DetachedGuardMiddleware:
 
 # `_extract_viewer_config` is imported above from routes_ui and re-exported
 # here, where callers of the app module reach it.
-__all__ = ["create_app", "_extract_viewer_config"]
+__all__ = ["create_app", "validate_base_path", "_extract_viewer_config"]
+
+# Bundled static assets, served at /static under the prefix when present.
+_STATIC_DIR = Path(__file__).parent.parent / "html" / "templates" / "static"
 
 
-# Implements: REQ-o00074-A
-def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
+# Implements: REQ-o00074-A, REQ-d00295-A, REQ-d00295-C
+def create_app(state: AppState, mount_mcp: bool = True, base_path: str = "") -> Starlette:
     """Create the Starlette application with REST API routes.
 
     REQ-d00010-A: Application with factory function.
@@ -139,6 +182,8 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
     Args:
         state: Pre-built AppState instance with graph, config, etc.
         mount_mcp: Whether to mount the MCP sub-app at /mcp.
+        base_path: Prefix the whole route table is mounted under (empty for
+            the root). Validated by ``validate_base_path``.
 
     Returns:
         Configured Starlette application.
@@ -156,6 +201,7 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
     tracker = HeldSessionTracker()
     state.shared["session_tracker"] = tracker
 
+    base_path = validate_base_path(base_path)
     routes: list[Route | Mount] = [
         # UI
         Route("/", index),
@@ -276,12 +322,17 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
             mcp_app = None
 
     # Mount static files if directory exists
-    templates_dir = Path(__file__).parent.parent / "html" / "templates"
-    static_dir = templates_dir / "static"
-    if static_dir.exists():
+    if _STATIC_DIR.exists():
         from starlette.staticfiles import StaticFiles
 
-        routes.append(Mount("/static", app=StaticFiles(directory=str(static_dir))))
+        routes.append(Mount("/static", app=StaticFiles(directory=str(_STATIC_DIR))))
+
+    # Implements: REQ-d00295-A, REQ-d00295-D
+    # One outer Mount carries the whole table — API routes, the /mcp mount
+    # and /static alike — so nothing answers at the root. An empty prefix
+    # mounts nothing and leaves the table exactly as it was.
+    if base_path:
+        routes = [Mount(base_path, routes=routes)]
 
     # REQ-d00010-F: CORS support
     middleware = [
@@ -292,9 +343,9 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
             allow_headers=["*"],
         ),
         Middleware(NoCacheMiddleware),
-        Middleware(APIErrorMiddleware),
+        Middleware(APIErrorMiddleware, base_path=base_path),
         Middleware(AutoRefreshMiddleware),
-        Middleware(DetachedGuardMiddleware),
+        Middleware(DetachedGuardMiddleware, base_path=base_path),
     ]
 
     # Starlette does not run mounted sub-apps' lifespans, and FastMCP's
@@ -312,5 +363,7 @@ def create_app(state: AppState, mount_mcp: bool = True) -> Starlette:
 
     app = Starlette(routes=routes, middleware=middleware, lifespan=lifespan)
     app.state.app_state = state
+    # The page reads this to build every URL it requests (REQ-d00295-B).
+    app.state.url_prefix = base_path
 
     return app

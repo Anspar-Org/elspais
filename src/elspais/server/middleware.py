@@ -155,8 +155,15 @@ class APIErrorMiddleware(BaseHTTPMiddleware):
     the frontend can't parse, resulting in 'Unknown error' messages.
     """
 
+    def __init__(self, app, base_path: str = "") -> None:
+        super().__init__(app)
+        # A string test on the path, so it is told where the API routes are
+        # mounted: under a prefix they answer at ``<prefix>/api/...``.
+        self._api_prefix = base_path + "/api/"
+
+    # Implements: REQ-d00295-A
     async def dispatch(self, request: Request, call_next) -> Response:
-        if not request.url.path.startswith("/api/"):
+        if not request.url.path.startswith(self._api_prefix):
             return await call_next(request)
         try:
             return await call_next(request)

@@ -27,13 +27,23 @@ function ownWriteRecently(withinMs) {
     return _ownWritesInFlight > 0 || (Date.now() - _lastOwnWriteAt) < withinMs;
 }
 
+{# Implements: REQ-d00295-B #}
+// Every caller names a route from the server's root ('/api/...'); the
+// prefix the server is mounted under is prepended HERE, once, so no
+// caller carries it and none can forget it. A caller that already
+// prefixed would be prefixed twice — callers pass root-relative URLs only.
+function prefixedUrl(url) {
+    if (URL_PREFIX && url.charAt(0) === '/') return URL_PREFIX + url;
+    return url;
+}
+
 async function apiFetch(url, options) {
     var busyBtn = _lastClickedButton;
     if (busyBtn) busyBtn.classList.add('busy');
     var isWrite = !!(options && options.method && options.method.toUpperCase() !== 'GET');
     if (isWrite) { _ownWritesInFlight += 1; _lastOwnWriteAt = Date.now(); }
     try {
-        var resp = await fetch(url, options);
+        var resp = await fetch(prefixedUrl(url), options);
         var data = await resp.json();
         if (!resp.ok) {
             // A precondition rejection is a conversation, not a dead end: it
