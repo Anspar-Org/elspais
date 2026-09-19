@@ -3631,3 +3631,224 @@ class TestComputeLinkDataIntegrates:
 
         implemented_ids = {entry["id"] for entry in r_links["implemented"]}
         assert "LIB-d00001" in implemented_ids
+
+
+class TestSaveChangelogAuthorFromProxy:
+    """The changelog row a save writes names the identity a trusted proxy
+    supplied with the save request, else the process's own (REQ-d00296).
+    """
+
+    PROXY_SECRET = "shared-with-the-hub"
+    PROXIED = {
+        "X-Elspais-Proxy-Secret": PROXY_SECRET,
+        "X-Elspais-User-Name": "Bob Jones",
+        "X-Elspais-User-Email": "bob@co.org",
+    }
+
+    @staticmethod
+    def _mutate_and_save(client: TestClient, headers: dict[str, str]) -> None:
+        # A title change leaves the requirement Active, so the save owes it
+        # a changelog row.
+        resp = client.post(
+            "/api/mutate/title",
+            json={
+                "node_id": "REQ-t00001",
+                "new_title": "Retitled by the session",
+                "if_version": _version(client, "REQ-t00001"),
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        resp = client.post(
+            "/api/save",
+            json={"if_tip_mutation_id": _tip(client), "message": "retitled by the session"},
+            headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["success"] is True
+
+    # Verifies: REQ-d00296-A
+    def test_REQ_d00296_A_changelog_row_names_the_session_user(self, disk_app, monkeypatch):
+        from elspais.server import proxy_trust
+
+        monkeypatch.setattr(proxy_trust, "_SECRET", self.PROXY_SECRET)
+        app, spec_file = disk_app
+        self._mutate_and_save(TestClient(app), self.PROXIED)
+        content = spec_file.read_text(encoding="utf-8")
+        assert "Bob Jones (<bob@co.org>) | retitled by the session" in content
+        assert "Test User" not in content
+
+    # Verifies: REQ-d00296-B, REQ-d00296-C
+    def test_REQ_d00296_B_changelog_row_names_the_process_without_proof(
+        self, disk_app, monkeypatch
+    ):
+        from elspais.server import proxy_trust
+
+        monkeypatch.setattr(proxy_trust, "_SECRET", self.PROXY_SECRET)
+        # The save path signs its rows through the changelog author lookup,
+        # not the comment routes' helper; pin the process identity there so
+        # the shell running the suite cannot supply a different one.
+        monkeypatch.setattr(
+            "elspais.utilities.changelog_author._lookup_raw",
+            lambda _id_source: ("Alice Smith", "alice@co.org"),
+        )
+        app, spec_file = disk_app
+        headers = {**self.PROXIED, "X-Elspais-Proxy-Secret": "wrong"}
+        self._mutate_and_save(TestClient(app), headers)
+        content = spec_file.read_text(encoding="utf-8")
+        assert "Alice Smith (<alice@co.org>) | retitled by the session" in content
+        assert "Bob Jones" not in content
+
+
+class TestSaveLeavesServedGraphAgreeingWithDisk:
+    """A save through the viewer leaves the served graph agreeing with the
+    files it wrote, as one through the MCP save tool does, so a later save
+    keeps the changelog rows an earlier one added.
+    """
+
+    @staticmethod
+    def _make_project(tmp_path: Path) -> Path:
+        (tmp_path / ".elspais.toml").write_text(
+            'version = 5\n[project]\nname = "test"\nnamespace = "REQ"\n'
+            "[scanning.spec]\n"
+            'directories = ["spec"]\n'
+            "[changelog]\n"
+            "hash_current = true\n",
+            encoding="utf-8",
+        )
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        spec_file = spec_dir / "requirements.md"
+        spec_file.write_text(
+            "# REQ-d00001: Test Req\n"
+            "\n"
+            "**Level**: DEV | **Status**: Active | **Implements**: -\n"
+            "\n"
+            "## Assertions\n"
+            "\n"
+            "A. The system SHALL do X.\n"
+            "\n"
+            "*End* *Test Req* | **Hash**: 00000000\n"
+            "---\n",
+            encoding="utf-8",
+        )
+        return spec_file
+
+    @staticmethod
+    def _retitle_and_save(client: TestClient, title: str, reason: str) -> None:
+        resp = client.post(
+            "/api/mutate/title",
+            json={
+                "node_id": "REQ-d00001",
+                "new_title": title,
+                "if_version": _version(client, "REQ-d00001"),
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        resp = client.post(
+            "/api/save",
+            json={"if_tip_mutation_id": _tip(client), "message": reason},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["success"] is True, resp.text
+
+    # Verifies: REQ-d00132-A, REQ-o00062-O
+    def test_REQ_d00132_A_second_save_keeps_the_first_changelog_row(self, tmp_path, monkeypatch):
+        from elspais.config import get_config
+        from elspais.graph.factory import build_graph
+
+        # The save signs its rows through the changelog author lookup; pin
+        # the process identity so the shell running the suite cannot leave
+        # the row unsigned.
+        monkeypatch.setattr(
+            "elspais.utilities.changelog_author._lookup_raw",
+            lambda _id_source: ("Alice Smith", "alice@co.org"),
+        )
+        spec_file = self._make_project(tmp_path)
+        config = get_config(start_path=tmp_path, quiet=True)
+        graph = build_graph(config=config, repo_root=tmp_path)
+        state = AppState(graph=graph, repo_root=tmp_path, config=config)
+        # The freshness middleware would rebuild on whichever request first
+        # follows its throttle, so left in place it could bring the served
+        # graph into agreement with disk by timing alone. Only the save
+        # itself may do so here.
+        monkeypatch.setattr(state, "ensure_fresh", lambda: False)
+        client = TestClient(create_app(state, mount_mcp=False))
+
+        self._retitle_and_save(client, "First title", "first reason")
+        self._retitle_and_save(client, "Second title", "second reason")
+
+        content = spec_file.read_text(encoding="utf-8")
+        assert "first reason" in content
+        assert "second reason" in content
+        assert "# REQ-d00001: Second title" in content
+
+
+class TestSaveReportsAFailedRebuildBesideTheWrite:
+    """A save through the viewer whose rebuild cannot publish is still a
+    save -- the files are on disk -- and the failed rebuild is reported
+    beside it, under the same key the MCP save tool uses, with the graph
+    the save was made against left live.
+    """
+
+    # Verifies: REQ-p00015-B, REQ-p00015-F, REQ-o00062-O
+    def test_REQ_p00015_B_save_reports_the_failed_rebuild_beside_the_write(
+        self, tmp_path, monkeypatch
+    ):
+        from elspais.config import get_config
+        from elspais.graph.factory import build_graph
+
+        # The save signs its rows through the changelog author lookup; pin
+        # the process identity so the shell running the suite cannot leave
+        # the row unsigned.
+        monkeypatch.setattr(
+            "elspais.utilities.changelog_author._lookup_raw",
+            lambda _id_source: ("Alice Smith", "alice@co.org"),
+        )
+        spec_file = TestSaveLeavesServedGraphAgreeingWithDisk._make_project(tmp_path)
+        config = get_config(start_path=tmp_path, quiet=True)
+        graph = build_graph(config=config, repo_root=tmp_path)
+        state = AppState(graph=graph, repo_root=tmp_path, config=config)
+        # Only the save may rebuild here: the freshness middleware would
+        # otherwise reach the failing build on whichever request first
+        # follows its throttle.
+        monkeypatch.setattr(state, "ensure_fresh", lambda: False)
+        graph_before = state.graph
+        client = TestClient(create_app(state, mount_mcp=False))
+
+        # The served graph was built for real; only the rebuild that
+        # follows the write is made to fail.
+        cause = "cannot rebuild after the write"
+
+        def _refuse_to_build(*args, **kwargs):
+            raise RuntimeError(cause)
+
+        monkeypatch.setattr("elspais.graph.factory.build_graph", _refuse_to_build)
+
+        new_title = "Retitled before the rebuild failed"
+        resp = client.post(
+            "/api/mutate/title",
+            json={
+                "node_id": "REQ-d00001",
+                "new_title": new_title,
+                "if_version": _version(client, "REQ-d00001"),
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        resp = client.post(
+            "/api/save",
+            json={"if_tip_mutation_id": _tip(client), "message": "retitled"},
+        )
+
+        # REQ-p00015-B: the write happened, so the save is reported as one,
+        # and the rebuild that did not is reported beside it with its cause,
+        # under the key the MCP save tool reports it under (REQ-o00062-O).
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["success"] is True, body
+        assert body["rebuild_error"].startswith("BUILD ERROR: RuntimeError:")
+        assert cause in body["rebuild_error"]
+        assert f"# REQ-d00001: {new_title}" in spec_file.read_text(encoding="utf-8")
+
+        # REQ-p00015-F: nothing was published, so the graph being served is
+        # the one the save was made against.
+        assert state.graph is graph_before
