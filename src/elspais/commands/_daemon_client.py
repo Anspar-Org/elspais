@@ -14,12 +14,13 @@ from urllib.request import Request, urlopen
 
 
 # Implements: REQ-o00076-C
-def _get_daemon_port() -> int | None:
-    """Get port of a running daemon, if any.
+def _get_daemon_record() -> dict | None:
+    """The record of a running server, if any.
 
     Located from the working tree the command is running in, with
     nothing agreed in advance: no port is configured, passed or
-    remembered between commands.
+    remembered between commands. The whole record rather than its port,
+    because the port alone does not say where the server answers.
     """
     try:
         from elspais.config import find_git_root
@@ -29,20 +30,23 @@ def _get_daemon_port() -> int | None:
         if repo_root is None:
             return None
         info = get_daemon_info(repo_root)
-        return info["port"] if info else None
+        return info if info and "port" in info else None
     except Exception:
         return None
 
 
-def _try_port(
-    port: int,
+# Implements: REQ-o00076-E
+def _try_server(
+    info: dict,
     endpoint: str,
     params: dict | None,
     method: str,
 ) -> dict | list | None:
-    """Try a single port. Returns parsed JSON or None."""
+    """Try the server a record describes. Returns parsed JSON or None."""
+    from elspais.mcp.daemon import daemon_url
+
     try:
-        url = f"http://127.0.0.1:{port}{endpoint}"
+        url = daemon_url(info, endpoint)
         if method == "GET" and params:
             url += "?" + urlencode(params)
 
