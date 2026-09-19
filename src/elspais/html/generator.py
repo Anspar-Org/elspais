@@ -754,6 +754,8 @@ class HTMLGenerator:
             status_data=status_data,
             version=self.version,
             base_path=self.base_path,
+            # A static page requests nothing, so it carries no prefix.
+            url_prefix="",
             repo_name=(
                 self.repo_name or (Path(self.base_path).name if self.base_path else "elspais")
             ),
