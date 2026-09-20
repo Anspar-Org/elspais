@@ -458,14 +458,89 @@ also serves MCP tools at `/mcp` for AI agent integration.
   $ elspais viewer --static         # Generate static HTML file
   $ elspais viewer --server         # Start server without opening browser
   $ elspais viewer --path /my/repo  # Specify repository root
+  $ elspais viewer --server --session-lifetime   # End after the grace with no tab
+  $ elspais viewer --base-path /w/abc   # Serve everything under a prefix
 
 **Options:**
 
-  `--static`          Generate static HTML file instead of live server
-  `--server`          Start server without opening browser
-  `--port PORT`       Server port (default: 5001)
-  `--embed-content`   Embed full markdown in HTML for offline viewing
-  `--path DIR`        Path to repository root (default: auto-detect)
+  `--static`             Generate static HTML file instead of live server
+  `--server`             Start server without opening browser
+  `--port PORT`          Server port (default: 5001)
+  `--base-path PATH`     URL prefix the server sits under (default: none)
+  `--embed-content`      Embed full markdown in HTML for offline viewing
+  `--path DIR`           Path to repository root (default: auto-detect)
+  `--session-lifetime`   Stop the server, saving held changes, once no
+                         browser tab has held it open for the grace
+                         interval
+
+**Session lifetime.** A viewer tab holds a stream open to the server for
+as long as it is open, and the server counts it as a client exactly as it
+counts an agent's MCP session (see `daemon`). With `--session-lifetime`
+that count is what ends the viewer: it keeps serving while any tab holds
+a stream, and once no tab has held one for the grace interval -- counted
+from its start, so a viewer no tab ever connects to ends by the same
+clock -- it persists whatever changes it holds and stops, by the same
+rule and the same grace as a daemon whose clients are gone. The grace
+applies whether or not changes are pending, unlike a daemon whose
+recorded processes have all died: a tab's stream drops on a reload, a
+laptop going to sleep or a tunnel reconnecting, and comes back, so no
+stream held at one check is not a session that has ended. Meant for a
+viewer started on somebody's behalf, such as one a hub opens for a
+browser session. Without the flag the viewer's lifetime is unchanged.
+
+**Serving behind a proxy.** A server that serves many people through an
+authenticating proxy cannot name the person from its own surroundings, so
+the proxy supplies the identity with each request and the server believes
+it only when the request also carries a secret the two share:
+
+    ELSPAIS_PROXY_SECRET    set in the server's environment before it starts;
+                            read once at start, never re-read
+
+    X-Elspais-Proxy-Secret  the same value, on every proxied request
+    X-Elspais-User-Name     the authenticated user's display name
+    X-Elspais-User-Email    the authenticated user's email, used as the
+                            author id in comments and changelog rows
+    X-Elspais-Git-Token     a git credential, accepted only under the same
+                            secret; no operation consults it yet, and the
+                            git operations that come to will document it
+                            with those operations
+
+A comment, reply, resolution or save made through a request carrying the
+secret and both identity headers is attributed to that user. A request
+missing the secret, carrying the wrong one, or missing either identity
+header is attributed to the server's own identity, as a local viewer
+always is -- the headers are ignored, never refused. With no
+`ELSPAIS_PROXY_SECRET` in the environment nothing in the headers is
+believed, whatever they say. The secret is per process rather than a
+fixed value because the server listens on the local interface, and on a
+shared host every workspace process runs as the same OS user: a
+"trust the headers" switch would let any local caller speak as any user.
+
+The rule reaches the viewer's own API. A tool call an agent makes over the
+`/mcp` mount is that agent's session rather than a person's, and a save the
+server performs for itself when its last client is gone has no request at
+all; both name the server's own identity, whatever headers reached the
+process.
+
+`--base-path` mounts the whole server — the page, the API and the `/mcp`
+agent surface — under a prefix, for a router that places each workspace's
+viewer under a path of its own. The page builds every URL it requests under
+that prefix, and the address printed at startup carries it. The prefix is
+empty, or one or more path segments each introduced by a single `/` and made
+only of ASCII letters and digits, `-`, `_`, `.` and `~`, with no segment
+being `.` or `..`; anything else — a doubled slash, a `?` or `#`, a space, a
+`%`, a `.` or `..` segment — is refused naming that form, because the page,
+a router and the mount each spell such a prefix differently and so would
+name different paths under it. The flag applies to
+the server alone: with `--static` it is refused, since a generated file
+requests nothing under a prefix. With no prefix the server is exactly what
+it is without the flag.
+The viewer's record in `.elspais/daemon.json` names the prefix as
+`base_path`, so every command that reaches a running server through the
+record — the CLI's graph queries, `elspais doctor`, `elspais mcp env`
+— reaches a prefixed viewer where it answers. The state the page keeps in
+the browser is scoped to the prefix too, so viewers under different
+prefixes on one host keep state of their own.
 
 The served viewer also exports any report it can show -- `trace`, `summary`,
 `gaps`, `checks` -- as markdown, CSV or PDF through `GET
@@ -970,12 +1045,13 @@ Every `elspais` command that job runs afterward then inherits a daemon
 whose lifetime matches the job, rather than whichever of the three rungs
 below it happens to land on.
 
-**A held MCP session counts too.** An agent connected over streamable HTTP
+**A held session counts too.** An agent connected over streamable HTTP
 does not need a process id at all: holding the session's GET stream open
 for its lifetime is itself a handle the daemon can observe, so it is
-counted as a client for as long as the connection is held. A completed
-request is not — request traffic never keeps a daemon alive on its own,
-only presence does.
+counted as a client for as long as the connection is held. A viewer tab
+is counted the same way, through the change stream it holds at
+`/api/events`. A completed request is not — request traffic never keeps
+a daemon alive on its own, only presence does.
 
 **When nothing binds, you are told once.** If no handle can be derived —
 none of the three rungs resolves — or a declared `ELSPAIS_CLIENT_PID`
@@ -988,7 +1064,11 @@ does not repeat for that daemon; the same daemon does not warn you twice.
 **Started deliberately (explicit).** `elspais daemon`, a manual
 `elspais mcp serve`, and the viewer record no session at all. Their
 lifetime is governed solely by `cli_ttl`, and `daemon.json` carries no
-`client_pid` key.
+`client_pid` key. A viewer started with `--session-lifetime` is not an
+explicit start in this sense: it is started on behalf of the browser
+sessions it serves, records no process id because a page has none, and
+is bound to the tabs holding it through the streams they hold (see
+`viewer`).
 
 **Termination.** The check runs on the daemon's own clock, about once a
 minute, so a client-bound daemon with nothing pending shuts down at the
@@ -1106,7 +1186,7 @@ leaves nothing behind.
 client was seen gone counts as proof that a writer is present even when
 that writer could not register: the daemon keeps serving and the grace
 period starts again. Only applied changes count. Reading — search,
-queries, the viewer's polling — moves nothing and never postpones
+queries, the viewer's count probes — moves nothing and never postpones
 termination, so a client that merely polls cannot hold an orphaned daemon
 open.
 

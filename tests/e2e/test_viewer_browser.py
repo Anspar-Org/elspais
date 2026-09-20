@@ -16,6 +16,7 @@ Validates REQ-d00255-D, REQ-d00256-D: journey UAT verdict badge and
 failing-step identification are visible in the viewer.
 """
 
+import json
 import os
 import random
 import re
@@ -138,6 +139,7 @@ def _wait_for_server(
     proc: subprocess.Popen | None = None,
     log_path: Path | None = None,
     timeout: float = _STARTUP_TIMEOUT,
+    poll: float = 0.5,
 ) -> None:
     """Poll /api/status until the server is ready, dies, or the deadline passes.
 
@@ -173,7 +175,7 @@ def _wait_for_server(
                 return
         except (urllib.error.URLError, OSError, ConnectionRefusedError):
             pass
-        time.sleep(0.5)
+        time.sleep(poll)
     pytest.fail(
         f"Server at {base_url} did not become ready within {timeout}s "
         f"(still running: {proc is None or proc.poll() is None}). "
@@ -1405,6 +1407,20 @@ class TestBrowserOptimisticConcurrency:
 # ─────────────────────────────────────────────────────────────────────────────
 
 _BADGE_REQ_ID = "REQ-p00001"
+# The badge fixture's announcement interval, in seconds; a cycle wait allows
+# for a full interval plus the probe it triggers.
+_BADGE_HEARTBEAT_SECONDS = 2
+_CYCLE_TIMEOUT = _BADGE_HEARTBEAT_SECONDS * 3 + 2.0
+# How long the page's adopting count probe is held in the own-edit tests:
+# past the server's wake (half the interval, at most a second), so the
+# announcement of the page's own edit reaches it before the page has
+# adopted the tip, and short of the settle window the page allows its own
+# write, so the held adoption still lands inside it.
+_ADOPTION_DELAY_SECONDS = 1.4
+# The page holds an announced tip back while one of its own writes is in
+# flight or just finished (OWN_WRITE_SETTLE_MS); a deferral can chain once,
+# so a verdict lands within two windows of the last write.
+_JUDGEMENT_TIMEOUT = 2.0 * 2 + 1.5
 
 
 @pytest.fixture(scope="module")
@@ -1447,9 +1463,15 @@ def badge_viewer_url(tmp_path_factory):
     port = _find_free_port()
     base_url = f"http://127.0.0.1:{port}"
 
+    # The server announces itself every few seconds rather than every half
+    # minute, so a stream cycle -- the page's count heartbeat -- can be
+    # observed within a test's patience. Seconds, not a fraction of one: a
+    # probe every few hundred milliseconds would race tests that set page
+    # state by hand.
     proc, log_path = _spawn_viewer(
         [elspais_bin, "viewer", "--server", "--port", str(port), "--path", str(dest)],
         cwd=str(dest),
+        env={**os.environ, "_ELSPAIS_EVENTS_HEARTBEAT": str(_BADGE_HEARTBEAT_SECONDS)},
     )
 
     try:
@@ -1505,7 +1527,7 @@ def _badge_state(page) -> dict:
 
 
 def _refresh_dirty(page) -> None:
-    """Drive the count refresh explicitly instead of waiting on the 30s poll."""
+    """Drive the count refresh explicitly instead of waiting on the stream."""
     page.evaluate("() => refreshDirtyCount()")
 
 
@@ -2097,32 +2119,33 @@ class TestBrowserUnloadDecisionObservable:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _has_poll(page) -> bool:
-    """Is the 30s poll reachable as a named function a test can drive?"""
-    return page.evaluate("() => typeof window.pollForExternalChanges === 'function'")
+def _has_stream_cycle(page) -> bool:
+    """Is the change stream's cycle a named function a test can reason about?"""
+    return page.evaluate("() => typeof window.applyServerEvent === 'function'")
 
 
-def _poll_once(page) -> None:
-    """Run one poll cycle and wait for its count probe to actually land.
+def _await_cycle(page, timeout: float = _CYCLE_TIMEOUT) -> None:
+    """Wait for the next stream cycle and for its count probe to land.
 
-    The poll is not required to hand back a promise, so completion is observed
-    rather than awaited: `dirtyCountAt` is cleared first and the wait is for
-    something to set it again. Both count outcomes stamp it — a server answer
-    and a failed read alike — so this is a true "a probe happened" signal, not
-    a "the probe succeeded" one. That is what makes an absence assertion
-    (`the badge never went to ?`) strict instead of racy.
+    The server announces itself at the fixture's interval, and every
+    announcement runs one cycle, so a cycle is observed rather than driven:
+    `dirtyCountAt` is cleared first and the wait is for something to set it
+    again. Both count outcomes stamp it -- a server answer and a failed read
+    alike -- so this is a true "a probe happened" signal, not a "the probe
+    succeeded" one. That is what makes an absence assertion (`the badge
+    never went to ?`) strict instead of racy.
     """
-    assert _has_poll(page), (
-        "window.pollForExternalChanges() is not defined: the 30s poll is not a "
-        "named function, so the page's only count heartbeat cannot be driven "
-        "or observed"
+    assert _has_stream_cycle(page), (
+        "window.applyServerEvent() is not defined: the change stream's cycle "
+        "is not a named function, so the page's only count heartbeat cannot "
+        "be observed"
     )
     page.evaluate("() => { editState.dirtyCountAt = null; }")
-    page.evaluate("() => pollForExternalChanges()")
     _wait_for_js(
         page,
         "() => editState.dirtyCountAt !== null",
-        "a poll cycle must probe the pending count, but nothing re-established it",
+        "a stream cycle must probe the pending count, but nothing re-established it",
+        timeout=timeout,
     )
 
 
@@ -2149,9 +2172,10 @@ def _error_modal_text(page) -> str:
 
 
 class TestBrowserPendingWorkUnderPartialFailure:
-    """Validates REQ-d00267-A, REQ-d00267-B: the pending-change count is
-    established by, and only by, the count endpoint — on a heartbeat, and
-    honestly when the answer is unusable.
+    """Validates REQ-d00267-A, REQ-d00267-B, REQ-o00079-C, REQ-o00079-D,
+    REQ-o00079-E: the pending-change count is established by, and only by,
+    the count endpoint — on every announcement the server makes over the
+    stream the page holds, and honestly when the answer is unusable.
 
     Partial failure is the interesting case. One endpoint going down while
     another stays healthy must not let the healthy one's silence, or the
@@ -2162,90 +2186,191 @@ class TestBrowserPendingWorkUnderPartialFailure:
 
     @pytest.mark.browser
     @pytest.mark.e2e
-    def test_REQ_d00267_A_poll_cycle_drives_the_count(self, page_badge, badge_viewer_url):
-        # Verifies: REQ-d00267-A
-        """The poll is the page's only count heartbeat: an idle page whose
-        server dies must notice without any mutation or reload. Driving the
-        poll alone — never refreshDirtyCount() directly — must turn the count
-        unknown, and must recover it once the server answers again."""
+    def test_REQ_d00267_A_stream_cycle_drives_the_count(self, page_badge, badge_viewer_url):
+        # Verifies: REQ-d00267-A, REQ-o00079-D
+        """The stream is the page's only count heartbeat: an idle page whose
+        server dies must notice without any mutation or reload. Every
+        announcement runs one cycle, and that cycle alone — never
+        refreshDirtyCount() directly — must turn the count unknown, and must
+        recover it once the server answers again."""
         page = page_badge
         page.goto(badge_viewer_url, wait_until="networkidle")
 
-        _create_pending_mutation(page, badge_viewer_url, "Badge Poll Heartbeat")
+        _create_pending_mutation(page, badge_viewer_url, "Badge Stream Heartbeat")
         _refresh_dirty(page)
         assert _badge_state(page)["count_type"] == "number", "precondition: count must start known"
 
-        # Only the count endpoint dies; check-freshness stays healthy, so an
+        # Only the count endpoint dies; the stream keeps announcing, so an
         # unknown count here can only have come from the count probe itself.
         page.route("**/api/dirty", lambda route: route.abort())
-        _poll_once(page)
+        _await_cycle(page)
         _wait_for_js(
             page,
             "() => editState.mutationCount === null",
-            "a poll cycle with the count endpoint down must mark the count "
+            "a stream cycle with the count endpoint down must mark the count "
             "unknown; the page went on presenting a count it could not confirm",
         )
         assert _badge_state(page)["text"] == "?", _badge_state(page)
 
         page.unroute("**/api/dirty")
-        _poll_once(page)
+        _await_cycle(page)
         _wait_for_js(
             page,
             "() => typeof editState.mutationCount === 'number'",
-            "a poll cycle after the server recovered must re-establish the count",
+            "a stream cycle after the server recovered must re-establish the count",
+            timeout=_CYCLE_TIMEOUT,
         )
 
     @pytest.mark.browser
     @pytest.mark.e2e
-    def test_REQ_d00267_A_freshness_failure_does_not_speak_for_the_count(
+    def test_REQ_o00079_E_lost_stream_reprobes_and_does_not_speak_for_the_count(
         self, page_badge, badge_viewer_url
     ):
-        # Verifies: REQ-d00267-A
-        """Regression guard for the stuck-at-'?' bug. Only /api/dirty outcomes
-        may establish the count. A failing /api/check-freshness alongside a
-        perfectly healthy /api/dirty used to mark the count unknown, which
-        pinned the badge at '?' and left the navigation warning disarmed for
-        the rest of the session even though the server was answering."""
+        # Verifies: REQ-o00079-E, REQ-d00267-A
+        """A lost handle re-establishes the count, and only /api/dirty may
+        say what it is. The stream is lost while the count endpoint stays
+        healthy, so the count must come back known: presenting it as unknown
+        would pin the badge at '?' and disarm the navigation warning for as
+        long as the stream stayed broken even though the server was
+        answering. The count's record is cleared only after the page holds
+        the stream, so what stamps it next can only be the loss itself."""
         page = page_badge
+        pending = _create_pending_mutation(page, badge_viewer_url, "Badge Stream Down")
         page.goto(badge_viewer_url, wait_until="networkidle")
+        _wait_for_js(
+            page,
+            "() => editState.lastAnnouncedTip !== null",
+            "the page must hold the stream before it can lose it",
+        )
 
-        pending = _create_pending_mutation(page, badge_viewer_url, "Badge Freshness Down")
-        _refresh_dirty(page)
-        assert _badge_state(page)["text"] == str(pending), "precondition: badge shows the count"
-
-        page.route("**/api/check-freshness", lambda route: route.abort())
-
-        for cycle in range(3):
-            _poll_once(page)
-            state = _badge_state(page)
-            assert state["text"] != "?", (
-                f"cycle {cycle + 1}: /api/dirty is healthy, so the count is "
-                f"knowable; a check-freshness failure must not present it as "
-                f"unknown (badge {state['text']!r}, classes {state['classes']})"
-            )
-            assert "unknown" not in state["classes"], f"cycle {cycle + 1}: {state['classes']}"
-            assert state["count"] == pending, (
-                f"cycle {cycle + 1}: the badge must keep showing the server's "
-                f"real count {pending}, got {state['count']!r}"
-            )
-            assert _unload_state(page)["willWarnOnClose"] is True, (
-                f"cycle {cycle + 1}: work is pending and the count endpoint is "
-                f"healthy, so the navigation warning must stay armed"
-            )
-
-        page.unroute("**/api/check-freshness")
+        # From here the server declines every attempt to hold the stream.
+        # The page drops the handle it has and seeks it again, which is what
+        # its own retry does after a loss; the refusal it meets is the loss.
+        page.route("**/api/events", lambda route: route.abort())
+        page.evaluate(
+            """() => {
+                editState.dirtyCountAt = null;
+                _eventSource.close();
+                _eventSource = null;
+                connectServerEvents();
+            }"""
+        )
+        # Sooner than the silence watch could fire (twice the announced
+        # interval), so the probe can only be the lost handle's.
+        _wait_for_js(
+            page,
+            "() => _eventSource === null && editState.dirtyCountAt !== null",
+            "a lost stream must release the handle and re-establish the count",
+            timeout=_BADGE_HEARTBEAT_SECONDS * 2 - 1.0,
+        )
+        assert page.evaluate("() => editState.dirtyCountSource") == "server"
+        state = _badge_state(page)
+        assert state["text"] == str(pending), (
+            f"/api/dirty is healthy, so the count is knowable; a lost stream "
+            f"must not present it as unknown (badge {state['text']!r}, "
+            f"classes {state['classes']})"
+        )
+        assert "unknown" not in state["classes"], state["classes"]
+        assert _unload_state(page)["willWarnOnClose"] is True, (
+            "work is pending and the count endpoint is healthy, so the "
+            "navigation warning must be armed"
+        )
+        page.unroute("**/api/events")
 
     @pytest.mark.browser
     @pytest.mark.e2e
-    def test_REQ_d00267_A_poll_does_not_adopt_another_writers_tip(
+    def test_REQ_o00079_E_silence_past_the_promised_interval_reprobes_the_count(
         self, page_badge, badge_viewer_url
     ):
-        # Verifies: REQ-d00267-A
-        """The poll's count probe must not record the change history as seen.
-        Adopting the tip every 30s would mark another writer's mutations as
-        already-looked-at and the 'Another writer changed the graph' banner
-        could never raise again — the poll would silently destroy the very
-        warning it exists to give."""
+        # Verifies: REQ-o00079-E
+        """Silence is a cycle too. With the stream closed on the page's side
+        nothing can arrive, and the interval the page holds the server to is
+        shortened so the silence is noticed within the test's patience; the
+        only thing that can then re-establish the count is the page noticing
+        that nothing announced itself -- and it must keep noticing."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+        _wait_for_js(
+            page,
+            "() => editState.lastAnnouncedTip !== null",
+            "the page must hear the server before it can miss it",
+        )
+        page.evaluate(
+            """() => {
+                _eventSource.close();
+                _eventSource = null;
+                editState.dirtyCountAt = null;
+                _heartbeatMs = 200;
+                armSilenceWatch();
+            }"""
+        )
+        _wait_for_js(
+            page,
+            "() => editState.dirtyCountAt !== null",
+            "nothing was announced for twice the promised interval, so the "
+            "page must re-establish the count on its own",
+            timeout=1.5,
+        )
+        assert page.evaluate("() => editState.dirtyCountSource") == "server"
+        page.evaluate("() => { editState.dirtyCountAt = null; }")
+        _wait_for_js(
+            page,
+            "() => editState.dirtyCountAt !== null",
+            "the silence must keep being noticed, not noticed once",
+            timeout=1.5,
+        )
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_o00079_E_a_server_that_stops_answering_is_presented_as_one(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-o00079-E, REQ-d00267-B
+        """The reason the handle's loss re-establishes the count: a server
+        that has gone must show as one. The tab loses its network -- the
+        held stream drops without the page doing anything -- and the count
+        must turn unknown through the failing probe; once the network is
+        back the page's own retry must re-hold the stream and recover it."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+        _wait_for_js(
+            page,
+            "() => editState.lastAnnouncedTip !== null",
+            "the page must hold the stream before it can lose it",
+        )
+        page.evaluate("() => { editState.dirtyCountAt = null; }")
+        page.context.set_offline(True)
+        try:
+            _wait_for_js(
+                page,
+                "() => editState.dirtyCountAt !== null",
+                "the stream dropped, so the count must be re-established",
+                timeout=_BADGE_HEARTBEAT_SECONDS * 2 - 1.0,
+            )
+            assert page.evaluate("() => editState.dirtyCountSource") == "unreachable"
+            assert _badge_state(page)["text"] == "?", _badge_state(page)
+        finally:
+            page.context.set_offline(False)
+        _wait_for_js(
+            page,
+            "() => _eventSource !== null && editState.dirtyCountSource === 'server'",
+            "once the server answers again the page must re-hold the stream and recover the count",
+            timeout=_CYCLE_TIMEOUT,
+        )
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_o00079_C_another_writers_change_is_announced_and_its_tip_not_adopted(
+        self, page_badge, badge_viewer_url
+    ):
+        # Verifies: REQ-o00079-C, REQ-d00267-A
+        """Another writer's mutation reaches the page as an announcement, not
+        at a poll: the 'Another writer changed the graph' banner raises within
+        the server's wake, and the cycle's count probe must not record the
+        change history as seen. Adopting the announced tip would mark another
+        writer's mutations as already-looked-at and the banner could never
+        raise again — the stream would silently destroy the very warning it
+        exists to carry."""
         page = page_badge
         page.goto(badge_viewer_url, wait_until="networkidle")
 
@@ -2253,6 +2378,15 @@ class TestBrowserPendingWorkUnderPartialFailure:
         _refresh_dirty(page)
         seen_before = _badge_state(page)["tip"]
         assert seen_before, f"precondition: a baseline tip must be recorded, got {seen_before!r}"
+        # The baseline mutation is itself announced; let that announcement
+        # land and clear whatever it raised, so what follows is attributable
+        # to the other writer alone.
+        _wait_for_js(
+            page,
+            f"() => editState.lastAnnouncedTip === {seen_before!r}",
+            "the baseline mutation must be announced over the stream",
+        )
+        page.evaluate("() => dismissStaleBanner()")
 
         # Another writer moves the graph behind this page's back.
         _create_pending_mutation(page, badge_viewer_url, "Badge Tip Other Writer")
@@ -2262,20 +2396,81 @@ class TestBrowserPendingWorkUnderPartialFailure:
             f"{seen_before!r} -> {other_tip!r}"
         )
 
-        _poll_once(page)
-
-        assert _badge_state(page)["tip"] == seen_before, (
-            f"the poll must not record history it never showed the operator as "
-            f"seen: lastSeenTip moved {seen_before!r} -> "
-            f"{_badge_state(page)['tip']!r}"
-        )
         _wait_for_js(
             page,
             "() => { const b = document.getElementById('stale-banner');"
             " return b && !b.classList.contains('hidden'); }",
-            "another writer moved the tip, so the poll must raise the "
+            "another writer moved the tip, so the announcement must raise the "
             "'Another writer changed the graph' banner",
         )
+        assert page.evaluate("() => editState.lastAnnouncedTip") == other_tip, (
+            "the announcement must carry the other writer's tip"
+        )
+        assert _badge_state(page)["tip"] == seen_before, (
+            f"the cycle must not record history it never showed the operator as "
+            f"seen: lastSeenTip moved {seen_before!r} -> "
+            f"{_badge_state(page)['tip']!r}"
+        )
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    @pytest.mark.parametrize("edits", [1, 2])
+    def test_REQ_o00079_C_the_pages_own_edits_are_not_another_writers(
+        self, page_badge, badge_viewer_url, edits
+    ):
+        # Verifies: REQ-o00079-C
+        """The announcement of this page's own edit arrives within the
+        server's wake, and must not be read as somebody else's change. Here
+        it always arrives first: the count probe that adopts the first edit's
+        tip is held past the wake, so the announcement outruns the page's
+        bookkeeping and is held back. One edit is the plain case. Two edits
+        is the case where the second lands and is adopted at once, inside
+        the settle window of the first: what is judged when the held-back
+        announcement is finally weighed must be the tip last announced, not
+        the one the page had in hand when it began waiting."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+        _refresh_dirty(page)
+        page.evaluate("() => dismissStaleBanner()")
+
+        # Only the first edit's adopting probe is held -- the first count
+        # request after it. The stream's own cycles probe the same endpoint,
+        # and holding those too would queue them ahead of the adoption and
+        # push it past the settle window, which is not the case under test.
+        hold_next = [True]
+
+        def _slow_adoption(route):
+            if hold_next[0]:
+                hold_next[0] = False
+                time.sleep(_ADOPTION_DELAY_SECONDS)
+            route.continue_()
+
+        page.route("**/api/dirty", _slow_adoption)
+        try:
+            for n in range(edits):
+                _attempt_title_mutation(page, f"Badge Own Edit Announced {n + 1}")
+        finally:
+            page.unroute("**/api/dirty")
+        tip = _server_dirty(page, badge_viewer_url).get("tip")
+        _wait_for_js(
+            page,
+            f"() => editState.lastAnnouncedTip === {tip!r}",
+            "the page's own edit must be announced over the stream",
+        )
+        # The verdict is observed, not timed: an announced tip is held back
+        # while a write of the page's own is recent, and the page holds at
+        # most one such judgement.
+        _wait_for_js(
+            page,
+            "() => _tipJudgement === null",
+            "an announced tip held back for the page's own write must be judged once it settles",
+            timeout=_JUDGEMENT_TIMEOUT,
+        )
+        assert page.evaluate(
+            "() => { const b = document.getElementById('stale-banner');"
+            " return b && b.classList.contains('hidden'); }"
+        ), "the page's own edit was announced back to it as another writer's"
+        assert _badge_state(page)["tip"] == tip, "the page's own write must be adopted as seen"
 
     @pytest.mark.browser
     @pytest.mark.e2e
@@ -2871,10 +3066,9 @@ class TestAssertionPillMeasures:
         a pill states its standing, names the four measures behind it, and
         carries no `~` and no caveat element (REQ-d00258-J).
         """
-        # Not `networkidle`: this page polls its own server every 30s, so on a
-        # long-lived session viewer the network never goes quiet and the wait
-        # times out. Waiting for the entry point the test actually calls is
-        # both stricter and stable.
+        # Not `networkidle`: this page holds a change stream open to its
+        # server for its whole life. Waiting for the entry point the test
+        # actually calls is both stricter and stable.
         page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
         page.wait_for_function(
             "() => typeof window.openCard === 'function'", timeout=_PAGE_LOAD_TIMEOUT
@@ -3217,3 +3411,369 @@ class TestEnvironmentTagRendering:
         page_tables.locator("#card-stack-body").wait_for(state="visible", timeout=10_000)
 
         assert page_tables.locator("#card-stack-body .result-environment").count() == 0
+
+
+# ---------------------------------------------------------------------------
+# A viewer's lifetime follows the tab holding it (REQ-o00079)
+# ---------------------------------------------------------------------------
+
+
+# The session-lifetime viewer's grace and check interval. The grace is the
+# window a tab has to connect after the viewer starts, and the window a
+# lost stream has to come back: it is counted from the viewer's start, so
+# it is sized for a slow runner to become ready and load the page inside
+# it. The check runs many times within it, so the test observes the rule
+# holding the viewer open through checks that find nothing held.
+_SESSION_GRACE_SECONDS = 8.0
+_SESSION_CHECK_SECONDS = 0.5
+
+
+def _session_lifetime_viewer(tmp_path_factory):
+    """A viewer started to serve browser sessions, checking every few seconds.
+
+    Its clients are pages and nothing else, so it is watched with no pid;
+    the grace is a few seconds, so the test observes both halves of the rule
+    within its patience.
+    """
+    elspais_bin = resolve_elspais()
+    if elspais_bin is None:
+        pytest.skip("elspais CLI not found on PATH")
+    src = REPO_ROOT / "tests" / "fixtures" / "viewer-tables"
+    if not src.exists():
+        pytest.skip(f"viewer-tables fixture not present at {src}")
+
+    dest = tmp_path_factory.mktemp("viewer-session-lifetime")
+    for item in src.iterdir():
+        if item.is_dir():
+            shutil.copytree(item, dest / item.name)
+        else:
+            shutil.copy2(item, dest / item.name)
+
+    port = _find_free_port()
+    base_url = f"http://127.0.0.1:{port}"
+    proc, log_path = _spawn_viewer(
+        [
+            elspais_bin,
+            "viewer",
+            "--server",
+            "--session-lifetime",
+            "--port",
+            str(port),
+            "--path",
+            str(dest),
+        ],
+        cwd=str(dest),
+        env={
+            **os.environ,
+            "_ELSPAIS_CLIENT_CHECK_INTERVAL": str(_SESSION_CHECK_SECONDS),
+            "_ELSPAIS_CLIENT_GRACE": str(_SESSION_GRACE_SECONDS),
+            "_ELSPAIS_EVENTS_HEARTBEAT": "2",
+        },
+    )
+    return proc, log_path, base_url, dest
+
+
+def _await_process_exit(proc: subprocess.Popen, seconds: float) -> bool:
+    try:
+        proc.wait(timeout=seconds)
+    except subprocess.TimeoutExpired:
+        return False
+    return True
+
+
+def _end_viewer(proc: subprocess.Popen) -> None:
+    if proc.poll() is None:
+        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            proc.wait(timeout=5)
+
+
+class TestBrowserSessionBoundLifetime:
+    """Validates REQ-o00079-A and REQ-o00079-B through a real tab: the page
+    holds a handle for as long as it is open, the viewer keeps serving while
+    it does, and once the tab has been gone for the grace the viewer ends on
+    its own.
+    """
+
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_o00079_A_open_tab_keeps_the_viewer_and_closing_it_ends_it(self, tmp_path_factory):
+        # Verifies: REQ-o00079-A, REQ-o00079-B
+        # The browser and its tab are up before the viewer is, so the grace
+        # -- counted from the viewer's start -- is spent on the viewer
+        # becoming ready and the page loading, and on nothing else.
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            proc, log_path, base_url, dest = _session_lifetime_viewer(tmp_path_factory)
+            daemon_json = dest / ".elspais" / "daemon.json"
+            try:
+                _wait_for_server(base_url, proc=proc, log_path=log_path, poll=0.1)
+                page.goto(base_url, wait_until="domcontentloaded")
+                _wait_for_js(
+                    page,
+                    "() => editState.lastAnnouncedTip !== null",
+                    "the page must hold the change stream and hear the server on it",
+                    timeout=_SESSION_GRACE_SECONDS - 2.0,
+                )
+                # The tab holds its stream for longer than the grace: the
+                # handle is what the rule sees, and the rule is not the
+                # cause of an ending while one is held -- the grace bounds
+                # an absence, not a lifetime.
+                assert not _await_process_exit(proc, _SESSION_GRACE_SECONDS + 1.0), (
+                    f"the viewer ended while a tab held its stream:\n{_server_output(log_path)}"
+                )
+                # The tab is visible in the record an operator reads.
+                info = json.loads(daemon_json.read_text())
+                assert {"kind": "session", "count": 1} in info.get("clients", []), info
+                browser.close()
+
+                # Losing the tab starts the grace rather than ending the
+                # viewer at the next check: a reload drops the stream the
+                # same way, and comes back.
+                assert not _await_process_exit(proc, _SESSION_CHECK_SECONDS * 3), (
+                    f"the viewer ended at a check inside the grace:\n{_server_output(log_path)}"
+                )
+                assert _await_process_exit(proc, _SESSION_GRACE_SECONDS + 10), (
+                    f"the last tab closed, but the viewer went on serving:\n"
+                    f"{_server_output(log_path)}"
+                )
+                assert proc.returncode == 0, _server_output(log_path)
+                assert not daemon_json.exists(), (
+                    "a viewer that ended must not leave a record naming it as serving"
+                )
+            finally:
+                _end_viewer(proc)
+
+
+# ---------------------------------------------------------------------------
+# Base-path fixture + browser tests: the viewer served under a prefix
+# ---------------------------------------------------------------------------
+
+_BASE_PATH = "/w/abc"
+
+
+def _copy_project(src: Path, dest: Path) -> None:
+    """Copy a fixture project into ``dest`` and make it a git repository."""
+    for item in src.iterdir():
+        if item.is_dir():
+            shutil.copytree(item, dest / item.name)
+        else:
+            shutil.copy2(item, dest / item.name)
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "test",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "test",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    subprocess.run(["git", "init"], cwd=dest, capture_output=True, env=env)
+    subprocess.run(["git", "add", "."], cwd=dest, capture_output=True, env=env)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=dest, capture_output=True, env=env)
+
+
+@pytest.fixture(scope="session")
+def prefixed_viewer(tmp_path_factory):
+    """A viewer started with ``--base-path`` over its own copy of the
+    viewer-tables project. Yields ``(root_url, prefixed_url, log_path,
+    project_dir)``.
+
+    Its own project, not this repository: a viewer serving a directory
+    stops whichever daemon already serves it, and the session fixture over
+    the repository would be the casualty.
+    """
+    elspais_bin = resolve_elspais()
+    if elspais_bin is None:
+        pytest.skip("elspais CLI not found on PATH")
+
+    src = REPO_ROOT / "tests" / "fixtures" / "viewer-tables"
+    if not src.exists():
+        pytest.skip(f"viewer-tables fixture not present at {src}")
+    dest = tmp_path_factory.mktemp("viewer-prefixed-run")
+    _copy_project(src, dest)
+
+    port = _find_free_port()
+    root_url = f"http://127.0.0.1:{port}"
+    base_url = root_url + _BASE_PATH
+
+    proc, log_path = _spawn_viewer(
+        [
+            elspais_bin,
+            "viewer",
+            "--server",
+            "--port",
+            str(port),
+            "--base-path",
+            _BASE_PATH,
+            "--path",
+            str(dest),
+        ],
+        cwd=str(dest),
+    )
+
+    try:
+        _wait_for_server(base_url, proc=proc, log_path=log_path)
+        yield root_url, base_url, log_path, dest
+    finally:
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(f"{base_url}/api/shutdown", method="POST")
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
+
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                proc.wait(timeout=5)
+
+
+@pytest.fixture()
+def page_prefixed(prefixed_viewer):
+    """Launch headless Chromium against the prefixed viewer."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        pg = context.new_page()
+        pg.set_default_timeout(10_000)
+        yield pg
+        browser.close()
+
+
+class TestViewerUnderBasePath:
+    """Validates REQ-d00295: a viewer started under a prefix serves the page
+    there, the page requests everything under it, and the agent surface sits
+    beside it."""
+
+    # Verifies: REQ-d00295-A, REQ-d00295-B
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00295_B_a_card_loads_with_every_request_under_the_prefix(
+        self, page_prefixed, prefixed_viewer
+    ):
+        root_url, base_url, _log, _dir = prefixed_viewer
+        requested: list[str] = []
+        page_prefixed.on(
+            "request",
+            lambda request: (
+                requested.append(request.url) if request.url.startswith(root_url) else None
+            ),
+        )
+
+        page_prefixed.goto(base_url, wait_until="networkidle")
+        page_prefixed.evaluate("() => window.openCard('REQ-p00001')")
+        card = page_prefixed.locator("#card-stack-body").filter(has_text="REQ-p00001")
+        card.wait_for(state="visible", timeout=10_000)
+
+        paths = [url[len(root_url) :] for url in requested]
+        api_paths = [p for p in paths if "/api/" in p]
+        assert any(p.startswith(f"{_BASE_PATH}/api/node/") for p in api_paths), api_paths
+        outside = [p for p in paths if not p.startswith(_BASE_PATH)]
+        assert outside == [], f"requests escaped the prefix: {outside}"
+
+    # Verifies: REQ-d00295-A
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00295_A_the_root_answers_nothing_and_the_address_names_the_prefix(
+        self, prefixed_viewer
+    ):
+        import urllib.error
+        import urllib.request
+
+        root_url, base_url, log_path, _dir = prefixed_viewer
+        with pytest.raises(urllib.error.HTTPError) as refused:
+            urllib.request.urlopen(f"{root_url}/api/status", timeout=5)
+        assert refused.value.code == 404
+        with urllib.request.urlopen(f"{base_url}/", timeout=5) as resp:
+            assert resp.status == 200
+            assert f'URL_PREFIX = "{_BASE_PATH}"' in resp.read().decode()
+        # The address the command announces is the one a browser can use.
+        # The whole log, not its tail: the line is the first thing the
+        # server wrote, and every request since has added a line below it.
+        assert f"Starting trace-edit server at {base_url}" in log_path.read_text(errors="replace")
+
+    # Verifies: REQ-d00295-D
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00295_D_an_agent_reaches_mcp_under_the_prefix(self, prefixed_viewer):
+        pytest.importorskip("mcp")
+        import asyncio
+
+        from mcp import ClientSession
+        from mcp.client.streamable_http import streamablehttp_client
+
+        _root, base_url, _log, _dir = prefixed_viewer
+
+        async def scenario() -> list[str]:
+            async with streamablehttp_client(f"{base_url}/mcp") as (read, write, _sid):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    tools = await session.list_tools()
+                    return [tool.name for tool in tools.tools]
+
+        names = asyncio.run(asyncio.wait_for(scenario(), 60))
+        assert "get_requirement" in names, names
+
+    # Verifies: REQ-d00295-F
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00295_F_the_page_keeps_its_state_under_the_prefix(
+        self, page_prefixed, prefixed_viewer
+    ):
+        """The state cookie is scoped to the prefix, so another workspace's
+        page on the same host, under another prefix, neither sends nor
+        reads it."""
+        _root, base_url, _log, _dir = prefixed_viewer
+        page_prefixed.goto(base_url, wait_until="networkidle")
+        page_prefixed.evaluate("() => window.openCard('REQ-p00001')")
+        card = page_prefixed.locator("#card-stack-body").filter(has_text="REQ-p00001")
+        card.wait_for(state="visible", timeout=10_000)
+
+        cookies = {c["name"]: c for c in page_prefixed.context.cookies()}
+        assert "elspais_trace_state" in cookies, sorted(cookies)
+        assert cookies["elspais_trace_state"]["path"] == _BASE_PATH
+
+    # Verifies: REQ-d00295-I
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00295_I_the_page_keeps_its_state_at_the_root_without_a_prefix(
+        self, page, viewer_url
+    ):
+        """With no prefix the state cookie keeps the scope it always had,
+        the root of the host, so a viewer started without the flag reads
+        the state it wrote before the flag existed."""
+        page.goto(viewer_url, wait_until="networkidle")
+        page.evaluate("() => window.openCard('REQ-p00001')")
+        card = page.locator("#card-stack-body").filter(has_text="REQ-p00001")
+        card.wait_for(state="visible", timeout=10_000)
+
+        cookies = {c["name"]: c for c in page.context.cookies()}
+        assert "elspais_trace_state" in cookies, sorted(cookies)
+        assert cookies["elspais_trace_state"]["path"] == "/"
+
+    # Verifies: REQ-o00076-E
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_o00076_E_a_command_locating_the_viewer_reaches_it_under_the_prefix(
+        self, prefixed_viewer
+    ):
+        """The record a prefixed viewer leaves names the prefix, and the
+        unsaved-work probe every command runs through it gets an answer
+        rather than the 404 of the root."""
+        from elspais.mcp.daemon import get_daemon_info, get_daemon_mutation_count
+
+        _root, _base, _log, project_dir = prefixed_viewer
+        info = get_daemon_info(project_dir)
+        assert info is not None, "the viewer left no record"
+        assert info["type"] == "viewer"
+        assert info["base_path"] == _BASE_PATH
+        assert get_daemon_mutation_count(info) == 0

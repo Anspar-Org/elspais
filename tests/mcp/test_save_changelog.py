@@ -2,9 +2,7 @@
 """Tests for MCP save_mutations changelog enforcement."""
 
 from pathlib import Path
-from unittest.mock import patch
 
-from elspais.config import get_config
 from elspais.graph import NodeKind
 from elspais.graph.factory import build_graph
 from elspais.mcp.server import (
@@ -70,12 +68,9 @@ class TestMcpChangelogEnforcement:
         active = _get_active_mutated_reqs(graph)
         assert "REQ-d00001" in active
 
-    @patch(
-        "elspais.utilities.changelog_author.resolve_changelog_author",
-        return_value=MOCK_AUTHOR,
-    )
-    def test_REQ_p00004_A_adds_changelog_after_save(self, mock_author, tmp_path: Path):
-        """Changelog entry should be added for Active mutations."""
+    def test_REQ_p00004_A_adds_changelog_after_save(self, tmp_path: Path):
+        """Changelog entry should be added for Active mutations, signed by the
+        author the caller established beforehand."""
         project, config_path = _make_project(tmp_path)
         graph = build_graph(
             spec_dirs=[project / "spec"],
@@ -88,8 +83,10 @@ class TestMcpChangelogEnforcement:
         # Mutate
         graph.update_title("REQ-d00001", "Updated Title")
 
-        config = get_config(config_path)
-        _add_changelog_for_active_mutations(graph, project, config, "Updated title")
+        added = _add_changelog_for_active_mutations(
+            graph, project, _get_active_mutated_reqs(graph), "Updated title", MOCK_AUTHOR
+        )
+        assert added == 1
 
         content = (project / "spec" / "requirements.md").read_text()
         assert "## Changelog" in content

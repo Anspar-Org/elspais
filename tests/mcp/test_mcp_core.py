@@ -649,6 +649,115 @@ class TestRefreshGraphConfigError:
         assert state["graph"].find_by_id("REQ-p00001") is not None
 
 
+class TestRefreshGraphBuildError:
+    """Validates REQ-p00015-F: a rebuild whose build raises leaves the
+    previously served graph live rather than substituting nothing, so no
+    refresh is recorded as applied when nothing was rebuilt.
+
+    Validates REQ-p00015-B: the unapplied refresh is reported to the caller
+    with its cause, as a ``BUILD ERROR:`` message naming the exception; a
+    surface that wrote files before rebuilding reports the failed rebuild
+    beside the write that did happen rather than as a failed write.
+    """
+
+    @staticmethod
+    def _refuse_to_build(cause: str):
+        def _raise(*args, **kwargs):
+            raise RuntimeError(cause)
+
+        return _raise
+
+    # Verifies: REQ-p00015-F, REQ-p00015-B
+    def test_REQ_p00015_F_failed_build_keeps_the_live_graph(self, tmp_path, monkeypatch):
+        """A build that raises must not wipe the graph in the holder."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.shared_state import SharedServerState, rebuild_shared_graph
+
+        _make_project(tmp_path)
+        state = SharedServerState({"working_dir": tmp_path})
+
+        assert rebuild_shared_graph(state)["success"] is True
+        live_graph = state["graph"]
+        live_config = state["config"]
+        build_time = state["build_time"]
+        assert live_graph.find_by_id("REQ-p00001") is not None
+
+        cause = "spec directory vanished mid-build"
+        monkeypatch.setattr("elspais.graph.factory.build_graph", self._refuse_to_build(cause))
+        result = rebuild_shared_graph(state)
+
+        # REQ-p00015-B: the unapplied refresh is reported, with its cause.
+        assert result["success"] is False
+        assert result["message"].startswith("BUILD ERROR: RuntimeError:")
+        assert cause in result["message"]
+        assert result["node_count"] == 0
+        assert result["config"] is None
+
+        # REQ-p00015-F: nothing was published, so the previous graph is still
+        # the one being served -- same object, still queryable, same stamp.
+        assert state["graph"] is live_graph
+        assert state["config"] is live_config
+        assert state["build_time"] == build_time
+        assert state["graph"].find_by_id("REQ-p00001") is not None
+
+    # Verifies: REQ-p00015-B, REQ-p00015-F
+    def test_REQ_p00015_B_save_mutations_reports_a_failed_rebuild_beside_the_write(
+        self, tmp_path, monkeypatch
+    ):
+        """A save whose rebuild fails is still a save; the failure rides beside it."""
+        pytest.importorskip("mcp")
+        from elspais.graph.render import node_version
+        from elspais.mcp.server import create_server
+        from elspais.mcp.shared_state import SharedServerState
+
+        # The save signs its changelog rows through the changelog author
+        # lookup; pin the process identity so the shell running the suite
+        # cannot leave the row unsigned.
+        monkeypatch.setattr(
+            "elspais.utilities.changelog_author._lookup_raw",
+            lambda _id_source: ("Alice Smith", "alice@co.org"),
+        )
+
+        _make_project(tmp_path)
+        state = SharedServerState({"working_dir": tmp_path})
+        server = create_server(working_dir=tmp_path, shared_state=state)
+        tools = server._tool_manager._tools
+        update_title = tools["mutate_update_title"].fn
+        mutation_log = tools["get_mutation_log"].fn
+        save = tools["save_mutations"].fn
+
+        live_graph = state["graph"]
+        node = live_graph.find_by_id("REQ-p00001")
+        assert node is not None
+
+        new_title = "Retitled before the rebuild failed"
+        retitled = update_title(
+            node_id="REQ-p00001", new_title=new_title, if_version=node_version(node)
+        )
+        assert retitled["success"] is True, retitled
+        tip = mutation_log()["current_tip"]
+        assert tip
+
+        # The graph the save writes from was built for real; only the
+        # rebuild that follows the write is made to fail.
+        monkeypatch.setattr(
+            "elspais.graph.factory.build_graph", self._refuse_to_build("cannot rebuild")
+        )
+        result = save(if_tip_mutation_id=tip, message="retitled")
+
+        # REQ-p00015-B: the write happened, so the save is reported as one,
+        # and the rebuild that did not is reported beside it with its cause.
+        assert result["success"] is True, result
+        assert result["rebuild_error"].startswith("BUILD ERROR: RuntimeError:")
+        assert "cannot rebuild" in result["rebuild_error"]
+        on_disk = (tmp_path / "spec" / "prd.md").read_text(encoding="utf-8")
+        assert f"# REQ-p00001: {new_title}" in on_disk
+
+        # REQ-p00015-F: nothing was published, so the graph being served is
+        # the one the save was made against.
+        assert state["graph"] is live_graph
+
+
 class TestRefreshGraphFailedDirectorySwitch:
     """Validates REQ-p00015-F: a project switch that publishes nothing must
     leave no part of it applied.

@@ -40,27 +40,31 @@ def run_env(args: argparse.Namespace) -> int:
     shell that can read it. Printed rather than exported because a
     process cannot set a variable in the shell that started it.
     """
-    from elspais.mcp.daemon import ensure_daemon, get_daemon_info
+    from elspais.mcp.daemon import daemon_url, ensure_daemon, get_daemon_info
 
     repo_root = find_git_root() or Path.cwd()
-    port = None
+    info = None
     if getattr(args, "no_start", False):
         info = get_daemon_info(repo_root)
-        port = info.get("port") if info else None
     else:
         try:
-            port = ensure_daemon(repo_root)
+            ensure_daemon(repo_root)
+            info = get_daemon_info(repo_root)
         except RuntimeError as exc:
             print(f"# no daemon: {exc}", file=sys.stderr)
+    port = info.get("port") if info else None
 
-    if not port:
+    if not port or info is None:
         print(
             "# No daemon is serving this working tree, so no address was printed.",
             file=sys.stderr,
         )
         return 1
 
-    print(f"export ELSPAIS_MCP_URL=http://127.0.0.1:{port}/mcp")
+    # Implements: REQ-o00076-E
+    # The address comes from the record, so a server mounted under a
+    # prefix is announced where it answers.
+    print(f"export ELSPAIS_MCP_URL={daemon_url(info, '/mcp')}")
     print(f"export ELSPAIS_MCP_PORT={port}")
     return 0
 

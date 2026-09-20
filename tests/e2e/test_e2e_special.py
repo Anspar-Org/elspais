@@ -11,6 +11,7 @@ Each test class manages its own project setup because it needs:
 import csv
 import io
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -1472,3 +1473,197 @@ class TestTheRestartSurfaceOffersTheTwoAnswers:
             "(restart and let the daemon save) would have got a discard"
         )
         assert "force" in (result.stderr + result.stdout)
+
+
+# ---------------------------------------------------------------------------
+# A viewer serving browser sessions ends with the last one (REQ-o00079)
+# ---------------------------------------------------------------------------
+
+
+def _free_port() -> int:
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
+
+
+# The session-lifetime viewer's grace and check interval. The grace is the
+# window a client has to connect after the viewer starts, and the window a
+# lost stream has to come back: it is counted from the viewer's start, so it
+# is sized for a slow runner to become ready and connect inside it. The
+# check runs many times within it, so the tests observe the rule holding
+# the viewer open through checks that find nothing held.
+_SESSION_GRACE_SECONDS = 8.0
+_SESSION_CHECK_SECONDS = 0.5
+
+
+def _spawn_session_viewer(tmp_path: Path) -> tuple[subprocess.Popen, Path, str]:
+    """Start `elspais viewer --server --session-lifetime` on a fresh project.
+
+    Checked twice a second with a grace of a few seconds, so the test
+    observes both halves of the rule within its patience. Output goes to a
+    file so a viewer that never came up can say why.
+    """
+    import os
+
+    elspais_bin = resolve_elspais()
+    if elspais_bin is None:
+        pytest.skip("elspais CLI not found on PATH")
+    _daemon_project(tmp_path, "session-lifetime-project")
+    port = _free_port()
+    log_path = tmp_path / "viewer.log"
+    with open(log_path, "wb") as sink:
+        proc = subprocess.Popen(
+            [
+                elspais_bin,
+                "viewer",
+                "--server",
+                "--session-lifetime",
+                "--port",
+                str(port),
+                "--path",
+                str(tmp_path),
+            ],
+            cwd=tmp_path,
+            stdout=sink,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+            env={
+                **os.environ,
+                "_ELSPAIS_CLIENT_CHECK_INTERVAL": str(_SESSION_CHECK_SECONDS),
+                "_ELSPAIS_CLIENT_GRACE": str(_SESSION_GRACE_SECONDS),
+            },
+        )
+    return proc, log_path, f"http://127.0.0.1:{port}"
+
+
+def _wait_for_viewer(proc: subprocess.Popen, base_url: str, log_path: Path) -> None:
+    import time
+    import urllib.request
+
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            pytest.fail(f"viewer exited before serving:\n{log_path.read_text(errors='replace')}")
+        try:
+            with urllib.request.urlopen(f"{base_url}/api/status", timeout=2) as resp:
+                if resp.status == 200:
+                    return
+        except OSError:
+            pass
+        time.sleep(0.2)
+    pytest.fail(f"viewer never became ready:\n{log_path.read_text(errors='replace')}")
+
+
+def _exited(proc: subprocess.Popen, seconds: float) -> bool:
+    try:
+        proc.wait(timeout=seconds)
+    except subprocess.TimeoutExpired:
+        return False
+    return True
+
+
+def _end(proc: subprocess.Popen) -> None:
+    import os
+    import signal
+
+    if proc.poll() is None:
+        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            proc.wait(timeout=5)
+
+
+@pytest.mark.e2e
+class TestViewerSessionBoundLifetime:
+    """Validates REQ-o00079-B: a viewer started to serve browser sessions is
+    bound by the client-liveness rule over the streams its pages hold, from
+    the moment it starts. No pid is recorded; a held stream is the one handle,
+    and the rule ends the process once none has been held for the grace.
+    """
+
+    # Verifies: REQ-o00079-B, REQ-o00074-M
+    def test_REQ_o00079_B_a_viewer_no_page_ever_holds_ends_after_the_grace(self, tmp_path):
+        """Validates REQ-o00079-B: the interval before the first page connects
+        is inside the rule and inside the grace. A viewer started for a
+        session that never arrives is kept through checks that find nothing
+        held -- a slow first page is still on its way -- and ends once the
+        grace has passed, rather than serving nobody until something else
+        stops it. While it waits it discloses that nothing is pending and
+        when it will stop (REQ-o00074-M)."""
+        proc, log_path, base_url = _spawn_session_viewer(tmp_path)
+        try:
+            _wait_for_viewer(proc, base_url, log_path)
+            # Several checks find nothing held, and none of them is the
+            # cause of an ending: the grace has not passed.
+            assert not _exited(proc, _SESSION_CHECK_SECONDS * 3), (
+                f"the viewer ended at a check inside the grace:\n"
+                f"{log_path.read_text(errors='replace')}"
+            )
+            assert _exited(proc, _SESSION_GRACE_SECONDS + 10), (
+                f"no page ever held the viewer, yet it went on serving:\n"
+                f"{log_path.read_text(errors='replace')}"
+            )
+            assert proc.returncode == 0
+            assert not (tmp_path / ".elspais" / "daemon.json").exists()
+            output = log_path.read_text(errors="replace")
+            assert "nothing is pending" in output, output
+            # The deadline disclosed is the time left in the grace at the
+            # check that printed it, which depends on scheduling; its shape
+            # does not.
+            assert re.search(r"In \d+s, if no client is running", output), output
+            assert "No recorded client is running and no unsaved mutations are pending" in output
+        finally:
+            _end(proc)
+
+    # Verifies: REQ-o00079-A, REQ-o00079-B
+    def test_REQ_o00079_B_a_held_stream_keeps_the_viewer_until_it_closes(self, tmp_path):
+        """Validates REQ-o00079-A and REQ-o00079-B: the handle is the stream
+        and nothing else. Holding it keeps the viewer through many checks
+        without any request completing; closing it — the socket simply going
+        away, with nothing said — is what lets the viewer end."""
+        import http.client
+        import time
+
+        proc, log_path, base_url = _spawn_session_viewer(tmp_path)
+        try:
+            _wait_for_viewer(proc, base_url, log_path)
+            host, port = base_url[len("http://") :].split(":")
+            conn = http.client.HTTPConnection(host, int(port), timeout=10)
+            conn.request("GET", "/api/events")
+            resp = conn.getresponse()
+            assert resp.status == 200
+            assert resp.getheader("content-type", "").startswith("text/event-stream")
+            first = resp.readline().decode()
+            assert first.startswith("event: hello"), first
+
+            # Held for longer than the grace, with the viewer sending nothing
+            # but what the stream carries: the handle alone keeps it, and
+            # the grace is not a lifetime.
+            assert not _exited(proc, _SESSION_GRACE_SECONDS + 1.0), (
+                f"the viewer ended while a stream was held:\n{log_path.read_text(errors='replace')}"
+            )
+            info = json.loads((tmp_path / ".elspais" / "daemon.json").read_text())
+            assert info.get("clients") == [{"kind": "session", "count": 1}], info
+            assert "client_pid" not in info or info["client_pid"] is None
+
+            conn.close()
+            # Losing the only stream starts the grace; it does not end the
+            # viewer at the next check, because the stream may come back.
+            assert not _exited(proc, _SESSION_CHECK_SECONDS * 3), (
+                f"the viewer ended at a check inside the grace:\n"
+                f"{log_path.read_text(errors='replace')}"
+            )
+            deadline = time.monotonic() + _SESSION_GRACE_SECONDS + 10
+            while proc.poll() is None and time.monotonic() < deadline:
+                time.sleep(0.2)
+            assert proc.poll() is not None, (
+                f"the only stream closed, yet the viewer went on serving:\n"
+                f"{log_path.read_text(errors='replace')}"
+            )
+            assert proc.returncode == 0
+        finally:
+            _end(proc)

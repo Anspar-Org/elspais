@@ -261,6 +261,7 @@ Journey verdicts: `pass` (all steps have a passing test, none failed), `fail`
   `--static`              Generate static HTML file instead of live server
   `--server`              Start server without opening browser
   `--port PORT`           Server port (default: 5001)
+  `--base-path PATH`      URL prefix the server sits under (default: none)
   `--embed-content`       Embed full markdown in HTML (offline viewing)
   `--path DIR`            Path to repository root (default: auto-detect)
 

@@ -145,8 +145,9 @@ same helpers -- there is no softer path around the protocol:
   reason says so with its own status and `code`: **400** with
   `changelog_message_required` when an Active requirement changed and no
   changelog reason was given, **500** with `save_failed` when the write
-  itself failed. Neither is fixed by re-reading and retrying, which is
-  what 409 asks for.
+  itself failed or when the changelog author could not be established --
+  in which case nothing was written and the pending work is still held.
+  Neither is fixed by re-reading and retrying, which is what 409 asks for.
 - Successful mutations return the new `version`.
 - `/api/dirty` returns the pending `mutation_count` and the `tip`.
 - The history routes `/api/save`, `/api/revert`, and `/api/reload`
@@ -248,15 +249,25 @@ act.
 
 - `stale` (with `stale_files`) -- spec files changed **on disk**, e.g. a
   git checkout or an outside editor. Reloading from disk is the fix.
-- `mutation_tip` -- the mutation-log tip. Poll it and compare against the
-  tip you last saw: if it moved, another writer mutated the shared
-  in-memory graph. The live graph is already correct, so the fix is to
-  re-read it (refetch the nodes you display), *not* to reload from disk,
-  which would discard that writer's unsaved work.
+- `mutation_tip` -- the mutation-log tip. Compare it against the tip you
+  last saw: if it moved, another writer mutated the shared in-memory
+  graph. The live graph is already correct, so the fix is to re-read it
+  (refetch the nodes you display), *not* to reload from disk, which would
+  discard that writer's unsaved work.
 
-The viewer does exactly this on a 30-second poll and raises a banner
-naming which of the two happened. An agent holding state across calls
-can use the same field to know when to re-read.
+The same answer is announced over `GET /api/events`, a server-sent-events
+stream a client holds open for as long as it is interested. The server
+speaks first: a `hello` event on connection carrying the current tip and
+the interval at which it undertakes to announce itself, a `change` event
+promptly after any mutation, undo or rebuild, and a `heartbeat`
+at that interval when nothing changed, so a quiet server can be told from
+one that has gone. Every event carries the fields above. The interval
+defaults to half a minute; `_ELSPAIS_EVENTS_HEARTBEAT` (seconds) shortens
+it for tests.
+
+The viewer holds that stream for the life of its tab and raises a banner
+naming which of the two happened. An agent holding state across calls can
+read `/api/check-freshness` for the same fields to know when to re-read.
 
 ## The Viewer's Pending-Change Badge
 
@@ -282,41 +293,66 @@ The third state exists because both ways of collapsing it lie. Leaving
 the last count on screen asserts pending work that may exist in no
 process; showing zero hides work that is still pending behind a
 momentary network failure. `?` claims neither a count nor safety. The
-next usable answer from the server -- from a mutation, or from the
-30-second poll -- replaces it with the reported count.
+next usable answer from the server -- from a mutation, or from the next
+announcement over the stream -- replaces it with the reported count.
 
 ### The Count's Heartbeat
 
-The count is server-truth, so the page re-establishes it on a 30-second
-poll. Every cycle the poll probes `/api/dirty` and records the outcome,
-success or failure. Without that the count would move only at load and
-after this page's own mutations, and a server that died while the
-operator sat idle would leave a frozen number on screen forever.
+The count is server-truth, so the page re-establishes it on every event
+the server announces over the stream it holds -- a change, or the
+server's regular heartbeat when nothing changed. Every such cycle probes
+`/api/dirty` and records the outcome, success or failure. Without that
+the count would move only at load and after this page's own mutations,
+and a server that died while the operator sat idle would leave a frozen
+number on screen forever. Silence is a cycle too: if nothing is announced
+for twice the interval the server promised, or the stream is lost, the
+page probes anyway, so a server that has gone shows as `?` through the
+failing probe rather than as a number nobody can confirm.
 
 Two rules keep that probe honest:
 
-- **Only the count endpoint speaks for the count.** The same poll also
-  calls `/api/check-freshness` for the stale-file and other-writer
-  banners, but a failure there leaves the count alone. Letting it mark
-  the count unknown pinned the badge to `?` -- and the navigation
-  warning off -- for as long as that one endpoint stayed broken, even
-  with `/api/dirty` answering perfectly.
+- **Only the count endpoint speaks for the count.** The announcement
+  that triggered the cycle carries the stale-file and other-writer
+  fields, but an announcement says that something changed, never how
+  much is pending; and a stream that fails leaves the count alone.
+  Letting it mark the count unknown would pin the badge to `?` -- and
+  the navigation warning off -- for as long as the stream stayed broken,
+  even with `/api/dirty` answering perfectly.
 - **The probe never adopts the mutation-log tip**, on success or on
-  failure. Adopting it would mark another writer's mutations as seen
-  every cycle and the "Another writer changed the graph" banner would
-  never raise again. The tip advances only where the page has actually
-  re-read state: at load, after its own mutation, and on a reload from
-  memory. So `lastSeenTip` can lag the count by many cycles, which is
-  correct.
+  failure. Adopting it would mark another writer's mutations as seen on
+  every announcement and the "Another writer changed the graph" banner
+  would never raise again. The tip advances only where the page has
+  actually re-read state: at load, after its own mutation, and on a
+  reload from memory. So `lastSeenTip` can lag the count by many cycles,
+  which is correct. An announcement can also outrun the page's own
+  bookkeeping -- the server sees the tip move the instant this page's
+  own edit lands, before the page has adopted it -- so an announced tip
+  that arrives around one of the page's own writes is judged only once
+  that write has settled.
 
-**This makes an idle tab reactive to other writers.** Because the probe
+**This makes an idle tab reactive to other writers.** Because the cycle
 runs whether or not you touch the page, pending changes arriving through
 the shared daemon from someone else -- an MCP agent, a second viewer --
-show up in *this* tab's badge within 30 seconds, and arm its
+show up in *this* tab's badge as soon as they are announced, and arm its
 before-navigation warning. That follows from the badge being server-truth
 rather than a tally of what this page did, but it is a real change in
 behaviour from a badge that moved only when this page acted: a tab you
 have not touched can start warning you before it closes.
+
+### The Tab Is a Client
+
+Holding that stream is also what makes the tab a client the server can
+see go. The server counts the stream while it is open, exactly as it
+counts an agent's MCP session, and a tab that closes -- or a browser
+that is killed -- releases it without saying anything. A viewer started
+with `--session-lifetime` is bound by that count: it keeps serving while
+any tab holds a stream, and ends only once no tab has held one for the
+grace interval -- counted from its start, so a viewer no tab ever
+connects to ends by the same clock -- persisting whatever changes it
+holds first. The grace applies with or without pending changes: a tab's
+stream drops on a reload or a sleeping machine and comes back, so no
+stream held at one check is not a session that has ended. Without the
+flag the viewer's lifetime is what it always was.
 
 ### Leaving, Versus Acting on the Changes
 
@@ -371,19 +407,19 @@ Field by field:
   gave, as opposed to an absent value.
 - `countEstablishedAt` -- when that outcome was recorded, ISO-8601.
   `null` before the page has asked at all. Both outcomes stamp it, and
-  the 30-second poll produces one every cycle, so an old timestamp does
-  not mean "the server went quiet" -- it means no outcome of either kind
-  has been recorded since, i.e. the page has stopped asking. (Browsers
-  throttle timers in backgrounded tabs, so a tab that has been in the
-  background can show an old timestamp legitimately. Read it in a tab
-  that has been in the foreground.)
+  every announcement over the stream produces one, so an old timestamp
+  does not mean "the server went quiet" -- it means no outcome of either
+  kind has been recorded since, i.e. the page has stopped asking.
+  (Browsers throttle timers in backgrounded tabs, so a tab that has been
+  in the background can show an old timestamp legitimately. Read it in a
+  tab that has been in the foreground.)
 - `countSource` -- `"server"` if the count came from a usable
   `/api/dirty` answer, `"unreachable"` if the last attempt produced no
   usable answer (no response, an error response, or a count that was not
   a number), `null` if the page has not yet made the request.
 - `lastSeenTip` -- the mutation-log tip as of the last point at which
   this page actually re-read state, which is what the other-writer
-  banner compares against. Neither a failed read nor the poll's routine
+  banner compares against. Neither a failed read nor a cycle's routine
   count probe advances it, so it is routinely older than
   `countEstablishedAt` -- that is not a fault. `""` means nothing was
   pending when it was read.

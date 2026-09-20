@@ -910,37 +910,29 @@ def _get_active_mutated_reqs(graph: FederatedGraph) -> set[str]:
     return mutated_ids
 
 
+# Implements: REQ-d00296-A
 def _add_changelog_for_active_mutations(
     graph: FederatedGraph,
     repo_root: Path,
-    config: dict,
+    active_ids: set[str],
     message: str,
-) -> dict[str, Any]:
-    """Add changelog entries for mutated Active requirements after save.
+    author: dict[str, str],
+) -> int:
+    """Write the changelog rows a save owes its Active requirements.
 
-    Returns a status dict: ``{"success": True, "added": N}`` on success,
-    or ``{"success": False, "error": "..."}`` when the changelog author
-    cannot be resolved. The caller must propagate failure — silently
-    skipping changelog entries breaks the attribution chain.
+    Runs after the files are written, so ``active_ids`` is the set the
+    caller took before writing: a successful write clears the mutation
+    log the set is read from. ``author`` is likewise established by the
+    caller beforehand — the identity a trusted proxy supplied with the
+    request, else the process's own — so this never fails for want of a
+    signature after the tree has already changed.
+
+    Returns the number of rows written.
     """
     from datetime import date
 
     from elspais.graph.render import compute_hash_for_node
-    from elspais.utilities.changelog_author import (
-        AuthorResolutionError,
-        resolve_changelog_author,
-    )
     from elspais.utilities.spec_writer import add_changelog_entry
-
-    active_ids = _get_active_mutated_reqs(graph)
-    if not active_ids:
-        return {"success": True, "added": 0}
-
-    typed_config = _validate_config(config) if isinstance(config, dict) else config
-    try:
-        author = resolve_changelog_author(typed_config.changelog)
-    except AuthorResolutionError as exc:
-        return {"success": False, "error": str(exc)}
 
     added = 0
     for req_id in active_ids:
@@ -962,7 +954,7 @@ def _add_changelog_for_active_mutations(
         }
         add_changelog_entry(file_path, req_id, entry)
         added += 1
-    return {"success": True, "added": added}
+    return added
 
 
 # Implements: REQ-d00061-B, REQ-d00061-C, REQ-d00061-F, REQ-p00050-D
@@ -3201,6 +3193,21 @@ def _guard_mutation_tip(graph: Any, provided_tip: str) -> dict[str, Any] | None:
     }
 
 
+# Implements: REQ-p00015-B
+def _rebuild_after_write(state: Any, result: dict[str, Any]) -> dict[str, Any]:
+    """Rebuild through the one rebuild path after a tool wrote to disk.
+
+    The write happened, so the tool's result stays a success; a rebuild that
+    published nothing is reported beside it as ``rebuild_error`` naming the
+    cause, because the served graph now disagrees with the files and the
+    caller must be told rather than shown the previous graph as current.
+    """
+    rebuilt = rebuild_shared_graph(state)
+    if not rebuilt.get("success"):
+        result["rebuild_error"] = rebuilt.get("message", "")
+    return result
+
+
 # Implements: REQ-o00062-K
 def _reattach_version_after_rebuild(
     graph: Any, result: dict[str, Any], node_id: str
@@ -5396,15 +5403,16 @@ def _apply_link_impl(
         }
 
     # Refresh graph after file modification
-    rebuild_shared_graph(state)
-
-    return {
-        "success": True,
-        "comment": result,
-        "file": file_path,
-        "line": line,
-        "requirement_id": requirement_id,
-    }
+    return _rebuild_after_write(
+        state,
+        {
+            "success": True,
+            "comment": result,
+            "file": file_path,
+            "line": line,
+            "requirement_id": requirement_id,
+        },
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -7848,7 +7856,7 @@ def create_server(
         )
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
-            rebuild_shared_graph(_state)
+            _rebuild_after_write(_state, result)
         return _reattach_version_after_rebuild(_state["graph"], result, req_id)
 
     # Implements: REQ-o00063-B, REQ-o00063-F
@@ -7878,7 +7886,7 @@ def create_server(
         )
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
-            rebuild_shared_graph(_state)
+            _rebuild_after_write(_state, result)
         return _reattach_version_after_rebuild(_state["graph"], result, req_id)
 
     # Implements: REQ-o00062-N
@@ -7899,7 +7907,7 @@ def create_server(
         result = _restore_from_safety_branch(_state["working_dir"], branch_name)
         # REQ-o00063-F: Refresh graph after file mutations
         if result.get("success"):
-            rebuild_shared_graph(_state)
+            _rebuild_after_write(_state, result)
         return result
 
     @mcp.tool()
@@ -7947,9 +7955,12 @@ def create_server(
 
         result = persist_pending(_state, message=message, save_branch=save_branch)
 
-        # REQ-o00063-F: Refresh graph after file mutations
+        # REQ-o00063-F: Refresh graph after file mutations. The files are
+        # written and the pending work retired, so the save succeeded
+        # whatever happens next; a rebuild that could not publish is
+        # reported beside it as ``rebuild_error``, as the viewer's save does.
         if result.get("success"):
-            rebuild_shared_graph(_state)
+            _rebuild_after_write(_state, result)
 
         return result
 
@@ -8355,73 +8366,19 @@ def run_server(
             _executable_watcher().start()
 
         if client_pid is not None:
-            from elspais.server.client_watch import (
-                DEFAULT_GRACE_SECONDS,
-                ClientWatchdog,
-                pending_snapshot,
-            )
+            from elspais.server.client_watch import build_client_watchdog
 
-            # Implements: REQ-o00074-G, REQ-o00074-H
-            # Dereference the holder on every check: the live graph is
-            # swapped on rebuild, so a cached object would count and
-            # fingerprint a log nobody is writing to any more.
-            def _pending() -> tuple[int, str | None]:
-                return pending_snapshot(state.graph)
-
-            # Implements: REQ-p00083-A
-            # The watchdog does not save or raise the shutdown flag
-            # itself; it decides *that* the daemon stops and hands over
-            # to the one routine every stop path runs.
-            def _stop() -> dict[str, Any]:
-                return finalize_shutdown(
-                    state.shared,
-                    trigger="no recorded client was running",
-                )
-
-            # Implements: REQ-o00074-A, REQ-o00074-E
-            # A client that supplies no process identifier can still be
-            # holding a stream open, and that is a handle of the same
-            # kind. Looked up on each check rather than captured, so the
-            # order in which the app and the watchdog are built does not
-            # decide whether the handle is seen at all.
-            def _sessions_held() -> int:
-                tracker = state.shared.get("session_tracker")
-                return tracker.held() if tracker is not None else 0
-
-            # Implements: REQ-o00074-B
-            # Published from the check that computes the composition, so a
-            # client present only as a held stream — which registers
-            # nothing — is still visible to whoever asks why this daemon
-            # is running.
-            def _publish_clients(pids: list[int], held: int) -> None:
-                from elspais.mcp.daemon import record_daemon_clients
-
-                # A process that has committed to stopping does not update
-                # its own advertisement. This is the rule that already
-                # refuses graph writes once `is_shutting_down` is raised,
-                # applied to the one write that escaped it: publishing
-                # read-modify-writes the record, so a mark landing between
-                # its read and its write was silently dropped, and nothing
-                # ever re-marks it.
-                if state.shared.is_shutting_down:
-                    return
-                record_daemon_clients(working_dir, pids, held)
-
-            interval = float(_os.environ.get("_ELSPAIS_CLIENT_CHECK_INTERVAL", "60"))
-            grace = float(_os.environ.get("_ELSPAIS_CLIENT_GRACE", str(int(DEFAULT_GRACE_SECONDS))))
-            watchdog = ClientWatchdog(
+            # Implements: REQ-o00074-A, REQ-o00074-B, REQ-o00074-E, REQ-o00074-G, REQ-o00074-H
+            # The one wiring a viewer serving browser sessions uses too;
+            # it publishes the watchdog on the holder so the adoption
+            # route can register the clients that pick this daemon up
+            # after its first one is gone.
+            watchdog = build_client_watchdog(
+                state.shared,
                 client_pid=client_pid,
-                pending_fn=_pending,
-                interval_seconds=interval,
-                grace_seconds=grace,
-                lock=state.shared.write_lock,
-                stop_fn=_stop,
-                extra_liveness_fn=_sessions_held,
-                publish_fn=_publish_clients,
+                repo_root=working_dir,
+                trigger="no recorded client was running",
             )
-            # Published so the adoption route can register the clients that
-            # pick this daemon up after its first one is gone.
-            state.shared["watchdog"] = watchdog
             watchdog.start()
 
         uvi_config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")

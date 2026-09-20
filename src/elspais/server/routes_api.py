@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse, Response, StreamingResponse
 
 from elspais.config.schema import ElspaisConfig
 from elspais.graph import FILE_ID_PREFIX, NodeKind
@@ -72,6 +72,7 @@ from elspais.mcp.server import (
     _query_nodes,
     _undo_last_mutation,
 )
+from elspais.server.proxy_trust import proxied_identity
 from elspais.utilities.git import get_author_info
 from elspais.utilities.spec_paths import file_id_for_reference
 from elspais.view_model import build_levels, build_namespaces, build_statuses
@@ -982,9 +983,19 @@ async def api_dirty(request: Request) -> JSONResponse:
 # Implements: REQ-p00006-A
 async def api_check_freshness(request: Request) -> JSONResponse:
     """GET /api/check-freshness - Check if spec files changed since last build."""
+    return JSONResponse(freshness_report(_st(request)))
+
+
+# Implements: REQ-p00006-A, REQ-o00079-C
+def freshness_report(state: Any) -> dict[str, Any]:
+    """What a client needs to know about the graph it last read.
+
+    The one computation behind ``/api/check-freshness`` and every
+    announcement the change stream makes, so a page told of a change over
+    the stream and a client that asks read the same answer.
+    """
     import os
 
-    state = _st(request)
     build_time = state.build_time
     spec_dirs = state.config.get("scanning", {}).get("spec", {}).get("directories", ["spec"])
     working_dir = state.repo_root
@@ -1004,31 +1015,119 @@ async def api_check_freshness(request: Request) -> JSONResponse:
     log = _get_mutation_log(state.graph, limit=1)
     has_pending = log.get("count", 0) > 0
 
-    return JSONResponse(
-        {
-            "stale": len(stale_files) > 0,
-            "has_pending_mutations": has_pending,
-            "stale_files": sorted(stale_files),
-            # The mutation-log tip, so a polling client can notice that
-            # ANOTHER writer (an MCP agent, a second viewer) changed the
-            # graph. In-memory mutations touch no file, so mtime staleness
-            # alone can never reveal them. "" means nothing pending.
-            "mutation_tip": log.get("current_tip", ""),
-            # Implements: REQ-p00083-C
-            # The poll every client already runs, so a save the daemon
-            # performed reaches the next client without it having to ask.
-            "automatic_save": _automatic_save_record(state.repo_root),
-            # Implements: REQ-o00077-A
-            # Beside the content-staleness answer above, never merged
-            # into it: "the tree's files moved" and "the program serving
-            # them moved" are different conditions with different
-            # remedies, and one cannot stand in for the other.
-            "executable_difference": _executable_difference(),
-            # Implements: REQ-p00083-F
-            # Same poll, same reason: a process that died holding changes
-            # reaches the next client without it having to ask.
-            "lost_changes": _lost_changes_notice(state.repo_root),
-        }
+    return {
+        "stale": len(stale_files) > 0,
+        "has_pending_mutations": has_pending,
+        "stale_files": sorted(stale_files),
+        # The mutation-log tip, so a client can notice that ANOTHER writer
+        # (an MCP agent, a second viewer) changed the graph. In-memory
+        # mutations touch no file, so mtime staleness alone can never
+        # reveal them. "" means nothing pending.
+        "mutation_tip": log.get("current_tip", ""),
+        # Implements: REQ-p00083-C
+        # Carried on the answer every client already reads, so a save the
+        # daemon performed reaches the next client without it having to ask.
+        "automatic_save": _automatic_save_record(state.repo_root),
+        # Implements: REQ-o00077-A
+        # Beside the content-staleness answer above, never merged
+        # into it: "the tree's files moved" and "the program serving
+        # them moved" are different conditions with different
+        # remedies, and one cannot stand in for the other.
+        "executable_difference": _executable_difference(),
+        # Implements: REQ-p00083-F
+        # Same answer, same reason: a process that died holding changes
+        # reaches the next client without it having to ask.
+        "lost_changes": _lost_changes_notice(state.repo_root),
+    }
+
+
+# The interval at which the change stream announces itself with nothing
+# to say. Overridable so a test need not wait half a minute for one.
+_EVENTS_HEARTBEAT_ENV = "_ELSPAIS_EVENTS_HEARTBEAT"
+DEFAULT_EVENTS_HEARTBEAT_SECONDS = 30.0
+
+
+def events_heartbeat_seconds() -> float:
+    """The announcement interval the change stream undertakes."""
+    import os
+
+    raw = os.environ.get(_EVENTS_HEARTBEAT_ENV, "")
+    try:
+        value = float(raw) if raw else DEFAULT_EVENTS_HEARTBEAT_SECONDS
+    except ValueError:
+        return DEFAULT_EVENTS_HEARTBEAT_SECONDS
+    return value if value > 0 else DEFAULT_EVENTS_HEARTBEAT_SECONDS
+
+
+def _sse(event: str, payload: dict[str, Any]) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload)}\n\n"
+
+
+def _graph_mark(state: Any) -> tuple[int, float]:
+    """The cheap fingerprint of what the process serves.
+
+    The mutation log's revision moves on every applied change, undo
+    included — the tip alone returns to its old value after an undo, and
+    a page that was not told would go on showing the undone state. The
+    build time moves when a rebuild swaps the graph. Neither read needs
+    the writers' lock, and the stream never takes it.
+    """
+    graph = state.graph
+    return graph.mutation_log.revision, state.build_time
+
+
+# Implements: REQ-o00079-A, REQ-o00079-C
+async def api_events(request: Request) -> StreamingResponse:
+    """GET /api/events - Announce changes to a page over a stream it holds.
+
+    A server-sent-events stream the page holds open for its whole life,
+    which is what makes the page a client handle: the transport reports
+    the close whether or not the page meant it, and the tracker wrapping
+    this route counts the stream while it is held. Three events, all
+    carrying the answer ``/api/check-freshness`` gives:
+
+    ``hello``
+        On connection, with the current mutation tip and the interval at
+        which the server undertakes to announce itself.
+    ``change``
+        As soon as the wake after a change applied to the graph or a
+        rebuild of it — the page learns of another writer's work within
+        about a second, not at the next poll.
+    ``heartbeat``
+        At the announcement interval when nothing changed, so a page can
+        tell a quiet server from one that has gone.
+
+    The generator sleeps outside the writers' lock and never takes it: a
+    change is detected by comparing a fingerprint read without it, and
+    the report is computed from a snapshot. The stream ends when the
+    process commits to stopping, so a held page does not stall the
+    drain a stop waits on.
+    """
+    import anyio
+
+    state = _st(request)
+    heartbeat = events_heartbeat_seconds()
+    wake = min(1.0, heartbeat / 2)
+
+    async def _announce() -> Any:
+        mark = _graph_mark(state)
+        yield _sse("hello", {**freshness_report(state), "heartbeat_seconds": heartbeat})
+        last = time.monotonic()
+        while not state.shared.is_shutting_down:
+            await anyio.sleep(wake)
+            now_mark = _graph_mark(state)
+            if now_mark != mark:
+                mark = now_mark
+                yield _sse("change", freshness_report(state))
+                last = time.monotonic()
+            elif time.monotonic() - last >= heartbeat:
+                yield _sse("heartbeat", freshness_report(state))
+                last = time.monotonic()
+
+    return StreamingResponse(
+        _announce(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
@@ -2164,7 +2263,7 @@ async def _history_json(request: Request) -> dict:
         return {}
 
 
-# Implements: REQ-d00132-A, REQ-p00083-H
+# Implements: REQ-d00132-A, REQ-p00083-H, REQ-d00296-A, REQ-o00062-O, REQ-p00015-B
 @_serialized_write
 async def api_save(request: Request) -> JSONResponse:
     """POST /api/save - Persist mutations to spec files on disk.
@@ -2174,6 +2273,11 @@ async def api_save(request: Request) -> JSONResponse:
     The write itself is the one shared with the MCP save tool and the
     daemon's own save, so a save requested here enforces the same
     changelog rule and retires the same record as one requested there.
+    So is the rebuild that follows a successful write: the changelog rows
+    a save owes are written to the files outside the graph, and a served
+    graph that still rendered from memory would write the next save over
+    them. The one rebuild path leaves the served graph agreeing with disk,
+    exactly as the MCP save tool does.
 
     Status codes distinguish what the caller can do about a refusal. A
     guard rejection is 409, the conflict family a client already knows to
@@ -2182,7 +2286,7 @@ async def api_save(request: Request) -> JSONResponse:
     because the caller has to supply something, and a write that failed
     is 500, because retrying the same request is not the answer.
     """
-    from elspais.mcp.shared_state import persist_pending
+    from elspais.mcp.shared_state import persist_pending, rebuild_shared_graph
 
     state = _st(request)
     # REQ-o00062-N: persisting affects every writer's pending work — the
@@ -2191,13 +2295,21 @@ async def api_save(request: Request) -> JSONResponse:
     conflict = _tip_conflict(state, data, field="if_tip_mutation_id")
     if conflict is not None:
         return conflict
+    # REQ-d00296-A: a changelog row written for this save names the
+    # session's user where a trusted proxy supplied one with the request.
     result = persist_pending(
         state.shared,
         message=data.get("message"),
         save_branch=bool(data.get("save_branch")),
+        author=proxied_identity(request),
     )
     if result.get("success"):
-        state.build_time = time.time()
+        # The files are written and the pending work retired, so the save
+        # succeeded whatever happens next; a rebuild that could not publish
+        # is reported beside it rather than dressed up as a failed save.
+        rebuilt = rebuild_shared_graph(state.shared)
+        if not rebuilt.get("success"):
+            result["rebuild_error"] = rebuilt.get("message", "")
         return JSONResponse(result, status_code=200)
     status_code = 400 if result.get("code") == "changelog_message_required" else 500
     return JSONResponse(result, status_code=status_code)
@@ -2305,9 +2417,17 @@ def _event_to_response_dict(evt: CommentEvent) -> dict:
     return d
 
 
-# Implements: REQ-d00231-E
-def _resolve_author(state: Any) -> dict[str, str]:
-    """Resolve author identity from config (REQ-d00231-E)."""
+# Implements: REQ-d00231-E, REQ-d00296-A, REQ-d00296-B
+def _resolve_author(state: Any, request: Request) -> dict[str, str]:
+    """The author of an annotation made through this request.
+
+    The identity a trusted proxy supplied with the request, where there is
+    one; otherwise the identity the server establishes for itself, so a
+    local viewer names its own user as it always has.
+    """
+    proxied = proxied_identity(request)
+    if proxied is not None:
+        return proxied
     return get_author_info(state.config.get("changelog", {}).get("id_source", "gh"))
 
 
@@ -2336,7 +2456,7 @@ async def api_comment_add(request: Request) -> JSONResponse:
     if not anchor:
         return JSONResponse({"success": False, "error": "anchor required"}, status_code=400)
 
-    author_info = _resolve_author(state)
+    author_info = _resolve_author(state, request)
     today = date_type.today().isoformat()
     comment_id = generate_comment_id(anchor, author_info["id"], today, text)
     evt = CommentEvent(
@@ -2384,7 +2504,7 @@ async def api_comment_reply(request: Request) -> JSONResponse:
         return JSONResponse({"success": False, "error": "parent not found"}, status_code=404)
     parent_anchor, parent_thread = result
 
-    author_info = _resolve_author(state)
+    author_info = _resolve_author(state, request)
     today = date_type.today().isoformat()
     reply_id = generate_comment_id(parent_anchor, author_info["id"], today, text)
     evt = CommentEvent(
@@ -2426,7 +2546,7 @@ async def api_comment_resolve(request: Request) -> JSONResponse:
     if not found_anchor:
         return JSONResponse({"success": False, "error": "comment not found"}, status_code=404)
 
-    author_info = _resolve_author(state)
+    author_info = _resolve_author(state, request)
     today = date_type.today().isoformat()
     resolve_id = generate_comment_id(found_anchor, author_info["id"], today, "resolve")
     evt = CommentEvent(

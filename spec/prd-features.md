@@ -475,15 +475,16 @@ C. POST /api/comment/resolve SHALL remove a thread from the in-memory index, per
 
 D. GET /api/comments SHALL return serialized threads for a given anchor. GET /api/comments/card SHALL return threads grouped by anchor for all anchors of a node. GET /api/comments/orphaned SHALL return all orphaned threads.
 
-E. Author identity SHALL be resolved server-side via get_author_info using the changelog.id_source config, never from client input.
+E. Author identity SHALL be established by the server from a source it trusts — the identity a trusted proxy supplies with the request, else the server's own — and never from the body of the request.
 
 ### Changelog
 
+- 2026-09-17 | 15c0e4d6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 639d0eb5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | b8533d82 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | b8533d82 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Comment API Endpoints* | **Hash**: 639d0eb5
+*End* *Comment API Endpoints* | **Hash**: 15c0e4d6
 
 ## REQ-d00232: Comment UI Anchors and Margin Column
 
@@ -698,3 +699,51 @@ E. An operation that would discard, strand, or commit around pending changes SHA
 - 2026-08-07 | 94abbc63 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
 *End* *Viewer Pending-Work Indicator Truth* | **Hash**: c1be85e3
+
+## REQ-d00296: Request Identity From a Trusted Proxy
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-d00231
+
+A server that serves one person can name that person from its own
+surroundings — the login it runs under, the credentials on its machine. A
+server that serves many people through a proxy cannot: its surroundings name
+the machine, so every comment and every changelog row from every user would
+carry one identity. The identity has to arrive with the request, from the
+proxy that authenticated the user, and only from there — the server still
+establishes the author itself, from a source it trusts, which is what the
+rule it implements requires.
+
+Who is trusted is the whole question. The serving process listens on the
+local interface, and on a shared host every workspace process runs as the
+same operating-system user, so anything that can reach one process can reach
+them all. A flag saying "trust the identity headers" would let any local
+caller speak as any user; a fixed value known to every process would let one
+workspace speak as another's user. The proof therefore has to be a value the
+process shares with its proxy and with nothing else, and where none has been
+arranged, a request supplies no identity at all — a local viewer behaves as
+it always has.
+
+The obligation reaches the viewer: the surface a person uses, and the one an
+authenticating proxy stands in front of. A tool call an agent makes over the
+process's own MCP mount is that agent's session, not a person's, and a save
+the process performs for itself has no request at all; both are attributed to
+the process, as they always were.
+
+### Assertions
+
+A. The author recorded for an annotation or a save made through the viewer SHALL be the identity established for that request's session where a trusted source supplies one with the request.
+
+B. Where no trusted source supplies an identity with a request, the author recorded SHALL be the identity the server establishes for itself.
+
+C. An identity a request supplies without proof of trust SHALL be ignored, and the request SHALL be treated as one that supplied no identity.
+
+D. The proof of trust SHALL be a value arranged for the serving process alone, never a fixed value shared by every process; where none is arranged, nothing a request supplies is trusted.
+
+E. A credential a request supplies for acting on the repository on the user's behalf SHALL be accepted only under the same proof of trust as the identity, and otherwise treated as absent.
+
+### Changelog
+
+- 2026-09-18 | fe4f3620 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-17 | 00ac07cf | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
+
+*End* *Request Identity From a Trusted Proxy* | **Hash**: fe4f3620
