@@ -42,6 +42,47 @@ The interactive viewer (`elspais viewer`) shows:
   **◆** Changed vs main branch (diamond indicator)
   Filter buttons: `[Uncommitted]` `[Changed vs Main]`
 
+## Git From the Viewer
+
+The viewer's edit mode drives the repository through `/api/git/*`: status,
+branch, checkout, checkpoint commit, push, pull and pull request.
+
+  POST /api/git/push   Push the current branch to origin
+  POST /api/git/pull   Fast-forward the current branch
+  POST /api/git/pr     Open a pull request proposing the pushed branch
+
+`/api/git/pr` takes `{title, body, base?, repo?}`. The base defaults to the
+branch the remote points its HEAD at, else `main`. The branch must already
+be on the remote: a branch with commits the remote does not have, a detached
+HEAD, and a remote that is not GitHub's are each refused naming the
+condition. Where an open pull request already proposes the branch, that pull
+request is reported rather than the request refused.
+
+### Credentials
+
+A pull request is attributed to whoever's credential opened it, so one must
+be available. In order of precedence:
+
+1. `X-Elspais-Git-Token` on the request, believed only when the request also
+   carries the proxy secret (see the `concurrency` topic's note on proxied
+   identity) -- this is how a server serving many people acts as the person
+   who asked.
+2. `GH_TOKEN` in the server's environment.
+3. `GITHUB_TOKEN` in the server's environment.
+4. `gh auth token`, if the GitHub CLI is installed and signed in.
+
+With none of these the request is refused naming what to supply. A
+credential that arrives with a request serves only the operation it arrived
+for -- a push, a fetch or a pull request -- and is carried on that one
+command. It is never written to the repository's configuration, to the
+environment the server was started from, or to any file.
+
+### Pull is fast-forward only
+
+`/api/git/pull` fetches and fast-forwards. Where a fast-forward is not
+possible, it says so and tells you to push the branch and finish the work in
+a local checkout: elspais does not rebase, merge or resolve conflicts.
+
 ## Pre-Commit Hook Example
 
 ```sh

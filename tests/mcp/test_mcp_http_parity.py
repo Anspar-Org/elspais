@@ -166,6 +166,8 @@ EXEMPT_POST_ROUTES = {
     "/api/git/branch",  # git working-tree operations; concurrent-write
     "/api/git/push",  # safety is git's own (index locks, non-FF refusal),
     "/api/git/pull",  # and they do not read or write the mutation log
+    "/api/git/pr",  # proposes an already-pushed branch on the remote; it
+    # touches neither the working tree nor the graph
     "/api/git/checkout",
     "/api/git/commit",
     "/api/git/checkout-commit",

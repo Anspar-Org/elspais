@@ -1034,3 +1034,53 @@ H. A record disclosed under assertion C SHALL be retired once the affected conte
 - 2026-08-08 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author uncommitted-work durability invariants
 
 *End* *Durability of Uncommitted Work* | **Hash**: 80cf3ca1
+
+## REQ-d00297: Opening a Pull Request From the Viewer
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00004
+
+### Rationale
+
+The viewer already carries a branch from its creation through to the remote.
+Proposing that branch for review is the step that turns shared work into work
+somebody else can act on, and it is the one step of the round trip a person
+still has to leave the viewer to perform.
+
+Whose proposal it is matters more than that it happens. A pull request is
+attributed to whoever's credential opened it, so a session that supplies no
+credential must be refused rather than answered by some identity the serving
+process happens to hold — on a shared host that identity belongs to nobody in
+particular. The refusal is only useful if it says what to supply.
+
+A credential reaching the process on behalf of one person is the narrowest
+thing the process handles. Writing it into the environment or into the
+workspace's files would hand it to every later operation and to every other
+reader of that workspace, so it is confined to the single operation it was
+sent for.
+
+Assertions C and F are the two places the tool declines to guess. Work the
+remote has not seen cannot be proposed, and a history that will not
+fast-forward needs decisions about content that this tool does not make; in
+both cases the person is told what to do rather than having it attempted on
+their behalf.
+
+### Assertions
+
+A. A pull request proposing the branch a session has pushed SHALL be openable from the viewer, and SHALL be attributed to the identity whose credential that session supplied.
+
+B. A request to open a pull request that carries no usable credential SHALL be refused, and the refusal SHALL name what to supply.
+
+C. A request to open a pull request SHALL be refused where the branch's commits have not reached the remote, or where the remote is not one on which the tool can open a pull request; the refusal SHALL name the condition it met.
+
+D. A credential supplied with a request SHALL serve only the operation it was supplied for, and SHALL NOT be placed in the workspace's environment, in its configuration, or in any file the operation writes.
+
+E. Where the remote already holds an open pull request proposing the same work, that pull request SHALL be reported as the outcome rather than the request being refused.
+
+F. Where a pull cannot be completed by fast-forward, the user SHALL be told to push the branch and complete the work in a local checkout.
+
+### Changelog
+
+- 2026-09-19 | 1101aea2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-19 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-105: author the obligations for opening a pull request from the viewer
+
+*End* *Opening a Pull Request From the Viewer* | **Hash**: 1101aea2

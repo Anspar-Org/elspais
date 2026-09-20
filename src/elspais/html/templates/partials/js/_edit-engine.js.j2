@@ -160,6 +160,109 @@ function showToast(message, type) {
     }, 3000);
 }
 
+{# Implements: REQ-d00297-A #}
+// A toast whose message ends in something to follow. The pull request is
+// only useful if the person can reach it, and it lives outside this page.
+function showLinkToast(message, url, linkText) {
+    var container = document.getElementById('toast-container');
+    var toast = document.createElement('div');
+    toast.className = 'toast success';
+    toast.appendChild(document.createTextNode(message + ' '));
+    var link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = linkText || url;
+    toast.appendChild(link);
+    container.appendChild(toast);
+    setTimeout(function() {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s';
+        setTimeout(function() { toast.remove(); }, 300);
+    }, 8000);
+}
+
+// =====================================================================
+// Pull Request Modal (REQ-d00297)
+// =====================================================================
+
+{# Implements: REQ-d00297-A, REQ-d00297-B, REQ-d00297-C, REQ-d00297-E #}
+// Offered once the branch has reached the remote, because a pull request
+// can only propose commits the remote already holds.
+async function showPullRequestModal(branch) {
+    var old = document.getElementById('pr-modal-overlay');
+    if (old) old.remove();
+
+    var suggestion = branch || '';
+    var suggested = await apiFetch('/api/git/commit-message');
+    if (suggested && suggested.message) suggestion = suggested.message.split('\n')[0];
+
+    var overlay = document.createElement('div');
+    overlay.id = 'pr-modal-overlay';
+    overlay.className = 'modal-overlay visible';
+    overlay.innerHTML =
+        '<div class="modal-dialog">' +
+            '<div class="modal-title">Open pull request</div>' +
+            '<label class="modal-label">Title:</label>' +
+            '<input type="text" class="modal-input" id="pr-title-input" value="' + escapeAttr(suggestion) + '">' +
+            '<label class="modal-label">Description:</label>' +
+            '<textarea class="modal-input" id="pr-body-input" rows="5"></textarea>' +
+            '<div class="modal-error hidden" id="pr-modal-error"></div>' +
+            '<div class="modal-actions">' +
+                '<button class="btn" id="pr-modal-cancel">Cancel</button>' +
+                '<button class="btn btn-primary" id="pr-modal-submit">Open pull request</button>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(overlay);
+
+    var titleInput = document.getElementById('pr-title-input');
+    var bodyInput = document.getElementById('pr-body-input');
+    var errorEl = document.getElementById('pr-modal-error');
+    var submitBtn = document.getElementById('pr-modal-submit');
+    titleInput.focus();
+    titleInput.select();
+
+    function closeModal() { overlay.remove(); }
+
+    async function submit() {
+        var title = titleInput.value.trim();
+        if (!title) {
+            errorEl.textContent = 'A title is required';
+            errorEl.classList.remove('hidden');
+            return;
+        }
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Opening...';
+        var prBody = {title: title, body: bodyInput.value};
+        var result = await apiFetch('/api/git/pr', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(prBody)
+        });
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Open pull request';
+        if (result && result.success) {
+            closeModal();
+            showLinkToast(
+                result.existing ? 'Pull request already open:' : 'Pull request opened:',
+                result.url,
+                '#' + result.number
+            );
+        } else {
+            errorEl.textContent = (result && result.error) || 'Unknown error';
+            errorEl.classList.remove('hidden');
+        }
+    }
+
+    submitBtn.onclick = submit;
+    document.getElementById('pr-modal-cancel').onclick = closeModal;
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) closeModal(); });
+    overlay.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeModal();
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submit();
+    });
+}
+
 // =====================================================================
 // Error Modal
 // =====================================================================
@@ -2135,6 +2238,7 @@ function initShareSlider() {
                     showToast('Pushed to origin/' + (result.branch || ''), 'success');
                     refreshBranchStatus();
                     loadTreeData();
+                    showPullRequestModal(result.branch);
                 } else {
                     showErrorModal('Push failed', (result && result.error) || 'Unknown error');
                 }
@@ -2175,6 +2279,7 @@ function initShareSlider() {
                     if (result && result.success) {
                         showToast('Pushed to origin/' + (result.branch || ''), 'success');
                         refreshBranchStatus();
+                        showPullRequestModal(result.branch);
                     } else {
                         showErrorModal('Push failed', (result && result.error) || 'Unknown error');
                     }

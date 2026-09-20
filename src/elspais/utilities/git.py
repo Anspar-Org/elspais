@@ -10,6 +10,7 @@ enabling detection of:
 
 from __future__ import annotations
 
+import base64
 import os
 import subprocess
 import tempfile
@@ -30,6 +31,96 @@ _GIT_ENV_VARS_TO_STRIP = (
     "GIT_COMMITTER_EMAIL",
     "GIT_COMMITTER_DATE",
 )
+
+
+# Implements: REQ-d00297-D
+def token_command_prefix(token: str | None, remote_url: str | None) -> list[str]:
+    """``git`` arguments carrying ``token`` for one invocation, or nothing.
+
+    The credential is passed as a per-command configuration override, so it
+    lives for the length of that one process and reaches neither the
+    repository's configuration, the environment it was started from, nor any
+    file. An ssh remote authenticates by key and ignores the header, so none
+    is built for one.
+    """
+    if not token or not remote_url or not remote_url.startswith("http"):
+        return []
+    encoded = base64.b64encode(f"x-access-token:{token}".encode()).decode("ascii")
+    return ["-c", f"http.extraheader=AUTHORIZATION: basic {encoded}"]
+
+
+def get_remote_url(repo_root: Path, remote: str = "origin") -> str | None:
+    """The URL configured for ``remote``, or None when there is no such remote."""
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", remote],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        return None
+    if result.returncode != 0:
+        return None
+    url = result.stdout.strip()
+    return url or None
+
+
+# Implements: REQ-d00297-C
+def unpushed_commit_count(repo_root: Path, branch: str, remote: str = "origin") -> int | None:
+    """How far ``branch`` is ahead of its remote-tracking ref.
+
+    None means the branch has no remote-tracking ref at all, which is a
+    different answer from "ahead by nothing" and is reported as such.
+    """
+    env = _clean_git_env()
+    try:
+        exists = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"refs/remotes/{remote}/{branch}"],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        if exists.returncode != 0:
+            return None
+        ahead = subprocess.run(
+            ["git", "rev-list", "--count", f"{remote}/{branch}..{branch}"],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        return None
+    if ahead.returncode != 0:
+        return None
+    try:
+        return int(ahead.stdout.strip())
+    except ValueError:
+        return None
+
+
+def remote_default_branch(repo_root: Path, remote: str = "origin") -> str | None:
+    """The branch the remote points its HEAD at, or None when unrecorded."""
+    try:
+        result = subprocess.run(
+            ["git", "symbolic-ref", "--short", f"refs/remotes/{remote}/HEAD"],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        return None
+    if result.returncode != 0:
+        return None
+    ref = result.stdout.strip()
+    prefix = f"{remote}/"
+    if ref.startswith(prefix):
+        return ref[len(prefix) :]
+    return ref or None
 
 
 def _clean_git_env() -> dict[str, str]:
@@ -865,9 +956,11 @@ def commit_and_push_spec_files(
 
 
 # Implements: REQ-p00004-F
+# Implements: REQ-d00297-D, REQ-d00297-F
 def sync_branch(
     repo_root: Path,
     main_branches: tuple[str, ...] = ("main", "master"),
+    token: str | None = None,
 ) -> dict[str, Any]:
     """Sync the current branch with its remote and with main.
 
@@ -897,10 +990,12 @@ def sync_branch(
     if not branch:
         return {"success": False, "error": "Not on a branch (detached HEAD)"}
 
+    token_args = token_command_prefix(token, get_remote_url(repo_root) if token else None)
+
     # 1. Fetch
     try:
         subprocess.run(
-            ["git", "fetch"],
+            ["git", *token_args, "fetch"],
             cwd=repo_root,
             env=env,
             capture_output=True,
@@ -965,7 +1060,12 @@ def sync_branch(
                             )
                             return {
                                 "success": False,
-                                "error": f"Merge conflict with {remote_ref} — aborted",
+                                "error": (
+                                    f"{remote_ref} cannot be fast-forwarded into this "
+                                    "branch. Push this branch and finish the work in a "
+                                    "local checkout — elspais does not rebase, merge or "
+                                    "resolve conflicts."
+                                ),
                                 "actions": actions,
                             }
     except (subprocess.CalledProcessError, ValueError):
@@ -1016,7 +1116,11 @@ def sync_branch(
                     )
                     return {
                         "success": False,
-                        "error": f"Rebase conflict on {remote_main} — aborted",
+                        "error": (
+                            f"This branch cannot be fast-forwarded onto {remote_main}. "
+                            "Push this branch and finish the work in a local checkout — "
+                            "elspais does not rebase, merge or resolve conflicts."
+                        ),
                         "actions": actions,
                     }
                 break
@@ -1407,11 +1511,13 @@ def checkout_branch(
     return {"success": True, "branch": branch}
 
 
+# Implements: REQ-d00297-D
 def push_branch(
     repo_root: Path,
     branch: str,
     remote: str = "origin",
     set_upstream: bool = True,
+    token: str | None = None,
 ) -> dict[str, Any]:
     """Push ``branch`` to ``remote``.
 
@@ -1420,12 +1526,16 @@ def push_branch(
         branch: Local branch name to push.
         remote: Remote name (default "origin").
         set_upstream: If True, pass ``-u`` to set the remote-tracking ref.
+        token: Credential to authenticate this one push with. It is carried
+            on the command and nowhere else.
 
     Returns:
         ``{"success": True, "branch": branch}`` on success, or
         ``{"success": False, "error": "..."}`` on failure.
     """
-    cmd = ["git", "push"]
+    cmd = ["git"]
+    cmd.extend(token_command_prefix(token, get_remote_url(repo_root, remote) if token else None))
+    cmd.append("push")
     if set_upstream:
         cmd.append("-u")
     cmd.extend([remote, branch])

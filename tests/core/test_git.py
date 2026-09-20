@@ -885,6 +885,66 @@ class TestPullFfOnly:
         )
         assert status.stdout.strip() == ""
 
+    # Verifies: REQ-d00297-F
+    def test_REQ_d00297_F_merge_conflict_says_push_and_finish_locally(self, tmp_path):
+        """A remote branch that will not fast-forward in tells the user to
+        push this branch and finish the work in a local checkout, rather than
+        describing a merge elspais does not perform."""
+        _bare, clone_a, clone_b = _init_bare_and_clones(tmp_path)
+
+        for clone, text, message in (
+            (clone_a, "version A\n", "edit from a"),
+            (clone_b, "version B\n", "edit from b"),
+        ):
+            (clone / "README.md").write_text(text)
+            _git_run(["git", "add", "."], cwd=clone, capture_output=True, check=True)
+            _git_run(["git", "commit", "-m", message], cwd=clone, capture_output=True, check=True)
+        _git_run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
+
+        result = sync_branch(clone_b)
+
+        assert result["success"] is False
+        assert "Push this branch" in result["error"]
+        assert "local checkout" in result["error"]
+
+    # Verifies: REQ-d00297-F
+    def test_REQ_d00297_F_rebase_conflict_says_push_and_finish_locally(self, tmp_path):
+        """Main moving under a branch that cannot be replayed onto it gives
+        the same instruction: push, and finish the work in a local checkout."""
+        _bare, clone_a, clone_b = _init_bare_and_clones(tmp_path)
+
+        (clone_a / "README.md").write_text("version A\n")
+        _git_run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
+        _git_run(
+            ["git", "commit", "-m", "edit on main"], cwd=clone_a, capture_output=True, check=True
+        )
+        _git_run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
+
+        _git_run(
+            ["git", "checkout", "-b", "__test_diverged"],
+            cwd=clone_b,
+            capture_output=True,
+            check=True,
+        )
+        (clone_b / "README.md").write_text("version B\n")
+        _git_run(["git", "add", "."], cwd=clone_b, capture_output=True, check=True)
+        _git_run(
+            ["git", "commit", "-m", "edit on branch"], cwd=clone_b, capture_output=True, check=True
+        )
+
+        result = sync_branch(clone_b)
+
+        assert result["success"] is False
+        assert "Push this branch" in result["error"]
+        assert "local checkout" in result["error"]
+        status = _git_run(
+            ["git", "status", "--porcelain"],
+            cwd=clone_b,
+            capture_output=True,
+            text=True,
+        )
+        assert status.stdout.strip() == ""
+
 
 def _init_bare_with_spec(tmp_path: Path) -> tuple[Path, Path, Path]:
     """Create a bare remote and two clones with a spec/ directory.
