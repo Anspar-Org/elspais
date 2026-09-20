@@ -116,7 +116,7 @@
 | REQ-d00128 | FILE Node Creation in Build Pipeline                          | dev-graph-file-nodes.md | 926ddd2b |
 | REQ-d00129 | SourceLocation Removal and Consumer Migration                 | dev-graph-file-nodes.md | 6d11df36 |
 | REQ-d00130 | Parameterized Root Iteration and Kind-Based Index Query       | dev-graph-file-nodes.md | 5733741e |
-| REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | 4bd2b48b |
+| REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | c81d018a |
 | REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | f5a4193c |
 | REQ-d00133 | MCP FILE Node Integration                                     | dev-mcp-tools.md        | 08e2973f |
 | REQ-d00134 | Mutation Round-Trip Fidelity                                  | dev-graph-file-nodes.md | 19cb065b |
@@ -218,6 +218,7 @@
 | REQ-d00296 | Request Identity From a Trusted Proxy                         | prd-features.md         | fe4f3620 |
 | REQ-d00297 | Opening a Pull Request From the Viewer                        | prd-core.md             | 006e3f69 |
 | REQ-d00298 | Report Export                                                 | dev-cli.md              | 8c1b78eb |
+| REQ-d00299 | Configuration as Graph Content                                | dev-graph-config.md     | 0577c0a5 |
 
 ## User Journeys
 
