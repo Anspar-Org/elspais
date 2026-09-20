@@ -389,10 +389,10 @@ class TestViewerExport:
         )
         assert gaps_formats == ["markdown", "pdf"]
 
-    # Verifies: REQ-d00298-C
+    # Verifies: REQ-d00298-G
     @pytest.mark.browser
     @pytest.mark.e2e
-    def test_REQ_d00298_C_level_narrowing_reaches_only_a_report_that_reads_a_scope(
+    def test_REQ_d00298_G_level_narrowing_reaches_only_a_report_that_reads_a_scope(
         self, page, viewer_url
     ):
         """A level soloed in the header is sent as the scope the run route
@@ -426,10 +426,10 @@ class TestViewerExport:
         assert "nothing to export" in toast.text_content().lower()
         assert page.query_selector("#export-control") is not None
 
-    # Verifies: REQ-d00298-C
+    # Verifies: REQ-d00298-G
     @pytest.mark.browser
     @pytest.mark.e2e
-    def test_REQ_d00298_C_a_status_hidden_on_screen_is_hidden_from_the_download(
+    def test_REQ_d00298_G_a_status_hidden_on_screen_is_hidden_from_the_download(
         self, page, viewer_url
     ):
         """A reader who hides a status has narrowed the report they are

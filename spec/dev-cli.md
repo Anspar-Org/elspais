@@ -919,16 +919,20 @@ E. An export requested in a format the report does not offer SHALL be refused na
 
 F. A delivered export SHALL identify its report and its format.
 
+G. An export requested from a surface displaying a report it has narrowed SHALL be narrowed the same way, for every property of that narrowing the report's scope can express, and a surface displaying no report at all SHALL refuse the export rather than widen it.
+
 ### Rationale
 
 A and B are what make the viewer's report worth filing. The viewer shows a report a reader has narrowed and regenerated until it says what they need, and a document that then states something else -- a different column, a different rounding, a scope silently widened -- is a document nobody can vouch for. Tying the export to the command-line rendering rather than to a rendering of its own is what lets one reading, whichever surface produced it, stand for the other. A document format is one a reader files and reads as a page -- markdown, a spreadsheet's CSV, a PDF. The machine formats a report also answers in (JSON, a test runner's XML) are what the on-screen report is already served as, and are not exports; PDF is offered wherever markdown is because it is that markdown converted, so it states what the markdown states.
 
 C is REQ-d00280-D read from this side. A viewer receives what a browser sent, which is already a finished selection, and reading it the way the on-screen report reads it is what keeps the two from drifting apart when either edge changes. D is what keeps a refusal honest: a document format that needs a converter cannot be produced without it, and an empty or truncated file that downloads successfully is worse than a refusal, because it looks like the report it is not. E is the same disposition toward a format a report does not offer -- a findings listing has no columns to lay out as a spreadsheet, and a reader told which formats exist can ask for one of them. F is what lets a filed export be found again: a download that says only that it is a file has lost the one thing a reader needs to know about it.
 
+G is B read about a reader who has narrowed what they are looking at. A narrowed report is the report that reader is reading, so an export of it that arrives wider is a document they did not ask for and cannot tell apart from one they did -- a filed report claiming an estate nobody reviewed. The obligation reaches as far as the report's scope reaches and no further: a narrowing drawn on a property the scope cannot express cannot travel, and where a surface offers such a narrowing it is the surface's business to say which of its narrowings the document carries, because a reader who cannot see the difference will assume there is none. The empty case is the same honesty at its limit. A scope selects among values, so it has no way to select none, and a surface displaying nothing that exported anyway would deliver the whole estate under the appearance of a reader's selection; refusing is the only answer that does not lie.
+
 ### Changelog
 
-- 2026-09-19 | 196cb10b | - | Michael Lewis (<michael@anspar.org>) | A widened to each document format the report offers, and to PDF wherever it renders as markdown
-- 2026-09-18 | 196cb10b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-19 | 8c1b78eb | - | Michael Lewis (<michael@anspar.org>) | G added: an export carries the narrowing its surface is displaying under, and is refused where that surface displays nothing
+- 2026-09-18 | 196cb10b | - | Michael Lewis (<michael@anspar.org>) | A widened to each document format the report offers, and to PDF wherever it renders as markdown
 - 2026-09-17 | 071538b7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 
-*End* *Report Export* | **Hash**: 196cb10b
+*End* *Report Export* | **Hash**: 8c1b78eb

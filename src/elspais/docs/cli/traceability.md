@@ -286,14 +286,23 @@ Draft requirements downloads a report without them. A page with nothing
 selected to show shows nothing, and a scope cannot say "nothing", so
 Download refuses with a message rather than exporting the whole estate.
 
+Level and status are the only narrowings a scope can carry. The page hides
+rows by more than those -- the repository a requirement belongs to, its
+coverage state, its git state, its place in the hierarchy -- and a download
+taken while one of those is narrowing the page holds the rows it hides. On a
+federated estate that is the consequential one: soloing a member narrows the
+page and not the document. Narrow by level or status, or read the download
+knowing it is wider than the page.
+
 The page fetches the download rather than navigating to it, so a refusal is
 shown as a message on the page -- the reader keeps their filters -- and a
 download raises no leave-page warning however much unsaved work the page
 holds.
 
 A markdown or CSV download is the same formatter over the same payload as
-`elspais <report> --format markdown` or `--format csv`, so it states the
-same values in the same layout. A PDF is that markdown converted by `pandoc
+`elspais <report> --format markdown` or `--format csv` for the same
+inputs, so for those inputs it states the same values in the same layout,
+byte for byte. A PDF is that markdown converted by `pandoc
 --pdf-engine=xelatex` through the LaTeX template `elspais pdf` typesets
 with; when either tool is absent the export is refused with a 409 naming
 what to install, and a conversion that fails, or that could not fetch a

@@ -2237,14 +2237,17 @@ function onExportReportChange() {
     if (offered.indexOf(previous) >= 0) formatSel.value = previous;
 }
 
-{# Implements: REQ-d00298-C #}
-// The page's narrowing as the scope the run routes already read. Every
-// property the page hides rows by and the route scopes by is sent, because a
-// property the reader narrowed on screen and the download did not is a
-// download that says more than the page did. Level and status are those
-// properties; namespace is not one the route scopes by, so it is not sent --
-// a filter the route does not read would be a filter the download silently
-// ignored.
+{# Implements: REQ-d00298-G #}
+// The page's narrowing as the scope the run routes already read. Level and
+// status are the properties a scope can express, and both are sent whenever
+// they narrow, because a property the reader narrowed on screen and the
+// download did not is a download that says more than the page did.
+//
+// The page hides rows by more than those two -- repository, coverage state,
+// git state, hierarchy -- and none of them can be spelled as a scope, so none
+// of them travel: a download taken under one of those is wider than the page
+// showing it. The reports topic says so, since a reader cannot see it from
+// here.
 //
 // Only a narrowing is sent, and only to a report that reads one: every value
 // on is the whole estate, which is what the route reads when no scope
@@ -2268,7 +2271,7 @@ function exportScopeParams(report) {
     return params;
 }
 
-{# Implements: REQ-d00298-A, REQ-d00298-C #}
+{# Implements: REQ-d00298-A, REQ-d00298-G #}
 // The URL one download is fetched from: the report's export route, the chosen
 // format, and the page's narrowing spelled the way the on-screen route reads
 // it. Null where there is nothing to fetch -- no format chosen, or a narrowing
