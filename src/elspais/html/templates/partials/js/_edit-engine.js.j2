@@ -186,10 +186,29 @@ function showLinkToast(message, url, linkText) {
 // Pull Request Modal (REQ-d00297)
 // =====================================================================
 
+{# Implements: REQ-d00297-A, REQ-d00297-C #}
+// A pull request proposes one branch of one repository. A push across a
+// federation pushed several, and the dialog offered after it would propose
+// whichever one the server resolved to without saying which — so a push that
+// carried more than one says what it did instead, and a push that carried
+// exactly one names that repository and proposes it.
+function offerPullRequest(result) {
+    if (result && Array.isArray(result.results)) {
+        var pushed = result.results.filter(function(r) { return r.success; });
+        if (pushed.length === 1) {
+            showPullRequestModal(pushed[0].branch, pushed[0].repo);
+            return;
+        }
+        showToast('Pushed ' + pushed.length + ' repositories — a pull request proposes one at a time', 'info');
+        return;
+    }
+    showPullRequestModal(result && result.branch);
+}
+
 {# Implements: REQ-d00297-A, REQ-d00297-B, REQ-d00297-C, REQ-d00297-E #}
 // Offered once the branch has reached the remote, because a pull request
 // can only propose commits the remote already holds.
-async function showPullRequestModal(branch) {
+async function showPullRequestModal(branch, repo) {
     var old = document.getElementById('pr-modal-overlay');
     if (old) old.remove();
 
@@ -202,7 +221,7 @@ async function showPullRequestModal(branch) {
     overlay.className = 'modal-overlay visible';
     overlay.innerHTML =
         '<div class="modal-dialog">' +
-            '<div class="modal-title">Open pull request</div>' +
+            '<div class="modal-title">Open pull request' + (repo ? ' &mdash; ' + escapeAttr(repo) : '') + '</div>' +
             '<label class="modal-label">Title:</label>' +
             '<input type="text" class="modal-input" id="pr-title-input" value="' + escapeAttr(suggestion) + '">' +
             '<label class="modal-label">Description:</label>' +
@@ -234,10 +253,12 @@ async function showPullRequestModal(branch) {
         submitBtn.disabled = true;
         submitBtn.textContent = 'Opening...';
         var prBody = {title: title, body: bodyInput.value};
+        if (repo) prBody.repo = repo;
         var result = await apiFetch('/api/git/pr', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(prBody)
+            body: JSON.stringify(prBody),
+            handlesRefusal: true
         });
         submitBtn.disabled = false;
         submitBtn.textContent = 'Open pull request';
@@ -2238,7 +2259,7 @@ function initShareSlider() {
                     showToast('Pushed to origin/' + (result.branch || ''), 'success');
                     refreshBranchStatus();
                     loadTreeData();
-                    showPullRequestModal(result.branch);
+                    offerPullRequest(result);
                 } else {
                     showErrorModal('Push failed', (result && result.error) || 'Unknown error');
                 }
@@ -2279,7 +2300,7 @@ function initShareSlider() {
                     if (result && result.success) {
                         showToast('Pushed to origin/' + (result.branch || ''), 'success');
                         refreshBranchStatus();
-                        showPullRequestModal(result.branch);
+                        offerPullRequest(result);
                     } else {
                         showErrorModal('Push failed', (result && result.error) || 'Unknown error');
                     }

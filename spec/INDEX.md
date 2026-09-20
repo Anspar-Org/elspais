@@ -13,7 +13,7 @@
 | REQ-p00001 | Requirements Management Tool                     | prd-core.md     | 224578c6 |
 | REQ-p00002 | Requirements Validation                          | prd-core.md     | c8440f64 |
 | REQ-p00003 | Traceability Matrix Generation                   | prd-core.md     | 3121ad66 |
-| REQ-p00004 | Change Detection and Auditability                | prd-core.md     | 1042856d |
+| REQ-p00004 | Change Detection and Auditability                | prd-core.md     | 1a49b829 |
 | REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | de05471c |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-features.md | 185217a3 |
 | REQ-p00013 | End-to-End Tests Exercise the Installed Command  | prd-core.md     | 1b5c65b2 |
@@ -216,7 +216,7 @@
 | REQ-d00294 | A Result Is Its Own Record                                    | dev-graph-core.md       | 66e2737b |
 | REQ-d00295 | Viewer Served Under a Configured Prefix                       | dev-traceview-review.md | b3c8493f |
 | REQ-d00296 | Request Identity From a Trusted Proxy                         | prd-features.md         | fe4f3620 |
-| REQ-d00297 | Opening a Pull Request From the Viewer                        | prd-core.md             | 1101aea2 |
+| REQ-d00297 | Opening a Pull Request From the Viewer                        | prd-core.md             | 006e3f69 |
 | REQ-d00298 | Report Export                                                 | dev-cli.md              | 8c1b78eb |
 
 ## User Journeys

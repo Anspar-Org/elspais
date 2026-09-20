@@ -12,6 +12,7 @@ from __future__ import annotations
 import io
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -208,3 +209,27 @@ def test_a_failed_lookup_is_not_mistaken_for_an_existing_pull_request() -> None:
     from the failure."""
     opener = _Opener(_http_error(403, {"message": "Forbidden"}))
     assert find_open_pull_request("o", "r", "feature", TOKEN, opener=opener) is None
+
+
+# Verifies: REQ-d00297-E
+@pytest.mark.parametrize(
+    "branch",
+    [
+        pytest.param("fix&feature", id="ampersand"),
+        pytest.param("fix#3", id="fragment"),
+        pytest.param("fix%2fthing", id="percent"),
+    ],
+)
+def test_a_branch_name_cannot_rewrite_the_lookup_it_is_filtered_by(branch: str) -> None:
+    """Git admits characters a query string reads as structure. An unescaped
+    one would end the filter early, leaving GitHub to answer with every open
+    pull request -- and the first of those would be reported as this branch's.
+    The name is escaped, so the filter still names the branch whole."""
+    opener = _Opener(_Response([{"html_url": "https://github.com/o/r/pull/7", "number": 7}]))
+
+    find_open_pull_request("o", "r", branch, TOKEN, opener=opener)
+
+    query = opener.requests[0].full_url.split("?", 1)[1]
+    pairs = dict(urllib.parse.parse_qsl(query))
+    assert pairs["head"] == f"o:{branch}"
+    assert pairs["state"] == "open"

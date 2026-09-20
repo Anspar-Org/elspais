@@ -61,27 +61,37 @@ request is reported rather than the request refused.
 ### Credentials
 
 A pull request is attributed to whoever's credential opened it, so one must
-be available. In order of precedence:
+be available. Where it comes from depends on who the server is serving,
+which is decided by `ELSPAIS_PROXY_SECRET` (the `commands` topic's viewer
+section describes the proxied-identity headers, and the `config` topic lists
+the variable):
 
-1. `X-Elspais-Git-Token` on the request, believed only when the request also
-   carries the proxy secret (see the `concurrency` topic's note on proxied
-   identity) -- this is how a server serving many people acts as the person
-   who asked.
-2. `GH_TOKEN` in the server's environment.
-3. `GITHUB_TOKEN` in the server's environment.
-4. `gh auth token`, if the GitHub CLI is installed and signed in.
+- A server started **with** a proxy secret is answering for whoever the
+  proxy names. The credential is the one the request carried as
+  `X-Elspais-Git-Token`, believed only when the request also carries the
+  secret. There is no fallback: what the machine holds of its own belongs to
+  nobody who asked, so a request without a credential is refused rather than
+  attributed to the machine.
+- A server started **without** one is its operator's own viewer. It uses
+  `GH_TOKEN`, else `GITHUB_TOKEN` from its environment, else `gh auth token`
+  if the GitHub CLI is installed and signed in.
 
-With none of these the request is refused naming what to supply. A
+With no credential the request is refused naming what to supply. A
 credential that arrives with a request serves only the operation it arrived
-for -- a push, a fetch or a pull request -- and is carried on that one
-command. It is never written to the repository's configuration, to the
-environment the server was started from, or to any file.
+for -- a push, a fetch or a pull request -- and is handed to that one git
+process on its own environment, which the operating system shows to the
+owning account alone. It is never put on a command line, and never written
+to the repository's configuration, to the environment the server was started
+from, or to any file. Only an `https` remote is given one: an `ssh` remote
+authenticates by key, and a plaintext remote would put the credential on the
+wire.
 
 ### Pull is fast-forward only
 
-`/api/git/pull` fetches and fast-forwards. Where a fast-forward is not
-possible, it says so and tells you to push the branch and finish the work in
-a local checkout: elspais does not rebase, merge or resolve conflicts.
+`/api/git/pull` fetches and fast-forwards the current branch from its
+remote-tracking ref. Where a fast-forward is not possible it changes
+nothing, says so, and tells you to push the branch and finish the work in a
+local checkout: elspais does not rebase, merge or resolve conflicts.
 
 ## Pre-Commit Hook Example
 

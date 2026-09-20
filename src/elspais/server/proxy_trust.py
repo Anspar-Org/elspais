@@ -41,6 +41,16 @@ def _read_secret() -> str | None:
 _SECRET: str | None = _read_secret()
 
 
+def proxy_secret_is_configured() -> bool:
+    """Whether this process was started to serve people through a proxy.
+
+    A process with a secret is answering for whoever the proxy names, so
+    anything it holds of its own speaks for nobody who asked; a process
+    without one is somebody's own viewer, and what it holds is theirs.
+    """
+    return _SECRET is not None
+
+
 # Implements: REQ-d00296-C, REQ-d00296-D
 def request_is_trusted(request: Any) -> bool:
     """Whether the request carries the secret this process shares with its proxy.

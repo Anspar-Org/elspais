@@ -3843,3 +3843,163 @@ class TestViewerUnderBasePath:
         assert info["type"] == "viewer"
         assert info["base_path"] == _BASE_PATH
         assert get_daemon_mutation_count(info) == 0
+
+
+# ─────────────────────────────────────────────────────────────────
+# Proposing a pushed branch from the page (REQ-d00297)
+# ─────────────────────────────────────────────────────────────────
+
+
+def _pr_route_recorder(page, answer: dict, status: int = 200) -> list[dict]:
+    """Answer the pull-request route from here, recording what the page sent.
+
+    The route itself is exercised by its own tests; what is under test here
+    is what the page puts into it and what it does with the answer.
+    """
+    sent: list[dict] = []
+
+    def handle(route):
+        request = route.request
+        sent.append(json.loads(request.post_data or "{}"))
+        route.fulfill(
+            status=status,
+            content_type="application/json",
+            body=json.dumps(answer),
+        )
+
+    page.route("**/api/git/pr", handle)
+    return sent
+
+
+def _offer(page, result: dict) -> None:
+    """Offer the proposal for a push that answered with ``result``."""
+    page.evaluate("(result) => offerPullRequest(result)", result)
+
+
+class TestBrowserPullRequestModal:
+    """Validates REQ-d00297-A, REQ-d00297-C: a pushed branch is proposed from
+    the page, the proposal carries what the person typed and names where it
+    goes, and a push that carried several repositories is not answered by a
+    dialog proposing one of them without saying which."""
+
+    # Verifies: REQ-d00297-A
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00297_A_a_pushed_branch_is_proposed_with_what_was_typed(
+        self, page_badge, badge_viewer_url
+    ):
+        """The dialog appears after a push, sends the title and description
+        the person typed, and puts the pull request it is told about in front
+        of them as something they can follow."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+        sent = _pr_route_recorder(
+            page,
+            {
+                "success": True,
+                "url": "https://github.com/o/r/pull/41",
+                "number": 41,
+                "existing": False,
+            },
+        )
+
+        _offer(page, {"success": True, "branch": "badge-truth"})
+        page.wait_for_selector("#pr-modal-overlay", state="visible")
+        page.fill("#pr-title-input", "Propose the badge work")
+        page.fill("#pr-body-input", "What it changes and why")
+        page.click("#pr-modal-submit")
+
+        page.wait_for_function("() => !document.getElementById('pr-modal-overlay')")
+        assert sent == [{"title": "Propose the badge work", "body": "What it changes and why"}]
+
+        link = page.wait_for_selector("#toast-container a")
+        assert link.get_attribute("href") == "https://github.com/o/r/pull/41"
+        assert link.get_attribute("target") == "_blank"
+        assert "41" in link.text_content()
+
+    # Verifies: REQ-d00297-C
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00297_C_a_refusal_is_shown_and_the_dialog_stays_open(
+        self, page_badge, badge_viewer_url
+    ):
+        """A refusal is put in front of the person in the dialog they are in,
+        so the condition it names is read where the work still is."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+        _pr_route_recorder(
+            page,
+            {"success": False, "error": "Branch 'badge-truth' is not on the remote yet"},
+            status=400,
+        )
+
+        _offer(page, {"success": True, "branch": "badge-truth"})
+        page.wait_for_selector("#pr-modal-overlay", state="visible")
+        page.click("#pr-modal-submit")
+
+        page.wait_for_function(
+            "() => { const e = document.getElementById('pr-modal-error');"
+            " return e && !e.classList.contains('hidden'); }"
+        )
+        assert "not on the remote yet" in page.text_content("#pr-modal-error")
+        assert page.is_visible("#pr-modal-overlay")
+
+    # Verifies: REQ-d00297-A+C
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00297_A_a_push_across_repositories_is_not_answered_by_one_dialog(
+        self, page_badge, badge_viewer_url
+    ):
+        """A pull request proposes one repository. A push that carried
+        several is told about, rather than answered by a dialog proposing
+        whichever one the server would resolve to."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+        sent = _pr_route_recorder(page, {"success": True, "url": "x", "number": 1})
+
+        _offer(
+            page,
+            {
+                "success": True,
+                "results": [
+                    {"repo": "core", "success": True, "branch": "badge-truth"},
+                    {"repo": "lib", "success": True, "branch": "badge-truth"},
+                ],
+            },
+        )
+
+        page.wait_for_selector("#toast-container .toast")
+        assert not _dom_present(page, "#pr-modal-overlay")
+        assert "one at a time" in page.text_content("#toast-container")
+        assert sent == []
+
+    # Verifies: REQ-d00297-A
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00297_A_a_push_that_carried_one_repository_names_it(
+        self, page_badge, badge_viewer_url
+    ):
+        """Where the push carried exactly one repository there is no doubt
+        which is proposed — so it is proposed, named in the dialog and named
+        in what the dialog sends."""
+        page = page_badge
+        page.goto(badge_viewer_url, wait_until="networkidle")
+        sent = _pr_route_recorder(
+            page, {"success": True, "url": "https://github.com/o/r/pull/8", "number": 8}
+        )
+
+        _offer(
+            page,
+            {
+                "success": True,
+                "results": [{"repo": "core", "success": True, "branch": "badge-truth"}],
+            },
+        )
+
+        page.wait_for_selector("#pr-modal-overlay", state="visible")
+        assert "core" in page.text_content("#pr-modal-overlay .modal-title")
+        page.fill("#pr-title-input", "Propose core")
+        page.click("#pr-modal-submit")
+
+        page.wait_for_function("() => !document.getElementById('pr-modal-overlay')")
+        assert sent == [{"title": "Propose core", "body": "", "repo": "core"}]

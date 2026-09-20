@@ -34,19 +34,42 @@ _GIT_ENV_VARS_TO_STRIP = (
 
 
 # Implements: REQ-d00297-D
-def token_command_prefix(token: str | None, remote_url: str | None) -> list[str]:
-    """``git`` arguments carrying ``token`` for one invocation, or nothing.
+def token_git_env(token: str | None, remote_url: str | None) -> dict[str, str]:
+    """Environment entries carrying ``token`` for one git invocation, or none.
 
-    The credential is passed as a per-command configuration override, so it
-    lives for the length of that one process and reaches neither the
-    repository's configuration, the environment it was started from, nor any
-    file. An ssh remote authenticates by key and ignores the header, so none
-    is built for one.
+    The credential is handed to the child as a configuration override on its
+    own environment, which the operating system shows to the owning account
+    alone; a command line is shown to every local account for as long as the
+    command runs. It reaches neither the repository's configuration, the
+    environment this process was started from, nor any file. An ssh remote
+    authenticates by key and ignores the header, and a plaintext remote would
+    put the credential on the wire, so neither is given one.
     """
-    if not token or not remote_url or not remote_url.startswith("http"):
-        return []
+    if not token or not remote_url or not remote_url.startswith("https://"):
+        return {}
     encoded = base64.b64encode(f"x-access-token:{token}".encode()).decode("ascii")
-    return ["-c", f"http.extraheader=AUTHORIZATION: basic {encoded}"]
+    return {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "http.extraheader",
+        "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: basic {encoded}",
+    }
+
+
+def remote_host(remote_url: str | None) -> str | None:
+    """The host a remote URL names, without anything it carries before it.
+
+    A remote may embed a credential in its userinfo, so only the host is
+    ever repeated back to a caller.
+    """
+    url = (remote_url or "").strip()
+    if not url:
+        return None
+    scheme_split = url.split("://", 1)
+    rest = scheme_split[1] if len(scheme_split) == 2 else url
+    if "@" in rest:
+        rest = rest.rsplit("@", 1)[1]
+    host = rest.split("/", 1)[0].split(":", 1)[0]
+    return host or None
 
 
 def get_remote_url(repo_root: Path, remote: str = "origin") -> str | None:
@@ -67,13 +90,23 @@ def get_remote_url(repo_root: Path, remote: str = "origin") -> str | None:
     return url or None
 
 
-# Implements: REQ-d00297-C
-def unpushed_commit_count(repo_root: Path, branch: str, remote: str = "origin") -> int | None:
-    """How far ``branch`` is ahead of its remote-tracking ref.
+@dataclass(frozen=True)
+class BranchRemoteState:
+    """Where a branch stands against its remote-tracking ref.
 
-    None means the branch has no remote-tracking ref at all, which is a
-    different answer from "ahead by nothing" and is reported as such.
+    ``status`` is one of ``in-sync``, ``ahead``, ``no-tracking-ref``,
+    ``git-unavailable`` or ``unreadable``. They are kept apart because each
+    asks something different of the person: only ``ahead`` and
+    ``no-tracking-ref`` are answered by pushing.
     """
+
+    status: str
+    ahead: int = 0
+
+
+# Implements: REQ-d00297-C
+def branch_remote_state(repo_root: Path, branch: str, remote: str = "origin") -> BranchRemoteState:
+    """How far ``branch`` is ahead of its remote-tracking ref, or why unknown."""
     env = _clean_git_env()
     try:
         exists = subprocess.run(
@@ -84,7 +117,7 @@ def unpushed_commit_count(repo_root: Path, branch: str, remote: str = "origin") 
             text=True,
         )
         if exists.returncode != 0:
-            return None
+            return BranchRemoteState("no-tracking-ref")
         ahead = subprocess.run(
             ["git", "rev-list", "--count", f"{remote}/{branch}..{branch}"],
             cwd=repo_root,
@@ -93,13 +126,14 @@ def unpushed_commit_count(repo_root: Path, branch: str, remote: str = "origin") 
             text=True,
         )
     except FileNotFoundError:
-        return None
+        return BranchRemoteState("git-unavailable")
     if ahead.returncode != 0:
-        return None
+        return BranchRemoteState("unreadable")
     try:
-        return int(ahead.stdout.strip())
+        count = int(ahead.stdout.strip())
     except ValueError:
-        return None
+        return BranchRemoteState("unreadable")
+    return BranchRemoteState("ahead" if count else "in-sync", count)
 
 
 def remote_default_branch(repo_root: Path, remote: str = "origin") -> str | None:
@@ -962,22 +996,19 @@ def sync_branch(
     main_branches: tuple[str, ...] = ("main", "master"),
     token: str | None = None,
 ) -> dict[str, Any]:
-    """Sync the current branch with its remote and with main.
+    """Bring the current branch up to its remote-tracking ref by fast-forward.
 
-    Performs up to two safe operations:
-
-    1. **Merge remote tracking branch** — if ``origin/<branch>`` is ahead,
-       attempt ``git merge --ff-only``.  If that fails (diverged), try
-       ``git merge --no-edit`` and abort on conflict.
-    2. **Rebase on updated main** — if ``origin/main`` has moved past the
-       merge-base, attempt ``git rebase origin/main`` and abort on conflict.
-
-    Both operations abort cleanly if conflicts are detected — the working
-    tree is always left in a usable state.
+    Fetches, then fast-forwards where the remote is ahead. Work that cannot
+    be fast-forwarded is handed back: reconciling two histories needs
+    decisions about content this tool does not make, so the branch is left
+    exactly as it was found and the caller is told to push it and finish in a
+    local checkout.
 
     Args:
         repo_root: Path to repository root.
-        main_branches: Branch names to try rebasing onto.
+        main_branches: Accepted for the caller's branch vocabulary; the sync
+            reconciles a branch with its own remote-tracking ref only.
+        token: Credential to authenticate this one fetch with.
 
     Returns:
         Dict with ``success`` (bool), ``actions`` (list of descriptions),
@@ -990,12 +1021,12 @@ def sync_branch(
     if not branch:
         return {"success": False, "error": "Not on a branch (detached HEAD)"}
 
-    token_args = token_command_prefix(token, get_remote_url(repo_root) if token else None)
+    env.update(token_git_env(token, get_remote_url(repo_root) if token else None))
 
     # 1. Fetch
     try:
         subprocess.run(
-            ["git", *token_args, "fetch"],
+            ["git", "fetch"],
             cwd=repo_root,
             env=env,
             capture_output=True,
@@ -1014,7 +1045,7 @@ def sync_branch(
     except FileNotFoundError:
         return {"success": False, "error": "git not found", "actions": actions}
 
-    # 2. Merge remote tracking branch if ahead
+    # 2. Fast-forward to the remote-tracking ref where it is ahead
     remote_ref = f"origin/{branch}"
     try:
         rev = subprocess.run(
@@ -1029,7 +1060,6 @@ def sync_branch(
             if len(parts) == 2:
                 remote_ahead = int(parts[1])
                 if remote_ahead > 0:
-                    # Try ff-only first
                     ff = subprocess.run(
                         ["git", "merge", "--ff-only", remote_ref],
                         cwd=repo_root,
@@ -1040,92 +1070,18 @@ def sync_branch(
                     if ff.returncode == 0:
                         actions.append(f"Fast-forwarded from {remote_ref}")
                     else:
-                        # Try regular merge (auto-resolve)
-                        mg = subprocess.run(
-                            ["git", "merge", "--no-edit", remote_ref],
-                            cwd=repo_root,
-                            env=env,
-                            capture_output=True,
-                            text=True,
-                        )
-                        if mg.returncode == 0:
-                            actions.append(f"Merged {remote_ref}")
-                        else:
-                            # Conflict — abort
-                            subprocess.run(
-                                ["git", "merge", "--abort"],
-                                cwd=repo_root,
-                                env=env,
-                                capture_output=True,
-                            )
-                            return {
-                                "success": False,
-                                "error": (
-                                    f"{remote_ref} cannot be fast-forwarded into this "
-                                    "branch. Push this branch and finish the work in a "
-                                    "local checkout — elspais does not rebase, merge or "
-                                    "resolve conflicts."
-                                ),
-                                "actions": actions,
-                            }
+                        return {
+                            "success": False,
+                            "error": (
+                                f"{remote_ref} cannot be fast-forwarded into this "
+                                "branch. Push this branch and finish the work in a "
+                                "local checkout — elspais does not rebase, merge or "
+                                "resolve conflicts."
+                            ),
+                            "actions": actions,
+                        }
     except (subprocess.CalledProcessError, ValueError):
-        pass  # No remote tracking branch — skip merge step
-
-    # 3. Rebase on updated main if diverged
-    if branch not in main_branches:
-        for main_name in main_branches:
-            remote_main = f"origin/{main_name}"
-            try:
-                mb = subprocess.run(
-                    ["git", "merge-base", branch, remote_main],
-                    cwd=repo_root,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                )
-                if mb.returncode != 0:
-                    continue
-                merge_base = mb.stdout.strip()
-                tip = subprocess.run(
-                    ["git", "rev-parse", remote_main],
-                    cwd=repo_root,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                )
-                if tip.returncode != 0 or tip.stdout.strip() == merge_base:
-                    break  # Main hasn't moved — nothing to do
-
-                # Main has moved — try rebase
-                rb = subprocess.run(
-                    ["git", "rebase", remote_main],
-                    cwd=repo_root,
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                )
-                if rb.returncode == 0:
-                    actions.append(f"Rebased on {remote_main}")
-                else:
-                    # Conflict — abort
-                    subprocess.run(
-                        ["git", "rebase", "--abort"],
-                        cwd=repo_root,
-                        env=env,
-                        capture_output=True,
-                    )
-                    return {
-                        "success": False,
-                        "error": (
-                            f"This branch cannot be fast-forwarded onto {remote_main}. "
-                            "Push this branch and finish the work in a local checkout — "
-                            "elspais does not rebase, merge or resolve conflicts."
-                        ),
-                        "actions": actions,
-                    }
-                break
-            except (subprocess.CalledProcessError, ValueError):
-                continue
+        pass  # No remote tracking branch — nothing to fast-forward from
 
     if not actions:
         return {"success": True, "message": "Already up to date", "actions": actions}
@@ -1527,23 +1483,23 @@ def push_branch(
         remote: Remote name (default "origin").
         set_upstream: If True, pass ``-u`` to set the remote-tracking ref.
         token: Credential to authenticate this one push with. It is carried
-            on the command and nowhere else.
+            on that one child's environment and nowhere else.
 
     Returns:
         ``{"success": True, "branch": branch}`` on success, or
         ``{"success": False, "error": "..."}`` on failure.
     """
-    cmd = ["git"]
-    cmd.extend(token_command_prefix(token, get_remote_url(repo_root, remote) if token else None))
-    cmd.append("push")
+    cmd = ["git", "push"]
     if set_upstream:
         cmd.append("-u")
     cmd.extend([remote, branch])
+    env = _clean_git_env()
+    env.update(token_git_env(token, get_remote_url(repo_root, remote) if token else None))
     try:
         result = subprocess.run(
             cmd,
             cwd=repo_root,
-            env=_clean_git_env(),
+            env=env,
             capture_output=True,
             text=True,
         )

@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from typing import Any
@@ -74,9 +75,15 @@ def find_open_pull_request(
     token: str,
     opener: Opener | None = None,
 ) -> dict[str, Any] | None:
-    """The open pull request already proposing ``head_branch``, or None."""
+    """The open pull request already proposing ``head_branch``, or None.
+
+    A branch name may carry characters a query string reads as structure, so
+    the filter is escaped: an unescaped one would drop the filter and let an
+    unrelated pull request answer for this branch.
+    """
     send = opener or _default_opener
-    path = f"/repos/{owner}/{repo}/pulls?head={owner}:{head_branch}&state=open"
+    query = urllib.parse.urlencode({"head": f"{owner}:{head_branch}", "state": "open"})
+    path = f"/repos/{owner}/{repo}/pulls?{query}"
     try:
         response = send(_api_request("GET", path, token), REQUEST_TIMEOUT)
     except urllib.error.HTTPError:
