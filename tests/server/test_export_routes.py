@@ -5,9 +5,11 @@ The export renders nothing of its own. A markdown or CSV body is what the
 command's own formatter produces for the same request, byte for byte; a PDF is
 that markdown converted by pandoc. The body compared against is the
 formatter's return value -- the command prints it with a trailing newline the
-download does not carry -- and the request compared against is built at the
-command-line edge (``report_inputs_from_args``) so the test crosses both edges
-rather than calling the export's own builder twice.
+download does not carry. Where a report reads a selection, the request
+compared against is built at the command-line edge
+(``report_inputs_from_args``), so the test crosses both edges rather than
+calling the export's own builder twice; ``checks`` reads none, so its request
+is stated outright and only the formatter is crossed.
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ import argparse
 import re
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 from starlette.testclient import TestClient
@@ -248,6 +251,39 @@ def test_a_converter_that_writes_nothing_is_a_failure_not_an_empty_download(clie
     response = client.get("/api/export/summary", params={"format": "pdf"})
     assert response.status_code == 500
     assert response.json()["error"] == "render_failed"
+
+
+# Verifies: REQ-d00298-D
+def test_a_resource_the_converter_could_not_fetch_refuses_rather_than_delivering_short(
+    client, monkeypatch
+):
+    """Pandoc drops a resource it cannot fetch and still exits 0, so a PDF
+    missing a figure it names would download looking complete. The export
+    reads what the converter reported and refuses instead."""
+    import elspais.pdf.renderer as renderer
+    import elspais.server.export as export
+
+    monkeypatch.setattr(export.shutil, "which", lambda name: f"/usr/bin/{name}")
+
+    dropped = "[WARNING] Could not fetch resource diagram.png: replacing image with description"
+    real_run = subprocess.run
+
+    def dropping_run(cmd, **kwargs):
+        # Only the converter is stubbed: rendering the report runs git of its
+        # own, and a stub standing in for every subprocess would answer that
+        # too. A converter that succeeded, wrote its document, and quietly
+        # left a resource out of it.
+        if not cmd or cmd[0] != "pandoc":
+            return real_run(cmd, **kwargs)
+        Path(cmd[cmd.index("-o") + 1]).write_bytes(b"%PDF-1.5 short")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr=dropped)
+
+    monkeypatch.setattr(renderer.subprocess, "run", dropping_run)
+    response = client.get("/api/export/summary", params={"format": "pdf"})
+    assert response.status_code == 500
+    body = response.json()
+    assert body["error"] == "render_failed"
+    assert "diagram.png" in body["message"]
 
 
 # Verifies: REQ-d00298-A, REQ-d00298-E

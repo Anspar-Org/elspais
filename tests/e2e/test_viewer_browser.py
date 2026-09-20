@@ -331,6 +331,23 @@ class TestViewerInteraction:
         assert len(body_text.strip()) > 100, "Expected detail content after clicking a requirement"
 
 
+# The page's own fetch of a route, so the download is read the way the page
+# reads it -- under the prefix it is served at.
+_FETCH_TEXT = "(u) => fetch(prefixedUrl(u)).then(r => r.text())"
+
+
+# Every status on, so a test measuring one property is not reading another:
+# a retired status is hidden when the page loads, which is itself a narrowing
+# the export carries.
+_SHOW_EVERY_STATUS = """
+() => {
+    const g = filterGroups.status;
+    g.restore({on: g.buttons.map(b => b.key)});
+    g.render();
+}
+"""
+
+
 class TestViewerExport:
     """Validates REQ-d00298: a report downloads from the served page."""
 
@@ -384,6 +401,7 @@ class TestViewerExport:
         it had."""
         page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
         page.wait_for_function(_FILTERS_READY, timeout=_PAGE_LOAD_TIMEOUT)
+        page.evaluate(_SHOW_EVERY_STATUS)
         page.click("#stat-level-prd", modifiers=["Shift"])
         page.wait_for_timeout(300)
         page.select_option("#export-report", "trace")
@@ -405,8 +423,56 @@ class TestViewerExport:
         assert page.evaluate("exportUrl()") is None
         page.click("#btn-export")
         toast = page.wait_for_selector(".toast.error", timeout=5_000)
-        assert "no level" in toast.text_content().lower()
+        assert "nothing to export" in toast.text_content().lower()
         assert page.query_selector("#export-control") is not None
+
+    # Verifies: REQ-d00298-C
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00298_C_a_status_hidden_on_screen_is_hidden_from_the_download(
+        self, page, viewer_url
+    ):
+        """A reader who hides a status has narrowed the report they are
+        reading; the download carries the same narrowing, so it does not
+        arrive holding the rows the page was told to put away. Whole-estate
+        first, because a narrowing that changed nothing would prove nothing."""
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_function(_FILTERS_READY, timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_function(
+            "() => !!filterGroups.status && filterGroups.status.buttons.length > 1",
+            timeout=_PAGE_LOAD_TIMEOUT,
+        )
+        page.evaluate(_SHOW_EVERY_STATUS)
+        page.select_option("#export-report", "trace")
+        page.select_option("#export-format", "csv")
+        assert "scope_status" not in page.evaluate("exportUrl()")
+        whole = page.evaluate(_FETCH_TEXT, page.evaluate("exportUrl()"))
+
+        # The status carrying the most of the estate, soloed: rows exist to
+        # be kept, and every other status's rows are the ones put away.
+        kept = page.evaluate(
+            """() => {
+                const g = filterGroups.status;
+                const counted = g.buttons
+                    .map(b => [b.key, g._available.get(b.key) || 0])
+                    .sort((a, b) => b[1] - a[1]);
+                return counted[0][1] > 0 && counted[1][1] > 0 ? counted[0][0] : null;
+            }"""
+        )
+        assert kept, "precondition: the estate must hold rows under two statuses"
+        page.evaluate(
+            "(k) => { filterGroups.status.restore({on: [k]}); filterGroups.status.render(); }",
+            kept,
+        )
+        narrowed_url = page.evaluate("exportUrl()")
+        assert f"scope_status={kept}" in narrowed_url, narrowed_url
+        narrowed = page.evaluate(_FETCH_TEXT, narrowed_url)
+        assert narrowed != whole
+        assert len(narrowed) < len(whole)
+
+        # A report that reads no scope is told nothing, status included.
+        page.select_option("#export-report", "checks")
+        assert page.evaluate("exportUrl()") == "/api/export/checks?format=markdown"
 
     # Verifies: REQ-d00298-A
     @pytest.mark.browser

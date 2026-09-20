@@ -927,6 +927,7 @@ C is REQ-d00280-D read from this side. A viewer receives what a browser sent, wh
 
 ### Changelog
 
+- 2026-09-19 | 196cb10b | - | Michael Lewis (<michael@anspar.org>) | A widened to each document format the report offers, and to PDF wherever it renders as markdown
 - 2026-09-18 | 196cb10b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-17 | 071538b7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 

@@ -2238,23 +2238,34 @@ function onExportReportChange() {
 }
 
 {# Implements: REQ-d00298-C #}
-// The page's level selection as the scope the run routes already read. Only a
-// narrowing is sent, and only to a report that reads one: every level on is
-// the whole estate, which is what the route reads when no scope arrives, and
-// a findings listing reads no scope at all. No level on is a page showing
-// nothing, and a scope parameter cannot say "nothing" -- an empty value is
-// read as no narrowing -- so that case is null: refused, never widened into
-// the whole estate. Status and namespace are not sent -- the route resolves
-// what it is given, and a filter it does not read would be a filter the
-// download silently ignored.
+// The page's narrowing as the scope the run routes already read. Every
+// property the page hides rows by and the route scopes by is sent, because a
+// property the reader narrowed on screen and the download did not is a
+// download that says more than the page did. Level and status are those
+// properties; namespace is not one the route scopes by, so it is not sent --
+// a filter the route does not read would be a filter the download silently
+// ignored.
+//
+// Only a narrowing is sent, and only to a report that reads one: every value
+// on is the whole estate, which is what the route reads when no scope
+// arrives, and a findings listing reads no scope at all. No value on is a
+// page showing nothing, and a scope parameter cannot say "nothing" -- an
+// empty value is read as no narrowing -- so that case is null: refused,
+// never widened into the whole estate.
 function exportScopeParams(report) {
     var offer = exportOffers()[report];
-    var group = filterGroups.level;
-    if (!offer || !offer.scoped || !group || typeof LEVELS === 'undefined') return [];
-    var on = group.serialize().on;
-    if (on.length === 0) return null;
-    if (on.length >= LEVELS.length) return [];
-    return ['scope_level=' + encodeURIComponent(on.join(','))];
+    if (!offer || !offer.scoped) return [];
+    var params = [];
+    var properties = ['level', 'status'];
+    for (var i = 0; i < properties.length; i++) {
+        var group = filterGroups[properties[i]];
+        if (!group || group.buttons.length === 0) continue;
+        var on = group.serialize().on;
+        if (on.length === 0) return null;
+        if (on.length >= group.buttons.length) continue;
+        params.push('scope_' + properties[i] + '=' + encodeURIComponent(on.join(',')));
+    }
+    return params;
 }
 
 {# Implements: REQ-d00298-A, REQ-d00298-C #}
@@ -2276,7 +2287,7 @@ function exportUrl() {
 function exportRefusal() {
     var reportSel = document.getElementById('export-report');
     if (reportSel && exportScopeParams(reportSel.value) === null) {
-        return 'No level is selected, so the page shows nothing to export';
+        return 'Nothing is selected to show, so there is nothing to export';
     }
     return 'Choose a report and a format to export';
 }

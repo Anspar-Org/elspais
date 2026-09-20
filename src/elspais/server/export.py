@@ -153,6 +153,13 @@ def markdown_to_pdf(markdown: str, title: str) -> bytes:
     what to install; a converter that ran and left no document, or an empty
     one, is a failure carrying its own output -- never a short file that
     downloads as if it were the report.
+
+    A resource the converter could not fetch is refused for the same reason
+    and cannot be learnt from the return code: pandoc drops such a resource
+    and still exits successfully, so a document missing a figure it names
+    would otherwise download looking complete. The command line discloses
+    that omission beside a report it still prints; a download has no such
+    margin to disclose it in, so here it is a refusal.
     """
     for tool in ("pandoc", PDF_ENGINE):
         if shutil.which(tool) is None:
@@ -163,11 +170,22 @@ def markdown_to_pdf(markdown: str, title: str) -> bytes:
     with tempfile.TemporaryDirectory(prefix="elspais-export-") as tmp:
         output = Path(tmp) / "report.pdf"
         converter_output: list[str] = []
+        unfetched: list[str] = []
         rc = render_pdf(
-            document, output_path=output, engine=PDF_ENGINE, converter_output=converter_output
+            document,
+            output_path=output,
+            engine=PDF_ENGINE,
+            unfetched=unfetched,
+            converter_output=converter_output,
         )
         if rc != 0:
             raise RenderFailed(f"pandoc exited {rc}: {''.join(converter_output).strip()}")
+        if unfetched:
+            raise RenderFailed(
+                "pandoc could not fetch "
+                + ", ".join(sorted(set(unfetched)))
+                + " -- the document would be delivered without it"
+            )
         if not output.exists():
             raise RenderFailed("pandoc exited 0 and wrote no document")
         body = output.read_bytes()
