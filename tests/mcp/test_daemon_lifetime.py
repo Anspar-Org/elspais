@@ -1,4 +1,5 @@
-# Verifies: REQ-o00074-A+B+C+D+E+G+H+I+J+K+M+N+O, REQ-o00075-B, REQ-o00076-E, REQ-p00083-A+C+D+H
+# Verifies: REQ-o00074-A+B+C+D+E+G+H+I+J+K+M+N+O, REQ-o00075-B, REQ-o00076-E, REQ-p00083-A+C+D+H,
+# REQ-o00079-B
 """Daemon lifetime tests, verifying REQ-o00074 (Background Daemon Lifetime).
 
 A daemon started on behalf of a client is bound to that client at the
@@ -185,31 +186,41 @@ class TestAbsentClientsTerminateDaemon:
     serving indefinitely.
     """
 
-    # Verifies: REQ-o00074-E
+    # Verifies: REQ-o00074-E, REQ-o00079-B
     @pytest.mark.parametrize(
-        ("has_clients", "any_alive", "count", "grace_expired", "expected"),
+        ("has_clients", "any_alive", "count", "grace_expired", "transient", "expected"),
         [
             # No client identity recorded (explicit start): always keep,
             # regardless of everything else -- TTL-only behavior preserved.
-            (False, False, 0, True, Decision.KEEP),
-            (False, False, 5, True, Decision.KEEP),
-            (False, True, 0, False, Decision.KEEP),
+            (False, False, 0, True, False, Decision.KEEP),
+            (False, False, 5, True, False, Decision.KEEP),
+            (False, True, 0, False, False, Decision.KEEP),
             # A client is alive: keep, dirty or clean.
-            (True, True, 0, False, Decision.KEEP),
-            (True, True, 7, True, Decision.KEEP),
-            # No client alive + clean: exit immediately.
-            (True, False, 0, False, Decision.EXIT_CLEAN),
-            (True, False, 0, True, Decision.EXIT_CLEAN),
+            (True, True, 0, False, False, Decision.KEEP),
+            (True, True, 7, True, False, Decision.KEEP),
+            # No client alive + clean: a pid that died is final -> exit now.
+            (True, False, 0, False, False, Decision.EXIT_CLEAN),
+            (True, False, 0, True, False, Decision.EXIT_CLEAN),
             # No client alive + dirty: bounded grace, then save-and-exit.
-            (True, False, 3, False, Decision.WAIT_GRACE),
-            (True, False, 3, True, Decision.EXIT_SAVE),
+            (True, False, 3, False, False, Decision.WAIT_GRACE),
+            (True, False, 3, True, False, Decision.EXIT_SAVE),
             # Unknown mutation count is treated as dirty (conservative).
-            (True, False, None, False, Decision.WAIT_GRACE),
-            (True, False, None, True, Decision.EXIT_SAVE),
+            (True, False, None, False, False, Decision.WAIT_GRACE),
+            (True, False, None, True, False, Decision.EXIT_SAVE),
+            # Transient handles (streams, REQ-o00079-B): a stream that is
+            # not held now may be held again, so even a clean exit waits
+            # out the grace. A held stream and a dirty process decide as
+            # they always did.
+            (True, True, 0, False, True, Decision.KEEP),
+            (True, False, 0, False, True, Decision.WAIT_GRACE),
+            (True, False, 0, True, True, Decision.EXIT_CLEAN),
+            (True, False, 3, False, True, Decision.WAIT_GRACE),
+            (True, False, 3, True, True, Decision.EXIT_SAVE),
+            (True, False, None, True, True, Decision.EXIT_SAVE),
         ],
     )
     def test_REQ_o00074_E_shutdown_decision_matrix(
-        self, has_clients, any_alive, count, grace_expired, expected
+        self, has_clients, any_alive, count, grace_expired, transient, expected
     ):
         assert (
             shutdown_decision(
@@ -217,6 +228,7 @@ class TestAbsentClientsTerminateDaemon:
                 any_client_alive=any_alive,
                 mutation_count=count,
                 grace_expired=grace_expired,
+                transient_handles=transient,
             )
             is expected
         )
@@ -2159,3 +2171,315 @@ class TestStoppingDaemonStopsAdvertising:
         info = get_daemon_info(tmp_path)
         assert daemon_is_stopping(info), "a later publish erased the stopping mark"
         assert info["clients"] == [{"kind": "pid", "id": 4242}]
+
+
+# ---------------------------------------------------------------------------
+# A process whose clients are pages: watched with no pid at all (REQ-o00079)
+# ---------------------------------------------------------------------------
+
+
+class TestPagesAreTheOnlyClients:
+    """Validates REQ-o00079-B: a viewer serving browser sessions is bound by
+    the client-liveness rule over the streams its pages hold, with no process
+    identifier recorded at all. The rule binds from the start — the grace is
+    counted from before the first page connects — keeps the process while a
+    stream is held, and ends it once none has been held for the grace.
+    """
+
+    # Verifies: REQ-o00079-B
+    def test_REQ_o00079_B_no_pid_and_no_stream_ends_the_process_after_the_grace(self, capsys):
+        """Validates REQ-o00079-B: the interval before the first page connects
+        is inside the rule and inside the grace. A process nothing holds is
+        kept for the grace — a slow first page is still on its way — and ends
+        once the grace has passed with nothing held."""
+        clock = _Clock()
+        exits: list[str] = []
+        wd = ClientWatchdog(
+            client_pid=None,
+            pending_fn=lambda: (0, 0),
+            grace_seconds=100.0,
+            alive_fn=lambda pid: pytest.fail("no pid was recorded, none should be tested"),
+            exit_fn=lambda: exits.append("exit"),
+            clock=clock,
+            stop_fn=_ok_stop,
+            extra_liveness_fn=lambda: 0,
+        )
+        assert wd.clients() == []
+        clock.now += 50.0
+        assert wd.check_once() is Decision.WAIT_GRACE
+        assert exits == []
+        clock.now += 49.0
+        assert wd.check_once() is Decision.WAIT_GRACE
+        assert exits == []
+        clock.now += 1.0
+        assert wd.check_once() is Decision.EXIT_CLEAN
+        assert exits == ["exit"]
+
+    # Verifies: REQ-o00079-B
+    def test_REQ_o00079_B_the_grace_is_counted_from_the_start(self):
+        """Validates REQ-o00079-B: the clock runs from the process's start,
+        not from its first check, so a first check that comes after the
+        grace has passed with nothing held ends the process at once."""
+        clock = _Clock()
+        exits: list[str] = []
+        wd = ClientWatchdog(
+            client_pid=None,
+            pending_fn=lambda: (0, 0),
+            grace_seconds=100.0,
+            alive_fn=lambda pid: False,
+            exit_fn=lambda: exits.append("exit"),
+            clock=clock,
+            stop_fn=_ok_stop,
+            extra_liveness_fn=lambda: 0,
+        )
+        clock.now += 100.0
+        assert wd.check_once() is Decision.EXIT_CLEAN
+        assert exits == ["exit"]
+
+    # Verifies: REQ-o00079-B
+    def test_REQ_o00079_B_held_page_stream_keeps_the_process(self):
+        """Validates REQ-o00079-B: while a page holds its stream the rule is
+        not the cause of the process's ending; once the last stream has been
+        gone for the grace it is."""
+        clock = _Clock()
+        held = {"count": 1}
+        exits: list[str] = []
+        wd = ClientWatchdog(
+            client_pid=None,
+            pending_fn=lambda: (0, 0),
+            grace_seconds=100.0,
+            alive_fn=lambda pid: False,
+            exit_fn=lambda: exits.append("exit"),
+            clock=clock,
+            stop_fn=_ok_stop,
+            extra_liveness_fn=lambda: held["count"],
+        )
+        clock.now += 500.0
+        assert wd.check_once() is Decision.KEEP
+        assert wd.has_live_client() is True
+        held["count"] = 2
+        assert wd.check_once() is Decision.KEEP
+        held["count"] = 0
+        assert wd.has_live_client() is False
+        # The grace restarts from the check that first found nothing held,
+        # not from the process's start, which is long past.
+        assert wd.check_once() is Decision.WAIT_GRACE
+        assert exits == []
+        clock.now += 100.0
+        assert wd.check_once() is Decision.EXIT_CLEAN
+        assert exits == ["exit"]
+
+    # Verifies: REQ-o00079-B
+    def test_REQ_o00079_B_a_stream_lost_and_regained_within_the_grace_never_ends_it(self):
+        """Validates REQ-o00079-B: a page reloaded, a machine woken or a tunnel
+        reconnected drops the stream and opens another. The rule is not the
+        cause of an ending while the handle comes back inside the grace, and
+        each loss starts the grace afresh."""
+        clock = _Clock()
+        held = {"count": 1}
+        wd = ClientWatchdog(
+            client_pid=None,
+            pending_fn=lambda: (0, 0),
+            grace_seconds=100.0,
+            alive_fn=lambda pid: False,
+            exit_fn=lambda: pytest.fail("ended while the stream was only briefly lost"),
+            clock=clock,
+            stop_fn=_ok_stop,
+            extra_liveness_fn=lambda: held["count"],
+        )
+        assert wd.check_once() is Decision.KEEP
+        for _ in range(3):
+            held["count"] = 0
+            clock.now += 60.0
+            assert wd.check_once() is Decision.WAIT_GRACE
+            clock.now += 30.0
+            assert wd.check_once() is Decision.WAIT_GRACE
+            held["count"] = 1
+            clock.now += 30.0
+            assert wd.check_once() is Decision.KEEP
+
+    # Verifies: REQ-o00074-M
+    def test_REQ_o00074_M_the_disclosure_with_nothing_pending_names_the_deadline(self, capsys):
+        """Validates REQ-o00074-M: while the termination is held open the
+        process discloses what is pending and the deadline — the time left
+        in a grace that began when the process started, not the grace's
+        whole length — and with nothing pending it says nothing is, rather
+        than promising to save a count of zero."""
+        clock = _Clock()
+        wd = ClientWatchdog(
+            client_pid=None,
+            pending_fn=lambda: (0, 0),
+            grace_seconds=100.0,
+            alive_fn=lambda pid: False,
+            exit_fn=lambda: pytest.fail("ended inside the grace"),
+            clock=clock,
+            stop_fn=_ok_stop,
+            extra_liveness_fn=lambda: 0,
+        )
+        clock.now += 30.0
+        assert wd.check_once() is Decision.WAIT_GRACE
+        clock.now += 30.0
+        assert wd.check_once() is Decision.WAIT_GRACE
+        err = capsys.readouterr().err
+        assert err.count("nothing is pending") == 1, err
+        assert "In 70s, if no client is running" in err, err
+        assert "100s" not in err, err
+        assert "will stop" in err
+        assert "save" not in err
+
+    # Verifies: REQ-o00079-B
+    def test_REQ_o00079_B_pages_gone_with_held_changes_persists_before_ending(self, capsys):
+        """Validates REQ-o00079-B: the ending persists the changes the process
+        holds, by the same grace rule a daemon follows — the pages closing
+        says nothing about the worth of the work."""
+        clock = _Clock()
+        stops: list[str] = []
+        exits: list[str] = []
+
+        def _stop():
+            stops.append("stop")
+            return _ok_stop()
+
+        wd = ClientWatchdog(
+            client_pid=None,
+            pending_fn=lambda: (2, 7),
+            grace_seconds=100.0,
+            alive_fn=lambda pid: False,
+            exit_fn=lambda: exits.append("exit"),
+            clock=clock,
+            stop_fn=_stop,
+            extra_liveness_fn=lambda: 0,
+        )
+        assert wd.check_once() is Decision.WAIT_GRACE
+        assert stops == [] and exits == []
+        clock.now += 100.0
+        assert wd.check_once() is Decision.EXIT_SAVE
+        assert stops == ["stop"] and exits == ["exit"]
+
+    # Verifies: REQ-o00079-B
+    def test_REQ_o00079_B_unreadable_stream_source_keeps_the_process(self, capsys):
+        """Validates REQ-o00079-B: with no pid to fall back on, a stream
+        source that cannot answer is the process's only instrument; its
+        failure is inconclusive and keeps the process, as REQ-o00074-E
+        already requires for a daemon."""
+
+        def _boom() -> int:
+            raise RuntimeError("tracker unavailable")
+
+        wd = ClientWatchdog(
+            client_pid=None,
+            pending_fn=lambda: (0, 0),
+            alive_fn=lambda pid: False,
+            exit_fn=lambda: pytest.fail("terminated on a failed liveness check"),
+            stop_fn=_ok_stop,
+            extra_liveness_fn=_boom,
+        )
+        assert wd.check_once() is Decision.KEEP
+        assert "tracker unavailable" in capsys.readouterr().err
+
+    # Verifies: REQ-o00074-B
+    def test_REQ_o00074_B_page_streams_reach_the_state_record_with_no_pid(self, tmp_path):
+        """Validates REQ-o00074-B: the record names the sessions holding the
+        process even though no pid was ever recorded, so an operator asking
+        why a viewer is still running finds the pages keeping it up."""
+        from elspais.mcp.daemon import record_daemon_clients, write_daemon_json
+
+        write_daemon_json(repo_root=tmp_path, pid=111, port=222, server_type="viewer")
+        wd = ClientWatchdog(
+            client_pid=None,
+            pending_fn=lambda: (0, 0),
+            alive_fn=lambda pid: False,
+            exit_fn=lambda: pytest.fail("terminated while a session was held"),
+            stop_fn=_ok_stop,
+            extra_liveness_fn=lambda: 2,
+            publish_fn=lambda pids, held: record_daemon_clients(tmp_path, pids, held),
+        )
+        assert wd.check_once() is Decision.KEEP
+        info = json.loads((tmp_path / ".elspais" / "daemon.json").read_text())
+        assert info["clients"] == [{"kind": "session", "count": 2}]
+        assert "client_pid" not in info or info["client_pid"] is None
+
+
+class TestOneWiringForEveryServingProcess:
+    """Validates REQ-o00079-B and REQ-o00074-E: the daemon and a viewer
+    serving browser sessions are wired to the holder by one builder, so the
+    lifetime rule reads the same tracker, the same pending count and the
+    same shutdown routine wherever it applies.
+    """
+
+    def _shared(self, tmp_path):
+        from elspais.mcp.shared_state import SharedServerState
+
+        graph = MagicMock()
+        graph.mutation_log.tail.return_value = []
+        graph.mutation_log.revision = 0
+        return SharedServerState(graph=graph, working_dir=tmp_path)
+
+    # Verifies: REQ-o00079-B
+    def test_REQ_o00079_B_builder_reads_the_published_tracker(self, tmp_path, monkeypatch):
+        """Validates REQ-o00079-B: the streams counted are the ones the app
+        published, looked up at check time — so a tracker published after the
+        watchdog was built is still the one read. The grace is set to nothing
+        because the ending, not the wait, is what this test observes."""
+        from elspais.server.client_watch import build_client_watchdog
+        from elspais.server.session_track import HeldSessionTracker
+
+        monkeypatch.setenv("_ELSPAIS_CLIENT_CHECK_INTERVAL", "0.25")
+        monkeypatch.setenv("_ELSPAIS_CLIENT_GRACE", "0")
+        shared = self._shared(tmp_path)
+        exits: list[str] = []
+        wd = build_client_watchdog(
+            shared,
+            client_pid=None,
+            repo_root=tmp_path,
+            trigger="no browser session was holding the viewer",
+            exit_fn=lambda: exits.append("exit"),
+        )
+        assert shared["watchdog"] is wd
+        assert wd._interval == 0.25 and wd._grace == 0.0
+
+        tracker = HeldSessionTracker()
+        shared["session_tracker"] = tracker
+        tracker._enter()
+        assert wd.check_once() is Decision.KEEP
+        tracker._leave()
+        assert wd.check_once() is Decision.EXIT_CLEAN
+        assert exits == ["exit"]
+
+    # Verifies: REQ-o00074-E
+    def test_REQ_o00074_E_builder_records_the_pid_it_is_given(self, tmp_path):
+        """Validates REQ-o00074-E: the same builder serves a daemon started
+        for a client, recording that client as it always did."""
+        from elspais.server.client_watch import build_client_watchdog
+
+        shared = self._shared(tmp_path)
+        wd = build_client_watchdog(
+            shared, client_pid=os.getpid(), repo_root=tmp_path, trigger="test"
+        )
+        assert wd.clients() == [os.getpid()]
+        assert wd.check_once() is Decision.KEEP
+
+    # Verifies: REQ-p00083-A
+    def test_REQ_p00083_A_builder_stops_through_the_one_shutdown_routine(
+        self, tmp_path, monkeypatch
+    ):
+        """Validates REQ-p00083-A: the ending the builder wires is the
+        process's shutdown routine, so the work is accounted for and the
+        refusal flag raised before the process is signalled. The grace is set
+        to nothing because the ending, not the wait, is under test."""
+        from elspais.server.client_watch import build_client_watchdog
+
+        monkeypatch.setenv("_ELSPAIS_CLIENT_GRACE", "0")
+        shared = self._shared(tmp_path)
+        exits: list[str] = []
+        wd = build_client_watchdog(
+            shared,
+            client_pid=None,
+            repo_root=tmp_path,
+            trigger="test",
+            exit_fn=lambda: exits.append("exit"),
+        )
+        assert wd.check_once() is Decision.EXIT_CLEAN
+        assert exits == ["exit"]
+        assert shared.shutdown_finalized is True
+        assert shared.is_shutting_down is True

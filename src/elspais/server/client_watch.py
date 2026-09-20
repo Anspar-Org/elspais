@@ -11,14 +11,29 @@ daemon down once every one of them is gone, so orphaned daemons cannot
 accumulate and keep serving answers no client is watching.
 
 Daemons started without client identity (manual ``elspais mcp serve``,
-the viewer, ``elspais daemon``) never get a watchdog and keep
-their TTL-only lifetime.
+``elspais daemon``, the viewer by default) never get a watchdog and keep
+their TTL-only lifetime. A viewer started to serve browser sessions is
+the one process watched with no pid at all: its clients are pages, each
+present only as the stream it holds open, so the watchdog reads them
+through the held-stream source and records no process (REQ-o00079-B).
+
+A stream is a transient handle where a pid is not. A process that has
+died does not come back, so its absence is the client leaving; a stream
+drops on a page reload, a machine going to sleep or a tunnel
+reconnecting, and the page opens another the moment it can, so no
+stream held at one check says only that none is held now. A watchdog
+whose handles are all streams therefore gates even its clean exit on
+the grace, counted from its start so the window before the first page
+connects is the same window as any other.
 
 Shutdown decision matrix (``shutdown_decision``):
 
     no client identity recorded        -> KEEP (TTL-only behavior)
     some recorded client alive         -> KEEP
     all clients gone, nothing unsaved  -> EXIT_CLEAN
+      ... unless the handles are transient, then
+        in grace                       -> WAIT_GRACE (disclose, extend)
+        grace over                     -> EXIT_CLEAN
     all gone, unsaved, in grace        -> WAIT_GRACE (warn, extend)
     all gone, unsaved, grace over      -> EXIT_SAVE (persist, then exit)
 
@@ -118,12 +133,13 @@ class Decision(enum.Enum):
     SAVE_FAILED = "save-failed"
 
 
-# Implements: REQ-o00074-E
+# Implements: REQ-o00074-E, REQ-o00079-B
 def shutdown_decision(
     has_clients: bool,
     any_client_alive: bool,
     mutation_count: int | None,
     grace_expired: bool,
+    transient_handles: bool,
 ) -> Decision:
     """Pure decision function for the client-liveness watchdog.
 
@@ -136,8 +152,12 @@ def shutdown_decision(
         mutation_count: Unsaved in-memory mutations. None means unknown,
             which is treated as dirty (conservative: never assume work
             we cannot see is absent).
-        grace_expired: Whether the bounded dirty-daemon grace period has
-            elapsed since the last client was seen gone.
+        grace_expired: Whether the bounded grace period has elapsed since
+            the last client was seen gone.
+        transient_handles: Whether the handles this watchdog reads are
+            streams alone, which drop and return without the client
+            leaving. Such a watchdog waits out the grace before a clean
+            exit too; a pid that has died is final and needs no grace.
     """
     if not has_clients:
         return Decision.KEEP
@@ -145,6 +165,8 @@ def shutdown_decision(
         return Decision.KEEP
     dirty = mutation_count is None or mutation_count > 0
     if not dirty:
+        if transient_handles and not grace_expired:
+            return Decision.WAIT_GRACE
         return Decision.EXIT_CLEAN
     if grace_expired:
         return Decision.EXIT_SAVE
@@ -171,7 +193,7 @@ class ClientWatchdog:
 
     def __init__(
         self,
-        client_pid: int,
+        client_pid: int | None,
         pending_fn: Callable[[], tuple[int, object]],
         interval_seconds: float = DEFAULT_CHECK_INTERVAL_SECONDS,
         grace_seconds: float = DEFAULT_GRACE_SECONDS,
@@ -183,7 +205,16 @@ class ClientWatchdog:
         extra_liveness_fn: Callable[[], int] | None = None,
         publish_fn: Callable[[list[int], int], None] | None = None,
     ) -> None:
-        self._clients: set[int] = {client_pid}
+        # Implements: REQ-o00079-B
+        # No pid is a client set that starts empty, not a watchdog that
+        # never fires: a process serving browser pages has clients that
+        # are streams and nothing else. A stream drops and returns
+        # without its client leaving, so this watchdog's clean exit waits
+        # out the grace like a dirty one's, and the grace is counted from
+        # here, so the window before the first page connects is the same
+        # window as any other.
+        self._clients: set[int] = set() if client_pid is None else {client_pid}
+        self._transient_handles = client_pid is None
         self._clients_lock = threading.Lock()
         self._pending_fn = pending_fn
         self._lock = lock if lock is not None else nullcontext()
@@ -196,7 +227,7 @@ class ClientWatchdog:
         self._publish_fn = publish_fn
         self._published: tuple[tuple[int, ...], int] | None = None
         self._clock = clock
-        self._dead_since: float | None = None
+        self._dead_since: float | None = self._clock() if self._transient_handles else None
         self._warned_grace = False
         self._last_token: object = _UNOBSERVED
         self._stop = threading.Event()
@@ -371,6 +402,12 @@ class ClientWatchdog:
             self._dead_since = now
 
         grace_expired = (now - self._dead_since) >= self._grace
+        # The deadline disclosed is the time left, not the grace's length:
+        # for a watchdog whose handles are streams the countdown began at
+        # construction, and after an activity restart it began at an
+        # earlier check, so the grace has already been running when the
+        # disclosure is first printed.
+        remaining = max(self._grace - (now - self._dead_since), 0.0)
 
         with self._lock:
             # Re-read under the lock: no writer can be mid-mutation now,
@@ -391,11 +428,12 @@ class ClientWatchdog:
                 any_client_alive=False,
                 mutation_count=count,
                 grace_expired=grace_expired,
+                transient_handles=self._transient_handles,
             )
-            return self._act(decision, count)
+            return self._act(decision, count, remaining)
 
     # Implements: REQ-o00074-M, REQ-p00083-A, REQ-p00083-D
-    def _act(self, decision: Decision, count: int | None) -> Decision:
+    def _act(self, decision: Decision, count: int | None, remaining: float) -> Decision:
         """Emit the disclosure the decision requires and exit if it says so.
 
         Implements: REQ-o00074-E, REQ-o00074-M, REQ-p00083-A, REQ-p00083-D
@@ -423,16 +461,30 @@ class ClientWatchdog:
         elif decision is Decision.WAIT_GRACE:
             if not self._warned_grace:
                 self._warned_grace = True
-                print(
-                    "No recorded client is running. "
-                    f"{count if count is not None else 'An unknown number of'} "
-                    f"unsaved in-memory mutation(s) are pending. In {self._grace:.0f}s, "
-                    "if no client is running and nothing further is applied, the "
-                    "daemon will save them to disk and stop, and will record that "
-                    "it saved them itself.",
-                    file=sys.stderr,
-                    flush=True,
-                )
+                # Implements: REQ-o00074-M
+                # The disclosure states what is pending and the deadline,
+                # as the time left in the grace. With nothing pending
+                # there is nothing to save, so it says so rather than
+                # promising to save a count of zero.
+                if count == 0:
+                    print(
+                        "No recorded client is running and nothing is pending. "
+                        f"In {remaining:.0f}s, if no client is running, the "
+                        "process will stop.",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                else:
+                    print(
+                        "No recorded client is running. "
+                        f"{count if count is not None else 'An unknown number of'} "
+                        f"unsaved in-memory mutation(s) are pending. In {remaining:.0f}s, "
+                        "if no client is running and nothing further is applied, the "
+                        "daemon will save them to disk and stop, and will record that "
+                        "it saved them itself.",
+                        file=sys.stderr,
+                        flush=True,
+                    )
         elif decision is Decision.EXIT_SAVE:
             outcome = self._run_stop_routine()
             if not outcome.get("success"):
@@ -524,3 +576,84 @@ class ClientWatchdog:
     def stop(self) -> None:
         """Stop the watchdog thread (used by tests)."""
         self._stop.set()
+
+
+# Implements: REQ-o00074-A, REQ-o00074-B, REQ-o00074-E, REQ-o00074-G, REQ-o00074-H, REQ-o00079-B
+def build_client_watchdog(
+    shared: Any,
+    *,
+    client_pid: int | None,
+    repo_root: Any,
+    trigger: str,
+    exit_fn: Callable[[], None] = _default_exit,
+) -> ClientWatchdog:
+    """Wire a watchdog to the process-wide holder and publish it there.
+
+    One wiring for the daemon and for a viewer serving browser sessions,
+    so the lifetime rule is the same rule wherever it applies: the
+    pending count and activity token are read from whatever graph the
+    holder currently publishes, the stop hands over to the process's one
+    shutdown routine, held streams are read from the tracker the app
+    published, and the client set is recorded in the state record. The
+    check interval and grace period come from the same environment knobs
+    in both processes. A viewer passes no pid, and a watchdog with no pid
+    reads streams alone, so it waits out the grace before a clean exit
+    as well as a saving one (REQ-o00079-B).
+
+    ``shared`` is the ``SharedServerState`` holder. The watchdog is
+    published on it as ``"watchdog"`` so the adoption route and the idle
+    timeout can find it.
+    """
+    from elspais.mcp.shared_state import finalize_shutdown
+
+    # Dereference the holder on every check: the live graph is swapped on
+    # rebuild, so a cached object would count and fingerprint a log
+    # nobody is writing to any more.
+    def _pending() -> tuple[int, object]:
+        return pending_snapshot(shared["graph"])
+
+    # Implements: REQ-p00083-A
+    # The watchdog does not save or raise the shutdown flag itself; it
+    # decides *that* the process stops and hands over to the one routine
+    # every stop path runs.
+    def _stop() -> dict[str, Any]:
+        return finalize_shutdown(shared, trigger=trigger)
+
+    # A client that supplies no process identifier can still be holding a
+    # stream open, and that is a handle of the same kind. Looked up on
+    # each check rather than captured, so the order in which the app and
+    # the watchdog are built does not decide whether the handle is seen.
+    def _sessions_held() -> int:
+        tracker = shared.get("session_tracker")
+        return tracker.held() if tracker is not None else 0
+
+    # Published from the check that computes the composition, so a client
+    # present only as a held stream — which registers nothing — is still
+    # visible to whoever asks why this process is running.
+    def _publish_clients(pids: list[int], held: int) -> None:
+        from elspais.mcp.daemon import record_daemon_clients
+
+        # A process that has committed to stopping does not update its
+        # own advertisement: publishing read-modify-writes the record, so
+        # a mark landing between its read and its write would be dropped.
+        if shared.is_shutting_down:
+            return
+        record_daemon_clients(repo_root, pids, held)
+
+    interval = float(
+        os.environ.get("_ELSPAIS_CLIENT_CHECK_INTERVAL", str(int(DEFAULT_CHECK_INTERVAL_SECONDS)))
+    )
+    grace = float(os.environ.get("_ELSPAIS_CLIENT_GRACE", str(int(DEFAULT_GRACE_SECONDS))))
+    watchdog = ClientWatchdog(
+        client_pid=client_pid,
+        pending_fn=_pending,
+        interval_seconds=interval,
+        grace_seconds=grace,
+        lock=shared.write_lock,
+        stop_fn=_stop,
+        exit_fn=exit_fn,
+        extra_liveness_fn=_sessions_held,
+        publish_fn=_publish_clients,
+    )
+    shared["watchdog"] = watchdog
+    return watchdog

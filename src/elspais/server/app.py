@@ -31,6 +31,7 @@ from elspais.server.routes_api import (
     api_comment_reply,
     api_comment_resolve,
     api_dirty,
+    api_events,
     api_file_content,
     api_get_comments,
     api_get_comments_card,
@@ -187,6 +188,19 @@ def create_app(state: AppState, mount_mcp: bool = True, base_path: str = "") -> 
     Returns:
         Configured Starlette application.
     """
+    # Implements: REQ-o00074-A, REQ-o00079-A
+    # One tracker for every stream a client can hold: an agent's MCP
+    # session and a page's change stream are handles of the same kind,
+    # and the watchdog reads one count. Created before either mount and
+    # published on the holder so the watchdog can read it as a liveness
+    # source.
+    from starlette.routing import request_response
+
+    from elspais.server.session_track import HeldSessionTracker
+
+    tracker = HeldSessionTracker()
+    state.shared["session_tracker"] = tracker
+
     base_path = validate_base_path(base_path)
     routes: list[Route | Mount] = [
         # UI
@@ -209,6 +223,9 @@ def create_app(state: AppState, mount_mcp: bool = True, base_path: str = "") -> 
         Route("/api/spec-files", api_spec_files),
         Route("/api/dirty", api_dirty),
         Route("/api/check-freshness", api_check_freshness),
+        # The page's change stream, counted as held for as long as it is
+        # open: an object endpoint is served as the ASGI app it is.
+        Route("/api/events", tracker.asgi(request_response(api_events)), methods=["GET"]),
         Route("/api/session/attach", api_attach_client, methods=["POST"]),
         # Terms endpoints
         Route("/api/terms", api_terms),
@@ -296,12 +313,7 @@ def create_app(state: AppState, mount_mcp: bool = True, base_path: str = "") -> 
             mcp_app = mcp.streamable_http_app()
             # A client that holds a server-to-client stream open is present
             # in a way the daemon can observe without its cooperation, which
-            # is what a client handle has to be. Published on the holder so
-            # the client watchdog can read it as a second liveness source.
-            from elspais.server.session_track import HeldSessionTracker
-
-            tracker = HeldSessionTracker()
-            state.shared["session_tracker"] = tracker
+            # is what a client handle has to be.
             routes.append(Mount("/mcp", app=tracker.asgi(mcp_app)))
         except Exception as exc:
             # Tolerated failure (visible, never silent): the server still

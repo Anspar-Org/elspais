@@ -71,6 +71,7 @@
 | REQ-o00076 | Reaching the Serving Process                      | ops-mcp.md          | 7505310d |
 | REQ-o00077 | Serving From the Installed Program                | ops-mcp.md          | 3488ba9c |
 | REQ-o00078 | Release Completeness Across Distribution Channels | ops-architecture.md | 3f2d4577 |
+| REQ-o00079 | Serving a Browser Session                         | ops-mcp.md          | abe6acb7 |
 
 ## DEVELOPMENT
 

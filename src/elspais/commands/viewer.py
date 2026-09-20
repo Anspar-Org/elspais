@@ -301,6 +301,35 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
 
     attach_dirty_sentinel(state.shared)
 
+    # Implements: REQ-o00079-B
+    # A viewer started to serve browser sessions has clients that are
+    # pages, present only as the stream each holds open, so it is watched
+    # with no pid at all and reads its clients through the tracker the
+    # app published. The same watchdog, wired the same way, decides its
+    # ending as it decides a daemon's: once no handle has been held for
+    # the grace interval — counted from here, so the window before the
+    # first page connects is the same window as any other — it persists
+    # what it holds and stops. Without the flag the viewer's lifetime is
+    # exactly what it was.
+    if getattr(args, "session_lifetime", False):
+        from elspais.server.client_watch import build_client_watchdog
+
+        def _end_without_sessions() -> None:
+            # The watchdog ends the process without unwinding it, so the
+            # record naming this process as the one serving the tree is
+            # removed here rather than by the cleanup below, which will
+            # not run (REQ-o00076-E).
+            daemon_json.unlink(missing_ok=True)
+            os._exit(0)
+
+        build_client_watchdog(
+            state.shared,
+            client_pid=None,
+            repo_root=repo_root,
+            trigger="no browser session was holding the viewer",
+            exit_fn=_end_without_sessions,
+        ).start()
+
     try:
         import anyio
         import uvicorn

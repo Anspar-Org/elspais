@@ -2301,7 +2301,10 @@ function showStaleBanner(message) {
     banner.classList.remove('hidden');
 }
 
-// Poll every 30 seconds for changes we did not make.
+// =====================================================================
+// Change stream: the server announces changes over a handle the page
+// holds for as long as it is open (REQ-o00079)
+// =====================================================================
 //
 // Two independent ways the graph moves under an open viewer:
 //   1. Spec files edited on disk (git checkout, an editor) -- caught by the
@@ -2312,39 +2315,138 @@ function showStaleBanner(message) {
 // Reloading is the fix for (1); for (2) the live graph is already correct and
 // the page just needs to re-read it, so the banner offers that separately.
 //
-// This poll is also the page's only heartbeat for the pending count.
+// Both reach the page over one EventSource on /api/events, which the page
+// holds open for its whole life. Holding it is what makes this tab a client
+// the server can see go: the server counts the stream while it is open and
+// a tab that closes -- or a browser that is killed -- releases it without
+// saying anything. The server announces a change within about a second of
+// it landing, and announces itself at a regular interval when nothing has,
+// so a quiet server can be told from a dead one.
+//
+// The stream is also the page's only heartbeat for the pending count.
 // refreshDirtyCount() otherwise runs at load and after mutations, so a server
 // that dies while the operator sits idle would never re-enter it and the count
 // would stay frozen at its last value.
 //
 // The two jobs are independent on purpose. Only the count endpoint may speak
-// for the count: letting a freshness failure mark the count unknown pinned the
-// badge to '?' -- and the navigation warning off -- for as long as that one
-// endpoint stayed broken, even with the count endpoint answering perfectly.
-// And the count probe must not adopt the mutation-log tip, or every cycle
-// would silently mark another writer's mutations as seen and the banner below
-// would never raise again. Implements: REQ-d00267-A, REQ-d00267-B
-function pollForExternalChanges() {
+// for the count: letting a stream failure mark the count unknown would pin
+// the badge to '?' -- and the navigation warning off -- for as long as the
+// stream stayed broken, even with the count endpoint answering perfectly.
+// And the count probe must not adopt the mutation-log tip, or every
+// announcement would silently mark another writer's mutations as seen and
+// the banner below would never raise again. Implements: REQ-d00267-A, REQ-d00267-B
+
+// How long after one of this page's own writes an announced tip is held
+// before it is judged to be another writer's. Long enough for the write's
+// response and the count probe that adopts the tip to come back.
+var OWN_WRITE_SETTLE_MS = 2000;
+// The one judgement of an announced tip still pending, if any. Every
+// announcement replaces it, so what is judged when it fires is the tip
+// last announced -- never one an earlier announcement captured, which the
+// page's own later edit may since have adopted.
+var _tipJudgement = null;
+var _eventSource = null;
+var _silenceTimer = null;
+var _heartbeatMs = 30000;
+
+// One cycle, run for every announcement and on silence alike: exactly what
+// one poll cycle did. The count is re-established from the count endpoint
+// and the payload decides the banners -- an announcement says that
+// something changed, never how much is pending.
+{# Implements: REQ-o00079-D #}
+function applyServerEvent(data) {
     refreshDirtyCount({ adoptTip: false });
-    return apiFetch('/api/check-freshness').then(function(data) {
-        if (!data) return;
-        if (data.stale) {
-            showStaleBanner('Spec files have changed on disk.');
-            return;
-        }
-        var tip = data.mutation_tip || '';
-        // Until refreshDirtyCount() has run once we have no baseline, so
-        // adopt the server's tip rather than reporting a phantom change.
-        if (editState.lastSeenTip === null) {
-            editState.lastSeenTip = tip;
-            return;
-        }
-        if (tip !== editState.lastSeenTip) {
-            showStaleBanner('Another writer changed the graph.');
-        }
-    });
+    if (!data) return;
+    editState.lastAnnouncedTip = data.mutation_tip || '';
+    if (data.stale) {
+        showStaleBanner('Spec files have changed on disk.');
+        return;
+    }
+    var tip = data.mutation_tip || '';
+    // Until refreshDirtyCount() has run once we have no baseline, so
+    // adopt the server's tip rather than reporting a phantom change.
+    if (editState.lastSeenTip === null) {
+        editState.lastSeenTip = tip;
+        return;
+    }
+    noteAnnouncedTip();
 }
-setInterval(pollForExternalChanges, 30000);
+
+// Judge the tip last announced against the tip this page last saw.
+function noteAnnouncedTip() {
+    if (_tipJudgement !== null) {
+        clearTimeout(_tipJudgement);
+        _tipJudgement = null;
+    }
+    if (editState.lastAnnouncedTip === editState.lastSeenTip) return;
+    // An announcement can outrun this page's own bookkeeping: the server
+    // sees the tip move the instant a mutation lands, while the page adopts
+    // it only once the response and the count probe have come back. Judged
+    // now, this page's own edit would read as another writer's. So while a
+    // write of ours is in flight or has just finished, the judgement waits
+    // until it settles, and judges whatever was announced last by then: a
+    // tip that still differs from the one this page saw is another writer's.
+    if (ownWriteRecently(OWN_WRITE_SETTLE_MS)) {
+        _tipJudgement = setTimeout(function() {
+            _tipJudgement = null;
+            noteAnnouncedTip();
+        }, OWN_WRITE_SETTLE_MS);
+        return;
+    }
+    showStaleBanner('Another writer changed the graph.');
+}
+
+// Nothing announced itself for twice the interval the server promised. The
+// count is re-established the way any cycle does it, so a server that has
+// gone presents as '?' through the failing probe rather than as a frozen
+// number -- and armed again, so the silence keeps being noticed.
+{# Implements: REQ-o00079-E #}
+function armSilenceWatch() {
+    if (_silenceTimer) clearTimeout(_silenceTimer);
+    _silenceTimer = setTimeout(function() {
+        refreshDirtyCount({ adoptTip: false });
+        armSilenceWatch();
+    }, _heartbeatMs * 2);
+}
+
+{# Implements: REQ-o00079-A, REQ-o00079-C, REQ-o00079-E #}
+function connectServerEvents() {
+    if (typeof EventSource !== 'function') {
+        armSilenceWatch();
+        return;
+    }
+    var source = new EventSource(prefixedUrl('/api/events'));
+    _eventSource = source;
+    function onEvent(ev) {
+        var data = null;
+        try { data = JSON.parse(ev.data); } catch (e) { data = null; }
+        if (data && typeof data.heartbeat_seconds === 'number' && data.heartbeat_seconds > 0) {
+            _heartbeatMs = data.heartbeat_seconds * 1000;
+        }
+        armSilenceWatch();
+        applyServerEvent(data);
+    }
+    source.addEventListener('hello', onEvent);
+    source.addEventListener('heartbeat', onEvent);
+    source.addEventListener('change', onEvent);
+    source.onerror = function() {
+        // The handle is lost: the server has gone, or declined the stream.
+        // The browser would retry every few seconds and every retry's
+        // probe would toast a network error, so the retry is taken over
+        // here at the announcement interval. Meanwhile the count is
+        // re-established, so a dead server shows as '?' now, not at the
+        // next silence check.
+        source.close();
+        if (_eventSource === source) _eventSource = null;
+        refreshDirtyCount({ adoptTip: false });
+        armSilenceWatch();
+        setTimeout(function() {
+            if (_eventSource === null) connectServerEvents();
+        }, _heartbeatMs);
+    };
+    armSilenceWatch();
+}
+connectServerEvents();
 
 // Re-read the live graph without touching disk: the in-memory state is
 // already authoritative when another writer moved it, so this refetches
