@@ -54,6 +54,15 @@ async function apiFetch(url, options) {
                 return data;
             }
             if (data.error) {
+                // A caller with somewhere of its own to put a refusal -- an
+                // open dialog holding the work the refusal is about -- says
+                // so and is handed the body. Everyone else gets the toast,
+                // because a refusal with nowhere to go is worse than a
+                // misplaced one.
+                if (options && options.handlesRefusal) {
+                    data._status = resp.status;
+                    return data;
+                }
                 showToast(data.error, 'error');
                 return null;
             }

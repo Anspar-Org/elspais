@@ -153,7 +153,7 @@ D. The tool SHALL create and switch to a new git branch, using stash to preserve
 
 E. The tool SHALL commit modified spec files and optionally push, refusing to operate on main/master branches.
 
-F. The tool SHALL fetch and fast-forward-merge from the remote tracking branch, aborting if the merge is not fast-forwardable.
+F. The tool SHALL fetch and fast-forward from the remote tracking branch, and SHALL hand back work that cannot be fast-forwarded, leaving the branch as it found it.
 
 G. <RETIRED> flagging satisfying requirements on template-subtree change is a special case of the reference-granularity review obligation stated in assertion K; superseded so one obligation family governs dependency-change review
 
@@ -175,6 +175,8 @@ O. When the tool reloads the graph from disk, the tool SHALL bring the change-de
 
 ## Changelog
 
+- 2026-09-19 | 1a49b829 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-19 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-105: F states the hand-back obligation for work that cannot be fast-forwarded, so one obligation governs the pull
 - 2026-08-24 | 1042856d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-07 | b7e19864 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-07 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-11: author O - a completed reload leaves the change-detection state in agreement with the content it loaded, on every reload surface
@@ -186,7 +188,7 @@ O. When the tool reloads the graph from disk, the tool SHALL bring the change-de
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: G flags satisfiers on any change within the template subtree, not just the root
 - 2026-04-23 | f8ff5509 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Change Detection and Auditability* | **Hash**: 1042856d
+*End* *Change Detection and Auditability* | **Hash**: 1a49b829
 ---
 
 # REQ-p00013: End-to-End Tests Exercise the Installed Command
@@ -1034,3 +1036,59 @@ H. A record disclosed under assertion C SHALL be retired once the affected conte
 - 2026-08-08 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author uncommitted-work durability invariants
 
 *End* *Durability of Uncommitted Work* | **Hash**: 80cf3ca1
+
+## REQ-d00297: Opening a Pull Request From the Viewer
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00004
+
+### Rationale
+
+The viewer already carries a branch from its creation through to the remote.
+Proposing that branch for review is the step that turns shared work into work
+somebody else can act on, and it is the one step of the round trip a person
+still has to leave the viewer to perform.
+
+Whose proposal it is matters more than that it happens. A pull request is
+attributed to whoever's credential opened it, so a session that supplies no
+credential must be refused rather than answered by some identity the serving
+process happens to hold — on a shared host that identity belongs to nobody in
+particular. The refusal is only useful if it says what to supply.
+
+A credential reaching the process on behalf of one person is the narrowest
+thing the process handles. Writing it into the environment or into the
+workspace's files would hand it to every later operation and to every other
+reader of that workspace, so it is confined to the single operation it was
+sent for. Confinement is a question about who can read it, not about how
+long it lasts: a command line is published by the operating system to every
+local account for as long as the command runs, and on a shared host that is
+every other person's workspace, so the arguments are named alongside the
+environment and the files rather than treated as the safe place.
+
+Assertions C and F are the two places the tool declines to guess. Work the
+remote has not seen cannot be proposed, and a history that will not
+fast-forward needs decisions about content that this tool does not make; in
+both cases the person is told what to do rather than having it attempted on
+their behalf.
+
+### Assertions
+
+A. A pull request proposing the branch a session has pushed SHALL be openable from the viewer, and SHALL be attributed to the identity whose credential that session supplied.
+
+B. A request to open a pull request that carries no usable credential SHALL be refused, and the refusal SHALL name what to supply.
+
+C. A request to open a pull request SHALL be refused where the branch's commits have not reached the remote, or where the remote is not one on which the tool can open a pull request; the refusal SHALL name the condition it met.
+
+D. A credential supplied with a request SHALL serve only the operation it was supplied for, and SHALL be carried where only that operation can read it — not in the command arguments the operating system publishes, not in the workspace's environment, not in its configuration, and not in any file the operation writes.
+
+E. Where the remote already holds an open pull request proposing the same work, that pull request SHALL be reported as the outcome rather than the request being refused.
+
+F. Where a pull cannot be completed by fast-forward, the user SHALL be told to push the branch and complete the work in a local checkout.
+
+### Changelog
+
+- 2026-09-19 | 006e3f69 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-19 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-105: D names the command arguments the operating system publishes, which a shared host exposes to every local account
+- 2026-09-19 | 1101aea2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-19 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-105: author the obligations for opening a pull request from the viewer
+
+*End* *Opening a Pull Request From the Viewer* | **Hash**: 006e3f69

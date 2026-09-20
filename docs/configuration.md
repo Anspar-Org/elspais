@@ -746,8 +746,9 @@ authenticating proxy in front of it. A request carrying the same value in
 `X-Elspais-Proxy-Secret` is believed about who sent it, and the user named
 by `X-Elspais-User-Name` and `X-Elspais-User-Email` becomes the author of
 the comments and changelog rows that request produces. `X-Elspais-Git-Token`
-would be accepted only under the same proof; no operation consults it yet, and
-the git operations that come to will document it with those operations. The
+is accepted only under the same proof, and authenticates a push, a pull's
+fetch and opening a pull request, each for that one operation and never
+reaching the workspace's environment or its disk. The
 value is read once when the server starts. With none set, nothing in those headers is believed, so a
 local viewer names its own user as before. See `elspais docs commands` under
 `viewer` for the full rule.

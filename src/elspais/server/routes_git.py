@@ -154,9 +154,11 @@ async def api_git_branch(request: Request) -> JSONResponse:
 # Implements: REQ-p00004-E
 async def api_git_push(request: Request) -> JSONResponse:
     """POST /api/git/push - Push local commits to remote."""
+    from elspais.server.proxy_trust import proxied_git_token
     from elspais.utilities.git import get_current_branch, push_branch
 
     state = request.app.state.app_state
+    token = proxied_git_token(request)
     try:
         data = await request.json()
     except Exception:
@@ -171,7 +173,7 @@ async def api_git_push(request: Request) -> JSONResponse:
             if not branch:
                 results.append({"repo": name, "success": False, "error": "detached HEAD"})
                 continue
-            rv = push_branch(root, branch)
+            rv = push_branch(root, branch, token=token)
             if rv["success"]:
                 results.append({"repo": name, "success": True, "branch": branch})
             else:
@@ -185,17 +187,19 @@ async def api_git_push(request: Request) -> JSONResponse:
             return JSONResponse(
                 {"success": False, "error": "Cannot push in detached HEAD state"}, status_code=400
             )
-        rv = push_branch(root, branch)
+        rv = push_branch(root, branch, token=token)
         status_code = 200 if rv["success"] else (500 if rv["error"] == "git not found" else 400)
         return JSONResponse(rv, status_code=status_code)
 
 
 # Implements: REQ-p00004-F
 async def api_git_pull(request: Request) -> JSONResponse:
-    """POST /api/git/pull - Sync branch with remote and main."""
+    """POST /api/git/pull - Fast-forward the branch from its remote."""
+    from elspais.server.proxy_trust import proxied_git_token
     from elspais.utilities.git import invalidate_ancestor_cache, sync_branch
 
     state = request.app.state.app_state
+    token = proxied_git_token(request)
     try:
         data = await request.json()
     except Exception:
@@ -206,7 +210,7 @@ async def api_git_pull(request: Request) -> JSONResponse:
     if monorepo:
         results = []
         for name, root, _ in _iter_repo_entries(state):
-            r = sync_branch(root)
+            r = sync_branch(root, token=token)
             r["repo"] = name
             results.append(r)
         invalidate_ancestor_cache()
@@ -214,7 +218,7 @@ async def api_git_pull(request: Request) -> JSONResponse:
         return JSONResponse({"success": all_ok, "results": results})
     else:
         root = _resolve_repo_root(state, repo_name)
-        result = sync_branch(root)
+        result = sync_branch(root, token=token)
         invalidate_ancestor_cache()
         status_code = 200 if result.get("success") else 400
         return JSONResponse(result, status_code=status_code)
@@ -455,3 +459,147 @@ async def api_git_suggest_branch_name(request: Request) -> JSONResponse:
     base = request.query_params.get("base", "branch")
     name = suggest_branch_name(state.repo_root, base)
     return JSONResponse({"name": name})
+
+
+# Implements: REQ-d00297-A, REQ-d00297-B
+def _resolve_git_credential(request: Request) -> str | None:
+    """The credential to act on the repository with, or None.
+
+    A credential the request itself carried speaks for the person who sent
+    it. Where the process was started to serve people through a proxy, that
+    is the only source there is: what the machine holds of its own belongs
+    to nobody who asked, and attributing one person's proposal to it would
+    misname its author. A process serving nobody but its operator is that
+    operator's own, so its environment is read, and last the credential
+    helper is asked — its absence is an answer, not a failure.
+    """
+    import os
+    import subprocess
+
+    from elspais.server.proxy_trust import proxied_git_token, proxy_secret_is_configured
+
+    supplied = proxied_git_token(request)
+    if supplied:
+        return supplied
+    if proxy_secret_is_configured():
+        return None
+    for var in ("GH_TOKEN", "GITHUB_TOKEN"):
+        value = (os.environ.get(var) or "").strip()
+        if value:
+            return value
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    token = result.stdout.strip()
+    return token or None
+
+
+# Implements: REQ-d00297-A, REQ-d00297-B, REQ-d00297-C, REQ-d00297-E
+async def api_git_pr(request: Request) -> JSONResponse:
+    """POST /api/git/pr - Open a pull request proposing the pushed branch."""
+    from elspais.utilities.git import (
+        branch_remote_state,
+        get_current_branch,
+        get_remote_url,
+        remote_default_branch,
+        remote_host,
+    )
+    from elspais.utilities.github import open_pull_request, parse_owner_repo
+
+    state = request.app.state.app_state
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    root = _resolve_repo_root(state, data.get("repo"))
+
+    branch = get_current_branch(root)
+    if not branch:
+        return JSONResponse(
+            {"success": False, "error": "Cannot open a pull request in detached HEAD state"},
+            status_code=400,
+        )
+
+    remote_url = get_remote_url(root)
+    if not remote_url:
+        return JSONResponse(
+            {"success": False, "error": "This repository has no 'origin' remote"},
+            status_code=400,
+        )
+    owner_repo = parse_owner_repo(remote_url)
+    if not owner_repo:
+        # Only the host is repeated back: a remote URL may carry a credential
+        # in front of it, and this answer is read and logged elsewhere.
+        host = remote_host(remote_url) or "an unrecognised host"
+        return JSONResponse(
+            {
+                "success": False,
+                "error": (
+                    f"'origin' points at {host}; elspais can open a pull request on GitHub only."
+                ),
+            },
+            status_code=400,
+        )
+    owner, repo = owner_repo
+
+    state_of_branch = branch_remote_state(root, branch)
+    refusals = {
+        "no-tracking-ref": f"Branch '{branch}' is not on the remote yet — push it first.",
+        "ahead": (f"Branch '{branch}' has commits the remote does not have — push it first."),
+        "git-unavailable": (
+            "git is not on this server's PATH, so where the branch stands against the "
+            "remote cannot be read. Install git where this server runs."
+        ),
+        "unreadable": (
+            f"How far branch '{branch}' is ahead of the remote could not be read from "
+            "this repository."
+        ),
+    }
+    if state_of_branch.status in refusals:
+        return JSONResponse(
+            {"success": False, "error": refusals[state_of_branch.status]},
+            status_code=400,
+        )
+
+    token = _resolve_git_credential(request)
+    if not token:
+        from elspais.server.proxy_trust import GIT_TOKEN_HEADER, proxy_secret_is_configured
+
+        if proxy_secret_is_configured():
+            detail = (
+                f"This server opens a pull request as the person who asked, so it needs "
+                f"their credential: send it as '{GIT_TOKEN_HEADER}' with the proxy secret."
+            )
+        else:
+            detail = (
+                "Set GH_TOKEN or GITHUB_TOKEN for this server, or sign in with 'gh auth login'."
+            )
+        return JSONResponse(
+            {"success": False, "error": f"No credential to open a pull request with. {detail}"},
+            status_code=400,
+        )
+
+    title = (data.get("title") or "").strip() or branch
+    body = data.get("body") or ""
+    base = (data.get("base") or "").strip() or remote_default_branch(root) or "main"
+
+    result = open_pull_request(
+        owner=owner,
+        repo=repo,
+        head_branch=branch,
+        base_branch=base,
+        title=title,
+        body=body,
+        token=token,
+        opener=getattr(request.app.state, "github_opener", None),
+    )
+    status_code = 200 if result.get("success") else 400
+    return JSONResponse(result, status_code=status_code)

@@ -7,7 +7,7 @@ Validates:
 - REQ-p00004-B: Git change detection
 - REQ-p00004-D: create_and_switch_branch SHALL create/switch branch with stash
 - REQ-p00004-E: commit_and_push_spec_files SHALL commit spec files, refuse on main/master
-- REQ-p00004-F: sync_branch SHALL fetch, merge remote, and rebase on main, aborting on conflict
+- REQ-p00004-F: sync_branch SHALL fetch and fast-forward, handing back what cannot be
 - REQ-p00004-H: list_branches SHALL list local/remote branches, strip prefixes, deduplicate
 - REQ-p00004-I: checkout SHALL switch to existing local/remote branches with fallback
 """
@@ -775,8 +775,9 @@ def _init_bare_and_clones(tmp_path: Path) -> tuple[Path, Path, Path]:
 class TestPullFfOnly:
     """Tests for sync_branch().
 
-    Validates REQ-p00004-F: The tool SHALL fetch, merge remote changes,
-    and rebase on main — aborting on conflict.
+    Validates REQ-p00004-F: The tool SHALL fetch and fast-forward from the
+    remote tracking branch, handing back work that cannot be fast-forwarded
+    and leaving the branch as it found it.
     """
 
     # Verifies: REQ-p00004-F
@@ -814,8 +815,11 @@ class TestPullFfOnly:
         assert (clone_b / "new_file.txt").read_text() == "hello\n"
 
     # Verifies: REQ-p00004-F
-    def test_REQ_p00004_F_diverged_no_conflict_merges(self, tmp_path):
-        """Diverged with no conflict succeeds via merge."""
+    def test_REQ_p00004_F_diverged_without_conflict_is_handed_back(self, tmp_path):
+        """A history that has diverged is handed back even where the two
+        sides touch different files. Whether a merge would have come out
+        clean is not the question: reconciling them is a decision about
+        content, and the branch is left exactly as it was found."""
         _bare, clone_a, clone_b = _init_bare_and_clones(tmp_path)
 
         # Push a commit from clone_a (different file)
@@ -829,7 +833,7 @@ class TestPullFfOnly:
         )
         _git_run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
 
-        # Make a local commit in clone_b (different file — no conflict)
+        # Make a local commit in clone_b (different file — would merge cleanly)
         (clone_b / "file_b.txt").write_text("from b\n")
         _git_run(["git", "add", "."], cwd=clone_b, capture_output=True, check=True)
         _git_run(
@@ -838,18 +842,25 @@ class TestPullFfOnly:
             capture_output=True,
             check=True,
         )
+        before = _git_run(
+            ["git", "rev-parse", "HEAD"], cwd=clone_b, capture_output=True, text=True
+        ).stdout.strip()
 
         result = sync_branch(clone_b)
 
-        assert result["success"] is True
-        assert any("Merged" in a or "Fast-forwarded" in a for a in result["actions"])
-        # Both files present
-        assert (clone_b / "file_a.txt").read_text() == "from a\n"
-        assert (clone_b / "file_b.txt").read_text() == "from b\n"
+        assert result["success"] is False
+        assert "Push this branch" in result["error"]
+        assert not (clone_b / "file_a.txt").exists()
+        after = _git_run(
+            ["git", "rev-parse", "HEAD"], cwd=clone_b, capture_output=True, text=True
+        ).stdout.strip()
+        assert after == before
 
     # Verifies: REQ-p00004-F
-    def test_REQ_p00004_F_diverged_with_conflict_aborts(self, tmp_path):
-        """Diverged with conflict aborts merge cleanly."""
+    def test_REQ_p00004_F_diverged_over_one_file_leaves_the_tree_clean(self, tmp_path):
+        """Two sides editing one file are handed back with nothing half-done:
+        no merge is begun, so there is nothing to abort and the working tree
+        carries no markers."""
         _bare, clone_a, clone_b = _init_bare_and_clones(tmp_path)
 
         # Both edit the SAME file (README.md from init)
@@ -875,8 +886,71 @@ class TestPullFfOnly:
         result = sync_branch(clone_b)
 
         assert result["success"] is False
-        assert "conflict" in result["error"].lower()
-        # Working tree should be clean (merge aborted)
+        assert "Push this branch" in result["error"]
+        # Nothing was begun, so the working tree carries no conflict markers
+
+        status = _git_run(
+            ["git", "status", "--porcelain"],
+            cwd=clone_b,
+            capture_output=True,
+            text=True,
+        )
+        assert status.stdout.strip() == ""
+
+    # Verifies: REQ-d00297-F
+    def test_REQ_d00297_F_no_fast_forward_says_push_and_finish_locally(self, tmp_path):
+        """A remote branch that will not fast-forward in tells the user to
+        push this branch and finish the work in a local checkout, rather than
+        describing a merge elspais does not perform."""
+        _bare, clone_a, clone_b = _init_bare_and_clones(tmp_path)
+
+        for clone, text, message in (
+            (clone_a, "version A\n", "edit from a"),
+            (clone_b, "version B\n", "edit from b"),
+        ):
+            (clone / "README.md").write_text(text)
+            _git_run(["git", "add", "."], cwd=clone, capture_output=True, check=True)
+            _git_run(["git", "commit", "-m", message], cwd=clone, capture_output=True, check=True)
+        _git_run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
+
+        result = sync_branch(clone_b)
+
+        assert result["success"] is False
+        assert "Push this branch" in result["error"]
+        assert "local checkout" in result["error"]
+
+    # Verifies: REQ-p00004-F
+    def test_REQ_p00004_F_a_branch_is_never_replayed_onto_a_moved_main(self, tmp_path):
+        """Main moving under a branch is not this operation's business. The
+        branch is reconciled with its own remote-tracking ref and with
+        nothing else, so a branch main has moved under is left where it is
+        rather than being replayed onto it."""
+        _bare, clone_a, clone_b = _init_bare_and_clones(tmp_path)
+
+        (clone_a / "README.md").write_text("version A\n")
+        _git_run(["git", "add", "."], cwd=clone_a, capture_output=True, check=True)
+        _git_run(
+            ["git", "commit", "-m", "edit on main"], cwd=clone_a, capture_output=True, check=True
+        )
+        _git_run(["git", "push"], cwd=clone_a, capture_output=True, check=True)
+
+        _git_run(
+            ["git", "checkout", "-b", "__test_diverged"],
+            cwd=clone_b,
+            capture_output=True,
+            check=True,
+        )
+        (clone_b / "README.md").write_text("version B\n")
+        _git_run(["git", "add", "."], cwd=clone_b, capture_output=True, check=True)
+        _git_run(
+            ["git", "commit", "-m", "edit on branch"], cwd=clone_b, capture_output=True, check=True
+        )
+
+        result = sync_branch(clone_b)
+
+        assert result["success"] is True
+        assert result["actions"] == []
+        assert (clone_b / "README.md").read_text() == "version B\n"
         status = _git_run(
             ["git", "status", "--porcelain"],
             cwd=clone_b,
@@ -1234,7 +1308,8 @@ class TestFullGitSyncWorkflowWithRemote:
 
     # Verifies: REQ-p00004-F
     def test_sync_conflict_from_concurrent_edits(self, tmp_path):
-        """Two clones edit same file on same branch → sync detects conflict."""
+        """Two clones edit the same file on the same branch → the second is
+        handed its work back rather than having the two reconciled for it."""
         _bare, clone_a, clone_b = _init_bare_with_spec(tmp_path)
 
         # Both on feature branch
@@ -1273,10 +1348,10 @@ class TestFullGitSyncWorkflowWithRemote:
             check=True,
         )
 
-        # clone_b: sync should detect conflict and abort cleanly
+        # clone_b: sync refuses and leaves the branch where it was
         result = sync_branch(clone_b)
         assert result["success"] is False
-        assert "conflict" in result["error"].lower()
+        assert "Push this branch" in result["error"]
 
         # Working tree should be clean (merge aborted)
         status = _git_run(
