@@ -11,6 +11,7 @@ Each test class manages its own project setup because it needs:
 import csv
 import io
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -1610,7 +1611,10 @@ class TestViewerSessionBoundLifetime:
             assert not (tmp_path / ".elspais" / "daemon.json").exists()
             output = log_path.read_text(errors="replace")
             assert "nothing is pending" in output, output
-            assert f"In {_SESSION_GRACE_SECONDS:.0f}s" in output, output
+            # The deadline disclosed is the time left in the grace at the
+            # check that printed it, which depends on scheduling; its shape
+            # does not.
+            assert re.search(r"In \d+s, if no client is running", output), output
             assert "No recorded client is running and no unsaved mutations are pending" in output
         finally:
             _end(proc)

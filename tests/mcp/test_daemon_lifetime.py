@@ -2301,9 +2301,10 @@ class TestPagesAreTheOnlyClients:
     # Verifies: REQ-o00074-M
     def test_REQ_o00074_M_the_disclosure_with_nothing_pending_names_the_deadline(self, capsys):
         """Validates REQ-o00074-M: while the termination is held open the
-        process discloses what is pending and the deadline — and with nothing
-        pending it says nothing is, rather than promising to save a count of
-        zero."""
+        process discloses what is pending and the deadline — the time left
+        in a grace that began when the process started, not the grace's
+        whole length — and with nothing pending it says nothing is, rather
+        than promising to save a count of zero."""
         clock = _Clock()
         wd = ClientWatchdog(
             client_pid=None,
@@ -2315,11 +2316,14 @@ class TestPagesAreTheOnlyClients:
             stop_fn=_ok_stop,
             extra_liveness_fn=lambda: 0,
         )
+        clock.now += 30.0
         assert wd.check_once() is Decision.WAIT_GRACE
+        clock.now += 30.0
         assert wd.check_once() is Decision.WAIT_GRACE
         err = capsys.readouterr().err
         assert err.count("nothing is pending") == 1, err
-        assert "100s" in err
+        assert "In 70s, if no client is running" in err, err
+        assert "100s" not in err, err
         assert "will stop" in err
         assert "save" not in err
 

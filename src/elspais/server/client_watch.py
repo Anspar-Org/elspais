@@ -402,6 +402,12 @@ class ClientWatchdog:
             self._dead_since = now
 
         grace_expired = (now - self._dead_since) >= self._grace
+        # The deadline disclosed is the time left, not the grace's length:
+        # for a watchdog whose handles are streams the countdown began at
+        # construction, and after an activity restart it began at an
+        # earlier check, so the grace has already been running when the
+        # disclosure is first printed.
+        remaining = max(self._grace - (now - self._dead_since), 0.0)
 
         with self._lock:
             # Re-read under the lock: no writer can be mid-mutation now,
@@ -424,10 +430,10 @@ class ClientWatchdog:
                 grace_expired=grace_expired,
                 transient_handles=self._transient_handles,
             )
-            return self._act(decision, count)
+            return self._act(decision, count, remaining)
 
     # Implements: REQ-o00074-M, REQ-p00083-A, REQ-p00083-D
-    def _act(self, decision: Decision, count: int | None) -> Decision:
+    def _act(self, decision: Decision, count: int | None, remaining: float) -> Decision:
         """Emit the disclosure the decision requires and exit if it says so.
 
         Implements: REQ-o00074-E, REQ-o00074-M, REQ-p00083-A, REQ-p00083-D
@@ -456,13 +462,14 @@ class ClientWatchdog:
             if not self._warned_grace:
                 self._warned_grace = True
                 # Implements: REQ-o00074-M
-                # The disclosure states what is pending and the deadline.
-                # With nothing pending there is nothing to save, so it
-                # says so rather than promising to save a count of zero.
+                # The disclosure states what is pending and the deadline,
+                # as the time left in the grace. With nothing pending
+                # there is nothing to save, so it says so rather than
+                # promising to save a count of zero.
                 if count == 0:
                     print(
                         "No recorded client is running and nothing is pending. "
-                        f"In {self._grace:.0f}s, if no client is running, the "
+                        f"In {remaining:.0f}s, if no client is running, the "
                         "process will stop.",
                         file=sys.stderr,
                         flush=True,
@@ -471,7 +478,7 @@ class ClientWatchdog:
                     print(
                         "No recorded client is running. "
                         f"{count if count is not None else 'An unknown number of'} "
-                        f"unsaved in-memory mutation(s) are pending. In {self._grace:.0f}s, "
+                        f"unsaved in-memory mutation(s) are pending. In {remaining:.0f}s, "
                         "if no client is running and nothing further is applied, the "
                         "daemon will save them to disk and stop, and will record that "
                         "it saved them itself.",

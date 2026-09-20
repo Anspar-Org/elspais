@@ -346,8 +346,12 @@ see go. The server counts the stream while it is open, exactly as it
 counts an agent's MCP session, and a tab that closes -- or a browser
 that is killed -- releases it without saying anything. A viewer started
 with `--session-lifetime` is bound by that count: it keeps serving while
-any tab holds a stream, and once none does -- including when no tab ever
-connected -- it persists whatever changes it holds and stops. Without the
+any tab holds a stream, and ends only once no tab has held one for the
+grace interval -- counted from its start, so a viewer no tab ever
+connects to ends by the same clock -- persisting whatever changes it
+holds first. The grace applies with or without pending changes: a tab's
+stream drops on a reload or a sleeping machine and comes back, so no
+stream held at one check is not a session that has ended. Without the
 flag the viewer's lifetime is what it always was.
 
 ### Leaving, Versus Acting on the Changes

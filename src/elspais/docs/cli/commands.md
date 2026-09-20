@@ -458,7 +458,7 @@ also serves MCP tools at `/mcp` for AI agent integration.
   $ elspais viewer --static         # Generate static HTML file
   $ elspais viewer --server         # Start server without opening browser
   $ elspais viewer --path /my/repo  # Specify repository root
-  $ elspais viewer --server --session-lifetime   # Stop once no tab holds it
+  $ elspais viewer --server --session-lifetime   # End after the grace with no tab
   $ elspais viewer --base-path /w/abc   # Serve everything under a prefix
 
 **Options:**
