@@ -69,6 +69,15 @@ def _init_repo_with_remote(root: Path, env: dict[str, str]) -> None:
         env=env,
         capture_output=True,
     )
+    # A runner carries no committer identity, so this repository states its own.
+    for key, value in (("user.name", "Test"), ("user.email", "test@example.invalid")):
+        subprocess.run(
+            ["git", "config", key, value],
+            cwd=root,
+            check=True,
+            env=env,
+            capture_output=True,
+        )
 
 
 # Verifies: REQ-d00297-D
