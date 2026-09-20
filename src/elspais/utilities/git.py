@@ -993,7 +993,6 @@ def commit_and_push_spec_files(
 # Implements: REQ-d00297-D, REQ-d00297-F
 def sync_branch(
     repo_root: Path,
-    main_branches: tuple[str, ...] = ("main", "master"),
     token: str | None = None,
 ) -> dict[str, Any]:
     """Bring the current branch up to its remote-tracking ref by fast-forward.
@@ -1006,8 +1005,6 @@ def sync_branch(
 
     Args:
         repo_root: Path to repository root.
-        main_branches: Accepted for the caller's branch vocabulary; the sync
-            reconciles a branch with its own remote-tracking ref only.
         token: Credential to authenticate this one fetch with.
 
     Returns:
@@ -1021,14 +1018,21 @@ def sync_branch(
     if not branch:
         return {"success": False, "error": "Not on a branch (detached HEAD)"}
 
-    env.update(token_git_env(token, get_remote_url(repo_root) if token else None))
+    # The fetch is the one invocation that talks to the remote, so it is the
+    # only one given the credential: the local rev-list and fast-forward below
+    # need no authentication, and a merge may run a repository hook that would
+    # otherwise be handed it.
+    fetch_env = {
+        **env,
+        **token_git_env(token, get_remote_url(repo_root) if token else None),
+    }
 
     # 1. Fetch
     try:
         subprocess.run(
             ["git", "fetch"],
             cwd=repo_root,
-            env=env,
+            env=fetch_env,
             capture_output=True,
             text=True,
             check=True,

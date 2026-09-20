@@ -127,3 +127,49 @@ def test_a_pushed_credential_is_absent_from_the_published_command_line(
             content = path.read_bytes()
             assert TOKEN.encode() not in content, path
             assert encoded.encode() not in content, path
+
+
+# Verifies: REQ-d00297-D
+def test_a_synced_credential_reaches_the_fetch_and_no_other_invocation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A sync authenticated with a supplied token hands it to the fetch, which
+    is the one invocation that talks to the remote. The rev-list and the
+    fast-forward beside it are local, and the merge may run a repository hook,
+    so neither is given the credential."""
+    env = git_mod._clean_git_env()
+    root = tmp_path / "repo"
+    root.mkdir()
+    _init_repo_with_remote(root, env)
+    (root / "a.txt").write_text("a\n")
+    subprocess.run(["git", "add", "."], cwd=root, check=True, env=env, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-qm", "first"], cwd=root, check=True, env=env, capture_output=True
+    )
+
+    real_run = subprocess.run
+    seen: dict[str, dict[str, str] | None] = {}
+
+    def fake_run(cmd: Any, **kwargs: Any) -> Any:
+        """Stand in for the three invocations that would need a remote."""
+        if isinstance(cmd, list) and len(cmd) > 1:
+            verb = cmd[1]
+            if verb in ("fetch", "rev-list", "merge"):
+                seen[verb] = kwargs.get("env")
+                stdout = "0\t1\n" if verb == "rev-list" else ""
+                return subprocess.CompletedProcess(cmd, 0, stdout, "")
+        return real_run(cmd, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = git_mod.sync_branch(root, token=TOKEN)
+    monkeypatch.undo()
+
+    assert result["success"] is True
+    encoded = base64.b64encode(f"x-access-token:{TOKEN}".encode()).decode("ascii")
+    assert seen["fetch"] is not None
+    assert seen["fetch"]["GIT_CONFIG_VALUE_0"] == f"AUTHORIZATION: basic {encoded}"
+    for verb in ("rev-list", "merge"):
+        carried = seen[verb]
+        assert carried is not None
+        assert "GIT_CONFIG_VALUE_0" not in carried
+        assert not any(TOKEN in value for value in carried.values())

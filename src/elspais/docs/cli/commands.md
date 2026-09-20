@@ -501,15 +501,18 @@ it only when the request also carries a secret the two share:
     X-Elspais-User-Email    the authenticated user's email, used as the
                             author id in comments and changelog rows
     X-Elspais-Git-Token     a git credential, accepted only under the same
-                            secret; no operation consults it yet, and the
-                            git operations that come to will document it
-                            with those operations
+                            secret; the git routes authenticate a push, a
+                            pull's fetch and opening a pull request with it,
+                            each for that one operation
 
 A comment, reply, resolution or save made through a request carrying the
 secret and both identity headers is attributed to that user. A request
 missing the secret, carrying the wrong one, or missing either identity
 header is attributed to the server's own identity, as a local viewer
-always is -- the headers are ignored, never refused. With no
+always is -- the identity headers are ignored, never refused. The git
+credential is not an identity: where an operation needs one and none can
+be found, the request is refused naming what to supply. The git topic
+states the rule for each route. With no
 `ELSPAIS_PROXY_SECRET` in the environment nothing in the headers is
 believed, whatever they say. The secret is per process rather than a
 fixed value because the server listens on the local interface, and on a
