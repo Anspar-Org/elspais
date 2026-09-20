@@ -542,6 +542,11 @@ record — the CLI's graph queries, `elspais doctor`, `elspais mcp env`
 the browser is scoped to the prefix too, so viewers under different
 prefixes on one host keep state of their own.
 
+The served viewer also exports any report it can show -- `trace`, `summary`,
+`gaps`, `checks` -- as markdown, CSV or PDF through `GET
+/api/export/{report}?format=...`, reading the same query the `/api/run`
+route reads. See `elspais docs traceability`.
+
 ## graph
 
 Export the traceability graph structure as JSON.

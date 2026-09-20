@@ -609,6 +609,37 @@ def compute_gaps(graph: FederatedGraph, config: dict, request: GapsRequest) -> d
     return result
 
 
+# Implements: REQ-d00298-B
+def render_gaps(data: dict[str, Any], fmt: str, gap_types: list[str] | None) -> str:
+    """Render a computed gap listing in one format.
+
+    The ONE rendering of a gap payload. The command prints through here and
+    an export downloads through here, so both rebuild the same ``GapData``
+    from the same dict and state the same sections: what a reader downloads
+    is what the command would have printed for the same request.
+    """
+    scope_lines = data.get("scope") or []
+    if fmt == "json":
+        return json.dumps(data, indent=2)
+    gap_data = _gap_data_from_dict(data)
+    types_to_render = gap_types or _ALL_GAP_TYPES
+    show_integrated = "uncovered" in types_to_render
+    if fmt == "markdown":
+        sections = [f"*{line}*" for line in scope_lines]
+        sections += [render_gap_markdown(gt, gap_data) for gt in types_to_render]
+        if show_integrated:
+            seg = render_integrated_markdown(gap_data)
+            if seg:
+                sections.append(seg)
+        return "\n\n".join(sections)
+    sections = list(scope_lines)
+    sections += [render_gap_text(gt, gap_data) for gt in types_to_render]
+    output = "\n\n".join(sections)
+    if show_integrated:
+        output += render_integrated_text(gap_data)
+    return output
+
+
 # Implements: REQ-d00279-C
 def run(args: argparse.Namespace) -> int:
     """Run a standalone gap listing command.
@@ -662,27 +693,7 @@ def run(args: argparse.Namespace) -> int:
     # payload was computed locally or by a serving process.
     gap_types: list[str] | None = gap_sections(inputs.values, command)
 
-    scope_lines = data.get("scope") or []
-    if fmt == "json":
-        output = json.dumps(data, indent=2)
-    else:
-        gap_data = _gap_data_from_dict(data)
-        types_to_render = gap_types or _ALL_GAP_TYPES
-        show_integrated = "uncovered" in types_to_render
-        if fmt == "markdown":
-            sections = [f"*{line}*" for line in scope_lines]
-            sections += [render_gap_markdown(gt, gap_data) for gt in types_to_render]
-            if show_integrated:
-                seg = render_integrated_markdown(gap_data)
-                if seg:
-                    sections.append(seg)
-            output = "\n\n".join(sections)
-        else:
-            sections = list(scope_lines)
-            sections += [render_gap_text(gt, gap_data) for gt in types_to_render]
-            output = "\n\n".join(sections)
-            if show_integrated:
-                output += render_integrated_text(gap_data)
+    output = render_gaps(data, fmt, gap_types)
 
     output_file = getattr(args, "output", None)
     if output_file:

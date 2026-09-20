@@ -265,6 +265,55 @@ Journey verdicts: `pass` (all steps have a passing test, none failed), `fail`
   `--embed-content`       Embed full markdown in HTML (offline viewing)
   `--path DIR`            Path to repository root (default: auto-detect)
 
+### Exporting a report from the viewer
+
+The served viewer downloads any report it can show as a document. The
+toolbar's Export control names the report (`trace`, `summary`, `gaps`,
+`checks`) and a format, and Download fetches it:
+
+  GET /api/export/{report}?format=markdown|csv|pdf
+
+The route takes exactly the query the matching `/api/run/{report}` route
+takes, plus `format`. It is read by the same code, so the download states
+what the on-screen report states: a `--scope` name is expanded where the
+invocation was received and nowhere else, and a value the report does not
+offer is refused with the same 400 the run route gives. The page sends the
+narrowing it is showing under -- the header's level selection as
+`scope_level=` and the toolbar's status selection as `scope_status=` --
+whenever either narrows the estate, and only to a report that reads a scope
+(`checks` lists findings and reads none), so a reader who has hidden the
+Draft requirements downloads a report without them. A page with nothing
+selected to show shows nothing, and a scope cannot say "nothing", so
+Download refuses with a message rather than exporting the whole estate.
+
+Level and status are the only narrowings a scope can carry. The page hides
+rows by more than those -- the repository a requirement belongs to, its
+coverage state, its git state, its place in the hierarchy -- and a download
+taken while one of those is narrowing the page holds the rows it hides. On a
+federated estate that is the consequential one: soloing a member narrows the
+page and not the document. Narrow by level or status, or read the download
+knowing it is wider than the page.
+
+The page fetches the download rather than navigating to it, so a refusal is
+shown as a message on the page -- the reader keeps their filters -- and a
+download raises no leave-page warning however much unsaved work the page
+holds.
+
+A markdown or CSV download is the same formatter over the same payload as
+`elspais <report> --format markdown` or `--format csv` for the same
+inputs, so for those inputs it states the same values in the same layout,
+byte for byte. A PDF is that markdown converted by `pandoc
+--pdf-engine=xelatex` through the LaTeX template `elspais pdf` typesets
+with; when either tool is absent the export is refused with a 409 naming
+what to install, and a conversion that fails, or that could not fetch a
+resource the document names, is refused carrying the converter's output --
+never a short or empty file. A format the report does not offer (CSV for `gaps` or
+`checks`, which list findings rather than columns) is refused with a 400
+naming the formats it does offer.
+
+The response is an attachment named `<report>-<YYYYMMDD-HHMMSS>.<md|csv|pdf>`
+with the matching content type.
+
 ## graph Command
 
 Export the full traceability graph as JSON:

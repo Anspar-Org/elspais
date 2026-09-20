@@ -32,6 +32,7 @@ from elspais.server.routes_api import (
     api_comment_resolve,
     api_dirty,
     api_events,
+    api_export,
     api_file_content,
     api_get_comments,
     api_get_comments_card,
@@ -236,6 +237,8 @@ def create_app(state: AppState, mount_mcp: bool = True, base_path: str = "") -> 
         Route("/api/run/gaps", api_run_gaps),
         Route("/api/run/analysis", api_run_analysis),
         Route("/api/run/trace", api_run_trace),
+        # The same reports, as documents to download
+        Route("/api/export/{report}", api_export),
         # Mutation POST endpoints
         Route("/api/mutate/status", api_mutate_status, methods=["POST"]),
         Route("/api/mutate/template", api_mutate_template, methods=["POST"]),

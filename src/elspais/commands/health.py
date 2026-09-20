@@ -5240,6 +5240,28 @@ def run(args: argparse.Namespace) -> int:
     return 1 if (runner_failed or checks_exit != 0) else 0
 
 
+# Implements: REQ-d00298-B
+def render_checks(data: dict[str, Any], fmt: str, request: ChecksRequest) -> str:
+    """Render a computed checks payload the way the command prints it.
+
+    The formatter reads an invocation, so the request is spelled back as the
+    arguments a reader would have typed for it -- and nothing more: no
+    narrowing, no graph source, no quiet or verbose flag, because the request
+    carries none of them. The payload is rebuilt the way the command rebuilds
+    one a serving process answered with, so both render one report.
+    """
+    args = argparse.Namespace(
+        format=fmt,
+        lenient=request.lenient,
+        spec_only=request.spec_only,
+        code_only=request.code_only,
+        tests_only=request.tests_only,
+        terms_only=request.terms_only,
+        treat_active=list(request.treat_active),
+    )
+    return _format_report(_report_from_dict(data), args)
+
+
 # Implements: REQ-d00285-C+F+H+I
 def run_preset(args: argparse.Namespace, preset: str) -> int:
     """Run one of the preset listings -- `unresolved`, `errors`, `uncited`.

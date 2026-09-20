@@ -1,0 +1,219 @@
+# Implements: REQ-d00298-A, REQ-d00298-B, REQ-d00298-D, REQ-d00298-E, REQ-d00298-F
+"""A viewer report rendered as a document to download.
+
+The viewer shows a report; this module turns the same report into the file a
+reader files. It renders nothing of its own: a markdown or CSV export is the
+command's own formatter run over the command's own payload, and a PDF is that
+markdown put through the conversion `elspais pdf` performs. What a report
+offers here is read off the table the command line reads, so the two surfaces
+offer one set.
+"""
+
+from __future__ import annotations
+
+import json
+import shutil
+import tempfile
+from collections.abc import Iterable, Sequence
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+from elspais.pdf.renderer import render_pdf
+
+if TYPE_CHECKING:
+    from elspais.graph.federated import FederatedGraph
+
+# The document formats an export renders directly. The machine formats a
+# report also offers (json, junit, sarif) are what the run routes already
+# answer with and are not documents.
+DOCUMENT_FORMATS: tuple[str, ...] = ("markdown", "csv")
+PDF_FORMAT = "pdf"
+PDF_ENGINE = "xelatex"
+
+MEDIA_TYPES: dict[str, str] = {
+    "markdown": "text/markdown; charset=utf-8",
+    "csv": "text/csv; charset=utf-8",
+    PDF_FORMAT: "application/pdf",
+}
+EXTENSIONS: dict[str, str] = {"markdown": "md", "csv": "csv", PDF_FORMAT: "pdf"}
+
+# What to install when a tool the PDF path needs is absent.
+INSTALL_HINTS: dict[str, str] = {
+    "pandoc": "install pandoc (https://pandoc.org/installing.html)",
+    PDF_ENGINE: f"install a TeX distribution that provides {PDF_ENGINE}",
+}
+
+
+class UnofferedFormat(ValueError):
+    """A format this report does not offer."""
+
+    def __init__(self, report: str, fmt: str, offered: Sequence[str]) -> None:
+        self.report = report
+        self.fmt = fmt
+        self.offered = tuple(offered)
+        super().__init__(
+            f"'{report}' does not export as {fmt}; it offers {', '.join(self.offered)}"
+        )
+
+
+class ToolingUnavailable(RuntimeError):
+    """A tool the format needs is not on the PATH."""
+
+    def __init__(self, tool: str) -> None:
+        self.tool = tool
+        super().__init__(f"{tool} not found on PATH -- {INSTALL_HINTS[tool]}")
+
+
+class RenderFailed(RuntimeError):
+    """The converter ran and did not produce the document."""
+
+
+# Implements: REQ-d00298-A, REQ-d00298-E
+def offered_formats(report: str) -> tuple[str, ...]:
+    """The export formats one report offers.
+
+    Read off the command line's own table rather than declared again here, so
+    a format the command offers is the format the viewer offers. PDF is
+    offered wherever markdown is, because it is that markdown converted.
+    """
+    from elspais.commands.report import FORMAT_SUPPORT
+
+    supported = FORMAT_SUPPORT[report]
+    offered = [fmt for fmt in DOCUMENT_FORMATS if fmt in supported]
+    if "markdown" in supported:
+        offered.append(PDF_FORMAT)
+    return tuple(offered)
+
+
+# Implements: REQ-d00298-C
+def reads_scope(report: str) -> bool:
+    """Whether this report reads a scope at all.
+
+    Read off the command line's own table of sections that select over
+    requirements. A report absent from it (`checks` lists findings) reads no
+    scope, and a page that sent it one would narrow nothing while looking as
+    if it had.
+    """
+    from elspais.commands.report import VALUE_SECTIONS
+
+    return report in VALUE_SECTIONS
+
+
+def export_offers(reports: Iterable[str]) -> dict[str, dict[str, Any]]:
+    """Each named report, the formats it offers and whether it reads a scope,
+    for a page to show and to send only what the route will read.
+
+    The names come from the route's own table of report readers, so the set a
+    page lists is the set the route serves and is spelled nowhere else.
+    """
+    return {
+        report: {"formats": list(offered_formats(report)), "scoped": reads_scope(report)}
+        for report in reports
+    }
+
+
+# Implements: REQ-d00298-B
+def render_document(
+    graph: FederatedGraph, config: dict[str, Any], report: str, request: Any, fmt: str
+) -> str:
+    """One report, in one document format, through the command's renderer.
+
+    Each branch is the command's own path: the payload its ``compute_*``
+    produces, rendered by the function its ``run`` renders with. Nothing here
+    decides what a value means -- the request arrived with that decided.
+    """
+    if report == "summary":
+        from elspais.commands.summary import compute_summary, render_summary
+
+        return render_summary(compute_summary(graph, config, request), fmt, config)
+    if report == "trace":
+        from elspais.commands.trace import render_trace
+
+        return render_trace(graph, config, request, fmt)
+    if report == "gaps":
+        from elspais.commands.gaps import compute_gaps, gap_sections, render_gaps
+
+        data = compute_gaps(graph, config, request)
+        return render_gaps(data, fmt, gap_sections(request.values, request.command))
+    if report == "checks":
+        from elspais.commands.health import compute_checks, render_checks
+
+        return render_checks(compute_checks(graph, config, request), fmt, request)
+    raise KeyError(report)
+
+
+# Implements: REQ-d00298-D
+def markdown_to_pdf(markdown: str, title: str) -> bytes:
+    """Convert a rendered markdown document to PDF.
+
+    The conversion is the one `elspais pdf` performs -- pandoc over the
+    bundled template -- so the viewer's document and the command line's are
+    typeset alike. A missing tool is refused before anything runs, naming
+    what to install; a converter that ran and left no document, or an empty
+    one, is a failure carrying its own output -- never a short file that
+    downloads as if it were the report.
+
+    A resource the converter could not fetch is refused for the same reason
+    and cannot be learnt from the return code: pandoc drops such a resource
+    and still exits successfully, so a document missing a figure it names
+    would otherwise download looking complete. The command line discloses
+    that omission beside a report it still prints; a download has no such
+    margin to disclose it in, so here it is a refusal.
+    """
+    for tool in ("pandoc", PDF_ENGINE):
+        if shutil.which(tool) is None:
+            raise ToolingUnavailable(tool)
+    # The template's title page and running header read the document's
+    # title, which a report's markdown does not carry.
+    document = f"---\ntitle: {json.dumps(title)}\n---\n\n{markdown}"
+    with tempfile.TemporaryDirectory(prefix="elspais-export-") as tmp:
+        output = Path(tmp) / "report.pdf"
+        converter_output: list[str] = []
+        unfetched: list[str] = []
+        rc = render_pdf(
+            document,
+            output_path=output,
+            engine=PDF_ENGINE,
+            unfetched=unfetched,
+            converter_output=converter_output,
+        )
+        if rc != 0:
+            raise RenderFailed(f"pandoc exited {rc}: {''.join(converter_output).strip()}")
+        if unfetched:
+            raise RenderFailed(
+                "pandoc could not fetch "
+                + ", ".join(sorted(set(unfetched)))
+                + " -- the document would be delivered without it"
+            )
+        if not output.exists():
+            raise RenderFailed("pandoc exited 0 and wrote no document")
+        body = output.read_bytes()
+    if not body:
+        raise RenderFailed("pandoc wrote an empty document")
+    return body
+
+
+# Implements: REQ-d00298-A, REQ-d00298-E
+def export_document(
+    graph: FederatedGraph, config: dict[str, Any], report: str, request: Any, fmt: str
+) -> str:
+    """The text of one report on its way to one format, or a refusal.
+
+    Judged against the offer before anything is rendered, so a refusal has
+    produced nothing. A PDF's text is the markdown rendering -- converting
+    it is the caller's step, off the event loop -- which is what makes the
+    PDF state the same values the markdown states.
+    """
+    offered = offered_formats(report)
+    if fmt not in offered:
+        raise UnofferedFormat(report, fmt, offered)
+    text_format = "markdown" if fmt == PDF_FORMAT else fmt
+    return render_document(graph, config, report, request, text_format)
+
+
+# Implements: REQ-d00298-F
+def download_filename(report: str, fmt: str, now: datetime | None = None) -> str:
+    """The name a download carries: which report, when, and in what format."""
+    stamp = (now or datetime.now()).strftime("%Y%m%d-%H%M%S")
+    return f"{report}-{stamp}.{EXTENSIONS[fmt]}"

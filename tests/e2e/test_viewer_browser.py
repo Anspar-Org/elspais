@@ -19,6 +19,7 @@ failing-step identification are visible in the viewer.
 import json
 import os
 import random
+import re
 import shutil
 import signal
 import socket
@@ -237,12 +238,18 @@ def page(viewer_url):
 class TestViewerPageLoad:
     """Validates REQ-d00010: viewer page loads correctly in a browser."""
 
+    # These are the first loads of the page over this repository's own estate,
+    # and a cold CI container has overrun the fixture's default deadline on
+    # that first render alone, so both get the allowance their neighbours get.
+    # The wait stays on networkidle: the page's scripts must have run for a
+    # script error to be observable.
+
     # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_page_loads_without_js_errors(self, page, viewer_url):
         js_errors = []
         page.on("pageerror", lambda err: js_errors.append(str(err)))
 
-        page.goto(viewer_url, wait_until="networkidle")
+        page.goto(viewer_url, wait_until="networkidle", timeout=_PAGE_LOAD_TIMEOUT)
 
         assert not js_errors, f"JS errors on page load: {js_errors}"
         title = page.title()
@@ -253,7 +260,7 @@ class TestViewerPageLoad:
 
     # Verifies: REQ-d00010-A
     def test_REQ_d00010_A_page_has_content(self, page, viewer_url):
-        page.goto(viewer_url, wait_until="networkidle")
+        page.goto(viewer_url, wait_until="networkidle", timeout=_PAGE_LOAD_TIMEOUT)
 
         body_text = page.text_content("body") or ""
         assert len(body_text.strip()) > 50, (
@@ -322,6 +329,216 @@ class TestViewerInteraction:
         # Check that some detail content appeared (panel, modal, or new content)
         body_text = page.text_content("body") or ""
         assert len(body_text.strip()) > 100, "Expected detail content after clicking a requirement"
+
+
+# The page's own fetch of a route, so the download is read the way the page
+# reads it -- under the prefix it is served at.
+_FETCH_TEXT = "(u) => fetch(prefixedUrl(u)).then(r => r.text())"
+
+
+# Every status on, so a test measuring one property is not reading another:
+# a retired status is hidden when the page loads, which is itself a narrowing
+# the export carries.
+_SHOW_EVERY_STATUS = """
+() => {
+    const g = filterGroups.status;
+    g.restore({on: g.buttons.map(b => b.key)});
+    g.render();
+}
+"""
+
+
+class TestViewerExport:
+    """Validates REQ-d00298: a report downloads from the served page."""
+
+    # Verifies: REQ-d00298-A, REQ-d00298-F
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00298_A_export_control_downloads_the_chosen_report(self, page, viewer_url):
+        """Choosing a report and a format in the toolbar and pressing Download
+        fetches an attachment named for that report and format."""
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_selector("#btn-export", timeout=_PAGE_LOAD_TIMEOUT)
+        page.select_option("#export-report", "trace")
+        page.select_option("#export-format", "markdown")
+        with page.expect_download() as download_info:
+            page.click("#btn-export")
+        download = download_info.value
+        assert re.match(r"^trace-\d{8}-\d{6}\.md$", download.suggested_filename), (
+            download.suggested_filename
+        )
+        # The page is still the viewer: a download is not a navigation away.
+        assert page.query_selector("#export-control") is not None
+
+    # Verifies: REQ-d00298-E
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00298_E_formats_listed_are_the_ones_the_report_offers(self, page, viewer_url):
+        """Switching to a report that offers no CSV drops CSV from the list,
+        so a reader cannot ask for a format the route will refuse."""
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_selector("#btn-export", timeout=_PAGE_LOAD_TIMEOUT)
+        page.select_option("#export-report", "trace")
+        trace_formats = page.eval_on_selector_all(
+            "#export-format option", "opts => opts.map(o => o.value)"
+        )
+        assert trace_formats == ["markdown", "csv", "pdf"]
+        page.select_option("#export-report", "gaps")
+        gaps_formats = page.eval_on_selector_all(
+            "#export-format option", "opts => opts.map(o => o.value)"
+        )
+        assert gaps_formats == ["markdown", "pdf"]
+
+    # Verifies: REQ-d00298-G
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00298_G_level_narrowing_reaches_only_a_report_that_reads_a_scope(
+        self, page, viewer_url
+    ):
+        """A level soloed in the header is sent as the scope the run route
+        reads, and only to a report that reads one: the checks listing reads
+        no scope, so sending it one would narrow nothing while looking as if
+        it had."""
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_function(_FILTERS_READY, timeout=_PAGE_LOAD_TIMEOUT)
+        page.evaluate(_SHOW_EVERY_STATUS)
+        page.click("#stat-level-prd", modifiers=["Shift"])
+        page.wait_for_timeout(300)
+        page.select_option("#export-report", "trace")
+        page.select_option("#export-format", "csv")
+        assert page.evaluate("exportUrl()") == "/api/export/trace?format=csv&scope_level=prd"
+        page.select_option("#export-report", "checks")
+        assert page.evaluate("exportUrl()") == "/api/export/checks?format=markdown"
+
+        # No level on is a page showing nothing. The toggle keeps the last
+        # level on, so the state arrives only through restored filter state;
+        # a scope cannot say "nothing", so the export has no URL and is
+        # refused rather than widened to the whole estate. A report reading
+        # no scope is unaffected.
+        page.evaluate(
+            "() => { filterGroups.level.restore({on: []}); filterGroups.level.render(); }"
+        )
+        assert page.evaluate("exportUrl()") == "/api/export/checks?format=markdown"
+        page.select_option("#export-report", "trace")
+        assert page.evaluate("exportUrl()") is None
+        page.click("#btn-export")
+        toast = page.wait_for_selector(".toast.error", timeout=5_000)
+        assert "nothing to export" in toast.text_content().lower()
+        assert page.query_selector("#export-control") is not None
+
+    # Verifies: REQ-d00298-G
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00298_G_a_status_hidden_on_screen_is_hidden_from_the_download(
+        self, page, viewer_url
+    ):
+        """A reader who hides a status has narrowed the report they are
+        reading; the download carries the same narrowing, so it does not
+        arrive holding the rows the page was told to put away. Whole-estate
+        first, because a narrowing that changed nothing would prove nothing."""
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_function(_FILTERS_READY, timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_function(
+            "() => !!filterGroups.status && filterGroups.status.buttons.length > 1",
+            timeout=_PAGE_LOAD_TIMEOUT,
+        )
+        page.evaluate(_SHOW_EVERY_STATUS)
+        page.select_option("#export-report", "trace")
+        page.select_option("#export-format", "csv")
+        assert "scope_status" not in page.evaluate("exportUrl()")
+        whole = page.evaluate(_FETCH_TEXT, page.evaluate("exportUrl()"))
+
+        # The status carrying the most of the estate, soloed: rows exist to
+        # be kept, and every other status's rows are the ones put away.
+        kept = page.evaluate(
+            """() => {
+                const g = filterGroups.status;
+                const counted = g.buttons
+                    .map(b => [b.key, g._available.get(b.key) || 0])
+                    .sort((a, b) => b[1] - a[1]);
+                return counted[0][1] > 0 && counted[1][1] > 0 ? counted[0][0] : null;
+            }"""
+        )
+        assert kept, "precondition: the estate must hold rows under two statuses"
+        page.evaluate(
+            "(k) => { filterGroups.status.restore({on: [k]}); filterGroups.status.render(); }",
+            kept,
+        )
+        narrowed_url = page.evaluate("exportUrl()")
+        assert f"scope_status={kept}" in narrowed_url, narrowed_url
+        narrowed = page.evaluate(_FETCH_TEXT, narrowed_url)
+        assert narrowed != whole
+        assert len(narrowed) < len(whole)
+
+        # A report that reads no scope is told nothing, status included.
+        page.select_option("#export-report", "checks")
+        assert page.evaluate("exportUrl()") == "/api/export/checks?format=markdown"
+
+    # Verifies: REQ-d00298-A
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00298_A_download_raises_no_leave_page_warning_over_pending_work(
+        self, page, viewer_url
+    ):
+        """The page holds pending work, so leaving it warns. A download is
+        not a departure: it is fetched in place, and no dialog is raised.
+        Registered before the click, because the dialog the old navigation
+        raised came with the click itself."""
+        dialogs: list[str] = []
+        page.on("dialog", lambda d: (dialogs.append(d.type), d.dismiss()))
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_selector("#btn-export", timeout=_PAGE_LOAD_TIMEOUT)
+        page.evaluate("() => { editState.mutationCount = 1; }")
+        assert page.evaluate("unloadWarningState().willWarnOnClose") is True, (
+            "precondition: the page must be one that warns before it is left"
+        )
+        page.select_option("#export-report", "summary")
+        page.select_option("#export-format", "csv")
+        with page.expect_download() as download_info:
+            page.click("#btn-export")
+        download = download_info.value
+        assert re.match(r"^summary-\d{8}-\d{6}\.csv$", download.suggested_filename), (
+            download.suggested_filename
+        )
+        assert dialogs == [], f"a download raised a dialog: {dialogs}"
+        assert page.url.rstrip("/") == viewer_url.rstrip("/")
+        assert page.query_selector("#export-control") is not None
+
+    # Verifies: REQ-d00298-E
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00298_E_a_refusal_is_shown_on_the_page_not_in_its_place(self, page, viewer_url):
+        """A format the report does not offer is refused by the route; the
+        refusal reaches the reader as a message on the page they were on,
+        naming the formats offered, rather than as the route's JSON where the
+        page used to be. The control lists only offered formats, so the
+        unoffered one is put into the list by hand."""
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_selector("#btn-export", timeout=_PAGE_LOAD_TIMEOUT)
+        # Let the page's own load-time requests over this estate finish first,
+        # so the refusal is measured on its own: clicked while they are still
+        # in flight, the fetch queues behind them on the server, and on a cold
+        # CI container that queue alone outran a short wait. The wait then
+        # gets the allowance the page gets, since the answer is bounded by the
+        # same load; the toast appears the moment the refusal arrives.
+        page.wait_for_load_state("networkidle", timeout=_PAGE_LOAD_TIMEOUT)
+        page.select_option("#export-report", "gaps")
+        page.evaluate(
+            """() => {
+                const sel = document.getElementById('export-format');
+                const opt = document.createElement('option');
+                opt.value = 'csv'; opt.textContent = 'csv';
+                sel.appendChild(opt);
+            }"""
+        )
+        page.select_option("#export-format", "csv")
+        assert page.evaluate("exportUrl()") == "/api/export/gaps?format=csv"
+        page.click("#btn-export")
+        toast = page.wait_for_selector(".toast.error", timeout=_PAGE_LOAD_TIMEOUT)
+        text = toast.text_content()
+        assert "markdown" in text and "pdf" in text, text
+        assert page.url.rstrip("/") == viewer_url.rstrip("/")
+        assert page.query_selector("#export-control") is not None
 
 
 # ---------------------------------------------------------------------------
@@ -3038,8 +3255,12 @@ class TestScopeMembershipAgreesWithAuthority:
         Were the client never shown some requirement, it could hide it under
         every scope and still look equivalent.
         """
-        page.goto(viewer_url, wait_until="domcontentloaded")
-        page.wait_for_function(_FILTERS_READY, timeout=30_000)
+        # The index over this repository's own estate may carry a full rebuild
+        # (the mutation tests before this one wrote spec files), so the page
+        # load gets the same allowance its neighbours get, not the fixture's
+        # default.
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_function(_FILTERS_READY, timeout=_PAGE_LOAD_TIMEOUT)
 
         client = _client_scope_membership(page)
         authority = _authority_scope_membership(page, viewer_url)
@@ -3061,8 +3282,12 @@ class TestScopeMembershipAgreesWithAuthority:
         than spelled out here, so the comparison keeps deciding something as the
         estate's levels and statuses change.
         """
-        page.goto(viewer_url, wait_until="domcontentloaded")
-        page.wait_for_function(_FILTERS_READY, timeout=30_000)
+        # The index over this repository's own estate may carry a full rebuild
+        # (the mutation tests before this one wrote spec files), so the page
+        # load gets the same allowance its neighbours get, not the fixture's
+        # default.
+        page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
+        page.wait_for_function(_FILTERS_READY, timeout=_PAGE_LOAD_TIMEOUT)
 
         vocab = page.evaluate(_VOCABULARY)
         carried_levels = sorted(

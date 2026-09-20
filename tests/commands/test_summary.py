@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from elspais.commands.summary import DEFAULT_VALUES, _pct, _render
+from elspais.commands.summary import DEFAULT_VALUES, _pct, render_summary
 from elspais.graph.aggregation import collect_coverage
 from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
@@ -386,7 +386,7 @@ class TestTextFormat:
         """Text output starts with 'Coverage Summary' header."""
         graph = _make_graph()
         data = collect_coverage(graph)
-        output = _render(data, "text")
+        output = render_summary(data, "text")
 
         assert output.startswith("Coverage Summary\n")
 
@@ -398,7 +398,7 @@ class TestTextFormat:
         _set_rollup(node, total=2, covered=1, tested=1, validated=1)
 
         data = collect_coverage(graph)
-        output = _render(data, "text")
+        output = render_summary(data, "text")
 
         assert "Summary by Level" in output
         assert "PRD:" in output
@@ -414,7 +414,7 @@ class TestTextFormat:
         _set_rollup(node, total=2, covered=1, tested=1, validated=0)
 
         data = collect_coverage(graph)
-        output = _render(data, "text")
+        output = render_summary(data, "text")
 
         assert "Per-Requirement Coverage" not in output
 
@@ -425,7 +425,7 @@ class TestTextFormat:
         _add_requirement(graph, "REQ-p00001", "Only PRD", level="prd")
 
         data = collect_coverage(graph)
-        output = _render(data, "text")
+        output = render_summary(data, "text")
 
         assert "PRD:" in output
         assert "OPS:" not in output
@@ -445,7 +445,7 @@ class TestMarkdownFormat:
         """Markdown output starts with '# Coverage Summary'."""
         graph = _make_graph()
         data = collect_coverage(graph)
-        output = _render(data, "markdown")
+        output = render_summary(data, "markdown")
 
         assert "# Coverage Summary" in output
 
@@ -461,7 +461,7 @@ class TestMarkdownFormat:
         _set_rollup(node, total=2, covered=1, tested=1, validated=1)
 
         data = collect_coverage(graph)
-        output = _render(data, "markdown")
+        output = render_summary(data, "markdown")
 
         assert "## Summary by Level" in output
         header = next(ln for ln in output.splitlines() if ln.startswith("| Level"))
@@ -487,7 +487,7 @@ class TestMarkdownFormat:
         _set_rollup(node, total=2, covered=1, tested=1, validated=1)
 
         data = collect_coverage(graph)
-        output = _render(data, "markdown")
+        output = render_summary(data, "markdown")
 
         assert "## Per-Requirement Coverage" not in output
 
@@ -499,7 +499,7 @@ class TestMarkdownFormat:
         _set_rollup(node, total=2, covered=2, tested=1, validated=1)
 
         data = collect_coverage(graph)
-        output = _render(data, "markdown")
+        output = render_summary(data, "markdown")
 
         lines = output.split("\n")
         data_lines = [ln for ln in lines if "| PRD |" in ln]
@@ -521,7 +521,7 @@ class TestJsonFormat:
         """JSON output contains 'levels' and 'excluded' keys."""
         graph = _build_mixed_graph()
         data = collect_coverage(graph)
-        output = _render(data, "json")
+        output = render_summary(data, "json")
 
         parsed = json.loads(output)
         assert "levels" in parsed
@@ -535,7 +535,7 @@ class TestJsonFormat:
         _set_rollup(node, total=3, covered=2, tested=1, validated=1)
 
         data = collect_coverage(graph)
-        output = _render(data, "json")
+        output = render_summary(data, "json")
         parsed = json.loads(output)
 
         prd = parsed["levels"][0]
@@ -554,7 +554,7 @@ class TestJsonFormat:
         """JSON output includes excluded status counts."""
         graph = _build_mixed_graph()
         data = collect_coverage(graph)
-        output = _render(data, "json")
+        output = render_summary(data, "json")
         parsed = json.loads(output)
 
         assert parsed["excluded"]["Draft"] == 1
@@ -575,7 +575,7 @@ class TestCsvFormat:
         """CSV output has the expected column headers."""
         graph = _make_graph()
         data = collect_coverage(graph)
-        output = _render(data, "csv")
+        output = render_summary(data, "csv")
 
         reader = csv.reader(io.StringIO(output))
         headers = next(reader)
@@ -599,7 +599,7 @@ class TestCsvFormat:
         """CSV has one header row plus one row per level."""
         graph = _build_mixed_graph()
         data = collect_coverage(graph)
-        output = _render(data, "csv")
+        output = render_summary(data, "csv")
 
         reader = csv.reader(io.StringIO(output))
         rows = list(reader)
@@ -621,7 +621,7 @@ class TestCsvFormat:
         _set_rollup(node, total=4, covered=3, tested=2, validated=1)
 
         data = collect_coverage(graph)
-        output = _render(data, "csv")
+        output = render_summary(data, "csv")
 
         reader = csv.DictReader(io.StringIO(output))
         row = next(reader)  # PRD row
@@ -653,7 +653,7 @@ class TestCsvFormat:
         """CSV output is parseable by Python csv module without errors."""
         graph = _build_mixed_graph()
         data = collect_coverage(graph)
-        output = _render(data, "csv")
+        output = render_summary(data, "csv")
 
         reader = csv.DictReader(io.StringIO(output))
         rows = list(reader)
@@ -687,10 +687,10 @@ class TestRenderDispatch:
         """Unknown format falls back to text."""
         graph = _make_graph()
         data = collect_coverage(graph)
-        output = _render(data, "unknown")
+        output = render_summary(data, "unknown")
 
         assert "Coverage Summary" in output
-        assert output == _render(data, "text")
+        assert output == render_summary(data, "text")
 
 
 # ===========================================================================
@@ -739,7 +739,7 @@ class TestSummaryIntegrations:
         per-associate 'library' row and a 'total' row."""
         fed = _federate_integrates(tmp_path)
         data = collect_coverage(fed, config=None)
-        text = _render(data, "text")
+        text = render_summary(data, "text")
 
         assert "External integrations" in text
         names = [row["associate"] for row in data["integrations"]]
@@ -770,8 +770,8 @@ class TestSummaryIntegrations:
         'Passing', so the vocabulary matches the rest of the report."""
         fed = _federate_integrates(tmp_path)
         data = collect_coverage(fed, config=None)
-        text = _render(data, "text")
-        md = _render(data, "markdown")
+        text = render_summary(data, "text")
+        md = render_summary(data, "markdown")
 
         assert "no lcov" not in text
         assert "no lcov" not in md
@@ -859,10 +859,10 @@ class TestSummaryIntegrations:
 
         # Rendered surfaces mark the failing row (text `!` marker + footnote,
         # markdown `!` marker + footnote).
-        text = _render(dict(data), "text")
+        text = render_summary(dict(data), "text")
         assert "!" in text
         assert "failing test result" in text
-        md = _render(dict(data), "markdown")
+        md = render_summary(dict(data), "markdown")
         assert "!" in md
         assert "failing test result" in md
 
@@ -1361,7 +1361,7 @@ class TestSummaryCarriedFootnote:
         graph, config = self._build(project, targets=["a"])
         data = collect_coverage(graph, config=config)
 
-        text = _render(data, "text")
+        text = render_summary(data, "text")
 
         # "Passing" is the verified (test-execution-derived) coverage figure.
         passing_line = next(
@@ -1376,7 +1376,7 @@ class TestSummaryCarriedFootnote:
         graph, config = self._build(project, targets=None)
         data = collect_coverage(graph, config=config)
 
-        text = _render(data, "text")
+        text = render_summary(data, "text")
 
         assert "*" not in text
         assert "test results from previous runs" not in text
@@ -1387,7 +1387,7 @@ class TestSummaryCarriedFootnote:
         graph, config = self._build(project, targets=["a"])
         data = collect_coverage(graph, config=config)
 
-        md = _render(data, "markdown")
+        md = render_summary(data, "markdown")
 
         assert "* 1/2 test results from previous runs" in md
 
@@ -1397,7 +1397,7 @@ class TestSummaryCarriedFootnote:
         graph, config = self._build(project, targets=None)
         data = collect_coverage(graph, config=config)
 
-        md = _render(data, "markdown")
+        md = render_summary(data, "markdown")
 
         assert "test results from previous runs" not in md
 
@@ -1407,7 +1407,7 @@ class TestSummaryCarriedFootnote:
         graph, config = self._build(project, targets=["a"])
         data = collect_coverage(graph, config=config)
 
-        rendered = _render(data, "json")
+        rendered = render_summary(data, "json")
         parsed = json.loads(rendered)
 
         assert parsed["carried_result_targets"] == 1
@@ -1420,7 +1420,7 @@ class TestSummaryCarriedFootnote:
         graph, config = self._build(project, targets=["a"])
         data = collect_coverage(graph, config=config)
 
-        rendered = _render(data, "csv")
+        rendered = render_summary(data, "csv")
 
         # The structured carried-results row renders correctly (1 carried of 2).
         rows = list(csv.reader(io.StringIO(rendered)))
@@ -1438,7 +1438,7 @@ class TestSummaryCarriedFootnote:
         graph, config = self._build(project, targets=None)
         data = collect_coverage(graph, config=config)
 
-        rendered = _render(data, "csv")
+        rendered = render_summary(data, "csv")
 
         assert "Carried Result Targets" not in rendered
         assert "*" not in rendered
@@ -1486,13 +1486,13 @@ class TestMeasuresArePublished:
     another."""
 
     def test_no_caveat_marker_anywhere_in_the_output(self, canonical_graph, canonical_config):
-        out = _render(collect_coverage(canonical_graph, canonical_config), "text")
+        out = render_summary(collect_coverage(canonical_graph, canonical_config), "text")
         assert "~" not in out
 
     def test_each_dimension_shows_the_measures_behind_its_total(
         self, canonical_graph, canonical_config
     ):
-        out = _render(collect_coverage(canonical_graph, canonical_config), "text")
+        out = render_summary(collect_coverage(canonical_graph, canonical_config), "text")
         # One line per dimension carries the total, then the four measures.
         assert "Implemented:" in out
         for word in ("direct", "indirect", "conducted"):
@@ -1538,7 +1538,7 @@ class TestMeasuresArePublished:
         lv = next(lv for lv in data["levels"] if lv["level"] == "PRD")
         assert lv["implemented_total_covered"] == pytest.approx(1.0)
 
-        out = _render(data, "text")
+        out = render_summary(data, "text")
         implemented_line = next(ln for ln in out.splitlines() if "Implemented:" in ln)
         assert "1/1 (100" in implemented_line
         assert "0.8/1" not in implemented_line
@@ -1586,7 +1586,7 @@ class TestTestedBreakdown:
         """The breakdown qualifies Tested, so it rides on the Tested line and
         introduces no coverage term of its own."""
         data = collect_coverage(self._graph_with_breakdown())
-        output = _render(data, "text")
+        output = render_summary(data, "text")
 
         tested_line = next(ln for ln in output.splitlines() if "Tested:" in ln)
         assert "[1 passed, 1 failed, 1 awaiting a result]" in tested_line
@@ -1602,7 +1602,7 @@ class TestTestedBreakdown:
         node = _add_requirement(graph, "REQ-p00001", "Untested", level="prd")
         _set_rollup(node, total=2, covered=2, tested=0, validated=0)
 
-        output = _render(collect_coverage(graph), "text")
+        output = render_summary(collect_coverage(graph), "text")
 
         tested_line = next(ln for ln in output.splitlines() if "Tested:" in ln)
         assert "awaiting" not in tested_line
@@ -1610,7 +1610,7 @@ class TestTestedBreakdown:
     # Verifies: REQ-d00258-U
     def test_markdown_tested_cell_carries_the_breakdown(self):
         data = collect_coverage(self._graph_with_breakdown())
-        output = _render(data, "markdown")
+        output = render_summary(data, "markdown")
 
         assert "[1 passed, 1 failed, 1 awaiting a result]" in output
 
@@ -1623,7 +1623,7 @@ class TestTestedBreakdown:
         its own, which REQ-d00258-V forbids -- and would make selecting
         `tested` state four columns in CSV and one in markdown."""
         data = collect_coverage(self._graph_with_breakdown())
-        output = _render(data, "csv")
+        output = render_summary(data, "csv")
 
         headers = next(csv.reader(io.StringIO(output)))
         assert not [h for h in headers if h.startswith("Tested Passed")], headers

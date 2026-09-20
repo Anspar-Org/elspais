@@ -44,8 +44,11 @@
 \makeatother
 \setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
 
-% Long tables
-\usepackage{longtable,booktabs}
+% Long tables; array supplies the column alignment commands pandoc's tables
+% use, and calc the arithmetic behind the relative column widths it emits when
+% a row outgrows the line
+\usepackage{longtable,booktabs,array}
+\usepackage{calc}
 
 % Code blocks and syntax highlighting
 \usepackage{fancyvrb}

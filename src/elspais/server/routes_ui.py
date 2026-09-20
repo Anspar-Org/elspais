@@ -79,6 +79,8 @@ async def index(request: Request):
         from elspais.html.generator import HTMLGenerator
         from elspais.html.highlighting import get_pygments_css
         from elspais.html.theme import get_catalog
+        from elspais.server.export import export_offers
+        from elspais.server.routes_api import EXPORT_REQUEST_BUILDERS
 
         templates = Jinja2Templates(directory=str(templates_dir))
 
@@ -128,6 +130,10 @@ async def index(request: Request):
             # a KeyError that the outer try/except would silently swallow
             # into the JSON fallback.
             "repo_name": typed.project.name,
+            # Implements: REQ-d00298-A
+            # What each report exports as, read off the server's own offer so
+            # the page never spells a second one.
+            "export_offers": export_offers(EXPORT_REQUEST_BUILDERS),
             "pygments_css": get_pygments_css(),
             "pygments_css_dark": get_pygments_css(style="monokai", scope=".theme-dark .highlight"),
             "node_index": {},

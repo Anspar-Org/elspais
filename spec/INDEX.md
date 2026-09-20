@@ -216,6 +216,7 @@
 | REQ-d00294 | A Result Is Its Own Record                                    | dev-graph-core.md       | 66e2737b |
 | REQ-d00295 | Viewer Served Under a Configured Prefix                       | dev-traceview-review.md | b3c8493f |
 | REQ-d00296 | Request Identity From a Trusted Proxy                         | prd-features.md         | fe4f3620 |
+| REQ-d00298 | Report Export                                                 | dev-cli.md              | 8c1b78eb |
 
 ## User Journeys
 
