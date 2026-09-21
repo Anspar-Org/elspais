@@ -1,12 +1,14 @@
 # Implements: REQ-d00131-A, REQ-d00131-B, REQ-d00131-C, REQ-d00131-D
 # Implements: REQ-d00131-E, REQ-d00131-F, REQ-d00131-G, REQ-d00131-H
-# Implements: REQ-d00131-I, REQ-d00131-J
+# Implements: REQ-d00131-I, REQ-d00131-J, REQ-d00131-Q
 # Implements: REQ-d00132-A, REQ-d00132-E, REQ-d00132-F
 """Render Protocol - Serialize graph nodes back to text.
 
 Each domain NodeKind has a render function that produces its text
-representation. Walking a FILE node's CONTAINS children in render_order
-and concatenating their rendered output produces the file's content.
+representation. A FILE node's content comes from the renderer its file
+type declares; the spec, journey, code and test types declare the walk
+over CONTAINS children in render_order. A type declaring no renderer is
+read-only, and asking for its content is refused naming the type.
 
 The render_save() function persists dirty FILE nodes to disk by rendering
 their CONTAINS children, replacing the old persistence.py text surgery.
@@ -15,11 +17,12 @@ their CONTAINS children, replacing the old persistence.py text surgery.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from elspais.graph.GraphNode import GraphNode, NodeKind
+from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.utilities.hasher import (
     HASH_VALUE_PATTERN,
@@ -614,12 +617,12 @@ def _render_test(node: GraphNode) -> str:
     return node.get_field("raw_text") or ""
 
 
-# Implements: REQ-d00131-I
-def render_file(node: GraphNode, resolver: Any | None = None) -> str:
-    """Render a FILE node by walking its CONTAINS children.
+def _render_composed_file(node: GraphNode, resolver: Any | None = None) -> str:
+    """Render a file whose content is composed from the nodes it holds.
 
     Walks CONTAINS children sorted by render_order edge metadata,
-    calls render_node on each, and concatenates the results.
+    calls render_node on each, and concatenates the results. This is the
+    renderer the spec, journey, code and test file types declare.
 
     Args:
         node: A FILE node.
@@ -629,9 +632,6 @@ def render_file(node: GraphNode, resolver: Any | None = None) -> str:
     Returns:
         The complete file content as a string.
     """
-    if node.kind != NodeKind.FILE:
-        raise ValueError(f"render_file() requires a FILE node, got {node.kind}")
-
     # Collect CONTAINS children with their render_order
     children_with_order: list[tuple[float, GraphNode]] = []
 
@@ -662,6 +662,70 @@ def render_file(node: GraphNode, resolver: Any | None = None) -> str:
     if result and not result.endswith("\n"):
         result += "\n"
     return result
+
+
+# Implements: REQ-d00131-I
+# Which renderer a file type declares. This table is the single authority
+# for that question: a file type absent from it declares none, and a
+# renderer named anywhere else would be a second answer to it.
+FILE_RENDERERS: dict[FileType, Callable[[GraphNode, Any | None], str]] = {
+    FileType.SPEC: _render_composed_file,
+    FileType.JOURNEY: _render_composed_file,
+    FileType.CODE: _render_composed_file,
+    FileType.TEST: _render_composed_file,
+}
+
+
+def _file_type_of(node: GraphNode) -> FileType | None:
+    """The FileType a FILE node declares, or None where it declares none.
+
+    The field holds a ``FileType`` where the node came from
+    ``create_file_node``, and the enum's string value where it was
+    rebuilt from a mutation entry or a multi-role type list.
+    """
+    declared = node.get_field("file_type")
+    if isinstance(declared, FileType):
+        return declared
+    if isinstance(declared, str):
+        try:
+            return FileType(declared)
+        except ValueError:
+            return None
+    return None
+
+
+# Implements: REQ-d00131-I
+def render_file(node: GraphNode, resolver: Any | None = None) -> str:
+    """Render a FILE node using the renderer its file type declares.
+
+    Args:
+        node: A FILE node.
+        resolver: Optional IdResolver, forwarded to the renderer so
+            REQUIREMENT citations use the configured assertion separator.
+
+    Returns:
+        The complete file content as a string.
+
+    Raises:
+        ValueError: The node is not a FILE node, or its file type
+            declares no renderer and is therefore read-only.
+    """
+    if node.kind != NodeKind.FILE:
+        raise ValueError(f"render_file() requires a FILE node, got {node.kind}")
+
+    file_type = _file_type_of(node)
+    renderer = FILE_RENDERERS.get(file_type) if file_type is not None else None
+    if renderer is None:
+        # Implements: REQ-d00131-Q
+        # Naming the type is the point: the caller asked for the content of
+        # a file whose type declares no renderer, and the type is what it
+        # has to change to get one.
+        named = file_type.value if file_type is not None else node.get_field("file_type")
+        raise ValueError(
+            f"A file of type '{named}' declares no renderer and is read-only; "
+            f"its content cannot be produced from the graph."
+        )
+    return renderer(node, resolver)
 
 
 # ─────────────────────────────────────────────────────────────────────────

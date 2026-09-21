@@ -9,8 +9,10 @@ Validates REQ-d00131-E: USER_JOURNEY renders full block
 Validates REQ-d00131-F: CODE renders # Implements: comment line(s)
 Validates REQ-d00131-G: TEST renders # Verifies: comment line(s)
 Validates REQ-d00131-H: TEST_RESULT render raises ValueError
-Validates REQ-d00131-I: FILE node renders by walking CONTAINS children sorted by render_order
+Validates REQ-d00131-I: A FILE node's content comes from the renderer its file type declares
 Validates REQ-d00131-J: Order-independent assertion hashing
+Validates REQ-d00131-Q: A file type declaring no renderer is read-only, and its
+    content is refused naming the type
 """
 
 from __future__ import annotations
@@ -549,6 +551,187 @@ class TestFileRender:
         assert "# Header" in result
         assert "## REQ-t00001: Test" in result
         assert "A. SHALL work." in result
+
+
+class TestFileTypeRendererDispatch:
+    """Validates REQ-d00131-I and REQ-d00131-Q: a file's content comes from
+    the renderer its file type declares, and a type declaring none is
+    read-only with a refusal that names the type."""
+
+    # The file types whose content is composed from the nodes they hold.
+    COMPOSED_TYPES = (FileType.SPEC, FileType.JOURNEY, FileType.CODE, FileType.TEST)
+    # The file types that declare no renderer and are therefore read-only.
+    READ_ONLY_TYPES = (FileType.RESULT,)
+
+    # Verifies: REQ-d00131-I
+    def test_REQ_d00131_I_spec_file_renders_byte_identically(self):
+        """A SPEC file's rendered content is unchanged by the dispatch.
+
+        The literal is what the composed walk produced before the
+        dispatch existed, so a renderer registered for SPEC that differs
+        in any byte fails here.
+        """
+        from elspais.graph.render import render_file
+
+        file_node = _make_file_node()
+
+        rem = _make_remainder_node(text="# Header\n", node_id="rem:1")
+        edge_rem = file_node.link(rem, EdgeKind.CONTAINS)
+        edge_rem.metadata = {"render_order": 0.0}
+
+        req = _make_requirement_node(
+            req_id="REQ-t00001",
+            title="Test",
+            assertions=[("A", "SHALL work.")],
+        )
+        edge_req = file_node.link(req, EdgeKind.CONTAINS)
+        edge_req.metadata = {"render_order": 1.0}
+
+        assert render_file(file_node) == (
+            "# Header\n"
+            "\n"
+            "## REQ-t00001: Test\n"
+            "\n"
+            "**Level**: Dev | **Status**: Draft | **Implements**: -\n"
+            "\n"
+            "### Assertions\n"
+            "\n"
+            "A. SHALL work.\n"
+            "\n"
+            "*End* *Test* | **Hash**: 59f502b1\n"
+        )
+
+    # Verifies: REQ-d00131-Q
+    def test_REQ_d00131_Q_result_file_content_is_refused_naming_the_type(self):
+        """Asking for a RESULT file's content is refused, and the message names the type."""
+        from elspais.graph.render import render_file
+
+        file_node = _make_file_node(path="results/junit.xml")
+        file_node.set_field("file_type", FileType.RESULT)
+
+        with pytest.raises(ValueError) as excinfo:
+            render_file(file_node)
+
+        assert FileType.RESULT.value in str(excinfo.value).lower()
+
+    # Verifies: REQ-d00131-Q
+    def test_REQ_d00131_Q_read_only_type_is_not_rendered_by_the_composed_walk(self):
+        """A read-only type refuses even where CONTAINS children exist.
+
+        Without a dispatch the walk renders whatever it is handed, so a
+        RESULT file holding a child would silently produce content.
+        """
+        from elspais.graph.render import render_file
+
+        file_node = _make_file_node(path="results/junit.xml")
+        file_node.set_field("file_type", FileType.RESULT)
+        rem = _make_remainder_node(text="<testsuite/>\n", node_id="rem:1")
+        edge = file_node.link(rem, EdgeKind.CONTAINS)
+        edge.metadata = {"render_order": 0.0}
+
+        with pytest.raises(ValueError):
+            render_file(file_node)
+
+    # Verifies: REQ-d00131-Q
+    def test_REQ_d00131_Q_refusal_reaches_the_kind_dispatch_too(self):
+        """``render_node`` on a read-only file type refuses identically.
+
+        The FILE branch of the kind dispatch must not bypass the
+        file-type dispatch.
+        """
+        from elspais.graph.render import render_node
+
+        file_node = _make_file_node(path="results/junit.xml")
+        file_node.set_field("file_type", FileType.RESULT)
+
+        with pytest.raises(ValueError) as excinfo:
+            render_node(file_node)
+
+        assert FileType.RESULT.value in str(excinfo.value).lower()
+
+    # Verifies: REQ-d00131-I
+    @pytest.mark.parametrize("file_type", list(COMPOSED_TYPES))
+    def test_REQ_d00131_I_composed_types_declare_the_walk(self, file_type):
+        """Every composed file type renders its CONTAINS children in order."""
+        from elspais.graph.render import render_file
+
+        file_node = _make_file_node()
+        file_node.set_field("file_type", file_type)
+
+        rem1 = _make_remainder_node(text="First block\n", node_id="rem:1")
+        edge1 = file_node.link(rem1, EdgeKind.CONTAINS)
+        edge1.metadata = {"render_order": 0.0}
+        rem2 = _make_remainder_node(text="Second block\n", node_id="rem:2")
+        edge2 = file_node.link(rem2, EdgeKind.CONTAINS)
+        edge2.metadata = {"render_order": 1.0}
+
+        result = render_file(file_node)
+        assert result.index("First block") < result.index("Second block")
+
+    # Verifies: REQ-d00131-I
+    def test_REQ_d00131_I_file_type_may_arrive_as_its_string_value(self):
+        """A file type recorded as its string value dispatches identically.
+
+        Mutation entries and the multi-role ``file_types`` list record the
+        enum's ``.value``, so a node rebuilt from one carries a string.
+        """
+        from elspais.graph.render import render_file
+
+        file_node = _make_file_node()
+        file_node.set_field("file_type", FileType.SPEC.value)
+        rem = _make_remainder_node(text="Body\n", node_id="rem:1")
+        edge = file_node.link(rem, EdgeKind.CONTAINS)
+        edge.metadata = {"render_order": 0.0}
+
+        assert "Body" in render_file(file_node)
+
+    # Verifies: REQ-d00131-I
+    # Verifies: REQ-d00131-Q
+    def test_REQ_d00131_I_dispatch_is_total_over_file_types(self):
+        """Every ``FileType`` member either declares a renderer or is refused.
+
+        A member that did neither would fall through to a silent
+        fallback, which is the outcome this case exists to forbid: the
+        two outcomes below must together account for every member of the
+        enum, with none left over.
+        """
+        from elspais.graph.render import render_file
+
+        rendered: set[FileType] = set()
+        refused: set[FileType] = set()
+
+        for file_type in FileType:
+            file_node = _make_file_node(path=f"x/{file_type.value}.txt")
+            file_node.set_field("file_type", file_type)
+            rem = _make_remainder_node(text="Content\n", node_id="rem:1")
+            edge = file_node.link(rem, EdgeKind.CONTAINS)
+            edge.metadata = {"render_order": 0.0}
+
+            try:
+                content = render_file(file_node)
+            except ValueError as exc:
+                assert file_type.value in str(exc).lower(), (
+                    f"refusal for {file_type} does not name the type: {exc}"
+                )
+                refused.add(file_type)
+            else:
+                assert "Content" in content
+                rendered.add(file_type)
+
+        assert rendered == set(self.COMPOSED_TYPES)
+        assert refused == set(self.READ_ONLY_TYPES)
+        assert rendered | refused == set(FileType)
+
+    # Verifies: REQ-d00131-Q
+    def test_REQ_d00131_Q_file_declaring_no_type_is_refused(self):
+        """A FILE node carrying no file type declares no renderer either."""
+        from elspais.graph.render import render_file
+
+        file_node = _make_file_node()
+        file_node.set_field("file_type", None)
+
+        with pytest.raises(ValueError):
+            render_file(file_node)
 
 
 class TestNormalizedHashing:
