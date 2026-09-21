@@ -290,6 +290,9 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 CACHE_DIR="$REPO_ROOT/.results"
 UNIT_CACHE="$CACHE_DIR/.test-cache-unit"
 
+# Killing this hook must not kill the tier it started — see the library.
+. "$REPO_ROOT/.githooks/lib-tier-run.sh"
+
 mkdir -p "$CACHE_DIR"
 
 # Compute content hash from the staged index (what the commit will contain).
@@ -307,26 +310,49 @@ else
     echo -e "${BLUE}Running unit/integration tests with coverage...${NC}"
     echo ""
 
-    if ! pytest tests/ --tb=short -q \
+    UNIT_RUN_DIR="$CACHE_DIR/run-unit"
+    mkdir -p "$UNIT_RUN_DIR"
+
+    # The verdict is recorded by the run itself, inside the detached session,
+    # so a hook killed mid-tier still leaves the tree certified. Writing it
+    # here instead would mean the timeout that kills the hook also discards a
+    # pass the tier had already earned.
+    {
+        printf '#!/bin/bash\n'
+        printf '# Records the unit verdict for the tree this run was started for.\n'
+        printf 'if [ "$1" -eq 0 ] && [ -n %q ]; then\n' "$CONTENT_HASH"
+        printf '    printf "%%s\\n" %q > %q\n' "$CONTENT_HASH" "$UNIT_CACHE"
+        printf 'else\n'
+        printf '    rm -f %q\n' "$UNIT_CACHE"
+        printf 'fi\n'
+    } > "$UNIT_RUN_DIR/finish.sh"
+
+    UNIT_RC=$(tier_execute "$UNIT_RUN_DIR" "$CONTENT_HASH" "$REPO_ROOT" "unit" \
+        "$UNIT_RUN_DIR/finish.sh" \
+        pytest tests/ --tb=short -q \
         --junitxml="$CACHE_DIR/junit.xml" -o junit_family=xunit1 \
-        --cov=src/elspais --cov-context=test --cov-report=json:"$CACHE_DIR/coverage.json" --cov-report= 2>&1; then
+        --cov=src/elspais --cov-context=test \
+        --cov-report=json:"$CACHE_DIR/coverage.json" --cov-report=)
+
+    if [ "$UNIT_RC" = "137" ]; then
+        echo ""
+        echo -e "${RED}The test run ended without recording a verdict.${NC}"
+        echo "Its output is in $UNIT_RUN_DIR/log. Commit again to re-run;"
+        echo "a run still in progress will be waited on rather than duplicated."
+        exit 1
+    fi
+
+    if [ "$UNIT_RC" != "0" ]; then
         echo ""
         echo -e "${RED}Tests failed!${NC}"
         echo "Fix the errors above before committing."
         echo ""
         echo "To bypass this check (NOT RECOMMENDED):"
         echo "  git commit --no-verify"
-        rm -f "$UNIT_CACHE"
         exit 1
     fi
 
     echo -e "${GREEN}Tests passed!${NC}"
-    if [ -n "$CONTENT_HASH" ]; then
-        echo "$CONTENT_HASH" > "$UNIT_CACHE"
-    else
-        # No trustworthy key for this pass — drop any stale cache instead
-        rm -f "$UNIT_CACHE"
-    fi
     echo ""
 fi
 

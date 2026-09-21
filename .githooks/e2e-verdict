@@ -30,6 +30,9 @@ E2E_CACHE="$CACHE_DIR/.test-cache-e2e"
 CONTENT_HASH=$(git write-tree | head -c 40)
 mkdir -p "$CACHE_DIR"
 
+# Killing this script must not kill the tier it started — see the library.
+. "$REPO_ROOT/.githooks/lib-tier-run.sh"
+
 # The tier re-enters a fresh interpreter -- `sys.executable`, a spawned
 # daemon -- and such a child inherits no sys.path from pytest, so the
 # environment that decides the verdict is the interpreter pytest runs
@@ -146,25 +149,49 @@ fi
 # binds on, which is the line-level linking the pretty-print below exists for.
 E2E_RESULTS="$CACHE_DIR/junit-e2e.xml"
 
-E2E_RC=0
-pytest tests/ -m "e2e" --tb=short -q \
-    --junitxml="$E2E_RESULTS" -o junit_family=xunit1 2>&1 || E2E_RC=$?
+# The tier runs detached, so a push whose client times out — or a hook killed
+# for any other reason — loses the connection and not the run. The verdict,
+# and the artifact elspais reads, are recorded by the run itself: a verdict
+# earned must survive the death of whoever was waiting for it. Pushing again
+# attaches to a run still going, or hits the verdict one already recorded.
+E2E_RUN_DIR="$CACHE_DIR/run-e2e"
+mkdir -p "$E2E_RUN_DIR"
 
-# Pretty-print JUnit XML for elspais line-level linking. The XML is an
-# artifact and never gates the verdict.
-if ! python3 -c "
-import xml.etree.ElementTree as ET
-tree = ET.parse('$E2E_RESULTS')
-ET.indent(tree, space='  ')
-tree.write('$E2E_RESULTS', encoding='unicode', xml_declaration=True)
-" 2>/dev/null; then
-    echo "::warning::junit pretty-print failed (tolerated: artifact formatting only)"
+{
+    printf '#!/bin/bash\n'
+    printf '# Records the e2e verdict, and formats the artifact it was read from.\n'
+    printf 'if ! python3 -c "\n'
+    printf 'import xml.etree.ElementTree as ET\n'
+    printf "tree = ET.parse('%s')\n" "$E2E_RESULTS"
+    printf "ET.indent(tree, space='  ')\n"
+    printf "tree.write('%s', encoding='unicode', xml_declaration=True)\n" "$E2E_RESULTS"
+    printf '" 2>/dev/null; then\n'
+    printf '    echo "::warning::junit pretty-print failed (tolerated: artifact formatting only)"\n'
+    printf 'fi\n'
+    # 137 is the library's "ended without recording one", which is not a
+    # verdict about the code and must never be cached as one.
+    printf 'if [ "$1" -eq 137 ]; then exit 0; fi\n'
+    printf 'if [ "$1" -eq 0 ]; then\n'
+    printf '    printf "%%s PASS %%s\\n" %q %q > %q\n' "$CONTENT_HASH" "$E2E_ENV_SRC" "$E2E_CACHE"
+    printf 'else\n'
+    printf '    printf "%%s FAIL %%s\\n" %q %q > %q\n' "$CONTENT_HASH" "$E2E_ENV_SRC" "$E2E_CACHE"
+    printf 'fi\n'
+} > "$E2E_RUN_DIR/finish.sh"
+
+E2E_RC=$(tier_execute "$E2E_RUN_DIR" "$CONTENT_HASH $E2E_ENV_SRC" "$REPO_ROOT" "e2e" \
+    "$E2E_RUN_DIR/finish.sh" \
+    pytest tests/ -m "e2e" --tb=short -q \
+    --junitxml="$E2E_RESULTS" -o junit_family=xunit1)
+
+if [ "$E2E_RC" = "137" ]; then
+    echo -e "${RED}The e2e run ended without recording a verdict.${NC}"
+    echo "Its output is in $E2E_RUN_DIR/log. Run this again to re-run;"
+    echo "a run still in progress will be waited on rather than duplicated."
+    exit 1
 fi
 
-if [ "$E2E_RC" -ne 0 ]; then
-    echo "$CONTENT_HASH FAIL $E2E_ENV_SRC" > "$E2E_CACHE"
+if [ "$E2E_RC" != "0" ]; then
     echo -e "${RED}E2E tests failed!${NC}"
     exit 1
 fi
-echo "$CONTENT_HASH PASS $E2E_ENV_SRC" > "$E2E_CACHE"
 echo -e "${GREEN}E2E tests passed!${NC}"

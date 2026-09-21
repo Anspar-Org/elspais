@@ -32,6 +32,7 @@ from elspais.config.schema import (
     ElspaisConfig,
 )
 from elspais.graph.builder import GraphBuilder
+from elspais.graph.declarations import build_declaration_nodes
 from elspais.graph.deserializer import DomainFile
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.federation_plan import (
@@ -1131,6 +1132,13 @@ def build_graph(
                 continue
             config_node = _get_or_create_file_node(document_path, FileType.CONFIG)
             config_node.set_field("config_document", parse_toml_document(document_text))
+            # Implements: REQ-d00299-D
+            # A declaration the document makes under a name becomes a node
+            # of its own, so it can be addressed and versioned. These are
+            # CONTAINS children that are NOT the file's text -- the CONFIG
+            # renderer dumps the document and never walks them.
+            for declaration_node in build_declaration_nodes(config_node):
+                builder.register_declaration_node(declaration_node)
 
     for spec_dir in spec_dirs:
         # Resolve full scan config for this spec dir from its own .elspais.toml

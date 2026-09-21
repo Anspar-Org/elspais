@@ -229,6 +229,21 @@ def _file_version_text(node: GraphNode) -> str:
     return f"{node.get_field('relative_path') or ''}\x1d{ordered}"
 
 
+# Implements: REQ-d00131-L, REQ-d00299-D
+def _declaration_version_text(node: GraphNode) -> str:
+    """Serialize a configuration declaration's identity and content.
+
+    A declaration is versioned on its own text and its own name, and on
+    nothing its neighbours in the same document hold, so two people editing
+    two scopes do not collide over one token.
+    """
+    from elspais.graph.declarations import declaration_text
+
+    table = node.get_field("declares_table") or ""
+    name = node.get_field("declared_name") or ""
+    return f"{table}\x1d{name}\x1d{declaration_text(node)}"
+
+
 _DIGEST_GRAMMAR: Any | None = None
 
 
@@ -273,6 +288,8 @@ def node_version(node: GraphNode) -> str:
 
     if node.kind == NodeKind.FILE:
         text = _file_version_text(node)
+    elif node.kind == NodeKind.DECLARATION:
+        text = _declaration_version_text(node)
     elif node.kind in (NodeKind.CODE, NodeKind.TEST):
         # A CODE node's ID embeds an absolute path, so it must never reach the
         # digest — versions would otherwise differ between machines.
@@ -332,6 +349,17 @@ def render_node(node: GraphNode, resolver: Any | None = None) -> str:
         raise ValueError(
             "STEP nodes are parse-derived and read-only; they are reached via "
             "STRUCTURES and never rendered directly."
+        )
+    elif kind == NodeKind.DECLARATION:
+        # Implements: REQ-d00299-D
+        # A declaration is part of a configuration document, and a
+        # configuration document's text is the document itself -- so there is
+        # no text a declaration renders to on its own, and a caller asking
+        # for one has the wrong node.
+        raise ValueError(
+            "DECLARATION nodes are part of the configuration document that "
+            "declares them and are not rendered independently. Render the "
+            "CONFIG FILE node instead."
         )
     elif kind == NodeKind.FILE:
         return render_file(node, resolver=resolver)

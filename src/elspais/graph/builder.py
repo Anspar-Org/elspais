@@ -4134,6 +4134,19 @@ class GraphBuilder:
         """
         self._nodes[file_node.id] = file_node
 
+    # Implements: REQ-d00299-D
+    def register_declaration_node(self, node: GraphNode) -> None:
+        """Register a configuration DECLARATION node in the builder's index.
+
+        Created by factory.py from the document its FILE node holds and
+        registered here so it appears in the final graph index and is
+        addressable. It is already linked beneath that FILE node.
+
+        Args:
+            node: A GraphNode with kind == NodeKind.DECLARATION.
+        """
+        self._nodes[node.id] = node
+
     def _to_relative_path(self, source_id: str) -> str:
         """Convert an absolute source path to a relative path.
 
@@ -5783,7 +5796,16 @@ class GraphBuilder:
         #        with at least one meaningful (non-satellite) child.
         # Orphans: parentless non-REQUIREMENT nodes without meaningful children.
         # Implements: REQ-d00128-I
-        _non_candidate_kinds = {NodeKind.FILE, NodeKind.REMAINDER, NodeKind.ASSERTION}
+        # DECLARATION sits with these three for the reason they are here: a
+        # configuration declaration is structure, not traceable content that
+        # failed to link, so having no content-level parent says nothing
+        # about it.
+        _non_candidate_kinds = {
+            NodeKind.FILE,
+            NodeKind.REMAINDER,
+            NodeKind.ASSERTION,
+            NodeKind.DECLARATION,
+        }
         _content_edge_kinds = {
             EdgeKind.IMPLEMENTS,
             EdgeKind.REFINES,
