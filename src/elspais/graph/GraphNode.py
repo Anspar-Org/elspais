@@ -41,6 +41,10 @@ class FileType(Enum):
 
     Determines which domain parser processes the file and what
     node kinds its content produces.
+
+    CONFIG is the exception to that sentence: a configuration document
+    produces no content nodes. It is held because it was read, and it
+    decides how everything else is read (REQ-d00299-A).
     """
 
     SPEC = "spec"
@@ -48,6 +52,8 @@ class FileType(Enum):
     CODE = "code"
     TEST = "test"
     RESULT = "result"
+    # Implements: REQ-d00299-A
+    CONFIG = "config"
 
 
 # Structural node-id prefixes. FILE and REMAINDER node ids are keyed by

@@ -44,7 +44,7 @@ class TestFileTypeEnum:
         """FileType has all required enum members."""
         from elspais.graph.GraphNode import FileType
 
-        expected = {"SPEC", "JOURNEY", "CODE", "TEST", "RESULT"}
+        expected = {"SPEC", "JOURNEY", "CODE", "TEST", "RESULT", "CONFIG"}
         actual = {member.name for member in FileType}
         assert expected == actual, f"Missing members: {expected - actual}"
 

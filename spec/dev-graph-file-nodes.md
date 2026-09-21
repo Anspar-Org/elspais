@@ -10,7 +10,7 @@ The graph data model SHALL support FILE nodes and file-aware edge kinds for repr
 
 A. `NodeKind` enum SHALL include a `FILE` value with string representation `"file"`.
 
-B. A `FileType` enum SHALL exist alongside `NodeKind` with values: `SPEC`, `JOURNEY`, `CODE`, `TEST`, `RESULT`.
+B. A `FileType` enum SHALL exist alongside `NodeKind` with values: `SPEC`, `JOURNEY`, `CODE`, `TEST`, `RESULT`, `CONFIG`.
 
 C. `EdgeKind` enum SHALL include `STRUCTURES`, `DEFINES`, and `YIELDS` values for file-aware structural edges.
 
@@ -24,11 +24,13 @@ FILE nodes are the foundation for representing source files as first-class graph
 
 ### Changelog
 
+- 2026-09-20 | 3f3620d0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-20 | - | - | Michael Lewis (<michael@anspar.org>) | Name the configuration file type among the values the FileType enum carries
 - 2026-07-31 | 070e173b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 664d3990 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 664d3990 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *FILE Node Data Model* | **Hash**: 070e173b
+*End* *FILE Node Data Model* | **Hash**: 3f3620d0
 ---
 
 ## REQ-d00127: GraphNode API: Filtered Traversal and Edge-Only Relationships

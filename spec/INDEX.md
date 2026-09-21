@@ -111,7 +111,7 @@
 | REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 515f0165 |
 | REQ-d00124 | Graph Analysis Engine                                         | dev-cli.md              | b153d5f6 |
 | REQ-d00125 | Analysis CLI Command                                          | dev-cli.md              | 474fa8af |
-| REQ-d00126 | FILE Node Data Model                                          | dev-graph-file-nodes.md | 070e173b |
+| REQ-d00126 | FILE Node Data Model                                          | dev-graph-file-nodes.md | 3f3620d0 |
 | REQ-d00127 | GraphNode API: Filtered Traversal and Edge-Only Relationships | dev-graph-file-nodes.md | 20632d4a |
 | REQ-d00128 | FILE Node Creation in Build Pipeline                          | dev-graph-file-nodes.md | 926ddd2b |
 | REQ-d00129 | SourceLocation Removal and Consumer Migration                 | dev-graph-file-nodes.md | 6d11df36 |

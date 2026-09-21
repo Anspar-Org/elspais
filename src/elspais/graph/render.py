@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import tomlkit
+
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.utilities.hasher import (
@@ -664,6 +666,33 @@ def _render_composed_file(node: GraphNode, resolver: Any | None = None) -> str:
     return result
 
 
+# Implements: REQ-d00299-A
+def _render_config_file(node: GraphNode, resolver: Any | None = None) -> str:
+    """Render a configuration document from the document the node holds.
+
+    Dumping the parsed document is what makes comments, spacing and key
+    order survive a round trip: a configuration is written by hand, and
+    what nobody changed comes back unchanged.
+
+    Args:
+        node: A FILE node of the CONFIG type.
+        resolver: Unused; a configuration document cites no identifiers.
+
+    Returns:
+        The document's text.
+
+    Raises:
+        ValueError: The node holds no document.
+    """
+    document = node.get_field("config_document")
+    if document is None:
+        raise ValueError(
+            f"{node.id} is a configuration document that holds no parsed "
+            f"document, so its content cannot be produced."
+        )
+    return tomlkit.dumps(document)
+
+
 # Implements: REQ-d00131-I
 # Which renderer a file type declares. This table is the single authority
 # for that question: a file type absent from it declares none, and a
@@ -673,6 +702,7 @@ FILE_RENDERERS: dict[FileType, Callable[[GraphNode, Any | None], str]] = {
     FileType.JOURNEY: _render_composed_file,
     FileType.CODE: _render_composed_file,
     FileType.TEST: _render_composed_file,
+    FileType.CONFIG: _render_config_file,
 }
 
 

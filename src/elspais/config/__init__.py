@@ -519,6 +519,27 @@ def _outdated_config_message(
     return "\n".join(lines)
 
 
+def _local_config_path(config_path: Path) -> Path:
+    """Where a machine-local overlay sits for a given committed config."""
+    return config_path.parent / ".elspais.local.toml"
+
+
+# Implements: REQ-d00299-A
+def config_document_paths(config_path: Path) -> list[Path]:
+    """Every configuration document read for a repository, in read order.
+
+    The committed file first, then the machine-local overlay layered over
+    it where one exists. ``load_config`` reads exactly these, and the graph
+    holds a node for exactly these, so the two cannot come to disagree
+    about which documents a repository's configuration came from.
+    """
+    paths = [config_path]
+    local_path = _local_config_path(config_path)
+    if local_path.is_file():
+        paths.append(local_path)
+    return paths
+
+
 # Implements: REQ-d00207-B
 # Implements: REQ-d00212-V, REQ-d00212-X
 def load_config(config_path: Path) -> dict[str, Any]:
@@ -557,7 +578,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
     _override_levels(merged, user_config)
 
     # Deep-merge developer-local overrides if present
-    local_path = config_path.parent / ".elspais.local.toml"
+    local_path = _local_config_path(config_path)
     _local_project_name: Any = None
     _local_project_namespace: Any = None
     _local_declared_version: int | None = None
@@ -1101,6 +1122,7 @@ def scan_exclusions(config: dict[str, Any], kind: str) -> tuple[list[str], list[
 
 __all__ = [
     "config_defaults",
+    "config_document_paths",
     "default_level_keys",
     "level_expects_validation",
     "status_expects_implementation",

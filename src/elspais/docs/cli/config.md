@@ -471,3 +471,9 @@ configuration: `ELSPAIS_VERSION`, `ELSPAIS_CLIENT_PID` and
 not settings.
 
 To register an associate without editing either file, use `elspais associate`.
+
+Both documents are kept once they are read. Building a repository's graph
+holds a node for `.elspais.toml`, and for `.elspais.local.toml` where one
+sits beside it, carrying the document itself rather than the values taken
+from it. The document a node holds gives back the file it was read from
+exactly -- comments, blank lines and the order its author chose included.

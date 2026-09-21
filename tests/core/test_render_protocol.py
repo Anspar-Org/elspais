@@ -18,6 +18,7 @@ Validates REQ-d00131-Q: A file type declaring no renderer is read-only, and its
 from __future__ import annotations
 
 import pytest
+import tomlkit
 
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.GraphNode import FileType
@@ -560,6 +561,8 @@ class TestFileTypeRendererDispatch:
 
     # The file types whose content is composed from the nodes they hold.
     COMPOSED_TYPES = (FileType.SPEC, FileType.JOURNEY, FileType.CODE, FileType.TEST)
+    # The file types whose content is the document the node holds.
+    HELD_CONTENT_TYPES = (FileType.CONFIG,)
     # The file types that declare no renderer and are therefore read-only.
     READ_ONLY_TYPES = (FileType.RESULT,)
 
@@ -703,6 +706,10 @@ class TestFileTypeRendererDispatch:
         for file_type in FileType:
             file_node = _make_file_node(path=f"x/{file_type.value}.txt")
             file_node.set_field("file_type", file_type)
+            if file_type in self.HELD_CONTENT_TYPES:
+                # A held-content type renders what the node carries, so
+                # the content goes there rather than into a child.
+                file_node.set_field("config_document", tomlkit.parse('key = "Content"\n'))
             rem = _make_remainder_node(text="Content\n", node_id="rem:1")
             edge = file_node.link(rem, EdgeKind.CONTAINS)
             edge.metadata = {"render_order": 0.0}
@@ -718,7 +725,7 @@ class TestFileTypeRendererDispatch:
                 assert "Content" in content
                 rendered.add(file_type)
 
-        assert rendered == set(self.COMPOSED_TYPES)
+        assert rendered == set(self.COMPOSED_TYPES) | set(self.HELD_CONTENT_TYPES)
         assert refused == set(self.READ_ONLY_TYPES)
         assert rendered | refused == set(FileType)
 
