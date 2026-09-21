@@ -59,7 +59,7 @@ DECLARATION_OPERATIONS: tuple[str, ...] = (
 
 
 def declared_entries(config_node: GraphNode) -> list[tuple[str, str, Any]]:
-    """Every named declaration a document makes, in the order it makes them.
+    """Every named declaration the node's document makes, in document order.
 
     Args:
         config_node: A FILE node of the ``CONFIG`` type.
@@ -69,7 +69,15 @@ def declared_entries(config_node: GraphNode) -> list[tuple[str, str, Any]]:
         ``item`` is the tomlkit value the document holds under that name.
         Empty where the node holds no document.
     """
-    document = config_node.get_field("config_document")
+    return entries_in(config_node.get_field("config_document"))
+
+
+def entries_in(document: Any) -> list[tuple[str, str, Any]]:
+    """Every named declaration a document makes, in the order it makes them.
+
+    Takes the document rather than the node holding it, because a change is
+    judged on a document the graph does not hold yet.
+    """
     if document is None:
         return []
 
@@ -255,6 +263,16 @@ def document_text(config_node: GraphNode) -> str:
     return tomlkit.dumps(document_of(config_node))
 
 
+def copy_document(config_node: GraphNode) -> Any:
+    """A separate document holding what this node's document holds.
+
+    A change is applied to one of these and judged before it is installed,
+    so a change that would leave a configuration the tool cannot load never
+    touches the document the graph is serving.
+    """
+    return tomlkit.parse(document_text(config_node))
+
+
 def replace_document(config_node: GraphNode, text: str) -> None:
     """Put a document back as it was written, parsing it afresh.
 
@@ -268,12 +286,12 @@ def replace_document(config_node: GraphNode, text: str) -> None:
 
 # Implements: REQ-d00299-D
 def colliding_name(
-    config_node: GraphNode, table: str, name: str, *, ignoring: str | None = None
+    document: Any, table: str, name: str, *, ignoring: str | None = None
 ) -> str | None:
     """A name the document already declares that differs from ``name`` only in case.
 
     Args:
-        config_node: The document to look in.
+        document: The document to look in.
         table: The configuration table the name would be declared in.
         name: The name wanted.
         ignoring: A name to pass over -- the declaration being renamed,
@@ -283,7 +301,7 @@ def colliding_name(
     Returns:
         The name already declared, or None where none collides.
     """
-    for declared_table, declared_name, _item in declared_entries(config_node):
+    for declared_table, declared_name, _item in entries_in(document):
         if declared_table != table:
             continue
         if ignoring is not None and declared_name == ignoring:
@@ -293,9 +311,8 @@ def colliding_name(
     return None
 
 
-def _table_of(config_node: GraphNode, table: str) -> Any:
-    """The held table ``table``, created in the document where it has none."""
-    document = document_of(config_node)
+def _table_of(document: Any, table: str) -> Any:
+    """The table ``table``, created in the document where it has none."""
     existing = document.get(table)
     if hasattr(existing, "keys"):
         return existing
@@ -305,7 +322,7 @@ def _table_of(config_node: GraphNode, table: str) -> Any:
 
 
 # Implements: REQ-d00299-D
-def set_declaration(config_node: GraphNode, table: str, name: str, settings: dict[str, Any]) -> Any:
+def set_declaration(document: Any, table: str, name: str, settings: dict[str, Any]) -> Any:
     """Write what a declaration says, adding it where the document has none.
 
     A declaration is replaced rather than merged: what is written is what
@@ -318,21 +335,21 @@ def set_declaration(config_node: GraphNode, table: str, name: str, settings: dic
     written = tomlkit.table()
     for key, value in settings.items():
         written[key] = value
-    holder = _table_of(config_node, table)
+    holder = _table_of(document, table)
     holder[name] = written
     return holder[name]
 
 
 # Implements: REQ-d00299-D
-def remove_declaration(config_node: GraphNode, table: str, name: str) -> None:
+def remove_declaration(document: Any, table: str, name: str) -> None:
     """Take a declaration out of the document that declares it."""
-    holder = document_of(config_node).get(table)
+    holder = document.get(table)
     if hasattr(holder, "keys") and name in holder:
         del holder[name]
 
 
 # Implements: REQ-d00299-D
-def rename_declaration_key(config_node: GraphNode, table: str, name: str, new_name: str) -> Any:
+def rename_declaration_key(document: Any, table: str, name: str, new_name: str) -> Any:
     """Respell the name a declaration is declared under, where it stands.
 
     Taking the entry out and putting it back under the new name would move
@@ -347,7 +364,7 @@ def rename_declaration_key(config_node: GraphNode, table: str, name: str, new_na
     Returns:
         The item the document now holds under ``new_name``.
     """
-    holder = _table_of(config_node, table)
+    holder = _table_of(document, table)
     item = holder[name]
     body = getattr(getattr(item, "value", None), "body", None)
     ended_with_blank = bool(body) and isinstance(body[-1][1], Whitespace)

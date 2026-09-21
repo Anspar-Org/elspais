@@ -23,8 +23,10 @@ from elspais.graph.declarations import (
     DECLARED_TABLES,
     build_declaration_node,
     colliding_name,
+    copy_document,
     declaration_node_id,
     declared_entries,
+    document_of,
     document_text,
     is_config_node,
     remove_declaration,
@@ -3127,6 +3129,45 @@ class TraceGraph:
             config_node.unlink(stale)
             self._index.pop(stale.id, None)
 
+    # Implements: REQ-d00299-E
+    def _change_declaration_document(self, config_node: GraphNode, edit: Any) -> None:
+        """Apply an edit to a copy, refuse an unloadable result, then install it.
+
+        The refusal comes before the change rather than after it. A change
+        cannot produce an unparseable document -- `tomlkit` edits structure
+        rather than text -- but it can produce one that parses and then
+        fails validation, and a repository left holding one is a repository
+        whose configuration the tool refuses on its next read. So the
+        document the graph serves is never the one being judged: the edit
+        lands on a copy, and a copy that will not load is dropped.
+
+        Args:
+            config_node: The configuration document being changed.
+            edit: Applied to the copy, and to nothing else.
+
+        Raises:
+            ValueError: The result is a configuration this version cannot
+                load. The document is untouched, and nothing has been
+                recorded.
+        """
+        from elspais.graph.held_config import config_with
+
+        prospective = copy_document(config_node)
+        edit(prospective)
+
+        try:
+            config_with(self, config_node, prospective)
+        except ValueError as refusal:
+            raise ValueError(
+                f"That change would leave {config_node.get_field('relative_path')} a "
+                f"configuration this version cannot load, so it was not made. "
+                f"Change what it declares and try again. The configuration was "
+                f"refused because: {refusal}"
+            ) from refusal
+
+        config_node.set_field("config_document", prospective)
+        self._sync_declaration_nodes(config_node)
+
     def _declaration_entry(
         self,
         operation: str,
@@ -3171,7 +3212,7 @@ class TraceGraph:
         differing only in case are one name: admitting the second would
         write a declaration nothing could address.
         """
-        existing = colliding_name(config_node, table, name, ignoring=own)
+        existing = colliding_name(document_of(config_node), table, name, ignoring=own)
         if existing is not None:
             raise ValueError(
                 f"{config_node.get_field('relative_path')} already declares "
@@ -3215,8 +3256,9 @@ class TraceGraph:
         self._refuse_collision(config_node, table, name, None)
 
         before_text = document_text(config_node)
-        set_declaration(config_node, table, name, settings)
-        self._sync_declaration_nodes(config_node)
+        self._change_declaration_document(
+            config_node, lambda document: set_declaration(document, table, name, settings)
+        )
         return self._declaration_entry("add_declaration", config_node, table, name, before_text)
 
     # Implements: REQ-d00299-D
@@ -3244,8 +3286,9 @@ class TraceGraph:
         name = str(node.get_field("declared_name"))
 
         before_text = document_text(config_node)
-        set_declaration(config_node, table, name, settings)
-        self._sync_declaration_nodes(config_node)
+        self._change_declaration_document(
+            config_node, lambda document: set_declaration(document, table, name, settings)
+        )
         return self._declaration_entry("update_declaration", config_node, table, name, before_text)
 
     # Implements: REQ-d00299-D
@@ -3283,8 +3326,9 @@ class TraceGraph:
         self._refuse_collision(config_node, table, new_name, name)
 
         before_text = document_text(config_node)
-        rename_declaration_key(config_node, table, name, new_name)
-        self._sync_declaration_nodes(config_node)
+        self._change_declaration_document(
+            config_node, lambda document: rename_declaration_key(document, table, name, new_name)
+        )
         return self._declaration_entry(
             "rename_declaration", config_node, table, new_name, before_text, before_name=name
         )
@@ -3310,8 +3354,9 @@ class TraceGraph:
         name = str(node.get_field("declared_name"))
 
         before_text = document_text(config_node)
-        remove_declaration(config_node, table, name)
-        self._sync_declaration_nodes(config_node)
+        self._change_declaration_document(
+            config_node, lambda document: remove_declaration(document, table, name)
+        )
         return self._declaration_entry("delete_declaration", config_node, table, name, before_text)
 
     def _refuse_declared_table(self, table: str) -> None:

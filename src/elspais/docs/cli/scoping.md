@@ -87,6 +87,12 @@ A change states what the declaration says afterwards, whole. A setting the
 change leaves out is a setting the project no longer states, not one carried
 over from before.
 
+A change is judged before it is made. One that would leave a configuration the
+tool cannot load -- a setting the schema does not define, a value of the wrong
+type, a name it will not admit -- is refused naming what is wrong, and the
+document is left as it was. What is judged is shape: a scope selecting a level
+or a status no project declares loads, and goes through.
+
 A declared name is matched without regard to case, so `sponsor` and `Sponsor`
 are one name. Declaring the second while the first stands is refused, naming
 the one already there. Renaming a declaration to another casing of its own

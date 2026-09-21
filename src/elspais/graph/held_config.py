@@ -129,3 +129,41 @@ def held_config(graph: Any) -> dict[str, Any]:
         ValueError: The graph holds no configuration document.
     """
     return config_from_nodes(iter_config_nodes(graph))
+
+
+# Implements: REQ-d00299-E
+def config_with(graph: Any, node: GraphNode, document: Any) -> dict[str, Any]:
+    """The configuration this graph would derive if ``node`` held ``document``.
+
+    What a change would leave behind is asked through the same function that
+    answers what a read leaves behind, so the refusal at a change and the
+    refusal at a read cannot drift apart. There is one authority on whether
+    a configuration loads.
+
+    Deliberately uncached: the answer is about a document the graph does not
+    hold, and caching it against the documents it does hold would hand the
+    next reader a configuration nobody wrote.
+
+    Args:
+        graph: A ``TraceGraph``.
+        node: The configuration document being changed.
+        document: The document it would hold afterwards.
+
+    Returns:
+        The configuration dictionary the documents would assemble to.
+
+    Raises:
+        ValueError: The result is a configuration this version will not
+            load. ``pydantic``'s validation error is one of these.
+    """
+    held = iter_config_nodes(graph)
+    pairs = [
+        (
+            Path(str(other.get_field("absolute_path"))),
+            document if other is node else other.get_field("config_document"),
+        )
+        for other in held
+    ]
+    if not any(other is node for other in held):
+        pairs.append((Path(str(node.get_field("absolute_path"))), document))
+    return derive_config(pairs)
