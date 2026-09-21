@@ -887,6 +887,8 @@ def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
     Returns:
         The FILE nodes containing mutated content, unique by identity.
     """
+    from elspais.graph.declarations import DECLARATION_OPERATIONS
+
     dirty_files: dict[int, Any] = {}
 
     def _mark(node: Any) -> None:
@@ -1019,6 +1021,17 @@ def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
                 _mark(graph.find_by_id(old_file))
             if new_file:
                 _mark(graph.find_by_id(new_file))
+
+        # Implements: REQ-d00299-D
+        # A declaration mutation names its document, which is the file that
+        # has to be rewritten. A removed declaration is out of the index, so
+        # there is no node left to walk up from.
+        if entry.operation in DECLARATION_OPERATIONS:
+            config_file_id = entry.after_state.get("file_id") or entry.before_state.get(
+                "file_id", ""
+            )
+            if config_file_id:
+                _mark(graph.find_by_id(config_file_id))
 
         # For rename_file - mark the new file ID (old ID no longer exists)
         if entry.operation == "rename_file":

@@ -73,6 +73,52 @@ dimensions. A report that states nothing about a requirement at all — `checks`
 and its narrowings, `changed`, `analysis` — passes the values half over and
 reads only the scope.
 
+## Changing a declaration
+
+A declaration is held in the graph as a node of its own, so it can be added,
+changed, renamed and removed there. These are ordinary graph mutations: they
+join the same mutation log, the same undo and the same count of pending
+changes as a change to a requirement, and the configuration document is
+written back by the same save. There is no command for it yet -- what exists
+is the capability, not an invocation. `[scopes.NAME]` is what a graph holds
+this way today; a table it holds no declarations for is refused.
+
+A change states what the declaration says afterwards, whole. A setting the
+change leaves out is a setting the project no longer states, not one carried
+over from before.
+
+A declared name is matched without regard to case, so `sponsor` and `Sponsor`
+are one name. Declaring the second while the first stands is refused, naming
+the one already there. Renaming a declaration to another casing of its own
+name is a recasing, and goes through.
+
+An undo restores the document's text rather than the values it held. A
+configuration is written by hand, and reversing the values would reflow the
+comments, spacing and key order written around them.
+
+One consequence is worth knowing before removing a declaration. A comment
+written above one belongs, in TOML's own model, to the item before it, so
+removing a declaration leaves that comment in the document, where it now sits
+above whatever followed:
+
+```text
+[scopes.sponsor]
+level = ["prd"]
+
+# what the auditor sees
+[scopes.auditor]
+level = ["prd", "ops"]
+```
+
+Remove `auditor` and the comment describing it is still there, now above
+whatever came after. Remove `sponsor` instead and that same comment goes with
+it, because it sits between `sponsor`'s last setting and the next header. So
+comments written around a declaration do not always survive its removal, and
+the one at risk is the one introducing the declaration that follows. Read the
+document after removing one. A rename does not raise the question -- the name
+is respelled where it stands, so everything written around it keeps its
+place.
+
 ## What a scoped report tells you
 
 A report narrowed on purpose and one that lost requirements on the way are the

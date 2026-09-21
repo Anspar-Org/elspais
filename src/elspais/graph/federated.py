@@ -1244,6 +1244,64 @@ class FederatedGraph:
         self._record_mutation(repo_name, result)
         return result
 
+    # Implements: REQ-d00299-D
+    def add_declaration(
+        self,
+        config_file_id: str,
+        table: str,
+        name: str,
+        settings: dict[str, Any],
+    ) -> MutationEntry:
+        """Declare something under a name in a configuration document.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[config_file_id]
+        result = self._graph_for(config_file_id).add_declaration(
+            config_file_id, table, name, settings
+        )
+        self._ownership[result.after_state["id"]] = repo_name
+        self._record_mutation(repo_name, result)
+        return result
+
+    # Implements: REQ-d00299-D
+    def update_declaration(self, declaration_id: str, settings: dict[str, Any]) -> MutationEntry:
+        """Change what a declaration says.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[declaration_id]
+        result = self._graph_for(declaration_id).update_declaration(declaration_id, settings)
+        self._record_mutation(repo_name, result)
+        return result
+
+    # Implements: REQ-d00299-D
+    def rename_declaration(self, declaration_id: str, new_name: str) -> MutationEntry:
+        """Respell the name a declaration is declared under. Updates ownership.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[declaration_id]
+        result = self._graph_for(declaration_id).rename_declaration(declaration_id, new_name)
+        new_id = result.after_state.get("id", declaration_id)
+        if new_id != declaration_id:
+            self._ownership.pop(declaration_id, None)
+            self._ownership[new_id] = repo_name
+        self._record_mutation(repo_name, result)
+        return result
+
+    # Implements: REQ-d00299-D
+    def delete_declaration(self, declaration_id: str) -> MutationEntry:
+        """Take a declaration out of its document. Updates ownership.
+
+        # Strategy: by_id
+        """
+        repo_name = self._ownership[declaration_id]
+        result = self._graph_for(declaration_id).delete_declaration(declaration_id)
+        self._ownership.pop(declaration_id, None)
+        self._record_mutation(repo_name, result)
+        return result
+
     # Implements: REQ-d00201-A
     def fix_broken_reference(
         self,

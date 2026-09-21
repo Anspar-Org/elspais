@@ -28,6 +28,7 @@ from collections.abc import Iterator
 from typing import Any
 
 import tomlkit
+from tomlkit.items import Whitespace
 
 from elspais.graph.GraphNode import (
     FileType,
@@ -44,6 +45,68 @@ from elspais.graph.relations import EdgeKind
 DECLARED_TABLES: tuple[str, ...] = ("scopes",)
 
 
+# The mutation operations that edit a configuration document. Named here
+# because the one authority for how a declaration is written is also the
+# one place that can say which log entries wrote one: `_find_dirty_files`
+# asks this to find the document a removed declaration no longer hangs
+# beneath.
+DECLARATION_OPERATIONS: tuple[str, ...] = (
+    "add_declaration",
+    "update_declaration",
+    "rename_declaration",
+    "delete_declaration",
+)
+
+
+def declared_entries(config_node: GraphNode) -> list[tuple[str, str, Any]]:
+    """Every named declaration a document makes, in the order it makes them.
+
+    Args:
+        config_node: A FILE node of the ``CONFIG`` type.
+
+    Returns:
+        ``(table, name, item)`` for each entry of each held table, where
+        ``item`` is the tomlkit value the document holds under that name.
+        Empty where the node holds no document.
+    """
+    document = config_node.get_field("config_document")
+    if document is None:
+        return []
+
+    entries: list[tuple[str, str, Any]] = []
+    for table in DECLARED_TABLES:
+        declared = document.get(table)
+        if not hasattr(declared, "keys"):
+            continue
+        entries.extend((table, str(name), declared[name]) for name in list(declared.keys()))
+    return entries
+
+
+def declaration_node_id(config_node: GraphNode, table: str, name: str) -> str:
+    """The id the declaration under ``name`` in ``table`` is addressed by."""
+    return make_declaration_id(
+        _namespace_of(config_node),
+        str(config_node.get_field("relative_path") or ""),
+        table,
+        name,
+    )
+
+
+def build_declaration_node(config_node: GraphNode, table: str, name: str, item: Any) -> GraphNode:
+    """A node for one named declaration, linked beneath its document.
+
+    The edge carries no ``render_order``: for this file type the children
+    are not the file's text, so there is no order to render them in, and
+    giving them one would read as a claim that there is.
+    """
+    node = GraphNode(id=declaration_node_id(config_node, table, name), kind=NodeKind.DECLARATION)
+    node.set_field("declares_table", table)
+    node.set_field("declared_name", name)
+    node.set_field("declaration", item)
+    config_node.link(node, EdgeKind.CONTAINS)
+    return node
+
+
 # Implements: REQ-d00299-D
 def build_declaration_nodes(config_node: GraphNode) -> list[GraphNode]:
     """A node for every named declaration the given document makes.
@@ -52,10 +115,6 @@ def build_declaration_nodes(config_node: GraphNode) -> list[GraphNode]:
     carries the declaration itself, so a reader reaches a declaration
     without walking the document for it.
 
-    The edges carry no ``render_order``: for this file type the children are
-    not the file's text, so there is no order to render them in, and giving
-    them one would read as a claim that there is.
-
     Args:
         config_node: A FILE node of the ``CONFIG`` type.
 
@@ -63,30 +122,10 @@ def build_declaration_nodes(config_node: GraphNode) -> list[GraphNode]:
         The declaration nodes created, in the order the document declares
         them.
     """
-    document = config_node.get_field("config_document")
-    if document is None:
-        return []
-
-    namespace = _namespace_of(config_node)
-    relative_path = str(config_node.get_field("relative_path") or "")
-    created: list[GraphNode] = []
-
-    for table in DECLARED_TABLES:
-        declared = document.get(table)
-        if not hasattr(declared, "keys"):
-            continue
-        for name in list(declared.keys()):
-            node = GraphNode(
-                id=make_declaration_id(namespace, relative_path, table, str(name)),
-                kind=NodeKind.DECLARATION,
-            )
-            node.set_field("declares_table", table)
-            node.set_field("declared_name", str(name))
-            node.set_field("declaration", declared[name])
-            config_node.link(node, EdgeKind.CONTAINS)
-            created.append(node)
-
-    return created
+    return [
+        build_declaration_node(config_node, table, name, item)
+        for table, name, item in declared_entries(config_node)
+    ]
 
 
 def _namespace_of(config_node: GraphNode) -> str:
@@ -194,3 +233,140 @@ def find_declaration(graph: Any, table: str, name: str) -> GraphNode | None:
 def is_config_node(node: GraphNode) -> bool:
     """Whether a node is a configuration document."""
     return node.kind == NodeKind.FILE and node.get_field("file_type") is FileType.CONFIG
+
+
+def document_of(config_node: GraphNode) -> Any:
+    """The parsed document a configuration FILE node holds.
+
+    Raises:
+        ValueError: The node holds none, so there is nothing to change.
+    """
+    document = config_node.get_field("config_document")
+    if document is None:
+        raise ValueError(
+            f"{config_node.id} is a configuration document that holds no "
+            f"parsed document, so it cannot be changed."
+        )
+    return document
+
+
+def document_text(config_node: GraphNode) -> str:
+    """The text the document a node holds would be written back as."""
+    return tomlkit.dumps(document_of(config_node))
+
+
+def replace_document(config_node: GraphNode, text: str) -> None:
+    """Put a document back as it was written, parsing it afresh.
+
+    An undo restores the text rather than reversing the edit, because a
+    document carries comments, key order and spacing that no reversal of
+    values would restore. The items the old document held are discarded
+    with it, so every node holding one must be re-pointed afterwards.
+    """
+    config_node.set_field("config_document", tomlkit.parse(text))
+
+
+# Implements: REQ-d00299-D
+def colliding_name(
+    config_node: GraphNode, table: str, name: str, *, ignoring: str | None = None
+) -> str | None:
+    """A name the document already declares that differs from ``name`` only in case.
+
+    Args:
+        config_node: The document to look in.
+        table: The configuration table the name would be declared in.
+        name: The name wanted.
+        ignoring: A name to pass over -- the declaration being renamed,
+            which cannot collide with itself, so recasing one is a rename
+            and not a collision.
+
+    Returns:
+        The name already declared, or None where none collides.
+    """
+    for declared_table, declared_name, _item in declared_entries(config_node):
+        if declared_table != table:
+            continue
+        if ignoring is not None and declared_name == ignoring:
+            continue
+        if declared_name.lower() == name.lower():
+            return declared_name
+    return None
+
+
+def _table_of(config_node: GraphNode, table: str) -> Any:
+    """The held table ``table``, created in the document where it has none."""
+    document = document_of(config_node)
+    existing = document.get(table)
+    if hasattr(existing, "keys"):
+        return existing
+    created = tomlkit.table(True)
+    document[table] = created
+    return document[table]
+
+
+# Implements: REQ-d00299-D
+def set_declaration(config_node: GraphNode, table: str, name: str, settings: dict[str, Any]) -> Any:
+    """Write what a declaration says, adding it where the document has none.
+
+    A declaration is replaced rather than merged: what is written is what
+    the declaration then says, so a setting left out is a setting the
+    project no longer states.
+
+    Returns:
+        The item the document now holds under ``name``.
+    """
+    written = tomlkit.table()
+    for key, value in settings.items():
+        written[key] = value
+    holder = _table_of(config_node, table)
+    holder[name] = written
+    return holder[name]
+
+
+# Implements: REQ-d00299-D
+def remove_declaration(config_node: GraphNode, table: str, name: str) -> None:
+    """Take a declaration out of the document that declares it."""
+    holder = document_of(config_node).get(table)
+    if hasattr(holder, "keys") and name in holder:
+        del holder[name]
+
+
+# Implements: REQ-d00299-D
+def rename_declaration_key(config_node: GraphNode, table: str, name: str, new_name: str) -> Any:
+    """Respell the name a declaration is declared under, where it stands.
+
+    Taking the entry out and putting it back under the new name would move
+    it to the end of its table and leave the comment written above it
+    describing whatever followed, so the key is replaced where it is.
+    ``tomlkit`` publishes no rename, hence ``_replace``; the table's
+    rendered header carries the old name too, so it is respelled first, and
+    the blank line ``tomlkit`` adds after a replaced table is taken back
+    off where the entry did not end with one -- it would otherwise detach
+    the next declaration's comment from the declaration it describes.
+
+    Returns:
+        The item the document now holds under ``new_name``.
+    """
+    holder = _table_of(config_node, table)
+    item = holder[name]
+    body = getattr(getattr(item, "value", None), "body", None)
+    ended_with_blank = bool(body) and isinstance(body[-1][1], Whitespace)
+
+    display_name = getattr(item, "display_name", None)
+    if display_name and "." in display_name:
+        item.display_name = f"{display_name.rsplit('.', 1)[0]}.{new_name}"
+
+    holder.value._replace(name, new_name, item)
+
+    body = getattr(getattr(item, "value", None), "body", None)
+    if not ended_with_blank and body and isinstance(body[-1][1], Whitespace):
+        body.pop()
+
+    # A table keeps a plain-dict shadow of its container's keys, and the
+    # replace above reaches the container only. Left behind, the shadow
+    # answers for a name the document no longer declares, and removing the
+    # renamed declaration later raises for a key that renders correctly.
+    if dict.__contains__(holder, name):
+        dict.__delitem__(holder, name)
+    dict.__setitem__(holder, new_name, item.value)
+    return holder[new_name]
