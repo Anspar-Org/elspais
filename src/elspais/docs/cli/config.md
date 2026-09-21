@@ -43,10 +43,11 @@ path = "../sibling-repo"
 namespace = "SIB"
 ```
 
-**Load order:** defaults -> `.elspais.toml` -> `.elspais.local.toml` -> env vars
+**Load order:** defaults -> `.elspais.toml` -> `.elspais.local.toml`
 
 Each layer deep-merges over the previous one, so you only need to
-specify the keys you want to override. Environment variables always win.
+specify the keys you want to override. The machine-local overlay is the
+last word; the environment supplies no configuration at all.
 
 ## Complete Configuration Reference
 
