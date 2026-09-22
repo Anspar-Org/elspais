@@ -161,18 +161,31 @@ same helpers -- there is no softer path around the protocol:
   re-reading will not clear it: an associate is read-only from every
   surface, and a save declines to write its files in any case, so an
   accepted edit would have gone nowhere.
-- 409 means a conflict and nothing else. A save that fails for another
-  reason says so with its own status and `code`: **400** with
+- 409 means a conflict and nothing else. A save that is refused for
+  another reason says so with its own status and `code`: **400** with
   `changelog_message_required` when an Active requirement changed and no
-  changelog reason was given, **500** with `save_failed` when the write
-  itself failed or when the changelog author could not be established --
-  in which case nothing was written and the pending work is still held.
-  A save that held back a file it was asked to write -- an associate's,
-  with `write_associates` false -- reports failure on the same terms,
-  naming that file among its errors: work a save did not perform stays
-  pending rather than being cleared with the rest.
-  None of these is fixed by re-reading and retrying, which is what 409
-  asks for.
+  changelog reason was given, **403** with `write_scope_declined` when
+  the save held back a file it was asked to write -- an associate's,
+  with `write_associates` false -- and **500** with `save_failed` when
+  the write itself failed or when the changelog author could not be
+  established, in which case nothing was written and the pending work is
+  still held. None of these is fixed by re-reading and retrying, which is
+  what 409 asks for.
+- A decline and a failure are different answers, so they do not arrive
+  alike. A decline is a policy answer that a further save repeats until
+  the write scope reaches that repository; a write that failed may well
+  succeed next time. The route maps the save's own `code` to a status
+  and hands the body back unchanged, so the JSON a caller reads is the
+  one the save wrote, and the MCP save tool reports the same `code` for
+  the same case. `error` names the held-back files in full, by ids a
+  caller can use. A save that also failed to write something is reported
+  as a failure and carries no decline code, because that is the part a
+  caller can do least about.
+- Declining one file is not a reason to abandon another. A save can write
+  the served repository's files, report `saved_count` and `files_modified`
+  for them, and still be a decline; `errors` and `skipped` say which files
+  it held back, and the work queued for them stays pending rather than
+  being cleared with the rest.
 - Successful mutations return the new `version`.
 - `/api/dirty` returns the pending `mutation_count` and the `tip`.
 - The history routes `/api/save`, `/api/revert`, and `/api/reload`

@@ -1424,3 +1424,109 @@ class TestHttpMutationRoutesRefuseAnAssociate:
 
         assert resp.status_code == 200, f"{resp.status_code}: {resp.text}"
         assert resp.json()["success"] is True
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# A save that declined to write is refused, not failed
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _queue_associate_mutation(federated_app_state) -> None:
+    """Queue one change to an associate-owned requirement.
+
+    Applied to the graph rather than posted to a route: the HTTP mutation
+    routes refuse an associate-owned target outright, so a save can only ever
+    meet such a change if it arrived some other way -- an edit queued before
+    the scope narrowed, or a writer holding the graph directly. That is the
+    case the save's own answer has to cover.
+    """
+    federated_app_state.graph.change_status(REQ, "draft")
+    assert len(federated_app_state.graph.mutation_log) == 1
+
+
+class TestASaveThatDeclinedToWriteIsRefusedNotFailed:
+    """Validates REQ-o00062-O, REQ-d00253-B.
+
+    ``/api/save`` answered every unsuccessful save that was not a conflict
+    with 500, so a caller could not tell "the write scope does not reach that
+    repository, and it will say so again" from "the write failed, try again".
+    The first is a refusal the caller can act on -- 403, the status the
+    mutation routes already give for the same reason -- and the body carries
+    the save's own ``code`` so a caller reading the JSON sees it too.
+    """
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_a_declined_save_is_403(self, federated_client, federated_app_state):
+        """REQ-o00062-O: nothing is in conflict and nothing failed; the write
+        scope simply does not reach that file."""
+        _queue_associate_mutation(federated_app_state)
+
+        resp = federated_client.post(
+            "/api/save",
+            json={HISTORY_TIP_FIELD: _log_tip(federated_app_state), "message": CHANGELOG_REASON},
+        )
+
+        assert resp.status_code == 403, f"{resp.status_code}: {resp.text}"
+        payload = resp.json()
+        assert payload["success"] is False
+        assert payload["code"] == "write_scope_declined", payload
+        assert len(federated_app_state.graph.mutation_log) == 1, (
+            "the refused save discarded the work it declined to write"
+        )
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_the_body_is_the_saves_own_words(
+        self, federated_client, federated_app_state
+    ):
+        """REQ-o00062-O: the route maps the code to a status and hands the
+        body back. A route that re-worded the refusal would leave the two
+        surfaces describing one condition two ways."""
+        from elspais.graph.render import _decline_fields
+
+        _queue_associate_mutation(federated_app_state)
+        expected = _decline_fields(["one held-back file"], [REQ_FILE])
+
+        payload = federated_client.post(
+            "/api/save",
+            json={HISTORY_TIP_FIELD: _log_tip(federated_app_state), "message": CHANGELOG_REASON},
+        ).json()
+
+        assert payload["code"] == expected["code"]
+        assert payload["error"] == expected["error"], "the route re-worded the save's refusal"
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_the_refusal_keeps_what_the_save_reported(
+        self, federated_client, federated_app_state
+    ):
+        """REQ-o00062-O: a decline can accompany files that WERE written, so
+        the accounting the save produced survives the refusal."""
+        _queue_associate_mutation(federated_app_state)
+
+        payload = federated_client.post(
+            "/api/save",
+            json={HISTORY_TIP_FIELD: _log_tip(federated_app_state), "message": CHANGELOG_REASON},
+        ).json()
+
+        assert {"errors", "skipped", "saved_count", "files_modified"} <= set(payload), payload
+        assert any(REQ_FILE in entry for entry in payload["skipped"]), payload["skipped"]
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_the_mcp_save_tool_reports_the_same_code(
+        self, federated_client, federated_app_state, federated_mcp_tools
+    ):
+        """REQ-o00062-O: both surfaces reach disk through ``persist_pending``,
+        so the agent and the viewer are told the same thing about the same
+        pending work. A decline keeps that work, so both may be asked."""
+        _queue_associate_mutation(federated_app_state)
+        tip = _log_tip(federated_app_state)
+
+        http_payload = federated_client.post(
+            "/api/save",
+            json={HISTORY_TIP_FIELD: tip, "message": CHANGELOG_REASON},
+        ).json()
+        mcp_payload = federated_mcp_tools["save_mutations"](
+            if_tip_mutation_id=tip, message=CHANGELOG_REASON
+        )
+
+        assert mcp_payload["code"] == http_payload["code"] == "write_scope_declined"
+        assert mcp_payload["error"] == http_payload["error"]

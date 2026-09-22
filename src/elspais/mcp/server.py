@@ -2685,8 +2685,11 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
             '/api/reload require if_tip_mutation_id in the JSON body ("" =\n'
             "nothing pending). An unknown node is 404 with code node_not_found.\n"
             "409 means a conflict only: a save refused for a missing changelog\n"
-            "reason is 400 (changelog_message_required) and a save whose write\n"
-            "failed is 500 (save_failed). Retrying those unchanged cannot help."
+            "reason is 400 (changelog_message_required), a save that declined to\n"
+            "write an associate's files is 403 (write_scope_declined), and a save\n"
+            "whose write failed is 500 (save_failed). Retrying those unchanged\n"
+            "cannot help. A decline can accompany files that WERE written, and it\n"
+            "keeps the work it did not write pending rather than discarding it."
         ),
     },
     {

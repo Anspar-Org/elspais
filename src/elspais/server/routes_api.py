@@ -2365,6 +2365,16 @@ async def _history_json(request: Request) -> dict:
 
 
 # Implements: REQ-d00132-A, REQ-p00083-H, REQ-d00296-A, REQ-o00062-O, REQ-p00015-B
+# Implements: REQ-o00062-O, REQ-d00253-B
+# What a caller can do about a refused save, by the code the save reports.
+# Anything not named here is a write that failed, which is a 500: the request
+# was right and repeating it is the only thing left to try.
+_SAVE_REFUSAL_STATUS = {
+    "changelog_message_required": 400,
+    "write_scope_declined": 403,
+}
+
+
 @_serialized_write
 async def api_save(request: Request) -> JSONResponse:
     """POST /api/save - Persist mutations to spec files on disk.
@@ -2385,7 +2395,12 @@ async def api_save(request: Request) -> JSONResponse:
     re-read and retry. A save that failed for any other reason is not a
     conflict and does not become one: a missing changelog reason is 400,
     because the caller has to supply something, and a write that failed
-    is 500, because retrying the same request is not the answer.
+    is 500, because retrying the same request is not the answer. A save
+    that DECLINED to write -- the write scope does not reach an
+    associate's files -- is 403: nothing failed, the answer will not
+    change on a retry, and it is the same refusal the mutation routes
+    give for the same reason. A decline can accompany files that were
+    written, and the body says which.
     """
     from elspais.mcp.shared_state import persist_pending, rebuild_shared_graph
 
@@ -2412,7 +2427,7 @@ async def api_save(request: Request) -> JSONResponse:
         if not rebuilt.get("success"):
             result["rebuild_error"] = rebuilt.get("message", "")
         return JSONResponse(result, status_code=200)
-    status_code = 400 if result.get("code") == "changelog_message_required" else 500
+    status_code = _SAVE_REFUSAL_STATUS.get(result.get("code", ""), 500)
     return JSONResponse(result, status_code=status_code)
 
 

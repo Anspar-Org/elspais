@@ -393,6 +393,16 @@ returning HTTP 409 with the identical rejection body, and its history
 routes `/api/save`, `/api/revert`, and `/api/reload` require
 `if_tip_mutation_id` in the JSON body.
 
+A stale tip is not the only way a save comes back unsuccessful, and the
+`code` says which it was: `save_mutations` reports `write_scope_declined`
+where the save held back a file it was asked to write -- one an associate
+owns, with `federation.write_associates` false -- naming those files and
+leaving the work queued for them pending, and `save_failed` where a write
+was attempted and failed. A decline repeats until the write scope reaches
+that repository; a failure may not. The viewer's `/api/save` reports the
+same codes, as 403 and 500. See `elspais docs associate` for the federation
+boundary and how to write across it.
+
 Full protocol: `elspais docs concurrency` (or the MCP `docs("concurrency")`
 and `faq("concurrency")` tools).
 

@@ -26,11 +26,17 @@ import pytest
 
 from elspais.config import load_config
 from elspais.graph.factory import build_graph
+from elspais.graph.GraphNode import make_file_id
 from elspais.graph.render import render_save
-from tests.federation_repos import make_repo
+from tests.federation_repos import make_repo, namespace_for
 
 PRIMARY_REQ = "CORE-d00001"
 ASSOCIATE_REQ = "LIB-d00001"
+
+# The FILE node a save declines to write. Spelled in full because the
+# message has to name it in full: the id carries colons, and a caller
+# reading a truncated one cannot find the file it names.
+ASSOCIATE_FILE = make_file_id(namespace_for("lib"), "spec/reqs.md")
 
 # A status no fixture file starts with, so finding it in a file is evidence
 # the queued change reached disk rather than a coincidence of the template.
@@ -345,3 +351,102 @@ class TestWriteAssociatesEnabled:
         assert len(federation.member_log(ASSOCIATE_REQ)) == 0, (
             "the associate's own log still holds work that has been written"
         )
+
+
+class TestADeclineIsNamedAsOne:
+    """Validates REQ-d00253-B.
+
+    A save that held a file back and a save that could not write one both
+    arrive as an unsuccessful save. A caller can act on the first -- reach the
+    associate's repository from a tool that serves it, or opt in -- and
+    repeating the request answers neither, so the result names the decline
+    rather than leaving the two looking alike.
+    """
+
+    # Verifies: REQ-d00253-B
+    @pytest.mark.parametrize("also_primary", HELD_BACK_SHAPES)
+    def test_d00253_B_a_decline_carries_its_own_code(self, federation, also_primary):
+        """REQ-d00253-B: whether or not the save also had work in scope, what
+        it declined is the same answer and carries the same code."""
+        _queue(federation, also_primary)
+
+        result = federation.save()
+
+        assert result.get("code") == "write_scope_declined", (
+            f"a save that declined to write an associate's file reported {result.get('code')!r}"
+        )
+
+    # Verifies: REQ-d00253-B
+    def test_d00253_B_the_error_names_the_held_back_file_in_full(self, federation):
+        """REQ-d00253-B: the caller is told which file it still holds work for,
+        by an id it can use -- namespace and path, not a prefix of one."""
+        _queue(federation, also_primary=False)
+
+        result = federation.save()
+
+        assert ASSOCIATE_FILE in result["error"], (
+            f"the held-back file is not named in full: {result['error']!r}"
+        )
+
+    # Verifies: REQ-d00253-B
+    def test_d00253_B_a_decline_accompanies_the_files_that_were_written(self, federation):
+        """REQ-d00253-B: declining one repository's file is not a reason to
+        abandon the other's, so the two are reported together."""
+        _queue(federation, also_primary=True)
+
+        result = federation.save()
+
+        assert result.get("code") == "write_scope_declined", result
+        assert result["saved_count"] == 1, result
+        assert NEW_STATUS in federation.primary_spec.read_text(encoding="utf-8"), (
+            "the in-scope change never reached disk although only the associate was declined"
+        )
+
+    # Verifies: REQ-d00253-B
+    def test_d00253_B_a_save_that_also_failed_is_not_reported_as_a_decline(
+        self, federation, monkeypatch
+    ):
+        """REQ-d00253-B: a write that failed is the part a caller can do least
+        about, so a save carrying one is an unnamed failure even though it
+        declined a file as well."""
+        _queue(federation, also_primary=True)
+
+        def _explode(*args, **kwargs):
+            raise OSError("read-only file system")
+
+        monkeypatch.setattr("elspais.graph.render.render_file", _explode)
+
+        result = federation.save()
+
+        assert result["success"] is False
+        assert "code" not in result, (
+            "a save that failed to write was reported as a decline, which a retry would not fix"
+        )
+
+
+class TestASaveThatDeclinedNothing:
+    """Validates REQ-d00253-B.
+
+    The code says something happened. A save that declined nothing must not
+    carry it, or a caller mapping it to a refusal refuses a save that worked.
+    """
+
+    # Verifies: REQ-d00253-B
+    def test_d00253_B_a_successful_save_carries_no_code(self, federation):
+        """REQ-d00253-B: nothing was held back, so there is nothing to name."""
+        federation.graph.change_status(PRIMARY_REQ, NEW_STATUS)
+
+        result = federation.save()
+
+        assert result["success"] is True, result["errors"]
+        assert "code" not in result, result
+        assert "error" not in result, result
+
+    # Verifies: REQ-d00253-B
+    def test_d00253_B_a_save_with_nothing_pending_carries_no_code(self, federation):
+        """REQ-d00253-B: an empty save reaches the early return, which is the
+        same return a decline reaches -- and must not borrow its answer."""
+        result = federation.save()
+
+        assert result["success"] is True, result["errors"]
+        assert "code" not in result, result

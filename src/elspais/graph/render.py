@@ -867,6 +867,38 @@ def _derive_refines_refs(node: GraphNode, resolver: Any | None = None) -> list[s
 # ─────────────────────────────────────────────────────────────────────────
 
 
+# Implements: REQ-d00253-B, REQ-o00062-O
+def _decline_fields(errors: list[str], held_back: list[str]) -> dict[str, Any]:
+    """Name a save that declined to write, as against one that failed.
+
+    A caller is owed the difference. A file held back is a policy answer --
+    the write scope does not reach that repository -- and repeating the
+    request will answer it the same way; a write that failed may well
+    succeed next time. Both arrive as an unsuccessful save, so the code is
+    what tells them apart, and every surface maps it: the viewer answers a
+    decline with 403 rather than 500.
+
+    The code is claimed only where the decline is the WHOLE story. A save
+    that also failed to write something is reported as a failure, because
+    that is the part a caller can do least about.
+
+    Returns:
+        The fields to merge into the result, or nothing where this save
+        declined nothing or failed as well.
+    """
+    if not held_back or len(errors) != len(held_back):
+        return {}
+    return {
+        "code": "write_scope_declined",
+        "error": (
+            "This save did not write "
+            + ", ".join(held_back)
+            + ": the write scope does not reach an associate's files. The "
+            "changes queued for them are still pending."
+        ),
+    }
+
+
 def _files_with_pending_mutations(graph: FederatedGraph) -> list[Any]:
     """Identify the FILE nodes whose subtree has pending mutations.
 
@@ -1118,6 +1150,13 @@ def render_save(
     errors: list[str] = []
     files_modified: set[str] = set()
     skipped: list[str] = []
+    # Implements: REQ-d00253-B
+    # The ids of files this save declined to write, as against files it tried
+    # to write and could not. A caller can act on the first -- write the
+    # associate's repository from a tool serving it, or opt in -- and
+    # repeating the request answers neither, so the two must not arrive
+    # looking alike.
+    held_back: list[str] = []
     saved_count = 0
 
     # Default repo_root from graph if not provided
@@ -1161,6 +1200,7 @@ def render_save(
                 )
                 skipped.append(held)
                 errors.append(held)
+                held_back.append(node.id)
         dirty_files = kept
 
     if not dirty_files:
@@ -1175,6 +1215,7 @@ def render_save(
             "conflicts": [],
             "errors": errors,
             "skipped": skipped or ["No dirty files to save"],
+            **_decline_fields(errors, held_back),
         }
 
     # Defense-in-depth against cross-file REQ ID collisions: any file that
@@ -1281,6 +1322,7 @@ def render_save(
         graph.mutation_log.clear()
 
     result: dict[str, Any] = {
+        **_decline_fields(errors, held_back),
         "success": len(errors) == 0,
         "saved_count": saved_count,
         "files_modified": sorted(files_modified),
