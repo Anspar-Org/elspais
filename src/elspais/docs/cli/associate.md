@@ -245,6 +245,30 @@ succeeds cannot produce a federation that then refuses to build.
 `elspais checks` and `elspais doctor` report on every member, including the
 ones reached indirectly.
 
+## Changing a member's configuration
+
+A configuration document is changeable only in the repository the tool is
+serving. A federation holds one for every member, so a change can be aimed at
+an associate's -- a repository the tool reads rather than serves -- and that is
+refused, naming the document's own repository and the one being served:
+
+```text
+.elspais.toml is the configuration of 'CAL', and this tool is serving 'REQ'.
+A configuration document is changeable only in the repository being served;
+change it from a tool serving that repository instead.
+```
+
+Nothing is changed, on disk or in the graph, and nothing joins the pending
+changes. Writing into another repository's checkout is surprising wherever it
+happens, and where the checkout was made by a host for a session, an edit to it
+would be discarded without anyone noticing; a tool serving that repository is
+where such an edit belongs.
+
+Reading is unrestricted. Every member's configuration is held and readable, and
+a declaration is read in the project that makes it -- an associate's
+declarations are invisible to the host and the host's to the associate. What a
+declaration change is and what it reports is in `elspais docs scoping`.
+
 ## Options
 
 | Flag | Description |

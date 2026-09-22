@@ -28,6 +28,7 @@ from elspais.graph.declarations import (
     declared_entries,
     document_of,
     document_text,
+    find_declaration,
     is_config_node,
     remove_declaration,
     rename_declaration_key,
@@ -3184,6 +3185,24 @@ class TraceGraph:
         reflow the comments, spacing and key order written around them.
         """
         node_id = declaration_node_id(config_node, table, name)
+        after_state: dict[str, Any] = {
+            "file_id": config_node.id,
+            "table": table,
+            "name": name,
+            "id": node_id,
+        }
+        # Implements: REQ-d00299-G
+        # A name declared in two documents resolves to one of them, so a
+        # change to the other alters nothing a reader can see. Reporting it is
+        # the difference between a change that did nothing and a change that
+        # appeared to work. What is disclosed is only WHERE the name resolves
+        # -- never what that document declares, which would put the shape of
+        # an overlay back into the answers (REQ-d00290-B).
+        resolved = find_declaration(self, table, name)
+        owner = resolved.file_node() if resolved is not None else None
+        if owner is not None and owner.id != config_node.id:
+            after_state["shadowed_by"] = owner.get_field("relative_path")
+
         entry = MutationEntry(
             operation=operation,
             target_id=node_id,
@@ -3193,12 +3212,7 @@ class TraceGraph:
                 "name": before_name if before_name is not None else name,
                 "document_text": before_text,
             },
-            after_state={
-                "file_id": config_node.id,
-                "table": table,
-                "name": name,
-                "id": node_id,
-            },
+            after_state=after_state,
         )
         self._mutation_log.append(entry)
         return entry

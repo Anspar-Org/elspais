@@ -95,6 +95,20 @@ type, a name it will not admit -- is refused naming what is wrong, and the
 document is left as it was. What is judged is shape: a scope selecting a level
 or a status no project declares loads, and goes through.
 
+A repository may hold more than one configuration document: a machine-local
+overlay layered over the committed file. Where both declare a scope under the
+same name, the overlay's declaration is the one every reader resolves to, so
+changing the committed one changes nothing a reader can see. The change still
+goes through -- the document says afterwards what it was asked to say -- and
+the report names the document the name resolves in instead, so a change that
+moved nothing is not mistaken for one that worked. It says where the name
+resolves and not what is declared there; read the overlay for that. A name no
+other document declares is reported as nothing at all.
+
+In a federation the documents of every member are held, and a change may be
+aimed only at the one belonging to the repository the tool is serving; see
+`elspais docs associate`.
+
 A declared name is matched without regard to case, so `sponsor` and `Sponsor`
 are one name. Declaring the second while the first stands is refused, naming
 the one already there. Renaming a declaration to another casing of its own
