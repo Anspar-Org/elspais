@@ -28,7 +28,7 @@ from collections.abc import Iterator
 from typing import Any
 
 import tomlkit
-from tomlkit.items import Whitespace
+from tomlkit.items import Comment, SingleKey, Whitespace
 
 from elspais.graph.GraphNode import (
     FileType,
@@ -311,6 +311,53 @@ def colliding_name(
     return None
 
 
+# A table's body runs from its header to the next one, so comments and blank
+# lines written between a declaration's last setting and the NEXT header are
+# stored INSIDE the first table while belonging, to a reader, with what
+# follows. Every edit here therefore lifts that trivia off before it works and
+# puts it back where it was written. Left alone it is destroyed by a removal,
+# carried away by a replacement, and jumped over by an addition, each of which
+# rewrites bytes nobody touched (REQ-d00299-C).
+
+
+def _trailing_trivia(item: Any) -> list[Any]:
+    """Cut the comments and blank lines from the end of a table's body.
+
+    Returns:
+        The body entries removed, in order, ready to be put back.
+    """
+    body = getattr(getattr(item, "value", None), "body", None)
+    if not body:
+        return []
+    cut = len(body)
+    while cut > 0 and body[cut - 1][0] is None:
+        if not isinstance(body[cut - 1][1], (Whitespace, Comment)):
+            break
+        cut -= 1
+    lifted = body[cut:]
+    del body[cut:]
+    return lifted
+
+
+def _restore_trivia(item: Any, lifted: list[Any]) -> None:
+    """Put lifted trivia back at the end of a table's body."""
+    body = getattr(getattr(item, "value", None), "body", None)
+    if body is None:
+        return
+    body.extend(lifted)
+
+
+def _last_declared_item(holder: Any) -> Any | None:
+    """The last declaration in a table, which is where its region's trivia sits."""
+    body = getattr(getattr(holder, "value", None), "body", None)
+    if not body:
+        return None
+    for key, value in reversed(body):
+        if key is not None:
+            return value
+    return None
+
+
 def _table_of(document: Any, table: str) -> Any:
     """The table ``table``, created in the document where it has none."""
     existing = document.get(table)
@@ -329,23 +376,75 @@ def set_declaration(document: Any, table: str, name: str, settings: dict[str, An
     the declaration then says, so a setting left out is a setting the
     project no longer states.
 
+    A declaration ALREADY there is edited setting by setting rather than
+    assigned whole. Assigning it whole would say the same thing about what
+    it declares and destroy everything written around it -- the note beside
+    a setting nobody touched, the comment explaining why a setting is what
+    it is -- which are the bytes REQ-d00299-C exists to keep.
+
     Returns:
         The item the document now holds under ``name``.
     """
-    written = tomlkit.table()
-    for key, value in settings.items():
-        written[key] = value
     holder = _table_of(document, table)
-    holder[name] = written
-    return holder[name]
+    existing = holder[name] if name in holder else None
+
+    if existing is None or not hasattr(existing, "keys"):
+        written = tomlkit.table()
+        for key, value in settings.items():
+            written[key] = value
+        # The region's trailing trivia introduces whatever comes AFTER these
+        # declarations, so the new one goes in front of it rather than after.
+        last = _last_declared_item(holder)
+        lifted = _trailing_trivia(last) if last is not None else []
+        holder[name] = written
+        _restore_trivia(holder[name], lifted)
+        return holder[name]
+
+    lifted = _trailing_trivia(existing)
+    for key in [key for key in list(existing.keys()) if key not in settings]:
+        del existing[key]
+    for key, value in settings.items():
+        if key in existing and existing[key] == value:
+            continue
+        existing[key] = value
+    _restore_trivia(existing, lifted)
+    return existing
 
 
-# Implements: REQ-d00299-D
+# Implements: REQ-d00299-D, REQ-d00299-C
 def remove_declaration(document: Any, table: str, name: str) -> None:
-    """Take a declaration out of the document that declares it."""
+    """Take a declaration out of the document that declares it.
+
+    What sits between its last setting and the next header goes back where
+    it was written. That text introduces the declaration that FOLLOWS, and
+    losing it with the removal would rewrite a declaration nobody touched.
+    The comment written ABOVE the removed declaration is a different matter
+    and is left alone: it belongs to the item before it, and deciding it
+    described the removed declaration would be a guess.
+    """
     holder = document.get(table)
-    if hasattr(holder, "keys") and name in holder:
-        del holder[name]
+    if not hasattr(holder, "keys") or name not in holder:
+        return
+
+    lifted = _trailing_trivia(holder[name])
+    # The blank line after a declaration's last setting separated THAT
+    # declaration from what followed, so it goes with the removal; what
+    # survives is the comment introducing the next one and everything after
+    # it. Keeping the blank too would leave the document opening a gap where
+    # a declaration used to be.
+    while lifted and not isinstance(lifted[0][1], Comment):
+        lifted.pop(0)
+    container = getattr(holder, "value", None)
+    slot = container._map.get(SingleKey(name)) if container is not None else None
+    if isinstance(slot, tuple):
+        slot = slot[-1]
+
+    del holder[name]
+
+    # A removal vacates its body slot rather than closing it up, so the
+    # trivia goes back into that slot and every later key keeps its index.
+    if lifted and container is not None and slot is not None:
+        container.body[slot] = (None, Whitespace("".join(item.as_string() for _k, item in lifted)))
 
 
 # Implements: REQ-d00299-D

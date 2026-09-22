@@ -85,7 +85,9 @@ this way today; a table it holds no declarations for is refused.
 
 A change states what the declaration says afterwards, whole. A setting the
 change leaves out is a setting the project no longer states, not one carried
-over from before.
+over from before. It is written setting by setting, so the note beside a
+setting nobody touched and the comment explaining why a setting is what it is
+are still there afterwards.
 
 A change is judged before it is made. One that would leave a configuration the
 tool cannot load -- a setting the schema does not define, a value of the wrong
@@ -108,6 +110,7 @@ removing a declaration leaves that comment in the document, where it now sits
 above whatever followed:
 
 ```text
+# what the sponsor sees
 [scopes.sponsor]
 level = ["prd"]
 
@@ -116,14 +119,18 @@ level = ["prd"]
 level = ["prd", "ops"]
 ```
 
-Remove `auditor` and the comment describing it is still there, now above
-whatever came after. Remove `sponsor` instead and that same comment goes with
-it, because it sits between `sponsor`'s last setting and the next header. So
-comments written around a declaration do not always survive its removal, and
-the one at risk is the one introducing the declaration that follows. Read the
-document after removing one. A rename does not raise the question -- the name
-is respelled where it stands, so everything written around it keeps its
-place.
+Remove `sponsor` and `auditor` keeps the comment introducing it: what is
+written between a declaration's last setting and the next header describes
+what follows, and goes back where it was written. The blank line that
+separated `sponsor` from it goes with the removal, since that blank belonged
+to the declaration being removed and leaving it would open a gap where a
+declaration used to be.
+
+Remove `auditor` instead and the comment describing it stays in the document,
+now above whatever came after, because nothing in the file says it described
+the declaration that was removed rather than the one before it. That is the
+comment to look for after removing a declaration. A rename does not raise the
+question at all -- the name is respelled where it stands.
 
 ## What a scoped report tells you
 
