@@ -269,6 +269,40 @@ a declaration is read in the project that makes it -- an associate's
 declarations are invisible to the host and the host's to the associate. What a
 declaration change is and what it reports is in `elspais docs scoping`.
 
+## Changing a member's requirements
+
+A member the tool reads rather than serves is read-only by default, and that
+holds from either surface: a mutation aimed at a node an associate owns is
+refused by the MCP tools and by the viewer's mutation routes alike, before the
+version token is judged, naming the associate and the setting that would open
+it. Nothing is changed, in memory or on disk.
+
+A change can still reach the pending work another way -- a command that mutates
+the graph directly, for instance -- and the save is where it is answered. A save
+writes only the repository being served while `write_associates` is false, so a
+change queued for an associate's file is not written; it is not discarded
+either. The save names the file it held back and why, in what it reports as
+skipped and as an error:
+
+```text
+file:CAL:spec/reqs.md: owned by an associate, so it is not written
+(federation.write_associates is false). The changes queued for it are kept
+rather than discarded.
+```
+
+Because the change is still pending, the save did not do what it was asked and
+does not report success: pending changes are cleared only once a save has
+performed them. Work queued for the repository being served is written as
+usual, and the pending record is kept whole, so a later save re-renders that
+file harmlessly.
+
+To write the change, set `write_associates = true` under `[federation]`, or
+make it from a tool serving the repository that owns the file.
+
+A file that is merely untidy -- formatting `elspais fix` would canonicalize,
+which nobody asked for -- is held back without a word, so an ordinary `fix` run
+in a federation is unaffected.
+
 ## Options
 
 | Flag | Description |

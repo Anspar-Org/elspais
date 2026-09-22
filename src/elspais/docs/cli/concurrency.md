@@ -152,13 +152,27 @@ same helpers -- there is no softer path around the protocol:
   identical to the MCP rejection (`version_conflict` or
   `mutation_log_conflict`).
 - An unknown node returns **404** with `code: "node_not_found"`.
+- A target owned by an **associate** is refused with **HTTP 403** while
+  `federation.write_associates` is false, carrying the MCP tools' own
+  refusal body. Ownership is settled before the token is judged, the
+  order the tools check in, so a write an agent is refused is refused in
+  the viewer for the same reason and in the same words. Nothing is
+  applied and nothing joins the pending work. This is not a conflict and
+  re-reading will not clear it: an associate is read-only from every
+  surface, and a save declines to write its files in any case, so an
+  accepted edit would have gone nowhere.
 - 409 means a conflict and nothing else. A save that fails for another
   reason says so with its own status and `code`: **400** with
   `changelog_message_required` when an Active requirement changed and no
   changelog reason was given, **500** with `save_failed` when the write
   itself failed or when the changelog author could not be established --
   in which case nothing was written and the pending work is still held.
-  Neither is fixed by re-reading and retrying, which is what 409 asks for.
+  A save that held back a file it was asked to write -- an associate's,
+  with `write_associates` false -- reports failure on the same terms,
+  naming that file among its errors: work a save did not perform stays
+  pending rather than being cleared with the rest.
+  None of these is fixed by re-reading and retrying, which is what 409
+  asks for.
 - Successful mutations return the new `version`.
 - `/api/dirty` returns the pending `mutation_count` and the `tip`.
 - The history routes `/api/save`, `/api/revert`, and `/api/reload`

@@ -867,7 +867,7 @@ def _derive_refines_refs(node: GraphNode, resolver: Any | None = None) -> list[s
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
+def _files_with_pending_mutations(graph: FederatedGraph) -> list[Any]:
     """Identify the FILE nodes whose subtree has pending mutations.
 
     Walks the mutation log and for each mutated node, finds its FILE
@@ -1039,7 +1039,27 @@ def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
             if new_file_id:
                 _mark(graph.find_by_id(new_file_id))
 
-    # Also mark files containing requirements with structural parse-dirty reasons.
+    return list(dirty_files.values())
+
+
+def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
+    """Every FILE node a save must rewrite.
+
+    Two kinds, and which kind a file is matters to the caller: a file the
+    MUTATION LOG names carries work somebody asked for, and a file that is
+    merely parse-dirty carries formatting the tool would tidy. A save that
+    declines to write the first owes the caller a word; declining the second
+    is routine.
+
+    Args:
+        graph: The traceability graph with pending mutations.
+
+    Returns:
+        The FILE nodes to rewrite, unique by identity.
+    """
+    dirty_files = {id(node): node for node in _files_with_pending_mutations(graph)}
+
+    # Files containing requirements with structural parse-dirty reasons.
     # "stale_hash" is excluded: that is a hash-value change only, handled by
     # update_hash_in_file (targeted text replace). render_save is for structural
     # changes (e.g. duplicate refs) that require a full re-render.
@@ -1048,7 +1068,9 @@ def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
             continue
         reasons = node.get_field("parse_dirty_reasons") or []
         if not reasons or any(r != "stale_hash" for r in reasons):
-            _mark(node.file_node())
+            owner = node.file_node()
+            if owner is not None and owner.kind == NodeKind.FILE:
+                dirty_files[id(owner)] = owner
 
     return list(dirty_files.values())
 
@@ -1118,18 +1140,41 @@ def render_save(
     if not write_associates:
         from elspais.graph.federated import is_associate_owned
 
-        dirty_files = [node for node in dirty_files if not is_associate_owned(graph, node)]
+        # Implements: REQ-d00132-E, REQ-d00253-B
+        # A file held back here is not written, so anything QUEUED for it is
+        # work this save did not perform. Recording that as an error is what
+        # keeps the mutation log: it is cleared only after a successful save,
+        # and a save that declined to write somebody's change did not succeed.
+        # A file that is merely parse-dirty carries no such work, so holding
+        # it back stays silent, as the write scope intends.
+        queued = {id(node) for node in _files_with_pending_mutations(graph)}
+        kept: list[Any] = []
+        for node in dirty_files:
+            if not is_associate_owned(graph, node):
+                kept.append(node)
+                continue
+            if id(node) in queued:
+                held = (
+                    f"{node.id}: owned by an associate, so it is not written "
+                    f"(federation.write_associates is false). The changes queued "
+                    f"for it are kept rather than discarded."
+                )
+                skipped.append(held)
+                errors.append(held)
+        dirty_files = kept
 
     if not dirty_files:
-        # No dirty files — clear log and return
-        graph.mutation_log.clear()
+        # Nothing to write. The log is cleared only where nothing was held
+        # back: work this save declined to write outlives it.
+        if not errors:
+            graph.mutation_log.clear()
         return {
-            "success": True,
+            "success": not errors,
             "saved_count": 0,
             "files_modified": [],
             "conflicts": [],
-            "errors": [],
-            "skipped": ["No dirty files to save"],
+            "errors": errors,
+            "skipped": skipped or ["No dirty files to save"],
         }
 
     # Defense-in-depth against cross-file REQ ID collisions: any file that

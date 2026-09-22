@@ -46,6 +46,7 @@ from elspais.mcp.server import (
     _get_mutation_log,
     _get_node,
     _get_requirement,
+    _guard_associate_write,
     _guard_mutation_tip,
     _guard_shutdown,
     _guard_version,
@@ -1388,15 +1389,27 @@ async def api_export(request: Request) -> Response:
 # ─────────────────────────────────────────────────────────────────
 
 
-# Implements: REQ-o00062-I, REQ-o00062-J, REQ-o00062-N, REQ-o00062-O
-def _version_conflict(state: Any, data: dict, node_id: str, field: str = "if_version"):
-    """Return a 409 response if the caller's token is stale, else None.
+# Implements: REQ-o00062-I, REQ-o00062-J, REQ-o00062-N, REQ-o00062-O, REQ-d00253-D
+def _write_refusal(state: Any, data: dict, node_id: str, field: str = "if_version"):
+    """Return the response a refused write gets, or None to go ahead.
 
-    Delegates to the same `_guard_version` the MCP tools use and returns its
-    dict verbatim: the viewer and an agent must see byte-identical rejections,
-    or "same rejection shape" is only an aspiration. A missing token is not a
-    special case -- absent reads as "" and conflicts like any other stale value.
+    Both checks are the MCP tools' own, run in the MCP tools' order --
+    ownership, then version -- and their dicts are returned verbatim: the
+    viewer and an agent must see byte-identical rejections, or "the same
+    rejection shape" is only an aspiration.
+
+    Ownership belongs here and not only on the agent surface. A write one
+    surface refuses and the other accepts is a mutation reachable on one of
+    them alone, which REQ-o00062-O forbids; and for an associate-owned node
+    accepting it is worse than useless, because the save will decline to write
+    that file (REQ-d00253-B) and the edit ends up nowhere.
+
+    A missing token is not a special case -- absent reads as "" and conflicts
+    like any other stale value.
     """
+    readonly = _guard_associate_write(state.graph, state.config, node_id)
+    if readonly is not None:
+        return JSONResponse(readonly, status_code=403)
     conflict = _guard_version(state.graph, node_id, data.get(field) or "")
     if conflict is None:
         return None
@@ -1432,7 +1445,7 @@ async def api_mutate_status(request: Request) -> JSONResponse:
         return JSONResponse(
             {"success": False, "error": "node_id and new_status required"}, status_code=400
         )
-    conflict = _version_conflict(state, data, node_id)
+    conflict = _write_refusal(state, data, node_id)
     if conflict is not None:
         return conflict
     result = _mutate_change_status(state.graph, node_id, new_status)
@@ -1459,7 +1472,7 @@ async def api_mutate_template(request: Request) -> JSONResponse:
             {"success": False, "error": "node_id and boolean is_template required"},
             status_code=400,
         )
-    conflict = _version_conflict(state, data, node_id)
+    conflict = _write_refusal(state, data, node_id)
     if conflict is not None:
         return conflict
     result = _mutate_set_stereotype(
@@ -1483,7 +1496,7 @@ async def api_mutate_title(request: Request) -> JSONResponse:
         return JSONResponse(
             {"success": False, "error": "node_id and new_title required"}, status_code=400
         )
-    conflict = _version_conflict(state, data, node_id)
+    conflict = _write_refusal(state, data, node_id)
     if conflict is not None:
         return conflict
     result = _mutate_update_title(state.graph, node_id, new_title)
@@ -1509,7 +1522,7 @@ async def api_mutate_assertion(request: Request) -> JSONResponse:
         return JSONResponse(
             {"success": False, "error": "assertion_id and new_text required"}, status_code=400
         )
-    conflict = _version_conflict(state, data, assertion_id)
+    conflict = _write_refusal(state, data, assertion_id)
     if conflict is not None:
         return conflict
     result = _mutate_update_assertion(state.graph, assertion_id, new_text)
@@ -1530,7 +1543,7 @@ async def api_mutate_assertion_add(request: Request) -> JSONResponse:
         return JSONResponse(
             {"success": False, "error": "req_id and text required"}, status_code=400
         )
-    conflict = _version_conflict(state, data, req_id)
+    conflict = _write_refusal(state, data, req_id)
     if conflict is not None:
         return conflict
     # The label follows from the position (REQ-o00062-R); a label supplied by
@@ -1554,7 +1567,7 @@ async def api_mutate_assertion_delete(request: Request) -> JSONResponse:
         return JSONResponse({"success": False, "error": "assertion_id required"}, status_code=400)
     if not confirm:
         return JSONResponse({"success": False, "error": "confirm=true required"}, status_code=400)
-    conflict = _version_conflict(state, data, assertion_id)
+    conflict = _write_refusal(state, data, assertion_id)
     if conflict is not None:
         return conflict
     result = _mutate_delete_assertion(state.graph, assertion_id, confirm=True)
@@ -1578,7 +1591,7 @@ async def api_mutate_remainder(request: Request) -> JSONResponse:
             {"success": False, "error": "At least one of text or heading required"},
             status_code=400,
         )
-    conflict = _version_conflict(state, data, node_id)
+    conflict = _write_refusal(state, data, node_id)
     if conflict is not None:
         return conflict
     result = _mutate_update_remainder(state.graph, node_id, text=text, heading=heading)
@@ -1600,7 +1613,7 @@ async def api_mutate_remainder_add(request: Request) -> JSONResponse:
         return JSONResponse(
             {"success": False, "error": "req_id and heading required"}, status_code=400
         )
-    conflict = _version_conflict(state, data, req_id)
+    conflict = _write_refusal(state, data, req_id)
     if conflict is not None:
         return conflict
     result = _mutate_add_remainder(state.graph, req_id, heading, text)
@@ -1618,7 +1631,7 @@ async def api_mutate_remainder_delete(request: Request) -> JSONResponse:
     node_id = data.get("node_id", "")
     if not node_id:
         return JSONResponse({"success": False, "error": "node_id required"}, status_code=400)
-    conflict = _version_conflict(state, data, node_id)
+    conflict = _write_refusal(state, data, node_id)
     if conflict is not None:
         return conflict
     result = _mutate_delete_remainder(state.graph, node_id)
@@ -1724,7 +1737,7 @@ async def api_mutate_requirement_add(request: Request) -> JSONResponse:
     # unparented requirement and returned 200.
     if file_id:
         file_id = file_id_for_reference(file_id, state.config)
-    conflict = _version_conflict(state, data, file_id)
+    conflict = _write_refusal(state, data, file_id)
     if conflict is not None:
         return conflict
     result = _add_req(state.graph, req_id, title, level)
@@ -1758,7 +1771,7 @@ async def api_mutate_requirement_delete(request: Request) -> JSONResponse:
         return JSONResponse({"success": False, "error": "node_id required"}, status_code=400)
     if not confirm:
         return JSONResponse({"success": False, "error": "confirm=true required"}, status_code=400)
-    conflict = _version_conflict(state, data, node_id)
+    conflict = _write_refusal(state, data, node_id)
     if conflict is not None:
         return conflict
     result = _mutate_delete_requirement(state.graph, node_id, confirm=True)
@@ -1783,7 +1796,7 @@ async def api_mutate_edge(request: Request) -> JSONResponse:
             {"success": False, "error": "source_id and target_id required"}, status_code=400
         )
     # Only the source's rendered reference line changes.
-    conflict = _version_conflict(state, data, source_id)
+    conflict = _write_refusal(state, data, source_id)
     if conflict is not None:
         return conflict
 
@@ -1847,7 +1860,7 @@ async def api_mutate_journey_field(request: Request) -> JSONResponse:
             {"success": False, "error": "node_id and field required"},
             status_code=400,
         )
-    conflict = _version_conflict(state, data, node_id)
+    conflict = _write_refusal(state, data, node_id)
     if conflict is not None:
         return conflict
     result = _mutate_update_journey_field(state.graph, node_id, field_name, value)
@@ -1872,7 +1885,7 @@ async def api_mutate_journey_section(request: Request) -> JSONResponse:
         )
     new_name = data.get("new_name")
     content = data.get("content")
-    conflict = _version_conflict(state, data, node_id)
+    conflict = _write_refusal(state, data, node_id)
     if conflict is not None:
         return conflict
     result = _mutate_journey_section(state.graph, node_id, action, name, new_name, content)
@@ -1917,7 +1930,7 @@ async def api_mutate_journey_add(request: Request) -> JSONResponse:
         )
 
     file_id = file_id_for_reference(file_id, state.config)
-    conflict = _version_conflict(state, data, file_id)
+    conflict = _write_refusal(state, data, file_id)
     if conflict is not None:
         return conflict
     result = _mutate_add_journey(state.graph, journey_id, title, file_id)
@@ -1939,7 +1952,7 @@ async def api_mutate_journey_delete(request: Request) -> JSONResponse:
             {"success": False, "error": "node_id required"},
             status_code=400,
         )
-    conflict = _version_conflict(state, data, node_id)
+    conflict = _write_refusal(state, data, node_id)
     if conflict is not None:
         return conflict
     # The journey is about to vanish; hand back its file's token instead, so
@@ -2044,18 +2057,18 @@ async def api_mutate_move_to_file(request: Request) -> JSONResponse:
 
     _moved = state.graph.find_by_id(node_id)
     _origin = _moved.file_node() if _moved is not None else None
-    conflict = _version_conflict(state, data, node_id)
+    conflict = _write_refusal(state, data, node_id)
     if conflict is not None:
         return conflict
     if _origin is not None:
-        conflict = _version_conflict(state, data, _origin.id, "if_source_file_version")
+        conflict = _write_refusal(state, data, _origin.id, "if_source_file_version")
         if conflict is not None:
             return conflict
     if not _destination_is_new:
         # A destination created by this very call has no prior version, so
         # there is nothing to clobber and nothing to guard — the same rule
         # parentless creation follows.
-        conflict = _version_conflict(state, data, target_file_id, "if_target_version")
+        conflict = _write_refusal(state, data, target_file_id, "if_target_version")
         if conflict is not None:
             return conflict
 
@@ -2112,7 +2125,7 @@ async def api_mutate_rename_file(request: Request) -> JSONResponse:
             {"success": False, "error": "file_id and new_relative_path required"},
             status_code=400,
         )
-    conflict = _version_conflict(state, data, file_id)
+    conflict = _write_refusal(state, data, file_id)
     if conflict is not None:
         return conflict
     # The rename changes the FILE's id, so report the version under the new one.
@@ -2146,7 +2159,7 @@ async def api_mutate_add_declaration(request: Request) -> JSONResponse:
         )
     # The document is what the declaration is added to, so it is the node
     # whose version the caller names -- the declaration does not exist yet.
-    conflict = _version_conflict(state, data, config_file_id)
+    conflict = _write_refusal(state, data, config_file_id)
     if conflict is not None:
         return conflict
     result = _mutate_add_declaration(
@@ -2165,7 +2178,7 @@ async def api_mutate_update_declaration(request: Request) -> JSONResponse:
     declaration_id = data.get("declaration_id", "")
     if not declaration_id:
         return JSONResponse({"success": False, "error": "declaration_id required"}, status_code=400)
-    conflict = _version_conflict(state, data, declaration_id)
+    conflict = _write_refusal(state, data, declaration_id)
     if conflict is not None:
         return conflict
     result = _mutate_update_declaration(state.graph, declaration_id, data.get("settings") or {})
@@ -2186,7 +2199,7 @@ async def api_mutate_rename_declaration(request: Request) -> JSONResponse:
             {"success": False, "error": "declaration_id and new_name required"},
             status_code=400,
         )
-    conflict = _version_conflict(state, data, declaration_id)
+    conflict = _write_refusal(state, data, declaration_id)
     if conflict is not None:
         return conflict
     result = _mutate_rename_declaration(state.graph, declaration_id, new_name)
@@ -2203,7 +2216,7 @@ async def api_mutate_delete_declaration(request: Request) -> JSONResponse:
     declaration_id = data.get("declaration_id", "")
     if not declaration_id:
         return JSONResponse({"success": False, "error": "declaration_id required"}, status_code=400)
-    conflict = _version_conflict(state, data, declaration_id)
+    conflict = _write_refusal(state, data, declaration_id)
     if conflict is not None:
         return conflict
     result = _mutate_delete_declaration(state.graph, declaration_id)

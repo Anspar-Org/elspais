@@ -1214,3 +1214,213 @@ class TestNotEveryRefusedSaveIsAConflict:
         assert resp.json()["success"] is True
         assert PENDING_TITLE in (viewer_project / "spec" / "dev-impl.md").read_text()
         assert len(app_state.graph.mutation_log) == 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ownership: a write the agent surface refuses, refused here too
+# ─────────────────────────────────────────────────────────────────────────────
+
+# The same fixture project, reached as an ASSOCIATE of a host repository that
+# declares it. Every id the RouteCase table names is then associate-owned, so
+# the table doubles as the ownership inventory: a route added tomorrow joins
+# it for the version guard and is swept for the ownership guard at the same
+# time, and cannot be added to one without the other.
+ASSOCIATE_NAME = "hht"
+
+# Two routes carry a payload field that the route validates against the HOST's
+# own grammar before any guard runs, so the fixture's spelling would be
+# refused for a reason that has nothing to do with ownership. The guarded node
+# -- the associate-owned FILE the requirement would be created in -- is
+# unchanged; only the new name is respelled.
+ASSOCIATE_PAYLOAD_OVERRIDES = {
+    "/api/mutate/requirement/add": {"req_id": "HOST-d00099", "level": "dev"},
+}
+
+
+@pytest.fixture
+def federated_project(tmp_path: Path, viewer_project: Path) -> Path:
+    """A host repository whose only associate is the hht-like fixture copy.
+
+    Per-test for the same reason ``viewer_project`` is: if the guard is not
+    there, the route applies its mutation, and two of these routes write to
+    disk.
+    """
+    from tests.federation_repos import make_repo
+
+    return make_repo(
+        tmp_path,
+        "host",
+        associates={ASSOCIATE_NAME: str(viewer_project)},
+        associate_namespaces={ASSOCIATE_NAME: NAMESPACE},
+    )
+
+
+@pytest.fixture
+def federated_app_state(federated_project: Path):
+    from elspais.server.state import AppState
+
+    state = AppState.from_config(repo_root=federated_project)
+    assert state.graph.root_repo_name != ASSOCIATE_NAME
+    return state
+
+
+@pytest.fixture
+def federated_client(federated_app_state) -> TestClient:
+    from elspais.server.app import create_app
+
+    return TestClient(create_app(state=federated_app_state, mount_mcp=False))
+
+
+@pytest.fixture
+def federated_mcp_tools(federated_app_state, federated_project: Path):
+    """MCP tools on the same federated graph the HTTP app serves."""
+    pytest.importorskip("mcp")
+    from elspais.mcp.server import create_server
+
+    server = create_server(federated_app_state.graph, working_dir=federated_project)
+    return {name: tool.fn for name, tool in server._tool_manager._tools.items()}
+
+
+def _associate_body(case: RouteCase) -> dict:
+    """The case's payload, with tokens, aimed at the associate-owned node.
+
+    The tokens are stale, which makes the sweep say something extra: both
+    guards have grounds to refuse, and the body asserted below is the
+    ownership one, so ownership is settled first -- the order the MCP tools
+    check in.
+    """
+    body = case.with_tokens(lambda _node_id: BOGUS_VERSION)
+    body.update(ASSOCIATE_PAYLOAD_OVERRIDES.get(case.path, {}))
+    return body
+
+
+class TestHttpMutationRoutesRefuseAnAssociate:
+    """Validates REQ-d00253-D, REQ-o00062-O:
+
+    The MCP tools refuse a mutation aimed at an associate-owned node. Until
+    the HTTP routes did too, a write the agent surface would not perform was
+    accepted by the viewer -- and then dropped at save time, because the save
+    does not write associate files either. The edit ended up nowhere.
+
+    The sweep runs the whole RouteCase table against a federation in which
+    every one of those ids belongs to the associate, so the guard is asserted
+    for the surface rather than for the routes someone listed.
+    """
+
+    # Verifies: REQ-d00253-D
+    def test_REQ_d00253_D_the_fixture_ids_are_associate_owned(self, federated_app_state):
+        """REQ-d00253-D: if the fixture's nodes were primary-owned, or absent,
+        every refusal below would be some other refusal and the sweep would
+        prove nothing."""
+        graph = federated_app_state.graph
+
+        for case in ROUTE_CASES:
+            node_id = case.guarded_id
+            assert graph.find_by_id(node_id) is not None, f"{node_id} is not in the graph"
+            assert graph.repo_for(node_id).name == ASSOCIATE_NAME, (
+                f"{node_id} is not owned by the associate, so {case.path} is untested"
+            )
+
+    # Verifies: REQ-d00253-D
+    def test_REQ_d00253_D_payload_overrides_name_real_routes(self):
+        """REQ-d00253-D: a stale override would silently re-aim a route's
+        payload at something the sweep no longer exercises."""
+        stale = set(ASSOCIATE_PAYLOAD_OVERRIDES) - {case.path for case in ROUTE_CASES}
+
+        assert not stale, f"payload overrides for routes with no RouteCase: {sorted(stale)}"
+
+    # Verifies: REQ-d00253-D
+    @pytest.mark.parametrize("case", ROUTE_CASES, ids=CASE_IDS)
+    def test_REQ_d00253_D_every_route_refuses_an_associate_owned_target(
+        self, federated_client, case: RouteCase
+    ):
+        """REQ-d00253-D: read-only means read-only on this surface too."""
+        resp = federated_client.post(case.path, json=_associate_body(case))
+
+        assert resp.status_code == 403, f"{case.path} -> {resp.status_code}: {resp.text}"
+        assert resp.json()["success"] is False
+
+    # Verifies: REQ-o00062-O
+    @pytest.mark.parametrize("case", ROUTE_CASES, ids=CASE_IDS)
+    def test_REQ_o00062_O_every_refusal_is_the_guard_the_mcp_tools_use(
+        self, federated_client, federated_app_state, case: RouteCase
+    ):
+        """REQ-o00062-O: the body is the shared guard's own dict, returned
+        verbatim. A route that hand-rolled an equivalent-looking refusal would
+        not match it."""
+        from elspais.mcp.server import _guard_associate_write
+
+        expected = _guard_associate_write(
+            federated_app_state.graph, federated_app_state.config, case.guarded_id
+        )
+        assert expected is not None, f"the shared guard does not refuse {case.guarded_id}"
+
+        payload = federated_client.post(case.path, json=_associate_body(case)).json()
+
+        assert payload == expected, f"{case.path} returns its own refusal body"
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_refusal_body_is_identical_to_the_mcp_tool(
+        self, federated_client, federated_mcp_tools
+    ):
+        """REQ-o00062-O: asserted end to end through a registered tool, not
+        only through the guard both surfaces call."""
+        http_body = federated_client.post(
+            "/api/mutate/title",
+            json={"node_id": REQ, "new_title": "Written by the viewer", VERSION_FIELD: "ignored"},
+        ).json()
+
+        mcp_body = federated_mcp_tools["mutate_update_title"](
+            node_id=REQ, new_title="Written by the viewer", if_version="ignored"
+        )
+
+        assert http_body == mcp_body
+
+    # Verifies: REQ-d00253-D
+    @pytest.mark.parametrize("case", ROUTE_CASES, ids=CASE_IDS)
+    def test_REQ_d00253_D_a_refused_route_applied_nothing(
+        self, federated_client, federated_app_state, case: RouteCase
+    ):
+        """REQ-d00253-D: refusing after mutating would leave the viewer holding
+        an edit no save will ever write -- exactly the loss being prevented."""
+        before_fingerprint = _graph_fingerprint(federated_app_state)
+        before_versions = {
+            node_id: render.node_version(federated_app_state.graph.find_by_id(node_id))
+            for node_id in case.token_fields().values()
+        }
+
+        federated_client.post(case.path, json=_associate_body(case))
+
+        assert _graph_fingerprint(federated_app_state) == before_fingerprint, (
+            f"{case.path} changed the graph it refused to mutate"
+        )
+        assert {
+            node_id: render.node_version(federated_app_state.graph.find_by_id(node_id))
+            for node_id in before_versions
+        } == before_versions
+        assert len(federated_app_state.graph.mutation_log) == 0, (
+            f"{case.path} queued a mutation it reported as refused"
+        )
+
+    # Verifies: REQ-d00253-D
+    def test_REQ_d00253_D_the_host_repo_is_still_writable(
+        self, federated_client, federated_app_state
+    ):
+        """REQ-d00253-D: the guard names an associate, not a federation. A
+        refusal that caught the host's own requirements too would be a
+        different defect wearing the same green."""
+        host_req = "HOST-d00001"
+        node = federated_app_state.graph.find_by_id(host_req)
+        assert node is not None, "the host repo contributed no requirement"
+
+        resp = federated_client.post(
+            "/api/mutate/title",
+            json={
+                "node_id": host_req,
+                "new_title": "Retitled in the host",
+                VERSION_FIELD: render.node_version(node),
+            },
+        )
+
+        assert resp.status_code == 200, f"{resp.status_code}: {resp.text}"
+        assert resp.json()["success"] is True
