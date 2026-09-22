@@ -33,6 +33,7 @@ from elspais.graph.comments import CommentEvent, CommentThread
 from elspais.graph.GraphNode import make_file_id, parse_structural_id
 from elspais.graph.parsers.directives import counted_assertion_labels
 from elspais.mcp.server import (
+    _attach_declaration_version,
     _attach_version,
     _automatic_save_record,
     _executable_difference,
@@ -50,6 +51,7 @@ from elspais.mcp.server import (
     _guard_version,
     _lost_changes_notice,
     _mutate_add_assertion,
+    _mutate_add_declaration,
     _mutate_add_edge,
     _mutate_add_journey,
     _mutate_add_remainder,
@@ -57,15 +59,18 @@ from elspais.mcp.server import (
     _mutate_change_edge_targets,
     _mutate_change_status,
     _mutate_delete_assertion,
+    _mutate_delete_declaration,
     _mutate_delete_edge,
     _mutate_delete_journey,
     _mutate_delete_remainder,
     _mutate_delete_requirement,
     _mutate_journey_section,
     _mutate_move_node_to_file,
+    _mutate_rename_declaration,
     _mutate_rename_file,
     _mutate_set_stereotype,
     _mutate_update_assertion,
+    _mutate_update_declaration,
     _mutate_update_journey_field,
     _mutate_update_remainder,
     _mutate_update_title,
@@ -2121,6 +2126,89 @@ async def api_mutate_rename_file(request: Request) -> JSONResponse:
     result = _with_version(state, result, _renamed_file_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
+
+
+@_serialized_write
+# Implements: REQ-d00299-D, REQ-o00062-O
+async def api_mutate_add_declaration(request: Request) -> JSONResponse:
+    """POST /api/mutate/add-declaration - Declare a scope under a name."""
+    state = _st(request)
+    data = await request.json()
+    config_file_id = data.get("config_file_id", "")
+    if config_file_id:
+        config_file_id = file_id_for_reference(config_file_id, state.config)
+    table = data.get("table", "")
+    name = data.get("name", "")
+    if not config_file_id or not table or not name:
+        return JSONResponse(
+            {"success": False, "error": "config_file_id, table and name required"},
+            status_code=400,
+        )
+    # The document is what the declaration is added to, so it is the node
+    # whose version the caller names -- the declaration does not exist yet.
+    conflict = _version_conflict(state, data, config_file_id)
+    if conflict is not None:
+        return conflict
+    result = _mutate_add_declaration(
+        state.graph, config_file_id, table, name, data.get("settings") or {}
+    )
+    result = _attach_declaration_version(state.graph, result)
+    return JSONResponse(result, status_code=200 if result.get("success") else 400)
+
+
+@_serialized_write
+# Implements: REQ-d00299-D, REQ-o00062-O
+async def api_mutate_update_declaration(request: Request) -> JSONResponse:
+    """POST /api/mutate/update-declaration - Change what a declaration says."""
+    state = _st(request)
+    data = await request.json()
+    declaration_id = data.get("declaration_id", "")
+    if not declaration_id:
+        return JSONResponse({"success": False, "error": "declaration_id required"}, status_code=400)
+    conflict = _version_conflict(state, data, declaration_id)
+    if conflict is not None:
+        return conflict
+    result = _mutate_update_declaration(state.graph, declaration_id, data.get("settings") or {})
+    result = _attach_declaration_version(state.graph, result)
+    return JSONResponse(result, status_code=200 if result.get("success") else 400)
+
+
+@_serialized_write
+# Implements: REQ-d00299-D, REQ-o00062-O
+async def api_mutate_rename_declaration(request: Request) -> JSONResponse:
+    """POST /api/mutate/rename-declaration - Respell a declaration's name."""
+    state = _st(request)
+    data = await request.json()
+    declaration_id = data.get("declaration_id", "")
+    new_name = data.get("new_name", "")
+    if not declaration_id or not new_name:
+        return JSONResponse(
+            {"success": False, "error": "declaration_id and new_name required"},
+            status_code=400,
+        )
+    conflict = _version_conflict(state, data, declaration_id)
+    if conflict is not None:
+        return conflict
+    result = _mutate_rename_declaration(state.graph, declaration_id, new_name)
+    result = _attach_declaration_version(state.graph, result)
+    return JSONResponse(result, status_code=200 if result.get("success") else 400)
+
+
+@_serialized_write
+# Implements: REQ-d00299-D, REQ-o00062-O
+async def api_mutate_delete_declaration(request: Request) -> JSONResponse:
+    """POST /api/mutate/delete-declaration - Remove a declaration."""
+    state = _st(request)
+    data = await request.json()
+    declaration_id = data.get("declaration_id", "")
+    if not declaration_id:
+        return JSONResponse({"success": False, "error": "declaration_id required"}, status_code=400)
+    conflict = _version_conflict(state, data, declaration_id)
+    if conflict is not None:
+        return conflict
+    result = _mutate_delete_declaration(state.graph, declaration_id)
+    result = _attach_declaration_version(state.graph, result)
+    return JSONResponse(result, status_code=200 if result.get("success") else 400)
 
 
 @_serialized_write

@@ -72,10 +72,11 @@ def _declared_names(graph) -> set[str]:
 class TestScopeDeclarationMutations:
     """Add, change, rename and remove one declaration, then undo all four.
 
-    The canonical fixture declares no scopes, so the chain starts from none
-    and ends there. Each forward step records the document's text, the
-    derived scopes and the pending count as they stood before it, and the
-    undo steps walk back through those records in reverse.
+    The chain declares its own scope, changes it, renames it and removes it,
+    leaving whatever the canonical fixture declares alone. Each forward step
+    records the document's text, the derived scopes and the pending count as
+    they stood before it, and the undo steps walk back through those records
+    in reverse.
     """
 
     text_before: ClassVar[dict[str, str]] = {}
@@ -121,13 +122,16 @@ class TestScopeDeclarationMutations:
         graph = mutable_graph
         text = _document_text(graph)
         pending = len(graph.mutation_log)
+        declared = set(_scopes(graph))
+        assert "sponsor" in declared, "the name being collided with is not declared"
 
         with pytest.raises(ValueError, match="(?i)sponsor"):
             graph.add_declaration(_config_node(graph).id, "scopes", spelling, {"level": ["ops"]})
 
         assert _document_text(graph) == text, "a refused declaration edited the document"
         assert len(graph.mutation_log) == pending, "a refused declaration joined the log"
-        assert set(_scopes(graph)) == {"sponsor"}
+        assert set(_scopes(graph)) == declared, "a refused declaration reached the configuration"
+        assert spelling not in _scopes(graph)
 
     # Verifies: REQ-d00299-D
     @pytest.mark.parametrize(

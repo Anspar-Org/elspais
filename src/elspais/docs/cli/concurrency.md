@@ -86,6 +86,8 @@ overwrite the guard exists to prevent.
 | `mutate_move_node_to_file` | three tokens: node, source file, target file |
 | `mutate_rename_file` | the FILE node |
 | `apply_link` | the FILE it edits |
+| `mutate_add_declaration` | the configuration document (`config_file_id`) |
+| `mutate_update_declaration`, `mutate_rename_declaration`, `mutate_delete_declaration` | the declaration itself |
 
 Edge mutations guard the source because only the source's rendered
 `Implements:`/`Refines:` line changes -- a target token would reject
@@ -96,6 +98,15 @@ guarded -- but a destination file the move itself creates has no prior
 state to clobber, so pass `if_target_version=""` and the move creates
 the file (path validated against the scanning config, all guards run
 before anything touches disk), exactly like the viewer's HTTP route.
+
+A configuration declaration is guarded the same way from either end: an
+addition names the document it is added to, the declaration not existing yet
+to hold a token, and a change, rename or removal names the declaration, which
+carries a token of its own taken from its own declaration -- so two writers
+changing two declarations in one document do not collide. What comes back
+names the declaration the change left behind, which after a rename is not the
+id you sent; guard your next change on that one. A removal reports no
+`version`: nothing is left to hold one.
 
 ## History-Level Guards: the Mutation-Log Tip
 

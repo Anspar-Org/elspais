@@ -79,9 +79,16 @@ A declaration is held in the graph as a node of its own, so it can be added,
 changed, renamed and removed there. These are ordinary graph mutations: they
 join the same mutation log, the same undo and the same count of pending
 changes as a change to a requirement, and the configuration document is
-written back by the same save. There is no command for it yet -- what exists
-is the capability, not an invocation. `[scopes.NAME]` is what a graph holds
-this way today; a table it holds no declarations for is refused.
+written back by the same save. `[scopes.NAME]` is what a graph holds this way
+today; a table it holds no declarations for is refused.
+
+No CLI command changes a declaration. A change is made through the MCP
+interface -- `mutate_add_declaration`, `mutate_update_declaration`,
+`mutate_rename_declaration`, `mutate_delete_declaration` -- or through the
+viewer's matching `/api/mutate/*-declaration` routes, which take the same
+arguments and answer identically. Either way the change carries a version
+token for what it changes, and a stale one is refused rather than allowed to
+overwrite a change the caller never saw; see `elspais docs concurrency`.
 
 A change states what the declaration says afterwards, whole. A setting the
 change leaves out is a setting the project no longer states, not one carried

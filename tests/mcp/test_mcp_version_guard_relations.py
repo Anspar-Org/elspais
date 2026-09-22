@@ -97,10 +97,20 @@ VERSION_OPTIONAL_TOOLS = {"mutate_add_requirement"}
 # three-token move, and the FILE rename. Each name here must have such a
 # class; see TestAddRequirementGuardsTheParentOnlyWhenThereIsOne,
 # TestMoveNodeToFileGuardsAllThreeAffectedNodes, TestRenameFileGuardsTheFile.
+# The four configuration-declaration tools are here for the same reason and
+# their class is TestDeclarationToolsGuardVersion, which lives beside the
+# route parity it is checked against in test_mcp_http_parity.py: the add
+# guards the DOCUMENT because the declaration does not exist yet, while the
+# other three guard the declaration itself, and the delete leaves no node to
+# report a version for.
 DEDICATED_CLASS_TOOLS = {
     "mutate_add_requirement",
     "mutate_move_node_to_file",
     "mutate_rename_file",
+    "mutate_add_declaration",
+    "mutate_update_declaration",
+    "mutate_rename_declaration",
+    "mutate_delete_declaration",
 }
 
 

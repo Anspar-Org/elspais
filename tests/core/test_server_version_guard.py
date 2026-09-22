@@ -30,7 +30,7 @@ from starlette.testclient import TestClient
 
 import elspais
 from elspais.graph import render
-from elspais.graph.GraphNode import FILE_ID_PREFIX, make_file_id
+from elspais.graph.GraphNode import FILE_ID_PREFIX, make_declaration_id, make_file_id
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 HHT_LIKE = FIXTURES_DIR / "hht-like"
@@ -71,6 +71,13 @@ OTHER_FILE = make_file_id(NAMESPACE, "spec/ops-deploy.md")
 GLOSSARY_FILE = make_file_id(NAMESPACE, "spec/glossary.md")
 JOURNEY = "JNY-001"
 JOURNEY_FILE = make_file_id(NAMESPACE, "spec/journeys.md")
+
+# The repository's committed configuration document, and the one scope the
+# fixture declares in it. A configuration change is addressed like any other
+# graph content: the document for a declaration being added to it, the
+# declaration itself for a change to one that is already there.
+CONFIG_FILE = make_file_id(NAMESPACE, ".elspais.toml")
+SCOPE_DECLARATION = make_declaration_id(NAMESPACE, ".elspais.toml", "scopes", "board")
 
 UNDO_ROUTE = "/api/mutate/undo"
 
@@ -208,6 +215,37 @@ ROUTE_CASES = [
         "/api/mutate/rename-file",
         GLOSSARY_FILE,
         {"file_id": GLOSSARY_FILE, "new_relative_path": "spec/glossary-renamed.md"},
+    ),
+    # A configuration change reads and writes the graph and the mutation log,
+    # so it is guarded like any other. A declaration does not exist yet when
+    # it is added, so the addition states the version of the document it is
+    # declared in -- the choice /api/mutate/requirement/add makes with its
+    # parent. The other three name the declaration itself.
+    RouteCase(
+        "/api/mutate/add-declaration",
+        CONFIG_FILE,
+        {
+            "config_file_id": CONFIG_FILE,
+            "table": "scopes",
+            "name": "auditor",
+            "settings": {"level": ["dev"]},
+        },
+    ),
+    RouteCase(
+        "/api/mutate/update-declaration",
+        SCOPE_DECLARATION,
+        {"declaration_id": SCOPE_DECLARATION, "settings": {"level": ["ops"]}},
+    ),
+    RouteCase(
+        "/api/mutate/rename-declaration",
+        SCOPE_DECLARATION,
+        {"declaration_id": SCOPE_DECLARATION, "new_name": "auditor"},
+    ),
+    RouteCase(
+        "/api/mutate/delete-declaration",
+        SCOPE_DECLARATION,
+        {"declaration_id": SCOPE_DECLARATION},
+        returns_version=False,
     ),
 ]
 
@@ -517,6 +555,148 @@ class TestHttpConflictIsTheMcpConflict:
         )
 
         assert http_body == mcp_body
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_declaration_conflict_body_is_identical_to_the_mcp_tool(
+        self, client, mcp_tools
+    ):
+        """REQ-o00062-O: Holds for a configuration change too, whose guarded
+        node is a declaration inside a document rather than a requirement."""
+        http_body = client.post(
+            "/api/mutate/update-declaration",
+            json={
+                "declaration_id": SCOPE_DECLARATION,
+                "settings": {"level": ["ops"]},
+                VERSION_FIELD: BOGUS_VERSION,
+            },
+        ).json()
+
+        mcp_body = mcp_tools["mutate_update_declaration"](
+            declaration_id=SCOPE_DECLARATION,
+            settings={"level": ["ops"]},
+            if_version=BOGUS_VERSION,
+        )
+
+        assert http_body == mcp_body
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# A change nothing reads is disclosed on both surfaces
+# ─────────────────────────────────────────────────────────────────────────────
+
+# A machine-local overlay declaring the same scope the committed document
+# declares. Every reader resolves the name to this one, so a change to the
+# committed declaration moves nothing anybody can see.
+OVERLAY_NAME = ".elspais.local.toml"
+SHADOWING_OVERLAY = '[scopes.board]\nlevel = ["dev"]\n'
+
+
+class TestShadowedChangeIsDisclosedOnBothSurfaces:
+    """Validates REQ-o00062-O, REQ-d00299-G:
+
+    A repository assembles its configuration from the documents it holds, and
+    where two declare one name only one of them is read. A change to the other
+    is applied and alters nothing a consumer resolves to -- the difference
+    between a change that did nothing and a change that appeared to work. The
+    disclosure that says so is part of the answer, so it has to reach an agent
+    and the viewer alike, and be absent where nothing shadows the change.
+    """
+
+    @pytest.fixture
+    def shadowed(self, viewer_project: Path):
+        """Both surfaces over one repository holding a shadowing overlay.
+
+        Built here rather than from the shared fixtures because the overlay
+        must be on disk before the graph is, and the two surfaces must share
+        the graph for the comparison to say anything.
+        """
+        pytest.importorskip("mcp")
+        (viewer_project / OVERLAY_NAME).write_text(SHADOWING_OVERLAY, encoding="utf-8")
+
+        from elspais.mcp.server import create_server
+        from elspais.server.app import create_app
+        from elspais.server.state import AppState
+
+        state = AppState.from_config(repo_root=viewer_project)
+        assert state.graph.find_by_id(SCOPE_DECLARATION) is not None, (
+            "the committed document's declaration is not addressable"
+        )
+        server = create_server(state.graph, working_dir=viewer_project)
+        tools = {name: tool.fn for name, tool in server._tool_manager._tools.items()}
+        return state, TestClient(create_app(state=state, mount_mcp=False)), tools
+
+    @staticmethod
+    def _version(state, node_id: str) -> str:
+        node = state.graph.find_by_id(node_id)
+        assert node is not None, f"node {node_id!r} missing"
+        return render.node_version(node)
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_route_reports_the_document_the_name_resolves_in(self, shadowed):
+        """REQ-d00299-G over HTTP: the change lands, and the answer names the
+        document that wins the name."""
+        state, client, _tools = shadowed
+
+        resp = client.post(
+            "/api/mutate/update-declaration",
+            json={
+                "declaration_id": SCOPE_DECLARATION,
+                "settings": {"level": ["ops"]},
+                VERSION_FIELD: self._version(state, SCOPE_DECLARATION),
+            },
+        )
+
+        assert resp.status_code == 200, f"{resp.status_code}: {resp.text}"
+        payload = resp.json()
+        assert payload.get("success") is True, payload
+        assert payload.get("shadowed_by") == OVERLAY_NAME, (
+            f"the shadowed change was not disclosed at the top level: {payload}"
+        )
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_tool_reports_the_same_document(self, shadowed):
+        """REQ-o00062-O: An agent is told what the viewer is told."""
+        state, _client, tools = shadowed
+
+        result = tools["mutate_update_declaration"](
+            declaration_id=SCOPE_DECLARATION,
+            settings={"level": ["ops"]},
+            if_version=self._version(state, SCOPE_DECLARATION),
+        )
+
+        assert result.get("success") is True, result
+        assert result.get("shadowed_by") == OVERLAY_NAME, (
+            f"the shadowed change was not disclosed at the top level: {result}"
+        )
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_neither_surface_discloses_an_unshadowed_change(
+        self, client, mcp_tools, version_of
+    ):
+        """REQ-d00299-G: With no overlay, the name resolves where it is
+        declared, so there is nothing to disclose -- and the key is absent
+        rather than present and empty."""
+        resp = client.post(
+            "/api/mutate/update-declaration",
+            json={
+                "declaration_id": SCOPE_DECLARATION,
+                "settings": {"level": ["ops"]},
+                VERSION_FIELD: version_of(SCOPE_DECLARATION),
+            },
+        )
+        assert resp.status_code == 200, f"{resp.status_code}: {resp.text}"
+        payload = resp.json()
+        assert payload.get("success") is True, payload
+
+        result = mcp_tools["mutate_update_declaration"](
+            declaration_id=SCOPE_DECLARATION,
+            settings={"level": ["dev"]},
+            if_version=version_of(SCOPE_DECLARATION),
+        )
+
+        assert result.get("success") is True, result
+        assert "shadowed_by" not in payload, payload
+        assert "shadowed_by" not in result, result
 
 
 # ─────────────────────────────────────────────────────────────────────────────
