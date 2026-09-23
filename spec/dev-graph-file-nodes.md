@@ -10,7 +10,7 @@ The graph data model SHALL support FILE nodes and file-aware edge kinds for repr
 
 A. `NodeKind` enum SHALL include a `FILE` value with string representation `"file"`.
 
-B. A `FileType` enum SHALL exist alongside `NodeKind` with values: `SPEC`, `JOURNEY`, `CODE`, `TEST`, `RESULT`.
+B. A `FileType` enum SHALL exist alongside `NodeKind` with values: `SPEC`, `JOURNEY`, `CODE`, `TEST`, `RESULT`, `CONFIG`.
 
 C. `EdgeKind` enum SHALL include `STRUCTURES`, `DEFINES`, and `YIELDS` values for file-aware structural edges.
 
@@ -24,11 +24,13 @@ FILE nodes are the foundation for representing source files as first-class graph
 
 ### Changelog
 
+- 2026-09-20 | 3f3620d0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-20 | - | - | Michael Lewis (<michael@anspar.org>) | Name the configuration file type among the values the FileType enum carries
 - 2026-07-31 | 070e173b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 664d3990 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 664d3990 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *FILE Node Data Model* | **Hash**: 070e173b
+*End* *FILE Node Data Model* | **Hash**: 3f3620d0
 ---
 
 ## REQ-d00127: GraphNode API: Filtered Traversal and Edge-Only Relationships
@@ -201,7 +203,7 @@ G. `TEST` render SHALL produce the `# Tests:` or `# Validates:` comment line(s) 
 
 H. `TEST_RESULT` render SHALL raise `ValueError` as test results are read-only and not rendered back to disk.
 
-I. Rendering a FILE node SHALL walk its CONTAINS children sorted by `render_order` edge metadata, call render on each, and concatenate the results with appropriate line separators to produce the complete file content.
+I. A FILE node's content SHALL be produced by the renderer its file type declares.
 
 J. Requirement hash computation SHALL use order-independent *Assertion* hashing: compute each *Assertion*'s normalized text hash individually, sort the hashes lexicographically, then hash the sorted collection into the requirement's final hash.
 
@@ -217,7 +219,13 @@ O. Where a card capability — a coverage indicator, a source link, or a body se
 
 P. Where a requirement's content yields no hash under the configured hash mode, `REQUIREMENT` render SHALL emit in the `*End*` marker's hash position a reserved value that no hash computation can produce, marking the content as unhashable rather than as awaiting a hash.
 
+Q. A file type that declares no renderer SHALL be read-only, and a request for the content of a file of that type SHALL be refused naming the type.
+
+R. A walk over FILE nodes SHALL act only on the file types it names.
+
 ### Rationale
+
+A file's text comes from the renderer its type declares. Spec, journey, code and test files are composed from the nodes they hold, and their renderer walks those nodes in `render_order`, which is what assertion I described while composition was the only case. Stating the property instead lets a file type whose text is not composed that way still be written back, and lets a type that declares no renderer be read-only by statement rather than by the accident of nothing mutating it. Assertion R keeps a file type introduced later out of every walk that has not asked for it, so a new type is additive rather than a sweep of every caller.
 
 The render protocol is the inverse of parsing: each node kind knows how to serialize itself back to text. This enables the graph to reconstruct files from its internal state, which is the foundation for render-based persistence. Order-independent *Assertion* hashing ensures that *Assertion* reordering does not trigger false change-detection flags.
 
@@ -231,6 +239,8 @@ Deriving the version from rendered output rather than from a counter means a reb
 
 ### Changelog
 
+- 2026-09-20 | c81d018a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-20 | - | - | Michael Lewis (<michael@anspar.org>) | State rendering as the renderer a file type declares; author Q (a type declaring none is read-only) and R (a walk names the types it acts on)
 - 2026-08-15 | 4bd2b48b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-08 | e701b585 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-09 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-59: author assertion P (reserved value marks unhashable content in the End marker)
@@ -247,7 +257,7 @@ Deriving the version from rendered output rather than from a counter means a reb
 - 2026-05-11 | c004c62e | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | c004c62e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Render Protocol for Graph Nodes* | **Hash**: 4bd2b48b
+*End* *Render Protocol for Graph Nodes* | **Hash**: c81d018a
 
 ## REQ-d00273: Requirement Metadata Block
 

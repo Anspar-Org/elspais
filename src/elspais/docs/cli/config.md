@@ -43,10 +43,11 @@ path = "../sibling-repo"
 namespace = "SIB"
 ```
 
-**Load order:** defaults -> `.elspais.toml` -> `.elspais.local.toml` -> env vars
+**Load order:** defaults -> `.elspais.toml` -> `.elspais.local.toml`
 
 Each layer deep-merges over the previous one, so you only need to
-specify the keys you want to override. Environment variables always win.
+specify the keys you want to override. The machine-local overlay is the
+last word; the environment supplies no configuration at all.
 
 ## Complete Configuration Reference
 
@@ -471,3 +472,33 @@ configuration: `ELSPAIS_VERSION`, `ELSPAIS_CLIENT_PID` and
 not settings.
 
 To register an associate without editing either file, use `elspais associate`.
+
+Both documents are kept once they are read. Building a repository's graph
+holds a node for `.elspais.toml`, and for `.elspais.local.toml` where one
+sits beside it, carrying the document itself rather than the values taken
+from it. The document a node holds gives back the file it was read from
+exactly -- comments, blank lines and the order its author chose included.
+
+## A Change That Will Not Load Is Refused
+
+A configuration document held in the graph can be changed there, and a change
+is judged before it is made. The edit is applied to a copy of the document,
+the copy is derived as a configuration, and only a copy the tool can load is
+installed. The document being served is never the one being judged.
+
+Whether the result will load is the judgement made when a configuration is
+read, so what that judgement refuses here is what it refuses there: a key the
+schema does not define, a value of the wrong type, a name the schema will not
+admit. The refusal names that underlying reason and the document that was not
+changed. A change may also be refused for a reason of its own before the
+judgement is reached -- declaring a name the document already declares in
+another case is one -- so a change is refused at least wherever a read would
+refuse the result.
+
+What is judged is shape, not meaning. A scope selecting a level or a status no
+project declares is a configuration the tool loads, so it is not refused here
+-- whether it selects anything is a question for the report it narrows.
+
+A refused change leaves everything as it was: the document is unchanged to the
+byte, what every consumer reads is unchanged, and there is nothing left pending
+to save or undo.

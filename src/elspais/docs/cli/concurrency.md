@@ -86,6 +86,8 @@ overwrite the guard exists to prevent.
 | `mutate_move_node_to_file` | three tokens: node, source file, target file |
 | `mutate_rename_file` | the FILE node |
 | `apply_link` | the FILE it edits |
+| `mutate_add_declaration` | the configuration document (`config_file_id`) |
+| `mutate_update_declaration`, `mutate_rename_declaration`, `mutate_delete_declaration` | the declaration itself |
 
 Edge mutations guard the source because only the source's rendered
 `Implements:`/`Refines:` line changes -- a target token would reject
@@ -96,6 +98,15 @@ guarded -- but a destination file the move itself creates has no prior
 state to clobber, so pass `if_target_version=""` and the move creates
 the file (path validated against the scanning config, all guards run
 before anything touches disk), exactly like the viewer's HTTP route.
+
+A configuration declaration is guarded the same way from either end: an
+addition names the document it is added to, the declaration not existing yet
+to hold a token, and a change, rename or removal names the declaration, which
+carries a token of its own taken from its own declaration -- so two writers
+changing two declarations in one document do not collide. What comes back
+names the declaration the change left behind, which after a rename is not the
+id you sent; guard your next change on that one. A removal reports no
+`version`: nothing is left to hold one.
 
 ## History-Level Guards: the Mutation-Log Tip
 
@@ -141,13 +152,45 @@ same helpers -- there is no softer path around the protocol:
   identical to the MCP rejection (`version_conflict` or
   `mutation_log_conflict`).
 - An unknown node returns **404** with `code: "node_not_found"`.
-- 409 means a conflict and nothing else. A save that fails for another
-  reason says so with its own status and `code`: **400** with
+- A target owned by an **associate** is refused with **HTTP 403** while
+  `federation.write_associates` is false, carrying the MCP tools' own
+  refusal body. Ownership is settled before the token is judged, the
+  order the tools check in, so a write an agent is refused is refused in
+  the viewer for the same reason and in the same words. Nothing is
+  applied and nothing joins the pending work. This is not a conflict and
+  re-reading will not clear it: an associate is read-only from every
+  surface, and a save declines to write its files in any case, so an
+  accepted edit would have gone nowhere.
+- 409 means a conflict and nothing else. A save that is refused for
+  another reason says so with its own status and `code`: **400** with
   `changelog_message_required` when an Active requirement changed and no
-  changelog reason was given, **500** with `save_failed` when the write
-  itself failed or when the changelog author could not be established --
-  in which case nothing was written and the pending work is still held.
-  Neither is fixed by re-reading and retrying, which is what 409 asks for.
+  changelog reason was given, **403** with `write_scope_declined` when
+  the save held back a file it was asked to write -- an associate's,
+  with `write_associates` false -- in which case nothing at all was
+  written and every pending change is still held, and **500** with
+  `save_failed` when
+  the write itself failed or when the changelog author could not be
+  established, in which case nothing was written and the pending work is
+  still held. None of these is fixed by re-reading and retrying, which is
+  what 409 asks for.
+- A decline and a failure are different answers, so they do not arrive
+  alike. A decline is a policy answer that a further save repeats until
+  the write scope reaches that repository; a write that failed may well
+  succeed next time. The route maps the save's own `code` to a status
+  and hands the body back unchanged, so the JSON a caller reads is the
+  one the save wrote, and the MCP save tool reports the same `code` for
+  the same case. `error` names the held-back files in full, by ids a
+  caller can use. A decline never reaches a write, so it is never also a
+  failure.
+- A save that holds anything back writes nothing at all, so a decline
+  reports `saved_count` 0 and an empty `files_modified` -- the files of
+  the repository being served are left alone with the rest. A change is
+  not always confined to the file its author edited: renaming a
+  requirement corrects the reference in every file citing it, and those
+  files may belong to other members, so writing only the part the write
+  scope reaches would break a reference in a repository nobody edited.
+  `errors` and `skipped` say which files were held back, and every
+  member's pending work is still there.
 - Successful mutations return the new `version`.
 - `/api/dirty` returns the pending `mutation_count` and the `tip`.
 - The history routes `/api/save`, `/api/revert`, and `/api/reload`

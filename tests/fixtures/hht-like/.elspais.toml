@@ -82,3 +82,8 @@ unmarked = "warning"
 unused = "warning"
 bad_definition = "error"
 collection_empty = "warning"
+
+# A named scope, so a report can be asked for by the audience it is for.
+[scopes.board]
+level = ["prd"]
+status = ["Active"]

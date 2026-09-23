@@ -2685,8 +2685,13 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
             '/api/reload require if_tip_mutation_id in the JSON body ("" =\n'
             "nothing pending). An unknown node is 404 with code node_not_found.\n"
             "409 means a conflict only: a save refused for a missing changelog\n"
-            "reason is 400 (changelog_message_required) and a save whose write\n"
-            "failed is 500 (save_failed). Retrying those unchanged cannot help."
+            "reason is 400 (changelog_message_required), a save that declined to\n"
+            "write an associate's files is 403 (write_scope_declined), and a save\n"
+            "whose write failed is 500 (save_failed). Retrying those unchanged\n"
+            "cannot help. A decline writes NOTHING at all -- not even the served\n"
+            "repository's own files -- and keeps every pending change rather than\n"
+            "discarding it, because a change can reach a file in another member and\n"
+            "writing half of it would break a reference nobody edited."
         ),
     },
     {
@@ -4004,6 +4009,122 @@ def _mutate_rename_file(
         }
     except (ValueError, KeyError) as e:
         return {"success": False, "error": str(e)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Configuration Declaration Mutations (REQ-d00299-D, REQ-o00062-O)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _declaration_result(entry: Any, message: str) -> dict[str, Any]:
+    """The result shape a declaration change reports on both surfaces.
+
+    ``declaration_id`` names what the change left behind, which is what a
+    caller guards its next change on -- after a rename that is not the id it
+    supplied. ``shadowed_by`` appears only where the change moved nothing a
+    reader can see because another document declares the same name
+    (REQ-d00299-G); it names WHERE the name resolves and never what that
+    document declares.
+    """
+    result: dict[str, Any] = {
+        "success": True,
+        "mutation": _serialize_mutation_entry(entry),
+        "declaration_id": entry.after_state.get("id", ""),
+        "message": message,
+    }
+    shadowed_by = entry.after_state.get("shadowed_by")
+    if shadowed_by:
+        result["shadowed_by"] = shadowed_by
+        result["message"] = (
+            f"{message}, but the effective configuration is unchanged: "
+            f"{shadowed_by} declares that name too, and that is where it resolves."
+        )
+    return result
+
+
+# Implements: REQ-d00299-D, REQ-o00062-O
+def _mutate_add_declaration(
+    graph: FederatedGraph,
+    config_file_id: str,
+    table: str,
+    name: str,
+    settings: dict[str, Any],
+) -> dict[str, Any]:
+    """Declare something under a name in a configuration document.
+
+    REQ-d00065-D: Only parameter validation and delegation.
+    """
+    if not config_file_id or not table or not name:
+        return {
+            "success": False,
+            "error": "config_file_id, table and name are required",
+        }
+    try:
+        entry = graph.add_declaration(config_file_id, table, name, dict(settings or {}))
+        return _declaration_result(entry, f"Declared [{table}.{name}]")
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+# Implements: REQ-d00299-D, REQ-o00062-O
+def _mutate_update_declaration(
+    graph: FederatedGraph, declaration_id: str, settings: dict[str, Any]
+) -> dict[str, Any]:
+    """Change what a declaration says.
+
+    REQ-d00065-D: Only parameter validation and delegation.
+    """
+    if not declaration_id:
+        return {"success": False, "error": "declaration_id is required"}
+    try:
+        entry = graph.update_declaration(declaration_id, dict(settings or {}))
+        return _declaration_result(entry, f"Changed {declaration_id}")
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+# Implements: REQ-d00299-D, REQ-o00062-O
+def _mutate_rename_declaration(
+    graph: FederatedGraph, declaration_id: str, new_name: str
+) -> dict[str, Any]:
+    """Respell the name a declaration is declared under.
+
+    REQ-d00065-D: Only parameter validation and delegation.
+    """
+    if not declaration_id or not new_name:
+        return {"success": False, "error": "declaration_id and new_name are required"}
+    try:
+        entry = graph.rename_declaration(declaration_id, new_name)
+        return _declaration_result(entry, f"Renamed {declaration_id} to '{new_name}'")
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+# Implements: REQ-d00299-D, REQ-o00062-O
+def _mutate_delete_declaration(graph: FederatedGraph, declaration_id: str) -> dict[str, Any]:
+    """Take a declaration out of the document that declares it.
+
+    REQ-d00065-D: Only parameter validation and delegation.
+    """
+    if not declaration_id:
+        return {"success": False, "error": "declaration_id is required"}
+    try:
+        entry = graph.delete_declaration(declaration_id)
+        return _declaration_result(entry, f"Removed {declaration_id}")
+    except (ValueError, KeyError) as e:
+        return {"success": False, "error": str(e)}
+
+
+def _attach_declaration_version(graph: Any, result: dict[str, Any]) -> dict[str, Any]:
+    """Report the version of the declaration a change left behind.
+
+    Resolved AFTER the change, because a rename retires the id the caller
+    supplied, and a removal leaves no declaration to report a version for.
+    """
+    if not result.get("success"):
+        return result
+    node = graph.find_by_id(result.get("declaration_id", ""))
+    return _attach_version(result, node) if node is not None else result
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -7647,6 +7768,138 @@ def create_server(
                 _state["graph"], file_id, new_relative_path, _state.get("repo_root")
             ),
             node,
+        )
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Configuration Declaration Tools (REQ-d00299-D, REQ-o00062-O)
+    # ─────────────────────────────────────────────────────────────────────
+
+    # Implements: REQ-d00299-D, REQ-o00062-O
+    @mcp.tool()
+    @_locked
+    def mutate_add_declaration(
+        config_file_id: str,
+        table: str,
+        name: str,
+        settings: dict[str, Any],
+        if_version: str,
+    ) -> dict[str, Any]:
+        """Declare a scope under a name in a configuration document.
+
+        Args:
+            config_file_id: The configuration document to declare it in
+                (e.g. "file:REQ:.elspais.toml").
+            table: The configuration table to declare it in (today "scopes").
+            name: The name to declare it under. Matched without regard to
+                case, so a name differing from an existing one only in case
+                is refused.
+            settings: What the declaration says, keyed as the TOML is written
+                (e.g. {"level": ["prd"], "status": ["Active"]}).
+            if_version: The version of config_file_id from your last read.
+                Required -- the document is what the change is added to.
+
+        Returns:
+            The mutation, `declaration_id` naming what was declared, and
+            `version` for that declaration so your next change to it can
+            name one. `shadowed_by` appears where another document declares
+            the same name, meaning the effective configuration did not move.
+        """
+        guard = _guard_associate_write(_state["graph"], _state["config"], config_file_id)
+        if guard:
+            return guard
+        conflict = _guard_version(_state["graph"], config_file_id, if_version)
+        if conflict:
+            return conflict
+        return _attach_declaration_version(
+            _state["graph"],
+            _mutate_add_declaration(_state["graph"], config_file_id, table, name, settings),
+        )
+
+    # Implements: REQ-d00299-D, REQ-o00062-O
+    @mcp.tool()
+    @_locked
+    def mutate_update_declaration(
+        declaration_id: str, settings: dict[str, Any], if_version: str
+    ) -> dict[str, Any]:
+        """Change what a declaration says, keeping the name it says it under.
+
+        What you send replaces what the declaration said: a setting left out
+        is a setting the project no longer states. Comments and spacing
+        written around the settings survive.
+
+        Args:
+            declaration_id: The declaration to change
+                (e.g. "decl:REQ:.elspais.toml:scopes:board").
+            settings: What it says afterwards.
+            if_version: The version of declaration_id from your last read.
+                Required.
+        """
+        guard = _guard_associate_write(_state["graph"], _state["config"], declaration_id)
+        if guard:
+            return guard
+        conflict = _guard_version(_state["graph"], declaration_id, if_version)
+        if conflict:
+            return conflict
+        return _attach_declaration_version(
+            _state["graph"],
+            _mutate_update_declaration(_state["graph"], declaration_id, settings),
+        )
+
+    # Implements: REQ-d00299-D, REQ-o00062-O
+    @mcp.tool()
+    @_locked
+    def mutate_rename_declaration(
+        declaration_id: str, new_name: str, if_version: str
+    ) -> dict[str, Any]:
+        """Respell the name a declaration is declared under.
+
+        Nothing inside the graph depends on a declared name, so a rename is
+        coherent. What it can break is outside the graph, where the name was
+        written down -- a job asking for a report under it.
+
+        Args:
+            declaration_id: The declaration to rename.
+            new_name: The name it is declared under afterwards.
+            if_version: The version of declaration_id from your last read.
+                Required.
+
+        Returns:
+            `declaration_id` naming the renamed declaration, which is a
+            different id from the one you supplied.
+        """
+        guard = _guard_associate_write(_state["graph"], _state["config"], declaration_id)
+        if guard:
+            return guard
+        conflict = _guard_version(_state["graph"], declaration_id, if_version)
+        if conflict:
+            return conflict
+        return _attach_declaration_version(
+            _state["graph"],
+            _mutate_rename_declaration(_state["graph"], declaration_id, new_name),
+        )
+
+    # Implements: REQ-d00299-D, REQ-o00062-O
+    @mcp.tool()
+    @_locked
+    def mutate_delete_declaration(declaration_id: str, if_version: str) -> dict[str, Any]:
+        """Remove a declaration from the document that declares it.
+
+        Args:
+            declaration_id: The declaration to remove.
+            if_version: The version of declaration_id from your last read.
+                Required.
+
+        Returns:
+            No `version`: nothing is left to hold one.
+        """
+        guard = _guard_associate_write(_state["graph"], _state["config"], declaration_id)
+        if guard:
+            return guard
+        conflict = _guard_version(_state["graph"], declaration_id, if_version)
+        if conflict:
+            return conflict
+        return _attach_declaration_version(
+            _state["graph"], _mutate_delete_declaration(_state["graph"], declaration_id)
         )
 
     # ─────────────────────────────────────────────────────────────────────

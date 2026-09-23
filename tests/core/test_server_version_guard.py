@@ -30,7 +30,7 @@ from starlette.testclient import TestClient
 
 import elspais
 from elspais.graph import render
-from elspais.graph.GraphNode import FILE_ID_PREFIX, make_file_id
+from elspais.graph.GraphNode import FILE_ID_PREFIX, make_declaration_id, make_file_id
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 HHT_LIKE = FIXTURES_DIR / "hht-like"
@@ -71,6 +71,13 @@ OTHER_FILE = make_file_id(NAMESPACE, "spec/ops-deploy.md")
 GLOSSARY_FILE = make_file_id(NAMESPACE, "spec/glossary.md")
 JOURNEY = "JNY-001"
 JOURNEY_FILE = make_file_id(NAMESPACE, "spec/journeys.md")
+
+# The repository's committed configuration document, and the one scope the
+# fixture declares in it. A configuration change is addressed like any other
+# graph content: the document for a declaration being added to it, the
+# declaration itself for a change to one that is already there.
+CONFIG_FILE = make_file_id(NAMESPACE, ".elspais.toml")
+SCOPE_DECLARATION = make_declaration_id(NAMESPACE, ".elspais.toml", "scopes", "board")
 
 UNDO_ROUTE = "/api/mutate/undo"
 
@@ -208,6 +215,37 @@ ROUTE_CASES = [
         "/api/mutate/rename-file",
         GLOSSARY_FILE,
         {"file_id": GLOSSARY_FILE, "new_relative_path": "spec/glossary-renamed.md"},
+    ),
+    # A configuration change reads and writes the graph and the mutation log,
+    # so it is guarded like any other. A declaration does not exist yet when
+    # it is added, so the addition states the version of the document it is
+    # declared in -- the choice /api/mutate/requirement/add makes with its
+    # parent. The other three name the declaration itself.
+    RouteCase(
+        "/api/mutate/add-declaration",
+        CONFIG_FILE,
+        {
+            "config_file_id": CONFIG_FILE,
+            "table": "scopes",
+            "name": "auditor",
+            "settings": {"level": ["dev"]},
+        },
+    ),
+    RouteCase(
+        "/api/mutate/update-declaration",
+        SCOPE_DECLARATION,
+        {"declaration_id": SCOPE_DECLARATION, "settings": {"level": ["ops"]}},
+    ),
+    RouteCase(
+        "/api/mutate/rename-declaration",
+        SCOPE_DECLARATION,
+        {"declaration_id": SCOPE_DECLARATION, "new_name": "auditor"},
+    ),
+    RouteCase(
+        "/api/mutate/delete-declaration",
+        SCOPE_DECLARATION,
+        {"declaration_id": SCOPE_DECLARATION},
+        returns_version=False,
     ),
 ]
 
@@ -517,6 +555,148 @@ class TestHttpConflictIsTheMcpConflict:
         )
 
         assert http_body == mcp_body
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_declaration_conflict_body_is_identical_to_the_mcp_tool(
+        self, client, mcp_tools
+    ):
+        """REQ-o00062-O: Holds for a configuration change too, whose guarded
+        node is a declaration inside a document rather than a requirement."""
+        http_body = client.post(
+            "/api/mutate/update-declaration",
+            json={
+                "declaration_id": SCOPE_DECLARATION,
+                "settings": {"level": ["ops"]},
+                VERSION_FIELD: BOGUS_VERSION,
+            },
+        ).json()
+
+        mcp_body = mcp_tools["mutate_update_declaration"](
+            declaration_id=SCOPE_DECLARATION,
+            settings={"level": ["ops"]},
+            if_version=BOGUS_VERSION,
+        )
+
+        assert http_body == mcp_body
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# A change nothing reads is disclosed on both surfaces
+# ─────────────────────────────────────────────────────────────────────────────
+
+# A machine-local overlay declaring the same scope the committed document
+# declares. Every reader resolves the name to this one, so a change to the
+# committed declaration moves nothing anybody can see.
+OVERLAY_NAME = ".elspais.local.toml"
+SHADOWING_OVERLAY = '[scopes.board]\nlevel = ["dev"]\n'
+
+
+class TestShadowedChangeIsDisclosedOnBothSurfaces:
+    """Validates REQ-o00062-O, REQ-d00299-G:
+
+    A repository assembles its configuration from the documents it holds, and
+    where two declare one name only one of them is read. A change to the other
+    is applied and alters nothing a consumer resolves to -- the difference
+    between a change that did nothing and a change that appeared to work. The
+    disclosure that says so is part of the answer, so it has to reach an agent
+    and the viewer alike, and be absent where nothing shadows the change.
+    """
+
+    @pytest.fixture
+    def shadowed(self, viewer_project: Path):
+        """Both surfaces over one repository holding a shadowing overlay.
+
+        Built here rather than from the shared fixtures because the overlay
+        must be on disk before the graph is, and the two surfaces must share
+        the graph for the comparison to say anything.
+        """
+        pytest.importorskip("mcp")
+        (viewer_project / OVERLAY_NAME).write_text(SHADOWING_OVERLAY, encoding="utf-8")
+
+        from elspais.mcp.server import create_server
+        from elspais.server.app import create_app
+        from elspais.server.state import AppState
+
+        state = AppState.from_config(repo_root=viewer_project)
+        assert state.graph.find_by_id(SCOPE_DECLARATION) is not None, (
+            "the committed document's declaration is not addressable"
+        )
+        server = create_server(state.graph, working_dir=viewer_project)
+        tools = {name: tool.fn for name, tool in server._tool_manager._tools.items()}
+        return state, TestClient(create_app(state=state, mount_mcp=False)), tools
+
+    @staticmethod
+    def _version(state, node_id: str) -> str:
+        node = state.graph.find_by_id(node_id)
+        assert node is not None, f"node {node_id!r} missing"
+        return render.node_version(node)
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_route_reports_the_document_the_name_resolves_in(self, shadowed):
+        """REQ-d00299-G over HTTP: the change lands, and the answer names the
+        document that wins the name."""
+        state, client, _tools = shadowed
+
+        resp = client.post(
+            "/api/mutate/update-declaration",
+            json={
+                "declaration_id": SCOPE_DECLARATION,
+                "settings": {"level": ["ops"]},
+                VERSION_FIELD: self._version(state, SCOPE_DECLARATION),
+            },
+        )
+
+        assert resp.status_code == 200, f"{resp.status_code}: {resp.text}"
+        payload = resp.json()
+        assert payload.get("success") is True, payload
+        assert payload.get("shadowed_by") == OVERLAY_NAME, (
+            f"the shadowed change was not disclosed at the top level: {payload}"
+        )
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_tool_reports_the_same_document(self, shadowed):
+        """REQ-o00062-O: An agent is told what the viewer is told."""
+        state, _client, tools = shadowed
+
+        result = tools["mutate_update_declaration"](
+            declaration_id=SCOPE_DECLARATION,
+            settings={"level": ["ops"]},
+            if_version=self._version(state, SCOPE_DECLARATION),
+        )
+
+        assert result.get("success") is True, result
+        assert result.get("shadowed_by") == OVERLAY_NAME, (
+            f"the shadowed change was not disclosed at the top level: {result}"
+        )
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_neither_surface_discloses_an_unshadowed_change(
+        self, client, mcp_tools, version_of
+    ):
+        """REQ-d00299-G: With no overlay, the name resolves where it is
+        declared, so there is nothing to disclose -- and the key is absent
+        rather than present and empty."""
+        resp = client.post(
+            "/api/mutate/update-declaration",
+            json={
+                "declaration_id": SCOPE_DECLARATION,
+                "settings": {"level": ["ops"]},
+                VERSION_FIELD: version_of(SCOPE_DECLARATION),
+            },
+        )
+        assert resp.status_code == 200, f"{resp.status_code}: {resp.text}"
+        payload = resp.json()
+        assert payload.get("success") is True, payload
+
+        result = mcp_tools["mutate_update_declaration"](
+            declaration_id=SCOPE_DECLARATION,
+            settings={"level": ["dev"]},
+            if_version=version_of(SCOPE_DECLARATION),
+        )
+
+        assert result.get("success") is True, result
+        assert "shadowed_by" not in payload, payload
+        assert "shadowed_by" not in result, result
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1034,3 +1214,320 @@ class TestNotEveryRefusedSaveIsAConflict:
         assert resp.json()["success"] is True
         assert PENDING_TITLE in (viewer_project / "spec" / "dev-impl.md").read_text()
         assert len(app_state.graph.mutation_log) == 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ownership: a write the agent surface refuses, refused here too
+# ─────────────────────────────────────────────────────────────────────────────
+
+# The same fixture project, reached as an ASSOCIATE of a host repository that
+# declares it. Every id the RouteCase table names is then associate-owned, so
+# the table doubles as the ownership inventory: a route added tomorrow joins
+# it for the version guard and is swept for the ownership guard at the same
+# time, and cannot be added to one without the other.
+ASSOCIATE_NAME = "hht"
+
+# Two routes carry a payload field that the route validates against the HOST's
+# own grammar before any guard runs, so the fixture's spelling would be
+# refused for a reason that has nothing to do with ownership. The guarded node
+# -- the associate-owned FILE the requirement would be created in -- is
+# unchanged; only the new name is respelled.
+ASSOCIATE_PAYLOAD_OVERRIDES = {
+    "/api/mutate/requirement/add": {"req_id": "HOST-d00099", "level": "dev"},
+}
+
+
+@pytest.fixture
+def federated_project(tmp_path: Path, viewer_project: Path) -> Path:
+    """A host repository whose only associate is the hht-like fixture copy.
+
+    Per-test for the same reason ``viewer_project`` is: if the guard is not
+    there, the route applies its mutation, and two of these routes write to
+    disk.
+    """
+    from tests.federation_repos import make_repo
+
+    return make_repo(
+        tmp_path,
+        "host",
+        associates={ASSOCIATE_NAME: str(viewer_project)},
+        associate_namespaces={ASSOCIATE_NAME: NAMESPACE},
+    )
+
+
+@pytest.fixture
+def federated_app_state(federated_project: Path):
+    from elspais.server.state import AppState
+
+    state = AppState.from_config(repo_root=federated_project)
+    assert state.graph.root_repo_name != ASSOCIATE_NAME
+    return state
+
+
+@pytest.fixture
+def federated_client(federated_app_state) -> TestClient:
+    from elspais.server.app import create_app
+
+    return TestClient(create_app(state=federated_app_state, mount_mcp=False))
+
+
+@pytest.fixture
+def federated_mcp_tools(federated_app_state, federated_project: Path):
+    """MCP tools on the same federated graph the HTTP app serves."""
+    pytest.importorskip("mcp")
+    from elspais.mcp.server import create_server
+
+    server = create_server(federated_app_state.graph, working_dir=federated_project)
+    return {name: tool.fn for name, tool in server._tool_manager._tools.items()}
+
+
+def _associate_body(case: RouteCase) -> dict:
+    """The case's payload, with tokens, aimed at the associate-owned node.
+
+    The tokens are stale, which makes the sweep say something extra: both
+    guards have grounds to refuse, and the body asserted below is the
+    ownership one, so ownership is settled first -- the order the MCP tools
+    check in.
+    """
+    body = case.with_tokens(lambda _node_id: BOGUS_VERSION)
+    body.update(ASSOCIATE_PAYLOAD_OVERRIDES.get(case.path, {}))
+    return body
+
+
+class TestHttpMutationRoutesRefuseAnAssociate:
+    """Validates REQ-d00253-D, REQ-o00062-O:
+
+    The MCP tools refuse a mutation aimed at an associate-owned node. Until
+    the HTTP routes did too, a write the agent surface would not perform was
+    accepted by the viewer -- and then dropped at save time, because the save
+    does not write associate files either. The edit ended up nowhere.
+
+    The sweep runs the whole RouteCase table against a federation in which
+    every one of those ids belongs to the associate, so the guard is asserted
+    for the surface rather than for the routes someone listed.
+    """
+
+    # Verifies: REQ-d00253-D
+    def test_REQ_d00253_D_the_fixture_ids_are_associate_owned(self, federated_app_state):
+        """REQ-d00253-D: if the fixture's nodes were primary-owned, or absent,
+        every refusal below would be some other refusal and the sweep would
+        prove nothing."""
+        graph = federated_app_state.graph
+
+        for case in ROUTE_CASES:
+            node_id = case.guarded_id
+            assert graph.find_by_id(node_id) is not None, f"{node_id} is not in the graph"
+            assert graph.repo_for(node_id).name == ASSOCIATE_NAME, (
+                f"{node_id} is not owned by the associate, so {case.path} is untested"
+            )
+
+    # Verifies: REQ-d00253-D
+    def test_REQ_d00253_D_payload_overrides_name_real_routes(self):
+        """REQ-d00253-D: a stale override would silently re-aim a route's
+        payload at something the sweep no longer exercises."""
+        stale = set(ASSOCIATE_PAYLOAD_OVERRIDES) - {case.path for case in ROUTE_CASES}
+
+        assert not stale, f"payload overrides for routes with no RouteCase: {sorted(stale)}"
+
+    # Verifies: REQ-d00253-D
+    @pytest.mark.parametrize("case", ROUTE_CASES, ids=CASE_IDS)
+    def test_REQ_d00253_D_every_route_refuses_an_associate_owned_target(
+        self, federated_client, case: RouteCase
+    ):
+        """REQ-d00253-D: read-only means read-only on this surface too."""
+        resp = federated_client.post(case.path, json=_associate_body(case))
+
+        assert resp.status_code == 403, f"{case.path} -> {resp.status_code}: {resp.text}"
+        assert resp.json()["success"] is False
+
+    # Verifies: REQ-o00062-O
+    @pytest.mark.parametrize("case", ROUTE_CASES, ids=CASE_IDS)
+    def test_REQ_o00062_O_every_refusal_is_the_guard_the_mcp_tools_use(
+        self, federated_client, federated_app_state, case: RouteCase
+    ):
+        """REQ-o00062-O: the body is the shared guard's own dict, returned
+        verbatim. A route that hand-rolled an equivalent-looking refusal would
+        not match it."""
+        from elspais.mcp.server import _guard_associate_write
+
+        expected = _guard_associate_write(
+            federated_app_state.graph, federated_app_state.config, case.guarded_id
+        )
+        assert expected is not None, f"the shared guard does not refuse {case.guarded_id}"
+
+        payload = federated_client.post(case.path, json=_associate_body(case)).json()
+
+        assert payload == expected, f"{case.path} returns its own refusal body"
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_refusal_body_is_identical_to_the_mcp_tool(
+        self, federated_client, federated_mcp_tools
+    ):
+        """REQ-o00062-O: asserted end to end through a registered tool, not
+        only through the guard both surfaces call."""
+        http_body = federated_client.post(
+            "/api/mutate/title",
+            json={"node_id": REQ, "new_title": "Written by the viewer", VERSION_FIELD: "ignored"},
+        ).json()
+
+        mcp_body = federated_mcp_tools["mutate_update_title"](
+            node_id=REQ, new_title="Written by the viewer", if_version="ignored"
+        )
+
+        assert http_body == mcp_body
+
+    # Verifies: REQ-d00253-D
+    @pytest.mark.parametrize("case", ROUTE_CASES, ids=CASE_IDS)
+    def test_REQ_d00253_D_a_refused_route_applied_nothing(
+        self, federated_client, federated_app_state, case: RouteCase
+    ):
+        """REQ-d00253-D: refusing after mutating would leave the viewer holding
+        an edit no save will ever write -- exactly the loss being prevented."""
+        before_fingerprint = _graph_fingerprint(federated_app_state)
+        before_versions = {
+            node_id: render.node_version(federated_app_state.graph.find_by_id(node_id))
+            for node_id in case.token_fields().values()
+        }
+
+        federated_client.post(case.path, json=_associate_body(case))
+
+        assert _graph_fingerprint(federated_app_state) == before_fingerprint, (
+            f"{case.path} changed the graph it refused to mutate"
+        )
+        assert {
+            node_id: render.node_version(federated_app_state.graph.find_by_id(node_id))
+            for node_id in before_versions
+        } == before_versions
+        assert len(federated_app_state.graph.mutation_log) == 0, (
+            f"{case.path} queued a mutation it reported as refused"
+        )
+
+    # Verifies: REQ-d00253-D
+    def test_REQ_d00253_D_the_host_repo_is_still_writable(
+        self, federated_client, federated_app_state
+    ):
+        """REQ-d00253-D: the guard names an associate, not a federation. A
+        refusal that caught the host's own requirements too would be a
+        different defect wearing the same green."""
+        host_req = "HOST-d00001"
+        node = federated_app_state.graph.find_by_id(host_req)
+        assert node is not None, "the host repo contributed no requirement"
+
+        resp = federated_client.post(
+            "/api/mutate/title",
+            json={
+                "node_id": host_req,
+                "new_title": "Retitled in the host",
+                VERSION_FIELD: render.node_version(node),
+            },
+        )
+
+        assert resp.status_code == 200, f"{resp.status_code}: {resp.text}"
+        assert resp.json()["success"] is True
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# A save that declined to write is refused, not failed
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _queue_associate_mutation(federated_app_state) -> None:
+    """Queue one change to an associate-owned requirement.
+
+    Applied to the graph rather than posted to a route: the HTTP mutation
+    routes refuse an associate-owned target outright, so a save can only ever
+    meet such a change if it arrived some other way -- an edit queued before
+    the scope narrowed, or a writer holding the graph directly. That is the
+    case the save's own answer has to cover.
+    """
+    federated_app_state.graph.change_status(REQ, "draft")
+    assert len(federated_app_state.graph.mutation_log) == 1
+
+
+class TestASaveThatDeclinedToWriteIsRefusedNotFailed:
+    """Validates REQ-o00062-O, REQ-d00253-B.
+
+    ``/api/save`` answered every unsuccessful save that was not a conflict
+    with 500, so a caller could not tell "the write scope does not reach that
+    repository, and it will say so again" from "the write failed, try again".
+    The first is a refusal the caller can act on -- 403, the status the
+    mutation routes already give for the same reason -- and the body carries
+    the save's own ``code`` so a caller reading the JSON sees it too.
+    """
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_a_declined_save_is_403(self, federated_client, federated_app_state):
+        """REQ-o00062-O: nothing is in conflict and nothing failed; the write
+        scope simply does not reach that file."""
+        _queue_associate_mutation(federated_app_state)
+
+        resp = federated_client.post(
+            "/api/save",
+            json={HISTORY_TIP_FIELD: _log_tip(federated_app_state), "message": CHANGELOG_REASON},
+        )
+
+        assert resp.status_code == 403, f"{resp.status_code}: {resp.text}"
+        payload = resp.json()
+        assert payload["success"] is False
+        assert payload["code"] == "write_scope_declined", payload
+        assert len(federated_app_state.graph.mutation_log) == 1, (
+            "the refused save discarded the work it declined to write"
+        )
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_the_body_is_the_saves_own_words(
+        self, federated_client, federated_app_state
+    ):
+        """REQ-o00062-O: the route maps the code to a status and hands the
+        body back. A route that re-worded the refusal would leave the two
+        surfaces describing one condition two ways."""
+        from elspais.graph.render import _decline_fields
+
+        _queue_associate_mutation(federated_app_state)
+        expected = _decline_fields([REQ_FILE])
+
+        payload = federated_client.post(
+            "/api/save",
+            json={HISTORY_TIP_FIELD: _log_tip(federated_app_state), "message": CHANGELOG_REASON},
+        ).json()
+
+        assert payload["code"] == expected["code"]
+        assert payload["error"] == expected["error"], "the route re-worded the save's refusal"
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_the_refusal_keeps_what_the_save_reported(
+        self, federated_client, federated_app_state
+    ):
+        """REQ-o00062-O: a decline writes nothing, and the accounting the save
+        produced for it -- what it held back, and that it wrote none of it --
+        survives the refusal rather than being replaced by the route's own."""
+        _queue_associate_mutation(federated_app_state)
+
+        payload = federated_client.post(
+            "/api/save",
+            json={HISTORY_TIP_FIELD: _log_tip(federated_app_state), "message": CHANGELOG_REASON},
+        ).json()
+
+        assert {"errors", "skipped", "saved_count", "files_modified"} <= set(payload), payload
+        assert any(REQ_FILE in entry for entry in payload["skipped"]), payload["skipped"]
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_the_mcp_save_tool_reports_the_same_code(
+        self, federated_client, federated_app_state, federated_mcp_tools
+    ):
+        """REQ-o00062-O: both surfaces reach disk through ``persist_pending``,
+        so the agent and the viewer are told the same thing about the same
+        pending work. A decline keeps that work, so both may be asked."""
+        _queue_associate_mutation(federated_app_state)
+        tip = _log_tip(federated_app_state)
+
+        http_payload = federated_client.post(
+            "/api/save",
+            json={HISTORY_TIP_FIELD: tip, "message": CHANGELOG_REASON},
+        ).json()
+        mcp_payload = federated_mcp_tools["save_mutations"](
+            if_tip_mutation_id=tip, message=CHANGELOG_REASON
+        )
+
+        assert mcp_payload["code"] == http_payload["code"] == "write_scope_declined"
+        assert mcp_payload["error"] == http_payload["error"]

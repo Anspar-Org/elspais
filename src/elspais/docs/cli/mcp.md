@@ -299,6 +299,74 @@ measures.
                   rolled_indirect. This is where whole-requirement and
                   conducted evidence stays visible.
 
+### Configuration Declarations
+
+A `[scopes.NAME]` a configuration document declares is a node of its own, so
+changing one is an ordinary graph mutation: it joins the same mutation log,
+the same undo and the same count of pending changes, and the document is
+written back by the same save. See `elspais docs scoping` for what a scope
+declares and `elspais docs associate` for the federation boundary a change
+may not cross.
+
+**mutate_add_declaration(config_file_id, table, name, settings, if_version)**
+
+Declare something under a name in a configuration document.
+
+  Args:
+    config_file_id  The document to declare it in (e.g.
+                     "file:REQ:.elspais.toml")
+    table           The configuration table to declare it in (today
+                     "scopes"); a table nothing is declarable in is refused
+    name            The name to declare it under, matched without regard to
+                     case, so a name differing from an existing one only in
+                     case is refused naming the one already there
+    settings        What the declaration says, keyed as the TOML is written
+                     (e.g. {"level": ["prd"], "status": ["Active"]})
+    if_version      The document's token -- what the declaration is added to,
+                     the declaration itself not existing yet
+
+**mutate_update_declaration(declaration_id, settings, if_version)**
+
+Change what a declaration says, keeping the name it says it under. What you
+send is what it says afterwards, whole: a setting left out is a setting the
+project no longer states. The comments and spacing written around the
+settings survive, because the table is edited setting by setting.
+
+**mutate_rename_declaration(declaration_id, new_name, if_version)**
+
+Respell the name a declaration is declared under, in place, so it keeps its
+position in the document. Nothing inside the graph depends on a declared
+name; what a rename can break is outside it, where the name was written down
+-- a job asking for a report under it.
+
+**mutate_delete_declaration(declaration_id, if_version)**
+
+Remove a declaration from the document that declares it.
+
+  Common to all of them:
+    declaration_id  Addresses one declaration in one document (e.g.
+                     "decl:REQ:.elspais.toml:scopes:board"); a name is
+                     matched without regard to case
+    if_version      The declaration's own token, for all but the addition
+
+  Returns:
+    declaration_id  What the change left behind -- after a rename, not the
+                     id you supplied. Guard your next change on this one
+    version         The declaration's token afterwards. A removal reports
+                     none: nothing is left to hold one
+    shadowed_by     Present only where another document declares the same
+                     name, meaning the effective configuration did not move
+                     -- a machine-local overlay is where a repository's
+                     second declaration of a name lives, and that is the one
+                     every reader resolves to. It says where the name
+                     resolves, never what is declared there
+
+A change is judged before it is made: one that would leave a configuration
+the tool cannot load is refused naming what is wrong, and the document is
+left as it was. The viewer's `/api/mutate/add-declaration`, `/api/mutate/update-declaration`,
+`/api/mutate/rename-declaration` and `/api/mutate/delete-declaration` routes
+take the same arguments in a JSON body and answer identically.
+
 ## Concurrency Control
 
 One daemon serves several writers at once (MCP agents and the viewer GUI),
@@ -324,6 +392,17 @@ The viewer's `/api/mutate/*` HTTP routes enforce the same guards,
 returning HTTP 409 with the identical rejection body, and its history
 routes `/api/save`, `/api/revert`, and `/api/reload` require
 `if_tip_mutation_id` in the JSON body.
+
+A stale tip is not the only way a save comes back unsuccessful, and the
+`code` says which it was: `save_mutations` reports `write_scope_declined`
+where the save held back a file it was asked to write -- one an associate
+owns, with `federation.write_associates` false -- naming those files,
+writing nothing at all and leaving every pending change in hand, and
+`save_failed` where a write was attempted and failed. A decline never
+reaches a write, so it is never also a failure. A decline repeats until
+the write scope reaches that repository; a failure may not. The viewer's `/api/save` reports the
+same codes, as 403 and 500. See `elspais docs associate` for the federation
+boundary and how to write across it.
 
 Full protocol: `elspais docs concurrency` (or the MCP `docs("concurrency")`
 and `faq("concurrency")` tools).

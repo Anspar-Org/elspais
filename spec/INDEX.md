@@ -111,12 +111,12 @@
 | REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 515f0165 |
 | REQ-d00124 | Graph Analysis Engine                                         | dev-cli.md              | b153d5f6 |
 | REQ-d00125 | Analysis CLI Command                                          | dev-cli.md              | 474fa8af |
-| REQ-d00126 | FILE Node Data Model                                          | dev-graph-file-nodes.md | 070e173b |
+| REQ-d00126 | FILE Node Data Model                                          | dev-graph-file-nodes.md | 3f3620d0 |
 | REQ-d00127 | GraphNode API: Filtered Traversal and Edge-Only Relationships | dev-graph-file-nodes.md | 20632d4a |
 | REQ-d00128 | FILE Node Creation in Build Pipeline                          | dev-graph-file-nodes.md | 926ddd2b |
 | REQ-d00129 | SourceLocation Removal and Consumer Migration                 | dev-graph-file-nodes.md | 6d11df36 |
 | REQ-d00130 | Parameterized Root Iteration and Kind-Based Index Query       | dev-graph-file-nodes.md | 5733741e |
-| REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | 4bd2b48b |
+| REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | c81d018a |
 | REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | f5a4193c |
 | REQ-d00133 | MCP FILE Node Integration                                     | dev-mcp-tools.md        | 08e2973f |
 | REQ-d00134 | Mutation Round-Trip Fidelity                                  | dev-graph-file-nodes.md | 19cb065b |
@@ -173,7 +173,7 @@
 | REQ-d00250 | Section Header Depth Canonicalization                         | dev-graph-core.md       | 48fc2f11 |
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | b49bd5ee |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 1de716cb |
-| REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | f454041e |
+| REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | 8360f2f4 |
 | REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 2de47895 |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
@@ -218,6 +218,7 @@
 | REQ-d00296 | Request Identity From a Trusted Proxy                         | prd-features.md         | fe4f3620 |
 | REQ-d00297 | Opening a Pull Request From the Viewer                        | prd-core.md             | 006e3f69 |
 | REQ-d00298 | Report Export                                                 | dev-cli.md              | 8c1b78eb |
+| REQ-d00299 | Configuration as Graph Content                                | dev-graph-config.md     | 0577c0a5 |
 
 ## User Journeys
 

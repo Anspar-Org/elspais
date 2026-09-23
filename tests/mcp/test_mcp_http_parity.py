@@ -30,7 +30,7 @@ import pytest
 
 import elspais
 from elspais.graph import render
-from elspais.graph.GraphNode import make_file_id
+from elspais.graph.GraphNode import make_declaration_id, make_file_id
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 HHT_LIKE = FIXTURES_DIR / "hht-like"
@@ -45,6 +45,12 @@ NAMESPACE = "REQ"
 
 JOURNEY = "JNY-001"
 JOURNEY_FILE = make_file_id(NAMESPACE, "spec/journeys.md")
+
+# The committed configuration document and the one scope the fixture declares
+# in it. A change to a configuration is a graph mutation, so it is reachable
+# on both surfaces and guarded on both.
+CONFIG_FILE = make_file_id(NAMESPACE, ".elspais.toml")
+SCOPE_DECLARATION = make_declaration_id(NAMESPACE, ".elspais.toml", "scopes", "board")
 
 CONFLICT_KEYS = {
     "success",
@@ -79,8 +85,46 @@ ROUTE_TO_TOOL = {
     "/api/mutate/journey/delete": "mutate_delete_journey",
     "/api/mutate/move-to-file": "mutate_move_node_to_file",
     "/api/mutate/rename-file": "mutate_rename_file",
+    "/api/mutate/add-declaration": "mutate_add_declaration",
+    "/api/mutate/update-declaration": "mutate_update_declaration",
+    "/api/mutate/rename-declaration": "mutate_rename_declaration",
+    "/api/mutate/delete-declaration": "mutate_delete_declaration",
     "/api/mutate/undo": "undo_last_mutation",
 }
+
+# The four configuration mutations, with a call that would edit the fixture's
+# document if the guard let it through, and the id whose version guards it.
+# ``mutate_add_declaration`` declares something that does not exist yet, so it
+# is guarded by the document it is declared in.
+DECLARATION_TOOL_CALLS = [
+    (
+        "mutate_add_declaration",
+        CONFIG_FILE,
+        {
+            "config_file_id": CONFIG_FILE,
+            "table": "scopes",
+            "name": "auditor",
+            "settings": {"level": ["dev"]},
+        },
+    ),
+    (
+        "mutate_update_declaration",
+        SCOPE_DECLARATION,
+        {"declaration_id": SCOPE_DECLARATION, "settings": {"level": ["ops"]}},
+    ),
+    (
+        "mutate_rename_declaration",
+        SCOPE_DECLARATION,
+        {"declaration_id": SCOPE_DECLARATION, "new_name": "auditor"},
+    ),
+    (
+        "mutate_delete_declaration",
+        SCOPE_DECLARATION,
+        {"declaration_id": SCOPE_DECLARATION},
+    ),
+]
+
+DECLARATION_IDS = [call[0] for call in DECLARATION_TOOL_CALLS]
 
 # The five tools this change adds, with a call that would mutate the fixture
 # if the guard let it through, and the id whose version guards that call.
@@ -423,6 +467,84 @@ class TestParityToolsGuardVersion:
         absent = {**kwargs}
         key = "file_id" if tool_name == "mutate_add_journey" else "node_id"
         absent[key] = "JNY-does-not-exist"
+
+        result = tools[tool_name](if_version=BOGUS_VERSION, **absent)
+
+        assert result["success"] is False
+        assert result["code"] == "node_not_found"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# A configuration change is guarded like any other
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "guarded_id", "kwargs"),
+    DECLARATION_TOOL_CALLS,
+    ids=DECLARATION_IDS,
+)
+class TestDeclarationToolsGuardVersion:
+    """Validates REQ-o00062-O, REQ-o00062-I, REQ-o00062-J:
+
+    A configuration change reads and writes the graph and the mutation log, so
+    it is not exempt from the precondition: each of the four tools takes a
+    required ``if_version`` and refuses a stale one with the body its HTTP
+    counterpart returns, so an agent and the viewer cannot overwrite each
+    other's configuration edits silently.
+    """
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_if_version_is_a_required_parameter(
+        self, tools, tool_name, guarded_id, kwargs
+    ):
+        """REQ-o00062-O: The precondition cannot be omitted."""
+        assert tool_name in tools, f"{tool_name} is not a registered MCP tool"
+        params = inspect.signature(tools[tool_name]).parameters
+
+        assert "if_version" in params, f"{tool_name} does not accept if_version"
+        assert params["if_version"].default is inspect.Parameter.empty
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_stale_version_rejected_and_the_document_untouched(
+        self, canonical_graph, tools, tool_name, guarded_id, kwargs
+    ):
+        """REQ-o00062-O: A refusal is a refusal -- the document the graph holds
+        is the one it held, and nothing joined the mutation log."""
+        before = node_version(canonical_graph.find_by_id(guarded_id))
+        pending = len(canonical_graph.mutation_log)
+
+        result = tools[tool_name](if_version=BOGUS_VERSION, **kwargs)
+
+        assert result["success"] is False, f"{tool_name} applied a stale-version change"
+        assert result["code"] == "version_conflict"
+        assert node_version(canonical_graph.find_by_id(guarded_id)) == before
+        assert len(canonical_graph.mutation_log) == pending
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_conflict_body_is_the_shape_the_route_returns(
+        self, tools, tool_name, guarded_id, kwargs
+    ):
+        """REQ-o00062-O: The same keys, the same code, and the current state to
+        reconcile against -- one rejection body, not one per surface."""
+        result = tools[tool_name](if_version=BOGUS_VERSION, **kwargs)
+
+        assert CONFLICT_KEYS <= set(result), f"{tool_name} conflict is missing keys: {result}"
+        assert result["node_id"] == guarded_id
+        assert result["provided_version"] == BOGUS_VERSION
+        assert result["current_version"] != BOGUS_VERSION
+        assert isinstance(result["current_state"], dict)
+        assert "error" not in result["current_state"]
+
+    # Verifies: REQ-o00062-O
+    def test_REQ_o00062_O_absent_target_is_not_a_version_conflict(
+        self, tools, tool_name, guarded_id, kwargs
+    ):
+        """REQ-o00062-O: Naming something that is not there is reported as
+        such, because retrying with a fresh token cannot fix it."""
+        absent = {**kwargs}
+        key = "config_file_id" if tool_name == "mutate_add_declaration" else "declaration_id"
+        absent[key] = "decl:REQ:.elspais.toml:scopes:nobody"
 
         result = tools[tool_name](if_version=BOGUS_VERSION, **absent)
 

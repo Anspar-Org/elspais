@@ -33,6 +33,13 @@ class NodeKind(Enum):
     REMAINDER = "remainder"
     # Implements: REQ-d00126-A
     FILE = "file"
+    # Implements: REQ-d00299-D
+    # One named entry a project declares in a configuration table -- today a
+    # `[scopes.NAME]`, tomorrow whatever else gains a coherent set of
+    # mutations. Deliberately NOT named after scopes: the table a node
+    # declares in is recorded on the node (`declares_table`), so the family
+    # grows by naming another table rather than by minting another kind.
+    DECLARATION = "declaration"
 
 
 # Implements: REQ-d00126-B
@@ -41,6 +48,10 @@ class FileType(Enum):
 
     Determines which domain parser processes the file and what
     node kinds its content produces.
+
+    CONFIG is the exception to that sentence: a configuration document
+    produces no content nodes. It is held because it was read, and it
+    decides how everything else is read (REQ-d00299-A).
     """
 
     SPEC = "spec"
@@ -48,6 +59,8 @@ class FileType(Enum):
     CODE = "code"
     TEST = "test"
     RESULT = "result"
+    # Implements: REQ-d00299-A
+    CONFIG = "config"
 
 
 # Structural node-id prefixes. FILE and REMAINDER node ids are keyed by
@@ -61,6 +74,7 @@ FILE_ID_PREFIX = "file:"
 REMAINDER_ID_PREFIX = "rem:"
 DEFINITION_ID_PREFIX = "def:"
 RESULT_ID_PREFIX = "result:"
+DECLARATION_ID_PREFIX = "decl:"
 CODE_ID_PREFIX = "code:"
 TEST_ID_PREFIX = "test:"
 
@@ -169,6 +183,27 @@ def parse_structural_id(node_id: str) -> tuple[str, str, str, int | None]:
             )
         return prefix, namespace, path, int(line)
     raise ValueError(f"'{node_id}' is not a structural id")
+
+
+# Implements: REQ-d00299-D
+def make_declaration_id(namespace: str, relative_path: str, table: str, name: str) -> str:
+    """Canonical id for a named declaration in a configuration document.
+
+    The document is named because two documents are read for a repository --
+    the committed file and the machine-local overlay -- and both may declare
+    the same name. The table is named because a name is unique within its
+    table and nowhere else.
+
+    Deliberately NOT a structural id: its last part is a declared name, not a
+    line, so ``parse_structural_id`` would read it wrongly if it admitted it.
+    """
+    _require_namespace(namespace, relative_path)
+    if not table or not name:
+        raise ValueError(
+            f"Cannot make a declaration id for '{relative_path}' without both a "
+            f"table and a name: the id says which declaration it addresses."
+        )
+    return f"{DECLARATION_ID_PREFIX}{namespace}:{relative_path}:{table}:{name}"
 
 
 def make_code_id(source_id: str, start_line: int) -> str:

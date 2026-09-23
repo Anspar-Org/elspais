@@ -245,6 +245,82 @@ succeeds cannot produce a federation that then refuses to build.
 `elspais checks` and `elspais doctor` report on every member, including the
 ones reached indirectly.
 
+## Changing a member's configuration
+
+A configuration document is changeable only in the repository the tool is
+serving. A federation holds one for every member, so a change can be aimed at
+an associate's -- a repository the tool reads rather than serves -- and that is
+refused, naming the document's own repository and the one being served:
+
+```text
+.elspais.toml is the configuration of 'CAL', and this tool is serving 'REQ'.
+A configuration document is changeable only in the repository being served;
+change it from a tool serving that repository instead.
+```
+
+Nothing is changed, on disk or in the graph, and nothing joins the pending
+changes. Writing into another repository's checkout is surprising wherever it
+happens, and where the checkout was made by a host for a session, an edit to it
+would be discarded without anyone noticing; a tool serving that repository is
+where such an edit belongs.
+
+Reading is unrestricted. Every member's configuration is held and readable, and
+a declaration is read in the project that makes it -- an associate's
+declarations are invisible to the host and the host's to the associate. What a
+declaration change is and what it reports is in `elspais docs scoping`.
+
+## Changing a member's requirements
+
+A member the tool reads rather than serves is read-only by default, and that
+holds from either surface: a mutation aimed at a node an associate owns is
+refused by the MCP tools and by the viewer's mutation routes alike, before the
+version token is judged, naming the associate and the setting that would open
+it. Nothing is changed, in memory or on disk.
+
+A change can still reach the pending work another way -- a command that mutates
+the graph directly, for instance -- and the save is where it is answered. A save
+writes only the repository being served while `write_associates` is false, so a
+change queued for an associate's file is not written; it is not discarded
+either. The save names the file it held back and why, in what it reports as
+skipped and as an error:
+
+```text
+file:CAL:spec/reqs.md: owned by an associate, so it is not written
+(federation.write_associates is false). The changes queued for it are kept
+rather than discarded.
+```
+
+Because the change is still pending, the save did not do what it was asked and
+does not report success: pending changes are cleared only once a save has
+performed them.
+
+A save that holds anything back writes nothing at all -- not even the files of
+the repository it is serving. A change is not always confined to the file its
+author edited: renaming a requirement corrects the reference in every file
+citing it, and those files may belong to other members, so writing the part the
+write scope reaches would leave a repository citing an identifier that no longer
+exists -- a reference broken by the save itself, in a file nobody edited, in a
+repository you may not be looking at. Holding all of it back leaves every member
+as it was and the work still in hand, so the save reports `saved_count` 0 and an
+empty `files_modified`, and every member's pending changes are still there to be
+saved once the write scope reaches them.
+
+The unsuccessful save says which kind of unsuccessful it was. It carries
+`code: "write_scope_declined"` and an `error` naming the held-back files in
+full, so a caller can tell a decline -- a policy answer a further save will
+repeat -- from a write that failed and might succeed next time. A decline never
+reaches a write, so it is never also a failure. The MCP save tool
+and the viewer both report the code the save wrote; over HTTP, `POST /api/save`
+maps it to **403**, the status the mutation routes already give for an
+associate-owned target, rather than the 500 a failed write gets.
+
+To write the change, set `write_associates = true` under `[federation]`, or
+make it from a tool serving the repository that owns the file.
+
+A file that is merely untidy -- formatting `elspais fix` would canonicalize,
+which nobody asked for -- is held back without a word and triggers none of
+this, so an ordinary `fix` run in a federation is unaffected.
+
 ## Options
 
 | Flag | Description |

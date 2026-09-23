@@ -18,9 +18,12 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from elspais.config import (
+    config_document_paths,
+    find_config_file,
     get_code_directories,
     get_config,
     get_spec_directories,
+    parse_toml_document,
     scan_exclusions,
 )
 from elspais.config.schema import (
@@ -29,6 +32,7 @@ from elspais.config.schema import (
     ElspaisConfig,
 )
 from elspais.graph.builder import GraphBuilder
+from elspais.graph.declarations import build_declaration_nodes
 from elspais.graph.deserializer import DomainFile
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.federation_plan import (
@@ -1107,6 +1111,34 @@ def build_graph(
                 existing_types.append(type_val)
             fn.set_field("file_types", existing_types)
         return file_nodes[resolved]
+
+    # Implements: REQ-d00299-A
+    # The configuration is read before anything else and decides how the
+    # rest is read, so the document it was read from is held before any
+    # spec file is. The node carries the parsed document rather than the
+    # values taken from it: the values are already in `config`, and it is
+    # the document — its comments, its spacing, the order its author chose
+    # — that a writer must be able to give back unchanged.
+    _read_config_path = config_path if config_path else find_config_file(repo_root)
+    if _read_config_path is not None and _read_config_path.is_file():
+        for document_path in config_document_paths(_read_config_path):
+            try:
+                document_text = document_path.read_text(encoding="utf-8")
+            except OSError:
+                # The configuration was read moments ago; a document that
+                # cannot be read now is a race, not a configuration fault,
+                # and refusing the build over it would be a worse answer
+                # than building without holding that document.
+                continue
+            config_node = _get_or_create_file_node(document_path, FileType.CONFIG)
+            config_node.set_field("config_document", parse_toml_document(document_text))
+            # Implements: REQ-d00299-D
+            # A declaration the document makes under a name becomes a node
+            # of its own, so it can be addressed and versioned. These are
+            # CONTAINS children that are NOT the file's text -- the CONFIG
+            # renderer dumps the document and never walks them.
+            for declaration_node in build_declaration_nodes(config_node):
+                builder.register_declaration_node(declaration_node)
 
     for spec_dir in spec_dirs:
         # Resolve full scan config for this spec dir from its own .elspais.toml

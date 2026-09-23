@@ -18,6 +18,23 @@ from typing import Any
 
 from elspais.graph.comment_store import update_anchors_on_rename
 from elspais.graph.comments import CommentIndex, CommentThread
+from elspais.graph.declarations import (
+    DECLARATION_OPERATIONS,
+    DECLARED_TABLES,
+    build_declaration_node,
+    colliding_name,
+    copy_document,
+    declaration_node_id,
+    declared_entries,
+    document_of,
+    document_text,
+    find_declaration,
+    is_config_node,
+    remove_declaration,
+    rename_declaration_key,
+    replace_document,
+    set_declaration,
+)
 from elspais.graph.edge_sets import (
     TRACEABILITY_EDGE_KINDS as _TRACEABILITY_EDGE_KINDS,
 )
@@ -892,6 +909,8 @@ class TraceGraph:
             self._undo_delete_remainder(entry)
         elif op == "add_changelog_entry":
             self._undo_add_changelog_entry(entry)
+        elif op in DECLARATION_OPERATIONS:
+            self._undo_declaration_mutation(entry)
         # Unknown operations are silently ignored (forward compatibility)
 
     # Implements: REQ-p00017-B, REQ-d00132-G
@@ -3052,6 +3071,331 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Configuration declaration mutations
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _config_node_for(self, config_file_id: str) -> GraphNode:
+        """The configuration document a mutation names, or a refusal."""
+        node = self._index.get(config_file_id)
+        if node is None:
+            raise KeyError(f"Configuration document '{config_file_id}' not found")
+        if not is_config_node(node):
+            raise ValueError(
+                f"Node '{config_file_id}' is not a configuration document, so it "
+                f"declares nothing that can be changed."
+            )
+        return node
+
+    def _declaration_node_for(self, node_id: str) -> GraphNode:
+        """The declaration a mutation names, or a refusal."""
+        node = self._index.get(node_id)
+        if node is None:
+            raise KeyError(f"Declaration '{node_id}' not found")
+        if node.kind != NodeKind.DECLARATION:
+            raise ValueError(
+                f"Node '{node_id}' is not a configuration declaration, so it "
+                f"cannot be changed as one."
+            )
+        return node
+
+    def _sync_declaration_nodes(self, config_node: GraphNode) -> None:
+        """Make the nodes beneath a document say what the document now says.
+
+        Every edit goes through here rather than adjusting one node: an
+        undo restores the document's text wholesale, so the items the nodes
+        held are gone with the document they came from, and a node left
+        pointing at one would report a declaration the document no longer
+        makes.
+        """
+        declared = {
+            declaration_node_id(config_node, table, name): (table, name, item)
+            for table, name, item in declared_entries(config_node)
+        }
+        held = {
+            child.id: child
+            for child in config_node.iter_children(edge_kinds={EdgeKind.CONTAINS})
+            if child.kind == NodeKind.DECLARATION
+        }
+
+        for node_id, (table, name, item) in declared.items():
+            node = held.pop(node_id, None)
+            if node is None:
+                node = build_declaration_node(config_node, table, name, item)
+            else:
+                node.set_field("declaration", item)
+            self._index[node_id] = node
+
+        for stale in held.values():
+            config_node.unlink(stale)
+            self._index.pop(stale.id, None)
+
+    # Implements: REQ-d00299-E
+    def _change_declaration_document(self, config_node: GraphNode, edit: Any) -> None:
+        """Apply an edit to a copy, refuse an unloadable result, then install it.
+
+        The refusal comes before the change rather than after it. A change
+        cannot produce an unparseable document -- `tomlkit` edits structure
+        rather than text -- but it can produce one that parses and then
+        fails validation, and a repository left holding one is a repository
+        whose configuration the tool refuses on its next read. So the
+        document the graph serves is never the one being judged: the edit
+        lands on a copy, and a copy that will not load is dropped.
+
+        Args:
+            config_node: The configuration document being changed.
+            edit: Applied to the copy, and to nothing else.
+
+        Raises:
+            ValueError: The result is a configuration this version cannot
+                load. The document is untouched, and nothing has been
+                recorded.
+        """
+        from elspais.graph.held_config import config_with
+
+        prospective = copy_document(config_node)
+        edit(prospective)
+
+        try:
+            config_with(self, config_node, prospective)
+        except ValueError as refusal:
+            raise ValueError(
+                f"That change would leave {config_node.get_field('relative_path')} a "
+                f"configuration this version cannot load, so it was not made. "
+                f"Change what it declares and try again. The configuration was "
+                f"refused because: {refusal}"
+            ) from refusal
+
+        config_node.set_field("config_document", prospective)
+        self._sync_declaration_nodes(config_node)
+
+    def _declaration_entry(
+        self,
+        operation: str,
+        config_node: GraphNode,
+        table: str,
+        name: str,
+        before_text: str,
+        before_name: str | None = None,
+    ) -> MutationEntry:
+        """Record a declaration mutation, carrying the text it is undone to.
+
+        The document's own text is what an undo restores, because a
+        configuration is written by hand: reversing the values would
+        reflow the comments, spacing and key order written around them.
+        """
+        node_id = declaration_node_id(config_node, table, name)
+        after_state: dict[str, Any] = {
+            "file_id": config_node.id,
+            "table": table,
+            "name": name,
+            "id": node_id,
+        }
+        # Implements: REQ-d00299-G
+        # A name declared in two documents resolves to one of them, so a
+        # change to the other alters nothing a reader can see. Reporting it is
+        # the difference between a change that did nothing and a change that
+        # appeared to work. What is disclosed is only WHERE the name resolves
+        # -- never what that document declares, which would put the shape of
+        # an overlay back into the answers (REQ-d00290-B).
+        resolved = find_declaration(self, table, name)
+        owner = resolved.file_node() if resolved is not None else None
+        if owner is not None and owner.id != config_node.id:
+            after_state["shadowed_by"] = owner.get_field("relative_path")
+
+        entry = MutationEntry(
+            operation=operation,
+            target_id=node_id,
+            before_state={
+                "file_id": config_node.id,
+                "table": table,
+                "name": before_name if before_name is not None else name,
+                "document_text": before_text,
+            },
+            after_state=after_state,
+        )
+        self._mutation_log.append(entry)
+        return entry
+
+    def _refuse_collision(
+        self, config_node: GraphNode, table: str, name: str, own: str | None
+    ) -> None:
+        """Refuse a name the document already declares under another case.
+
+        A declared name is matched without regard to case, so two spellings
+        differing only in case are one name: admitting the second would
+        write a declaration nothing could address.
+        """
+        existing = colliding_name(document_of(config_node), table, name, ignoring=own)
+        if existing is not None:
+            raise ValueError(
+                f"{config_node.get_field('relative_path')} already declares "
+                f"[{table}.{existing}], and a declared name is matched without "
+                f"regard to case, so '{name}' names that same declaration. "
+                f"Choose another name, or change [{table}.{existing}]."
+            )
+
+    # Implements: REQ-d00299-D
+    def add_declaration(
+        self,
+        config_file_id: str,
+        table: str,
+        name: str,
+        settings: dict[str, Any],
+    ) -> MutationEntry:
+        """Declare something under a name in a configuration document.
+
+        Args:
+            config_file_id: The CONFIG FILE node to declare it in.
+            table: The configuration table to declare it in.
+            name: The name to declare it under.
+            settings: What the declaration says, keyed as the TOML is
+                written.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: No such configuration document.
+            ValueError: The table holds no declarations, the name is
+                empty, or the document already declares that name.
+        """
+        config_node = self._config_node_for(config_file_id)
+        self._refuse_declared_table(table)
+        if not name:
+            raise ValueError(
+                "A declaration is addressed by the name it is declared under, "
+                "so it cannot be declared without one."
+            )
+        self._refuse_collision(config_node, table, name, None)
+
+        before_text = document_text(config_node)
+        self._change_declaration_document(
+            config_node, lambda document: set_declaration(document, table, name, settings)
+        )
+        return self._declaration_entry("add_declaration", config_node, table, name, before_text)
+
+    # Implements: REQ-d00299-D
+    def update_declaration(self, declaration_id: str, settings: dict[str, Any]) -> MutationEntry:
+        """Change what a declaration says, leaving the name it says it under.
+
+        What is written replaces what was there: a setting the change
+        leaves out is a setting the project no longer states.
+
+        Args:
+            declaration_id: The declaration to change.
+            settings: What it says afterwards.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: The graph holds no such declaration.
+        """
+        node = self._declaration_node_for(declaration_id)
+        config_node = node.file_node()
+        if config_node is None:
+            raise ValueError(f"Declaration '{declaration_id}' hangs beneath no document")
+        table = str(node.get_field("declares_table"))
+        name = str(node.get_field("declared_name"))
+
+        before_text = document_text(config_node)
+        self._change_declaration_document(
+            config_node, lambda document: set_declaration(document, table, name, settings)
+        )
+        return self._declaration_entry("update_declaration", config_node, table, name, before_text)
+
+    # Implements: REQ-d00299-D
+    def rename_declaration(self, declaration_id: str, new_name: str) -> MutationEntry:
+        """Respell the name a declaration is declared under.
+
+        Nothing inside the graph references a declared name -- no
+        requirement, edge or metric depends on one -- so a rename is
+        coherent where a rename of a status would not be. What it can
+        break is outside the graph, where a name was written down.
+
+        Args:
+            declaration_id: The declaration to rename.
+            new_name: The name it is declared under afterwards.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: The graph holds no such declaration.
+            ValueError: The name is empty, or the document already
+                declares another under it.
+        """
+        node = self._declaration_node_for(declaration_id)
+        config_node = node.file_node()
+        if config_node is None:
+            raise ValueError(f"Declaration '{declaration_id}' hangs beneath no document")
+        table = str(node.get_field("declares_table"))
+        name = str(node.get_field("declared_name"))
+        if not new_name:
+            raise ValueError(
+                "A declaration is addressed by the name it is declared under, "
+                "so it cannot be renamed to nothing."
+            )
+        self._refuse_collision(config_node, table, new_name, name)
+
+        before_text = document_text(config_node)
+        self._change_declaration_document(
+            config_node, lambda document: rename_declaration_key(document, table, name, new_name)
+        )
+        return self._declaration_entry(
+            "rename_declaration", config_node, table, new_name, before_text, before_name=name
+        )
+
+    # Implements: REQ-d00299-D
+    def delete_declaration(self, declaration_id: str) -> MutationEntry:
+        """Take a declaration out of the document that declares it.
+
+        Args:
+            declaration_id: The declaration to remove.
+
+        Returns:
+            MutationEntry recording the operation.
+
+        Raises:
+            KeyError: The graph holds no such declaration.
+        """
+        node = self._declaration_node_for(declaration_id)
+        config_node = node.file_node()
+        if config_node is None:
+            raise ValueError(f"Declaration '{declaration_id}' hangs beneath no document")
+        table = str(node.get_field("declares_table"))
+        name = str(node.get_field("declared_name"))
+
+        before_text = document_text(config_node)
+        self._change_declaration_document(
+            config_node, lambda document: remove_declaration(document, table, name)
+        )
+        return self._declaration_entry("delete_declaration", config_node, table, name, before_text)
+
+    def _refuse_declared_table(self, table: str) -> None:
+        """Refuse a table this graph holds no declarations for.
+
+        Which tables are held is decided in one place, and it is narrow on
+        purpose: a setting becomes changeable when someone has written the
+        means to change it coherently.
+        """
+        if table not in DECLARED_TABLES:
+            held = ", ".join(DECLARED_TABLES)
+            raise ValueError(
+                f"'{table}' is not a configuration table held as declarations; "
+                f"this graph holds {held}."
+            )
+
+    # Implements: REQ-o00062-G
+    def _undo_declaration_mutation(self, entry: MutationEntry) -> None:
+        """Undo a declaration mutation by restoring the document's text."""
+        config_node = self._index.get(entry.before_state.get("file_id", ""))
+        if config_node is None:
+            return
+        replace_document(config_node, entry.before_state.get("document_text", ""))
+        self._sync_declaration_nodes(config_node)
+
     # Implements: REQ-o00062-C
     def fix_broken_reference(
         self,
@@ -4133,6 +4477,19 @@ class GraphBuilder:
             file_node: A GraphNode with kind == NodeKind.FILE.
         """
         self._nodes[file_node.id] = file_node
+
+    # Implements: REQ-d00299-D
+    def register_declaration_node(self, node: GraphNode) -> None:
+        """Register a configuration DECLARATION node in the builder's index.
+
+        Created by factory.py from the document its FILE node holds and
+        registered here so it appears in the final graph index and is
+        addressable. It is already linked beneath that FILE node.
+
+        Args:
+            node: A GraphNode with kind == NodeKind.DECLARATION.
+        """
+        self._nodes[node.id] = node
 
     def _to_relative_path(self, source_id: str) -> str:
         """Convert an absolute source path to a relative path.
@@ -5783,7 +6140,16 @@ class GraphBuilder:
         #        with at least one meaningful (non-satellite) child.
         # Orphans: parentless non-REQUIREMENT nodes without meaningful children.
         # Implements: REQ-d00128-I
-        _non_candidate_kinds = {NodeKind.FILE, NodeKind.REMAINDER, NodeKind.ASSERTION}
+        # DECLARATION sits with these three for the reason they are here: a
+        # configuration declaration is structure, not traceable content that
+        # failed to link, so having no content-level parent says nothing
+        # about it.
+        _non_candidate_kinds = {
+            NodeKind.FILE,
+            NodeKind.REMAINDER,
+            NodeKind.ASSERTION,
+            NodeKind.DECLARATION,
+        }
         _content_edge_kinds = {
             EdgeKind.IMPLEMENTS,
             EdgeKind.REFINES,

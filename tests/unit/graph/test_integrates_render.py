@@ -55,5 +55,7 @@ def test_REQ_d00252_A_integrates_line_rendered(tmp_path):
 # Verifies: REQ-d00252-A
 def test_REQ_d00252_A_integrates_round_trips(tmp_path):
     graph = _build(tmp_path)
-    file_node = next(iter(graph.iter_roots(NodeKind.FILE)))
+    file_node = next(
+        n for n in graph.iter_roots(NodeKind.FILE) if n.get_field("relative_path") == "spec/dev.md"
+    )
     assert "**Integrates**: REQ-evs-0007" in render_file(file_node)

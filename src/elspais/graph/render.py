@@ -1,12 +1,14 @@
 # Implements: REQ-d00131-A, REQ-d00131-B, REQ-d00131-C, REQ-d00131-D
 # Implements: REQ-d00131-E, REQ-d00131-F, REQ-d00131-G, REQ-d00131-H
-# Implements: REQ-d00131-I, REQ-d00131-J
+# Implements: REQ-d00131-I, REQ-d00131-J, REQ-d00131-Q
 # Implements: REQ-d00132-A, REQ-d00132-E, REQ-d00132-F
 """Render Protocol - Serialize graph nodes back to text.
 
 Each domain NodeKind has a render function that produces its text
-representation. Walking a FILE node's CONTAINS children in render_order
-and concatenating their rendered output produces the file's content.
+representation. A FILE node's content comes from the renderer its file
+type declares; the spec, journey, code and test types declare the walk
+over CONTAINS children in render_order. A type declaring no renderer is
+read-only, and asking for its content is refused naming the type.
 
 The render_save() function persists dirty FILE nodes to disk by rendering
 their CONTAINS children, replacing the old persistence.py text surgery.
@@ -15,11 +17,14 @@ their CONTAINS children, replacing the old persistence.py text surgery.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from elspais.graph.GraphNode import GraphNode, NodeKind
+import tomlkit
+
+from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.utilities.hasher import (
     HASH_VALUE_PATTERN,
@@ -224,6 +229,21 @@ def _file_version_text(node: GraphNode) -> str:
     return f"{node.get_field('relative_path') or ''}\x1d{ordered}"
 
 
+# Implements: REQ-d00131-L, REQ-d00299-D
+def _declaration_version_text(node: GraphNode) -> str:
+    """Serialize a configuration declaration's identity and content.
+
+    A declaration is versioned on its own text and its own name, and on
+    nothing its neighbours in the same document hold, so two people editing
+    two scopes do not collide over one token.
+    """
+    from elspais.graph.declarations import declaration_text
+
+    table = node.get_field("declares_table") or ""
+    name = node.get_field("declared_name") or ""
+    return f"{table}\x1d{name}\x1d{declaration_text(node)}"
+
+
 _DIGEST_GRAMMAR: Any | None = None
 
 
@@ -268,6 +288,8 @@ def node_version(node: GraphNode) -> str:
 
     if node.kind == NodeKind.FILE:
         text = _file_version_text(node)
+    elif node.kind == NodeKind.DECLARATION:
+        text = _declaration_version_text(node)
     elif node.kind in (NodeKind.CODE, NodeKind.TEST):
         # A CODE node's ID embeds an absolute path, so it must never reach the
         # digest — versions would otherwise differ between machines.
@@ -327,6 +349,17 @@ def render_node(node: GraphNode, resolver: Any | None = None) -> str:
         raise ValueError(
             "STEP nodes are parse-derived and read-only; they are reached via "
             "STRUCTURES and never rendered directly."
+        )
+    elif kind == NodeKind.DECLARATION:
+        # Implements: REQ-d00299-D
+        # A declaration is part of a configuration document, and a
+        # configuration document's text is the document itself -- so there is
+        # no text a declaration renders to on its own, and a caller asking
+        # for one has the wrong node.
+        raise ValueError(
+            "DECLARATION nodes are part of the configuration document that "
+            "declares them and are not rendered independently. Render the "
+            "CONFIG FILE node instead."
         )
     elif kind == NodeKind.FILE:
         return render_file(node, resolver=resolver)
@@ -614,12 +647,12 @@ def _render_test(node: GraphNode) -> str:
     return node.get_field("raw_text") or ""
 
 
-# Implements: REQ-d00131-I
-def render_file(node: GraphNode, resolver: Any | None = None) -> str:
-    """Render a FILE node by walking its CONTAINS children.
+def _render_composed_file(node: GraphNode, resolver: Any | None = None) -> str:
+    """Render a file whose content is composed from the nodes it holds.
 
     Walks CONTAINS children sorted by render_order edge metadata,
-    calls render_node on each, and concatenates the results.
+    calls render_node on each, and concatenates the results. This is the
+    renderer the spec, journey, code and test file types declare.
 
     Args:
         node: A FILE node.
@@ -629,9 +662,6 @@ def render_file(node: GraphNode, resolver: Any | None = None) -> str:
     Returns:
         The complete file content as a string.
     """
-    if node.kind != NodeKind.FILE:
-        raise ValueError(f"render_file() requires a FILE node, got {node.kind}")
-
     # Collect CONTAINS children with their render_order
     children_with_order: list[tuple[float, GraphNode]] = []
 
@@ -662,6 +692,98 @@ def render_file(node: GraphNode, resolver: Any | None = None) -> str:
     if result and not result.endswith("\n"):
         result += "\n"
     return result
+
+
+# Implements: REQ-d00299-A
+def _render_config_file(node: GraphNode, resolver: Any | None = None) -> str:
+    """Render a configuration document from the document the node holds.
+
+    Dumping the parsed document is what makes comments, spacing and key
+    order survive a round trip: a configuration is written by hand, and
+    what nobody changed comes back unchanged.
+
+    Args:
+        node: A FILE node of the CONFIG type.
+        resolver: Unused; a configuration document cites no identifiers.
+
+    Returns:
+        The document's text.
+
+    Raises:
+        ValueError: The node holds no document.
+    """
+    document = node.get_field("config_document")
+    if document is None:
+        raise ValueError(
+            f"{node.id} is a configuration document that holds no parsed "
+            f"document, so its content cannot be produced."
+        )
+    return tomlkit.dumps(document)
+
+
+# Implements: REQ-d00131-I
+# Which renderer a file type declares. This table is the single authority
+# for that question: a file type absent from it declares none, and a
+# renderer named anywhere else would be a second answer to it.
+FILE_RENDERERS: dict[FileType, Callable[[GraphNode, Any | None], str]] = {
+    FileType.SPEC: _render_composed_file,
+    FileType.JOURNEY: _render_composed_file,
+    FileType.CODE: _render_composed_file,
+    FileType.TEST: _render_composed_file,
+    FileType.CONFIG: _render_config_file,
+}
+
+
+def _file_type_of(node: GraphNode) -> FileType | None:
+    """The FileType a FILE node declares, or None where it declares none.
+
+    The field holds a ``FileType`` where the node came from
+    ``create_file_node``, and the enum's string value where it was
+    rebuilt from a mutation entry or a multi-role type list.
+    """
+    declared = node.get_field("file_type")
+    if isinstance(declared, FileType):
+        return declared
+    if isinstance(declared, str):
+        try:
+            return FileType(declared)
+        except ValueError:
+            return None
+    return None
+
+
+# Implements: REQ-d00131-I
+def render_file(node: GraphNode, resolver: Any | None = None) -> str:
+    """Render a FILE node using the renderer its file type declares.
+
+    Args:
+        node: A FILE node.
+        resolver: Optional IdResolver, forwarded to the renderer so
+            REQUIREMENT citations use the configured assertion separator.
+
+    Returns:
+        The complete file content as a string.
+
+    Raises:
+        ValueError: The node is not a FILE node, or its file type
+            declares no renderer and is therefore read-only.
+    """
+    if node.kind != NodeKind.FILE:
+        raise ValueError(f"render_file() requires a FILE node, got {node.kind}")
+
+    file_type = _file_type_of(node)
+    renderer = FILE_RENDERERS.get(file_type) if file_type is not None else None
+    if renderer is None:
+        # Implements: REQ-d00131-Q
+        # Naming the type is the point: the caller asked for the content of
+        # a file whose type declares no renderer, and the type is what it
+        # has to change to get one.
+        named = file_type.value if file_type is not None else node.get_field("file_type")
+        raise ValueError(
+            f"A file of type '{named}' declares no renderer and is read-only; "
+            f"its content cannot be produced from the graph."
+        )
+    return renderer(node, resolver)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -745,7 +867,39 @@ def _derive_refines_refs(node: GraphNode, resolver: Any | None = None) -> list[s
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
+# Implements: REQ-d00253-B, REQ-d00253-G, REQ-o00062-O
+def _decline_fields(held_back: list[str]) -> dict[str, Any]:
+    """Name a save that declined to write, as against one that failed.
+
+    A caller is owed the difference. A decline is a policy answer -- the write
+    scope does not reach those repositories -- and repeating the request will
+    answer it the same way; a write that failed may well succeed next time.
+    Both arrive as an unsuccessful save, so the code is what tells them apart,
+    and every surface maps it: the viewer answers a decline with 403 rather
+    than 500.
+
+    There is no such thing as a decline that also failed. Under REQ-d00253-G a
+    save that holds anything back writes nothing at all, so it never reaches a
+    write that could fail.
+
+    Args:
+        held_back: The ids of the files the save declined to write.
+
+    Returns:
+        The fields to merge into the result.
+    """
+    return {
+        "code": "write_scope_declined",
+        "error": (
+            "This save did not write "
+            + ", ".join(held_back)
+            + ": the write scope does not reach an associate's files. The "
+            "changes queued for them are still pending."
+        ),
+    }
+
+
+def _files_with_pending_mutations(graph: FederatedGraph) -> list[Any]:
     """Identify the FILE nodes whose subtree has pending mutations.
 
     Walks the mutation log and for each mutated node, finds its FILE
@@ -765,6 +919,8 @@ def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
     Returns:
         The FILE nodes containing mutated content, unique by identity.
     """
+    from elspais.graph.declarations import DECLARATION_OPERATIONS
+
     dirty_files: dict[int, Any] = {}
 
     def _mark(node: Any) -> None:
@@ -898,13 +1054,44 @@ def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
             if new_file:
                 _mark(graph.find_by_id(new_file))
 
+        # Implements: REQ-d00299-D
+        # A declaration mutation names its document, which is the file that
+        # has to be rewritten. A removed declaration is out of the index, so
+        # there is no node left to walk up from.
+        if entry.operation in DECLARATION_OPERATIONS:
+            config_file_id = entry.after_state.get("file_id") or entry.before_state.get(
+                "file_id", ""
+            )
+            if config_file_id:
+                _mark(graph.find_by_id(config_file_id))
+
         # For rename_file - mark the new file ID (old ID no longer exists)
         if entry.operation == "rename_file":
             new_file_id = entry.after_state.get("id", "")
             if new_file_id:
                 _mark(graph.find_by_id(new_file_id))
 
-    # Also mark files containing requirements with structural parse-dirty reasons.
+    return list(dirty_files.values())
+
+
+def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
+    """Every FILE node a save must rewrite.
+
+    Two kinds, and which kind a file is matters to the caller: a file the
+    MUTATION LOG names carries work somebody asked for, and a file that is
+    merely parse-dirty carries formatting the tool would tidy. A save that
+    declines to write the first owes the caller a word; declining the second
+    is routine.
+
+    Args:
+        graph: The traceability graph with pending mutations.
+
+    Returns:
+        The FILE nodes to rewrite, unique by identity.
+    """
+    dirty_files = {id(node): node for node in _files_with_pending_mutations(graph)}
+
+    # Files containing requirements with structural parse-dirty reasons.
     # "stale_hash" is excluded: that is a hash-value change only, handled by
     # update_hash_in_file (targeted text replace). render_save is for structural
     # changes (e.g. duplicate refs) that require a full re-render.
@@ -913,7 +1100,9 @@ def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
             continue
         reasons = node.get_field("parse_dirty_reasons") or []
         if not reasons or any(r != "stale_hash" for r in reasons):
-            _mark(node.file_node())
+            owner = node.file_node()
+            if owner is not None and owner.kind == NodeKind.FILE:
+                dirty_files[id(owner)] = owner
 
     return list(dirty_files.values())
 
@@ -961,6 +1150,13 @@ def render_save(
     errors: list[str] = []
     files_modified: set[str] = set()
     skipped: list[str] = []
+    # Implements: REQ-d00253-B
+    # The ids of files this save declined to write, as against files it tried
+    # to write and could not. A caller can act on the first -- write the
+    # associate's repository from a tool serving it, or opt in -- and
+    # repeating the request answers neither, so the two must not arrive
+    # looking alike.
+    held_back: list[str] = []
     saved_count = 0
 
     # Default repo_root from graph if not provided
@@ -983,10 +1179,57 @@ def render_save(
     if not write_associates:
         from elspais.graph.federated import is_associate_owned
 
-        dirty_files = [node for node in dirty_files if not is_associate_owned(graph, node)]
+        # Implements: REQ-d00132-E, REQ-d00253-B
+        # A file held back here is not written, so anything QUEUED for it is
+        # work this save did not perform. Recording that as an error is what
+        # keeps the mutation log: it is cleared only after a successful save,
+        # and a save that declined to write somebody's change did not succeed.
+        # A file that is merely parse-dirty carries no such work, so holding
+        # it back stays silent, as the write scope intends.
+        #
+        # What happens NEXT where something was held back is REQ-d00253-G,
+        # below: nothing is written at all.
+        queued = {id(node) for node in _files_with_pending_mutations(graph)}
+        kept: list[Any] = []
+        for node in dirty_files:
+            if not is_associate_owned(graph, node):
+                kept.append(node)
+                continue
+            if id(node) in queued:
+                held = (
+                    f"{node.id}: owned by an associate, so it is not written "
+                    f"(federation.write_associates is false). The changes queued "
+                    f"for it are kept rather than discarded."
+                )
+                skipped.append(held)
+                errors.append(held)
+                held_back.append(node.id)
+        dirty_files = kept
+
+    # Implements: REQ-d00253-G
+    # A change is not always confined to the file its author edited: renaming
+    # a requirement corrects the reference in every file citing it, and those
+    # files may belong to other members. Writing the part the scope reaches
+    # and holding back the rest would leave a repository citing an identifier
+    # that no longer exists -- a reference broken by the save itself, in a
+    # file nobody edited. So a save that cannot write every file the work
+    # requires writes NONE of it, and every member is left as it was with the
+    # work still in hand. The operator's recourse is to widen the write scope
+    # and save again.
+    if held_back:
+        return {
+            "success": False,
+            "saved_count": 0,
+            "files_modified": [],
+            "conflicts": [],
+            "errors": errors,
+            "skipped": skipped,
+            **_decline_fields(held_back),
+        }
 
     if not dirty_files:
-        # No dirty files — clear log and return
+        # Nothing to write, and nothing held back -- the decline above is the
+        # only way work outlives a save.
         graph.mutation_log.clear()
         return {
             "success": True,
@@ -994,7 +1237,7 @@ def render_save(
             "files_modified": [],
             "conflicts": [],
             "errors": [],
-            "skipped": ["No dirty files to save"],
+            "skipped": skipped or ["No dirty files to save"],
         }
 
     # Defense-in-depth against cross-file REQ ID collisions: any file that

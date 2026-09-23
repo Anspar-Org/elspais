@@ -198,6 +198,26 @@ Each FILE node has a **FileType** classification:
 | `CODE` | `[scanning.code]` | `src/`, `lib/` |
 | `TEST` | `[scanning.test]` | `tests/` |
 | `RESULT` | `[[scanning.test.targets]]` | results/coverage produced per target |
+| `CONFIG` | read, not scanned | `.elspais.toml` and `.elspais.local.toml` |
+
+### DECLARATION
+
+One named entry a project declares in a configuration table. Today that is a
+`[scopes.NAME]` declaration; the kind is not named after scopes because the
+table a node declares in is recorded on the node, so another table can be
+held the same way.
+
+ID format: `decl:REQ:.elspais.toml:scopes:sponsor` -- the document is named
+because the committed configuration and the machine-local overlay may both
+declare a name.
+
+A declaration node hangs from its CONFIG file node by a CONTAINS edge, and
+this is the one place a CONTAINS child is not part of the file's text. A
+configuration document's text is the document itself, so rendering one gives
+back the bytes it was read from and never walks what it holds. These nodes
+exist so a declaration can be addressed by name and carry a version of its
+own -- a version taken from its own declaration, so a change to one scope
+does not invalidate a token held against another.
 
 ### REMAINDER
 
@@ -391,10 +411,14 @@ directly.
 #### CONTAINS
 
 FILE -> content node (REQUIREMENT, USER_JOURNEY, CODE, TEST, REMAINDER).
+CONFIG file -> DECLARATION.
 
 Represents physical file membership. Every parsed content node is
 connected to its source FILE node. Edge metadata includes `start_line`,
 `end_line`, and `render_order`.
+
+A configuration document's DECLARATION children carry no `render_order`:
+they are not the file's text, and the CONFIG renderer ignores them.
 
 #### STRUCTURES
 

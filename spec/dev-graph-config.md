@@ -380,3 +380,50 @@ B is the single exception, and it is a disclosure rather than a difference: whic
 - 2026-09-12 | 9019f766 | - | Michael Lewis (<michael@anspar.org>) | Active; an overlay changes how a value is written, nothing else
 
 *End* *Machine-Local Configuration Overlay* | **Hash**: 9019f766
+
+---
+
+## REQ-d00299: Configuration as Graph Content
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+A repository's configuration is read before anything else and decides how the rest is read. This requirement states that the document it was read from is kept alongside what it produced, where a reader's configuration comes from, and what may change it.
+
+### Assertions
+
+A. A configuration document read for a repository SHALL be held in that repository's graph.
+
+B. The configuration a consumer reads SHALL be derived from the documents held in the graph.
+
+C. A configuration document written back SHALL differ from the document it was read from only where a change was made to it.
+
+D. A scope a project declares under a name SHALL be addable, changeable, renamable and removable through the graph.
+
+E. A change that would leave a configuration the tool cannot load SHALL be refused naming what is wrong, and SHALL leave the document as it was.
+
+F. A configuration document SHALL be changeable only in the repository the tool is serving.
+
+G. Where a change leaves the effective configuration unchanged because another document declares the same name, the tool SHALL report that.
+
+### Rationale
+
+Configuration was read and discarded, leaving the values but not the document they came from. Holding the document is what makes a change to configuration expressible at all, and deriving the reader's configuration from it is what stops the two disagreeing: there is one source, and the values are a view over it.
+
+Assertion C is the load-bearing promise. A configuration file is written by hand and carries comments explaining why a setting is what it is. A writer that reformats such a file on its way past is a writer nobody can afford to let near one, so what nobody changed comes back unchanged.
+
+Assertion D is narrow on purpose, and the narrowness is the rule rather than a stage of work. A setting becomes changeable when someone has written the means to change it coherently. Renaming a status can be carried through every requirement that names it; removing one would leave requirements naming nothing, so nobody writes that. The set of changeable settings therefore grows with the functions that keep the graph whole, never with the schema. A scope declaration is the first because it shapes nothing: no requirement, edge or metric depends on it.
+
+Assertion E closes the path by which a tool can be disabled from its own interface. A change that parses but does not load leaves a repository whose configuration the tool will refuse on its next read, so the refusal belongs before the change, not after it.
+
+Assertion F keeps a write where its author is. A tool serving one repository writing into another's checkout is surprising wherever it happens, and where those checkouts were made by a host for a session, an edit to one would be discarded without being noticed.
+
+Assertion G answers a case peculiar to layered configuration. A name declared in two documents resolves to one of them, so a change to the other alters nothing a reader can see. Reporting it is the difference between a change that did nothing and a change that appeared to work.
+
+What a report produced under a declared name contains is the subject of the requirement governing named report declarations, and is not restated here.
+
+### Changelog
+
+- 2026-09-20 | 0577c0a5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-20 | - | - | Michael Lewis (<michael@anspar.org>) | Author configuration as graph-held content: the document is kept, the reader's configuration is derived from it, and what nobody changed is written back unchanged
+
+*End* *Configuration as Graph Content* | **Hash**: 0577c0a5

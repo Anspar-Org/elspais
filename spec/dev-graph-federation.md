@@ -290,18 +290,25 @@ C. Generated `INDEX.md` and `term-index.md` SHALL contain only primary-repo requ
 
 D. MCP mutation tools SHALL reject mutations targeting associate-owned nodes when `federation.write_associates` is false, returning a read-only error and applying no in-memory change.
 
-E. Write and index eligibility SHALL be declarable per associate entry, with the `[federation]` table values serving as defaults for entries that do not declare their own.
+E. <RETIRED> declared write and index eligibility per associate entry. Which member a write may reach is decided by where the work happens rather than by a declaration: a workspace prepared for one person holds that person's own clone of every member on one branch, so a member it prepared is writable, and a checkout nobody prepared is governed by the one setting in A. What a save does where the write scope does not reach a member is G.
 
 F. When `elspais fix` detects fixable issues in associate-owned content it will not write, its report SHALL distinguish those from applied fixes by prefixing each such line with `[skipping]`; the output SHALL never claim an associate-owned fix was applied.
+
+G. Where the work a save holds requires writing a file the write scope does not reach, the save SHALL write none of that work and SHALL leave all of it pending.
 
 ### Rationale
 
 Federation is fundamentally a read and validation aggregation: associates provide cross-repo reference resolution and coverage inheritance without surrendering write authority. Making the write and generation surfaces primary-repo-only by default prevents `elspais fix` and MCP mutations from silently editing files in repositories the operator does not own. The `[federation]` opt-in flags keep the safe default while allowing deliberate multi-repo authoring when an operator owns every associate.
 
-Global booleans alone cannot express the common cross-repo workflow — enable writes for exactly one associate that points at a matching worktree while everything else stays read-only — which is why eligibility is per-entry with the global table as default (assertion E). Note `index_associates` governs only associate-repo *references* in the term index and collection manifests; term definitions federate regardless.
+One setting for every member is enough because the interesting question is not which member but which checkout. Where a serving process prepares a private copy of every member for one person, on one branch, a member it prepared is one that person may write, and per-member granularity distinguishes nothing. Where nobody prepared the checkouts — a developer whose associates are their own working copies — the hazard is uniform across members and the single setting states it once. Note `index_associates` governs only associate-repo *references* in the term index and collection manifests; term definitions federate regardless.
+
+Assertion G is about what a write scope does to a change that straddles it. A change is not always confined to the file an author edited: renaming a requirement corrects the reference in every file citing it, and those files may belong to other members. Writing the part the scope reaches and holding back the rest would leave a repository citing an identifier that no longer exists — a reference broken by the save itself, in a file nobody edited, in a repository the operator may not be looking at. Holding all of it back leaves both repositories as they were and the work still in hand, so the operator's recourse is to widen the write scope and save again. This is a property of the change rather than of any one file: a save that writes what it may is the failure G forecloses, not a partial success worth keeping.
 
 ### Changelog
 
+- 2026-09-22 | 8360f2f4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-22 | - | - | Michael Lewis (<michael@anspar.org>) | Retire per-entry eligibility; one setting states the hazard (E)
+- 2026-09-22 | - | - | Michael Lewis (<michael@anspar.org>) | A change straddling the write scope is written whole or not at all (G)
 - 2026-08-02 | f454041e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | 6bd9cd1d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | f145d18a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -310,7 +317,7 @@ Global booleans alone cannot express the common cross-repo workflow — enable w
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: add per-entry write/index eligibility (E)
 - 2026-06-01 | 28c8c538 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Federation Write/Generation Scope* | **Hash**: f454041e
+*End* *Federation Write/Generation Scope* | **Hash**: 8360f2f4
 ---
 
 ## REQ-d00260: Workspace Registry and Federated View Assembly
@@ -392,7 +399,7 @@ E. Coverage rollups SHALL credit cross-repository coverage exclusively along dec
 
 ### Rationale
 
-Reference repositories exist so cross-cutting obligations resolve and surface (REQ-p00081, REQ-p00082-G/H); writing into one from a consuming repository is incoherent under any setting, which is why refusal is structural at the graph layer (B) rather than a flippable boolean — configuration can widen dependency writability (REQ-d00253-E) but can never make a reference repository writable. Health-check treatment per role is specified in the per-repo health delegation requirement (finding attribution and write-scope verdicts); this REQ deliberately does not restate it. Assertion E is why membership growth is safe: a reference repository contributes coverage only where a repository explicitly declares a *Traceability* relationship into it.
+Reference repositories exist so cross-cutting obligations resolve and surface (REQ-p00081, REQ-p00082-G/H); writing into one from a consuming repository is incoherent under any setting, which is why refusal is structural at the graph layer (B) rather than a flippable boolean — configuration can widen dependency writability (REQ-d00253-A) but can never make a reference repository writable. Health-check treatment per role is specified in the per-repo health delegation requirement (finding attribution and write-scope verdicts); this REQ deliberately does not restate it. Assertion E is why membership growth is safe: a reference repository contributes coverage only where a repository explicitly declares a *Traceability* relationship into it.
 
 ### Changelog
 

@@ -9,7 +9,7 @@ Exports:
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -519,14 +519,38 @@ def _outdated_config_message(
     return "\n".join(lines)
 
 
+def _local_config_path(config_path: Path) -> Path:
+    """Where a machine-local overlay sits for a given committed config."""
+    return config_path.parent / ".elspais.local.toml"
+
+
+# Implements: REQ-d00299-A
+def config_document_paths(config_path: Path) -> list[Path]:
+    """Every configuration document read for a repository, in read order.
+
+    The committed file first, then the machine-local overlay layered over
+    it where one exists. ``load_config`` reads exactly these, and the graph
+    holds a node for exactly these, so the two cannot come to disagree
+    about which documents a repository's configuration came from.
+    """
+    paths = [config_path]
+    local_path = _local_config_path(config_path)
+    if local_path.is_file():
+        paths.append(local_path)
+    return paths
+
+
 # Implements: REQ-d00207-B
 # Implements: REQ-d00212-V, REQ-d00212-X
 def load_config(config_path: Path) -> dict[str, Any]:
     """Load configuration from a TOML file.
 
-    Loads config_path, then deep-merges .elspais.local.toml (if present
-    alongside it) on top — following the docker-compose.override.yml / .env.local
-    convention for developer-local overrides.
+    Reads the documents ``config_document_paths()`` names — the committed
+    file, then the machine-local overlay where one sits beside it — and
+    derives the configuration from them. The derivation itself is
+    ``derive_config``, which takes documents already parsed, so a caller
+    holding the documents rather than their paths reaches the same values
+    by the same route.
 
     All defaults are provided by `ElspaisConfig` Pydantic field defaults.
     Returns a plain dict produced by ``model_dump(by_alias=True)``.
@@ -537,50 +561,93 @@ def load_config(config_path: Path) -> dict[str, Any]:
     Returns:
         Configuration dictionary with hyphenated keys.
     """
-    content = config_path.read_text(encoding="utf-8")
-    user_config = _parse_toml(content)
+    documents = [
+        (path, _parse_toml(path.read_text(encoding="utf-8")))
+        for path in config_document_paths(config_path)
+    ]
+    return derive_config(documents)
+
+
+def _plain_mapping(document: Mapping[str, Any]) -> dict[str, Any]:
+    """A parsed document as plain Python values.
+
+    A ``TOMLDocument`` carries tomlkit's own item types, which compare equal
+    to their Python counterparts but are not them. Unwrapping first is what
+    makes the derivation blind to whether its caller kept the document for
+    round-tripping or only wanted the values.
+    """
+    unwrap = getattr(document, "unwrap", None)
+    if callable(unwrap):
+        return unwrap()
+    return dict(document)
+
+
+# Implements: REQ-d00299-B
+# Implements: REQ-d00212-V, REQ-d00212-X
+def derive_config(documents: Sequence[tuple[Path, Mapping[str, Any]]]) -> dict[str, Any]:
+    """Derive a configuration from the documents it was read from.
+
+    A pure function of the documents: the defaults first, then each
+    document layered over what came before it in the order it was read.
+    Nothing here touches the filesystem, and nothing here needs a graph —
+    ``get_config`` runs before any graph exists, because reading the
+    configuration is what tells the builder where to look, so a derivation
+    that needed one would make building one impossible.
+
+    Args:
+        documents: Each document read for this repository, paired with the
+            path it was read from, in read order. The first is the
+            committed configuration and names the file every refusal below
+            points a reader at.
+
+    Returns:
+        Configuration dictionary with hyphenated keys.
+
+    Raises:
+        ValueError: No document was supplied, or the configuration the
+            documents assemble to is one this version will not load.
+    """
+    if not documents:
+        raise ValueError(
+            "A configuration is derived from the documents it was read from, and none was supplied."
+        )
+
+    config_path = documents[0][0]
     # Capture the user-supplied project name + namespace BEFORE merging in
     # defaults — the boundary checks below must reject a real TOML that
     # omits either field even when `config_defaults()` would supply a
-    # placeholder (see ProjectConfig.name / ProjectConfig.namespace).
-    _user_project = user_config.get("project") or {}
-    _user_project_name = _user_project.get("name")
-    _user_project_namespace = _user_project.get("namespace")
-    _user_declared_version = _declared_version_of(user_config, config_path)
-    merged = _merge_configs(config_defaults(), user_config)
-    # `[levels]` is a hierarchy declaration. When the user supplies their own
-    # levels, take only the user's keys (so a custom uppercase `[levels.PRD]`
-    # doesn't coexist with the lowercase default `[levels.prd]`). For
-    # user-keys that happen to match a default key, the per-field defaults
-    # still fill in missing values (e.g. `implements`) — this is the same
-    # pattern as the rest of the schema.
-    _override_levels(merged, user_config)
+    # placeholder (see ProjectConfig.name / ProjectConfig.namespace). The
+    # LAST document to supply one is what a reader gets, which is the same
+    # rule the merge itself follows.
+    _supplied_name: Any = None
+    _supplied_namespace: Any = None
+    _declared_version: int | None = None
 
-    # Deep-merge developer-local overrides if present
-    local_path = config_path.parent / ".elspais.local.toml"
-    _local_project_name: Any = None
-    _local_project_namespace: Any = None
-    _local_declared_version: int | None = None
-    if local_path.is_file():
-        local_config = _parse_toml(local_path.read_text(encoding="utf-8"))
-        # Same rule as the main TOML: capture pre-merge so we can tell whether
-        # the user supplied name/namespace vs. the schema defaults leaking
-        # through.
-        _local_project = local_config.get("project") or {}
-        _local_project_name = _local_project.get("name")
-        _local_project_namespace = _local_project.get("namespace")
-        _local_declared_version = _declared_version_of(local_config, local_path)
-        merged = _merge_configs(merged, local_config)
-        _override_levels(merged, local_config)
+    merged = config_defaults()
+    for source_path, document in documents:
+        layer = _plain_mapping(document)
+        project = layer.get("project") or {}
+        if project.get("name") is not None:
+            _supplied_name = project.get("name")
+        if project.get("namespace") is not None:
+            _supplied_namespace = project.get("namespace")
+        layer_version = _declared_version_of(layer, source_path)
+        if layer_version is not None:
+            _declared_version = layer_version
+        merged = _merge_configs(merged, layer)
+        # `[levels]` is a hierarchy declaration. When the user supplies their
+        # own levels, take only the user's keys (so a custom uppercase
+        # `[levels.PRD]` doesn't coexist with the lowercase default
+        # `[levels.prd]`). For user-keys that happen to match a default key,
+        # the per-field defaults still fill in missing values (e.g.
+        # `implements`) — this is the same pattern as the rest of the schema.
+        _override_levels(merged, layer)
 
     # Implements: REQ-d00212-V
     # A configuration this version does not read is refused, naming each
     # setting that has to change and what to write in its place. The version
     # is read from the file rather than from `merged`, whose defaults supply
     # the current one and would mask what the author actually declared.
-    _declared_version = _local_declared_version
-    if _declared_version is None:
-        _declared_version = _user_declared_version
     _repairs = _setting_repairs(merged)
     if (_declared_version is not None and _declared_version != CURRENT_CONFIG_VERSION) or _repairs:
         raise ValueError(_outdated_config_message(config_path, _declared_version, _repairs))
@@ -627,17 +694,12 @@ def load_config(config_path: Path) -> dict[str, Any]:
     # and [project].namespace. Bare ProjectConfig() construction in helpers
     # and tests still uses Pydantic defaults, but configs loaded from disk go
     # through this check, which is the only entry point that should accept
-    # user-authored TOML. The checks inspect the pre-merge user/local TOML
-    # values so the schema's placeholder defaults cannot mask a missing field.
-    supplied_name = _local_project_name if _local_project_name is not None else _user_project_name
-    if not supplied_name or not str(supplied_name).strip():
+    # user-authored TOML. The checks read the values the documents supplied,
+    # captured before the merge, so the schema's placeholder defaults cannot
+    # mask a missing field.
+    if not _supplied_name or not str(_supplied_name).strip():
         raise ValueError(f"{config_path}: [project].name is required and must be non-empty")
-    supplied_namespace = (
-        _local_project_namespace
-        if _local_project_namespace is not None
-        else _user_project_namespace
-    )
-    if not supplied_namespace or not str(supplied_namespace).strip():
+    if not _supplied_namespace or not str(_supplied_namespace).strip():
         raise ValueError(f"{config_path}: [project].namespace is required and must be non-empty")
 
     # Keyed as the TOML is written, hyphens and all
@@ -872,8 +934,10 @@ def get_config(
     - Fallback to defaults if no config found
     - Error reporting (unless quiet=True)
 
-    Override precedence (highest first):
-        env vars > ``.elspais.local.toml`` > ``.elspais.toml`` > defaults
+    There are three layers. Highest first: ``.elspais.local.toml``, the
+    machine-local overlay; ``.elspais.toml``, the committed configuration;
+    and the schema's own defaults. The environment supplies no
+    configuration, so there is no layer above the overlay.
 
     Args:
         config_path: Explicit config file path (optional)
@@ -1101,10 +1165,12 @@ def scan_exclusions(config: dict[str, Any], kind: str) -> tuple[list[str], list[
 
 __all__ = [
     "config_defaults",
+    "config_document_paths",
     "default_level_keys",
     "level_expects_validation",
     "status_expects_implementation",
     "load_config",
+    "derive_config",
     "find_config_file",
     "find_git_root",
     "validate_config",
@@ -1117,7 +1183,6 @@ __all__ = [
     "parse_toml_document",
     "get_status_roles",
     "_try_parse_numeric",
-    "_try_parse_env_value",
     "get_associates_config",
 ]
 

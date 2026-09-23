@@ -73,6 +73,86 @@ dimensions. A report that states nothing about a requirement at all — `checks`
 and its narrowings, `changed`, `analysis` — passes the values half over and
 reads only the scope.
 
+## Changing a declaration
+
+A declaration is held in the graph as a node of its own, so it can be added,
+changed, renamed and removed there. These are ordinary graph mutations: they
+join the same mutation log, the same undo and the same count of pending
+changes as a change to a requirement, and the configuration document is
+written back by the same save. `[scopes.NAME]` is what a graph holds this way
+today; a table it holds no declarations for is refused.
+
+No CLI command changes a declaration. A change is made through the MCP
+interface -- `mutate_add_declaration`, `mutate_update_declaration`,
+`mutate_rename_declaration`, `mutate_delete_declaration` -- or through the
+viewer's matching `/api/mutate/*-declaration` routes, which take the same
+arguments and answer identically. Either way the change carries a version
+token for what it changes, and a stale one is refused rather than allowed to
+overwrite a change the caller never saw; see `elspais docs concurrency`.
+
+A change states what the declaration says afterwards, whole. A setting the
+change leaves out is a setting the project no longer states, not one carried
+over from before. It is written setting by setting, so the note beside a
+setting nobody touched and the comment explaining why a setting is what it is
+are still there afterwards.
+
+A change is judged before it is made. One that would leave a configuration the
+tool cannot load -- a setting the schema does not define, a value of the wrong
+type, a name it will not admit -- is refused naming what is wrong, and the
+document is left as it was. What is judged is shape: a scope selecting a level
+or a status no project declares loads, and goes through.
+
+A repository may hold more than one configuration document: a machine-local
+overlay layered over the committed file. Where both declare a scope under the
+same name, the overlay's declaration is the one every reader resolves to, so
+changing the committed one changes nothing a reader can see. The change still
+goes through -- the document says afterwards what it was asked to say -- and
+the report names the document the name resolves in instead, so a change that
+moved nothing is not mistaken for one that worked. It says where the name
+resolves and not what is declared there; read the overlay for that. A name no
+other document declares is reported as nothing at all.
+
+In a federation the documents of every member are held, and a change may be
+aimed only at the one belonging to the repository the tool is serving; see
+`elspais docs associate`.
+
+A declared name is matched without regard to case, so `sponsor` and `Sponsor`
+are one name. Declaring the second while the first stands is refused, naming
+the one already there. Renaming a declaration to another casing of its own
+name is a recasing, and goes through.
+
+An undo restores the document's text rather than the values it held. A
+configuration is written by hand, and reversing the values would reflow the
+comments, spacing and key order written around them.
+
+One consequence is worth knowing before removing a declaration. A comment
+written above one belongs, in TOML's own model, to the item before it, so
+removing a declaration leaves that comment in the document, where it now sits
+above whatever followed:
+
+```text
+# what the sponsor sees
+[scopes.sponsor]
+level = ["prd"]
+
+# what the auditor sees
+[scopes.auditor]
+level = ["prd", "ops"]
+```
+
+Remove `sponsor` and `auditor` keeps the comment introducing it: what is
+written between a declaration's last setting and the next header describes
+what follows, and goes back where it was written. The blank line that
+separated `sponsor` from it goes with the removal, since that blank belonged
+to the declaration being removed and leaving it would open a gap where a
+declaration used to be.
+
+Remove `auditor` instead and the comment describing it stays in the document,
+now above whatever came after, because nothing in the file says it described
+the declaration that was removed rather than the one before it. That is the
+comment to look for after removing a declaration. A rename does not raise the
+question at all -- the name is respelled where it stands.
+
 ## What a scoped report tells you
 
 A report narrowed on purpose and one that lost requirements on the way are the

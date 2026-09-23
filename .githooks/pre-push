@@ -177,9 +177,11 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 # and the remote closes an idle connection well before a full e2e run
 # finishes. When the run happens here and the push ends in "Connection ...
 # closed by remote host", that is this stage overrunning the remote's idle
-# timeout, not a network fault: the verdict is cached, so pushing again
-# completes quickly. Running .githooks/e2e-verdict before the push avoids
-# the long window entirely.
+# timeout, not a network fault. The run is not lost with the connection:
+# e2e-verdict detaches the tier, so it carries on and records its verdict
+# whether or not this hook is still alive to see it. Pushing again attaches
+# to a run still going, or hits the verdict it recorded. Running
+# .githooks/e2e-verdict before the push avoids the long window entirely.
 E2E_RELEVANT=true
 E2E_MERGE_BASE=""
 if E2E_MERGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null); then
