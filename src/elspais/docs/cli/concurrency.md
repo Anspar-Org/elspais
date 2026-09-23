@@ -166,7 +166,9 @@ same helpers -- there is no softer path around the protocol:
   `changelog_message_required` when an Active requirement changed and no
   changelog reason was given, **403** with `write_scope_declined` when
   the save held back a file it was asked to write -- an associate's,
-  with `write_associates` false -- and **500** with `save_failed` when
+  with `write_associates` false -- in which case nothing at all was
+  written and every pending change is still held, and **500** with
+  `save_failed` when
   the write itself failed or when the changelog author could not be
   established, in which case nothing was written and the pending work is
   still held. None of these is fixed by re-reading and retrying, which is
@@ -178,14 +180,17 @@ same helpers -- there is no softer path around the protocol:
   and hands the body back unchanged, so the JSON a caller reads is the
   one the save wrote, and the MCP save tool reports the same `code` for
   the same case. `error` names the held-back files in full, by ids a
-  caller can use. A save that also failed to write something is reported
-  as a failure and carries no decline code, because that is the part a
-  caller can do least about.
-- Declining one file is not a reason to abandon another. A save can write
-  the served repository's files, report `saved_count` and `files_modified`
-  for them, and still be a decline; `errors` and `skipped` say which files
-  it held back, and the work queued for them stays pending rather than
-  being cleared with the rest.
+  caller can use. A decline never reaches a write, so it is never also a
+  failure.
+- A save that holds anything back writes nothing at all, so a decline
+  reports `saved_count` 0 and an empty `files_modified` -- the files of
+  the repository being served are left alone with the rest. A change is
+  not always confined to the file its author edited: renaming a
+  requirement corrects the reference in every file citing it, and those
+  files may belong to other members, so writing only the part the write
+  scope reaches would break a reference in a repository nobody edited.
+  `errors` and `skipped` say which files were held back, and every
+  member's pending work is still there.
 - Successful mutations return the new `version`.
 - `/api/dirty` returns the pending `mutation_count` and the `tip`.
 - The history routes `/api/save`, `/api/revert`, and `/api/reload`

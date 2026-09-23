@@ -1484,7 +1484,7 @@ class TestASaveThatDeclinedToWriteIsRefusedNotFailed:
         from elspais.graph.render import _decline_fields
 
         _queue_associate_mutation(federated_app_state)
-        expected = _decline_fields(["one held-back file"], [REQ_FILE])
+        expected = _decline_fields([REQ_FILE])
 
         payload = federated_client.post(
             "/api/save",
@@ -1498,8 +1498,9 @@ class TestASaveThatDeclinedToWriteIsRefusedNotFailed:
     def test_REQ_o00062_O_the_refusal_keeps_what_the_save_reported(
         self, federated_client, federated_app_state
     ):
-        """REQ-o00062-O: a decline can accompany files that WERE written, so
-        the accounting the save produced survives the refusal."""
+        """REQ-o00062-O: a decline writes nothing, and the accounting the save
+        produced for it -- what it held back, and that it wrote none of it --
+        survives the refusal rather than being replaced by the route's own."""
         _queue_associate_mutation(federated_app_state)
 
         payload = federated_client.post(

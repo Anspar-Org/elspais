@@ -867,27 +867,27 @@ def _derive_refines_refs(node: GraphNode, resolver: Any | None = None) -> list[s
 # ─────────────────────────────────────────────────────────────────────────
 
 
-# Implements: REQ-d00253-B, REQ-o00062-O
-def _decline_fields(errors: list[str], held_back: list[str]) -> dict[str, Any]:
+# Implements: REQ-d00253-B, REQ-d00253-G, REQ-o00062-O
+def _decline_fields(held_back: list[str]) -> dict[str, Any]:
     """Name a save that declined to write, as against one that failed.
 
-    A caller is owed the difference. A file held back is a policy answer --
-    the write scope does not reach that repository -- and repeating the
-    request will answer it the same way; a write that failed may well
-    succeed next time. Both arrive as an unsuccessful save, so the code is
-    what tells them apart, and every surface maps it: the viewer answers a
-    decline with 403 rather than 500.
+    A caller is owed the difference. A decline is a policy answer -- the write
+    scope does not reach those repositories -- and repeating the request will
+    answer it the same way; a write that failed may well succeed next time.
+    Both arrive as an unsuccessful save, so the code is what tells them apart,
+    and every surface maps it: the viewer answers a decline with 403 rather
+    than 500.
 
-    The code is claimed only where the decline is the WHOLE story. A save
-    that also failed to write something is reported as a failure, because
-    that is the part a caller can do least about.
+    There is no such thing as a decline that also failed. Under REQ-d00253-G a
+    save that holds anything back writes nothing at all, so it never reaches a
+    write that could fail.
+
+    Args:
+        held_back: The ids of the files the save declined to write.
 
     Returns:
-        The fields to merge into the result, or nothing where this save
-        declined nothing or failed as well.
+        The fields to merge into the result.
     """
-    if not held_back or len(errors) != len(held_back):
-        return {}
     return {
         "code": "write_scope_declined",
         "error": (
@@ -1186,6 +1186,9 @@ def render_save(
         # and a save that declined to write somebody's change did not succeed.
         # A file that is merely parse-dirty carries no such work, so holding
         # it back stays silent, as the write scope intends.
+        #
+        # What happens NEXT where something was held back is REQ-d00253-G,
+        # below: nothing is written at all.
         queued = {id(node) for node in _files_with_pending_mutations(graph)}
         kept: list[Any] = []
         for node in dirty_files:
@@ -1203,19 +1206,38 @@ def render_save(
                 held_back.append(node.id)
         dirty_files = kept
 
-    if not dirty_files:
-        # Nothing to write. The log is cleared only where nothing was held
-        # back: work this save declined to write outlives it.
-        if not errors:
-            graph.mutation_log.clear()
+    # Implements: REQ-d00253-G
+    # A change is not always confined to the file its author edited: renaming
+    # a requirement corrects the reference in every file citing it, and those
+    # files may belong to other members. Writing the part the scope reaches
+    # and holding back the rest would leave a repository citing an identifier
+    # that no longer exists -- a reference broken by the save itself, in a
+    # file nobody edited. So a save that cannot write every file the work
+    # requires writes NONE of it, and every member is left as it was with the
+    # work still in hand. The operator's recourse is to widen the write scope
+    # and save again.
+    if held_back:
         return {
-            "success": not errors,
+            "success": False,
             "saved_count": 0,
             "files_modified": [],
             "conflicts": [],
             "errors": errors,
+            "skipped": skipped,
+            **_decline_fields(held_back),
+        }
+
+    if not dirty_files:
+        # Nothing to write, and nothing held back -- the decline above is the
+        # only way work outlives a save.
+        graph.mutation_log.clear()
+        return {
+            "success": True,
+            "saved_count": 0,
+            "files_modified": [],
+            "conflicts": [],
+            "errors": [],
             "skipped": skipped or ["No dirty files to save"],
-            **_decline_fields(errors, held_back),
         }
 
     # Defense-in-depth against cross-file REQ ID collisions: any file that
@@ -1322,7 +1344,6 @@ def render_save(
         graph.mutation_log.clear()
 
     result: dict[str, Any] = {
-        **_decline_fields(errors, held_back),
         "success": len(errors) == 0,
         "saved_count": saved_count,
         "files_modified": sorted(files_modified),

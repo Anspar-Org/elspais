@@ -1,4 +1,4 @@
-# Verifies: REQ-d00132-E, REQ-d00253-B
+# Verifies: REQ-d00132-E, REQ-d00253-B, REQ-d00253-G
 """What a save does with work it declines to write.
 
 ``render_save`` writes only the primary repository's files unless
@@ -12,6 +12,15 @@ So a held-back file that carries QUEUED work makes the save a failure, which
 is what keeps the log. A file that is merely parse-dirty carries nothing
 anybody asked for, so holding it back stays silent -- ``elspais fix`` in a
 federation meets that case on every run.
+
+A change is not confined to the file its author edited: renaming a
+requirement corrects the reference in every file citing it, and those files
+may belong to other members. So a save that cannot write every file the work
+requires writes NONE of it (REQ-d00253-G). Writing the part the scope reaches
+would leave a member citing an identifier that no longer exists -- a reference
+broken by the save itself, in a file nobody edited. Every member is left as it
+was and the whole change stays pending, so the operator's recourse is to widen
+the write scope and save again.
 
 The federation here is two real repositories on disk, mutated through the
 FederatedGraph so the federated log records a pointer, because the pointer is
@@ -27,7 +36,7 @@ import pytest
 from elspais.config import load_config
 from elspais.graph.factory import build_graph
 from elspais.graph.GraphNode import make_file_id
-from elspais.graph.render import render_save
+from elspais.graph.render import _files_with_pending_mutations, render_save
 from tests.federation_repos import make_repo, namespace_for
 
 PRIMARY_REQ = "CORE-d00001"
@@ -62,6 +71,27 @@ B. The system SHALL do another thing.
 *End*
 """
 
+# A journey in the associate that validates the PRIMARY's requirement. It is
+# the motivating shape of REQ-d00253-G: renaming the requirement corrects the
+# identifier this journey cites, so one rename in the served repository dirties
+# a file in a member the write scope does not reach.
+ASSOCIATE_JOURNEY = "JNY-Lib-01"
+ASSOCIATE_JOURNEY_SPEC = f"""# User Journeys
+
+---
+
+### {ASSOCIATE_JOURNEY}: A lib journey
+
+**Actor**: End User
+**Goal**: Do a thing
+Validates: {PRIMARY_REQ}
+
+*End* *{ASSOCIATE_JOURNEY}*
+"""
+
+# The identifier the primary's requirement is renamed to.
+RENAMED_PRIMARY_REQ = "CORE-d00002"
+
 
 class Federation:
     """A primary repository and the one associate it declares."""
@@ -72,9 +102,11 @@ class Federation:
         self.associate = associate
         self.primary_spec = primary / "spec" / "reqs.md"
         self.associate_spec = associate / "spec" / "reqs.md"
+        self.associate_journey = associate / "spec" / "journeys.md"
         self._before = {
-            self.primary_spec: self.primary_spec.read_bytes(),
-            self.associate_spec: self.associate_spec.read_bytes(),
+            path: path.read_bytes()
+            for path in (self.primary_spec, self.associate_spec, self.associate_journey)
+            if path.exists()
         }
 
     def save(self, **kwargs):
@@ -88,10 +120,16 @@ class Federation:
         return self.graph.repo_for(node_id).graph.mutation_log
 
 
-def _federation(tmp_path: Path, associate_spec: str | None = None) -> Federation:
+def _federation(
+    tmp_path: Path,
+    associate_spec: str | None = None,
+    associate_journey: str | None = None,
+) -> Federation:
     associate = make_repo(tmp_path, "lib")
     if associate_spec is not None:
         (associate / "spec" / "reqs.md").write_text(associate_spec, encoding="utf-8")
+    if associate_journey is not None:
+        (associate / "spec" / "journeys.md").write_text(associate_journey, encoding="utf-8")
     primary = make_repo(tmp_path, "core", associates={"lib": str(associate)})
 
     config_path = primary / ".elspais.toml"
@@ -128,10 +166,12 @@ def _queue(federation: Federation, also_primary: bool) -> None:
 
 
 class TestQueuedWorkOutlivesTheSaveThatDeclinedIt:
-    """Validates REQ-d00132-E, REQ-d00253-B.
+    """Validates REQ-d00132-E, REQ-d00253-B, REQ-d00253-G.
 
     A save that held back a file somebody had queued work for did not do what
-    it was asked, so it does not clear the log and does not report success.
+    it was asked, so it does not clear the log and does not report success --
+    and under REQ-d00253-G it writes nothing at all, so the work it holds is
+    every member's work, still entire.
     """
 
     # Verifies: REQ-d00253-B
@@ -183,7 +223,7 @@ class TestQueuedWorkOutlivesTheSaveThatDeclinedIt:
         federation.save()
 
         assert len(federation.graph.mutation_log) == queued, (
-            "the federated mutation log was cleared by a save that wrote only part of it"
+            "the federated mutation log was cleared by a save that wrote none of it"
         )
         assert ASSOCIATE_REQ in {
             entry.target_id for entry in federation.graph.mutation_log.iter_entries()
@@ -206,17 +246,22 @@ class TestQueuedWorkOutlivesTheSaveThatDeclinedIt:
             "the associate's own mutation log was emptied, discarding its queued change"
         )
 
-    # Verifies: REQ-d00253-B
-    def test_d00253_B_the_primary_file_is_still_written(self, federation):
-        """REQ-d00253-B: holding the associate back is not a reason to abandon
-        the work that IS in scope."""
+    # Verifies: REQ-d00253-G
+    def test_d00253_G_the_in_scope_file_is_not_written_either(self, federation):
+        """REQ-d00253-G: holding one member's file back holds all of it back.
+        The served repository's change is in scope and still is not written,
+        because the change as a whole cannot be."""
         _queue(federation, also_primary=True)
 
         result = federation.save()
 
-        assert result["saved_count"] == 1, result
-        assert NEW_STATUS in federation.primary_spec.read_text(encoding="utf-8"), (
-            "the primary repository's queued change never reached disk"
+        assert result["saved_count"] == 0, (
+            f"the served repository's file was written even though a member was held back: {result}"
+        )
+        assert result["files_modified"] == [], result
+        assert federation.untouched(federation.primary_spec), (
+            "the served repository's file was rewritten although the save could not "
+            "write the member held back with it"
         )
 
     # Verifies: REQ-d00253-B
@@ -388,39 +433,43 @@ class TestADeclineIsNamedAsOne:
             f"the held-back file is not named in full: {result['error']!r}"
         )
 
-    # Verifies: REQ-d00253-B
-    def test_d00253_B_a_decline_accompanies_the_files_that_were_written(self, federation):
-        """REQ-d00253-B: declining one repository's file is not a reason to
-        abandon the other's, so the two are reported together."""
+    # Verifies: REQ-d00253-G
+    def test_d00253_G_a_decline_writes_nothing_it_could_have_written(self, federation):
+        """REQ-d00253-G: a decline is the answer for the whole save, not for
+        the one file that provoked it. The served repository's change could
+        have been written and deliberately is not, so no member is left
+        holding half a change."""
         _queue(federation, also_primary=True)
 
         result = federation.save()
 
         assert result.get("code") == "write_scope_declined", result
-        assert result["saved_count"] == 1, result
-        assert NEW_STATUS in federation.primary_spec.read_text(encoding="utf-8"), (
-            "the in-scope change never reached disk although only the associate was declined"
+        assert result["saved_count"] == 0, (
+            f"the served repository's file was written even though a member was held back: {result}"
+        )
+        assert federation.untouched(federation.primary_spec), (
+            "the in-scope change reached disk although the save declined the member "
+            "whose file the same work touches"
         )
 
-    # Verifies: REQ-d00253-B
-    def test_d00253_B_a_save_that_also_failed_is_not_reported_as_a_decline(
-        self, federation, monkeypatch
-    ):
-        """REQ-d00253-B: a write that failed is the part a caller can do least
-        about, so a save carrying one is an unnamed failure even though it
-        declined a file as well."""
+    # Verifies: REQ-d00253-G
+    def test_d00253_G_no_file_is_rendered_once_anything_is_held_back(self, federation, monkeypatch):
+        """REQ-d00253-G: nothing is written, so nothing is even rendered. A
+        renderer that cannot run at all leaves the decline the only answer the
+        save can give, which is how a caller knows no write was attempted."""
         _queue(federation, also_primary=True)
 
         def _explode(*args, **kwargs):
-            raise OSError("read-only file system")
+            raise AssertionError("a declined save rendered a file")
 
         monkeypatch.setattr("elspais.graph.render.render_file", _explode)
 
         result = federation.save()
 
+        assert result.get("code") == "write_scope_declined", result
         assert result["success"] is False
-        assert "code" not in result, (
-            "a save that failed to write was reported as a decline, which a retry would not fix"
+        assert result["errors"] == result["skipped"], (
+            f"a declined save reported something other than what it held back: {result}"
         )
 
 
@@ -450,3 +499,78 @@ class TestASaveThatDeclinedNothing:
 
         assert result["success"] is True, result["errors"]
         assert "code" not in result, result
+
+
+class TestAChangeStraddlingTheWriteScopeIsWrittenWhole:
+    """Validates REQ-d00253-G.
+
+    The motivating shape: one change in the served repository whose correction
+    lands in a member the write scope does not reach. A journey in the
+    associate validates the primary's requirement, so renaming that
+    requirement corrects the identifier the journey cites. Writing the primary
+    alone would leave the associate citing an identifier no repository holds,
+    in a file nobody edited -- so the save writes neither, and the pair stays
+    consistent.
+    """
+
+    @pytest.fixture
+    def straddling(self, tmp_path: Path) -> Federation:
+        federation = _federation(tmp_path, associate_journey=ASSOCIATE_JOURNEY_SPEC)
+        journey = federation.graph.find_by_id(ASSOCIATE_JOURNEY)
+        assert journey is not None, "the associate's journey did not load"
+        federation.graph.rename_node(PRIMARY_REQ, RENAMED_PRIMARY_REQ)
+        pending = {node.id for node in _files_with_pending_mutations(federation.graph)}
+        assert pending == {
+            make_file_id(namespace_for("core"), "spec/reqs.md"),
+            make_file_id(namespace_for("lib"), "spec/journeys.md"),
+        }, f"the rename did not straddle the write scope, so this fixture tests nothing: {pending}"
+        return federation
+
+    # Verifies: REQ-d00253-G
+    def test_d00253_G_the_rename_is_not_written_at_all(self, straddling):
+        """REQ-d00253-G: the served repository still names the requirement the
+        way every member cites it."""
+        result = straddling.save()
+
+        assert result["saved_count"] == 0, result
+        assert straddling.untouched(straddling.primary_spec), (
+            "the rename reached the served repository's file although the member "
+            "holding the citation could not be corrected"
+        )
+        assert PRIMARY_REQ in straddling.primary_spec.read_text(encoding="utf-8")
+
+    # Verifies: REQ-d00253-G
+    def test_d00253_G_the_member_is_left_citing_an_identifier_that_exists(self, straddling):
+        """REQ-d00253-G: the reference the save could not correct is a
+        reference it must not break either."""
+        straddling.save()
+
+        assert straddling.untouched(straddling.associate_journey)
+        cited = straddling.associate_journey.read_text(encoding="utf-8")
+        assert f"Validates: {PRIMARY_REQ}" in cited, (
+            "the associate's journey no longer cites the identifier the served repository holds"
+        )
+
+    # Verifies: REQ-d00253-G
+    def test_d00253_G_the_whole_rename_stays_pending(self, straddling):
+        """REQ-d00253-G: the operator's recourse is to widen the write scope
+        and save again, which needs the change still in hand."""
+        result = straddling.save()
+
+        assert result.get("code") == "write_scope_declined", result
+        assert any(
+            entry.operation == "rename_node" and entry.target_id == PRIMARY_REQ
+            for entry in straddling.graph.mutation_log.iter_entries()
+        ), "the rename was discarded by the save that refused to write it"
+
+    # Verifies: REQ-d00253-G
+    def test_d00253_G_widening_the_write_scope_writes_both_members(self, straddling):
+        """REQ-d00253-G: what the decline preserved is exactly what the second
+        save performs, in both members at once."""
+        result = straddling.save(write_associates=True)
+
+        assert result["success"] is True, result["errors"]
+        assert RENAMED_PRIMARY_REQ in straddling.primary_spec.read_text(encoding="utf-8")
+        assert f"Validates: {RENAMED_PRIMARY_REQ}" in straddling.associate_journey.read_text(
+            encoding="utf-8"
+        ), "the citation in the member was not corrected although writes were permitted"

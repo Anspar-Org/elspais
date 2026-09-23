@@ -2688,8 +2688,10 @@ _FAQ_ENTRIES: list[dict[str, str]] = [
             "reason is 400 (changelog_message_required), a save that declined to\n"
             "write an associate's files is 403 (write_scope_declined), and a save\n"
             "whose write failed is 500 (save_failed). Retrying those unchanged\n"
-            "cannot help. A decline can accompany files that WERE written, and it\n"
-            "keeps the work it did not write pending rather than discarding it."
+            "cannot help. A decline writes NOTHING at all -- not even the served\n"
+            "repository's own files -- and keeps every pending change rather than\n"
+            "discarding it, because a change can reach a file in another member and\n"
+            "writing half of it would break a reference nobody edited."
         ),
     },
     {

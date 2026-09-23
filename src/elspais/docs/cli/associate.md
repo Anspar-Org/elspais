@@ -292,18 +292,24 @@ rather than discarded.
 
 Because the change is still pending, the save did not do what it was asked and
 does not report success: pending changes are cleared only once a save has
-performed them. Work queued for the repository being served is written as
-usual, and the pending record is kept whole, so a later save re-renders that
-file harmlessly. Declining one member's file is not a reason to abandon
-another's, so a save that wrote the served repository's file reports that
-alongside the decline.
+performed them.
+
+A save that holds anything back writes nothing at all -- not even the files of
+the repository it is serving. A change is not always confined to the file its
+author edited: renaming a requirement corrects the reference in every file
+citing it, and those files may belong to other members, so writing the part the
+write scope reaches would leave a repository citing an identifier that no longer
+exists -- a reference broken by the save itself, in a file nobody edited, in a
+repository you may not be looking at. Holding all of it back leaves every member
+as it was and the work still in hand, so the save reports `saved_count` 0 and an
+empty `files_modified`, and every member's pending changes are still there to be
+saved once the write scope reaches them.
 
 The unsuccessful save says which kind of unsuccessful it was. It carries
 `code: "write_scope_declined"` and an `error` naming the held-back files in
 full, so a caller can tell a decline -- a policy answer a further save will
-repeat -- from a write that failed and might succeed next time. A save that
-also failed to write something is reported as a failure carrying no decline
-code, because that is the part a caller can do least about. The MCP save tool
+repeat -- from a write that failed and might succeed next time. A decline never
+reaches a write, so it is never also a failure. The MCP save tool
 and the viewer both report the code the save wrote; over HTTP, `POST /api/save`
 maps it to **403**, the status the mutation routes already give for an
 associate-owned target, rather than the 500 a failed write gets.
@@ -312,8 +318,8 @@ To write the change, set `write_associates = true` under `[federation]`, or
 make it from a tool serving the repository that owns the file.
 
 A file that is merely untidy -- formatting `elspais fix` would canonicalize,
-which nobody asked for -- is held back without a word, so an ordinary `fix` run
-in a federation is unaffected.
+which nobody asked for -- is held back without a word and triggers none of
+this, so an ordinary `fix` run in a federation is unaffected.
 
 ## Options
 
