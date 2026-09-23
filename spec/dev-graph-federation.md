@@ -306,6 +306,7 @@ Assertion G is about what a write scope does to a change that straddles it. A ch
 
 ### Changelog
 
+- 2026-09-22 | 8360f2f4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-22 | - | - | Michael Lewis (<michael@anspar.org>) | Retire per-entry eligibility; one setting states the hazard (E)
 - 2026-09-22 | - | - | Michael Lewis (<michael@anspar.org>) | A change straddling the write scope is written whole or not at all (G)
 - 2026-08-02 | f454041e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -316,7 +317,7 @@ Assertion G is about what a write scope does to a change that straddles it. A ch
 - 2026-07-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-38: add per-entry write/index eligibility (E)
 - 2026-06-01 | 28c8c538 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Federation Write/Generation Scope* | **Hash**: f454041e
+*End* *Federation Write/Generation Scope* | **Hash**: 8360f2f4
 ---
 
 ## REQ-d00260: Workspace Registry and Federated View Assembly
