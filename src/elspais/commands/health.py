@@ -4810,7 +4810,7 @@ def _reached_by(relative_path: str, reach: list[str]) -> bool:
     return any(cwd == "" or normalized.startswith(f"{cwd}/") for cwd in reach)
 
 
-# Implements: REQ-d00276-E
+# Implements: REQ-d00276-E, REQ-d00131-R
 def check_unrunnable_test_files(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:

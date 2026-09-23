@@ -76,6 +76,10 @@ def collect_uncited(graph: FederatedGraph) -> UncitedData:
     data = UncitedData()
     cited_but_unbound = {c.path for c in graph.unbound_citations()}
 
+    # Implements: REQ-d00131-R
+    # This walk names TEST and CODE and acts on nothing else: a file type it
+    # does not name cites nothing by definition, so reporting one as uncited
+    # would be reporting a file for being what it is.
     for file_node in graph.iter_roots(NodeKind.FILE):
         file_type = file_node.get_field("file_type")
         rel_path = file_node.get_field("relative_path") or file_node.id

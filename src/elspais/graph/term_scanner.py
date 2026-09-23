@@ -739,7 +739,10 @@ def scan_graph(
     excl = exclude_files or []
     unmatched: list[dict[str, str | int]] = []
 
-    # Code/test file types: scan comments only (not code or string literals)
+    # Implements: REQ-d00131-R
+    # Code/test file types: scan comments only (not code or string literals).
+    # The set is named rather than assumed, so a file type added later is not
+    # scanned for terms until somebody decides it should be.
     _CODE_FILE_TYPES = frozenset({FileType.CODE, FileType.TEST})
 
     # Spec-like nodes: scan full text with file-relative line offset.
