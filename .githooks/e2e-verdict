@@ -157,31 +157,129 @@ E2E_RESULTS="$CACHE_DIR/junit-e2e.xml"
 E2E_RUN_DIR="$CACHE_DIR/run-e2e"
 mkdir -p "$E2E_RUN_DIR"
 
+E2E_NOVERDICT="$E2E_RUN_DIR/noverdict"
+
+# The runner, resolved once, here, where the probe above has just shown it is
+# the one this tree means. Handing the run its absolute path closes the window
+# in which a PATH lookup at run time could find another, or none.
+PYTEST_BIN=$(command -v pytest)
+
+# A verdict is a statement about a run that tested this tree. The finisher
+# derives it from the report the run wrote as well as from its exit code, and
+# records NOTHING where either says no tests ran -- pytest not found (127) or
+# not executable (126), the tree unreachable (99), a usage or internal error
+# (4, 3), nothing collected (5), an interrupt (2, with no failure or error in
+# its report) or a signal, or a report that is missing, empty or unreadable.
+# Exit 2 with errors in the report is a collection error -- a module that
+# will not import on this tree -- and is recorded as FAIL. Caching FAIL for such a run would block every
+# later push of an unchanged tree over an environment fault, and caching PASS
+# would certify code nobody tested. FAIL is written only for a run whose
+# report holds failures.
+#
+# Written only when no run is in progress: a run already going calls the
+# finisher it started with at its end, and one for another tree must not have
+# its verdict recorded under this tree's key.
+write_finisher() {
 {
     printf '#!/bin/bash\n'
     printf '# Records the e2e verdict, and formats the artifact it was read from.\n'
-    printf 'if ! python3 -c "\n'
-    printf 'import xml.etree.ElementTree as ET\n'
-    printf "tree = ET.parse('%s')\n" "$E2E_RESULTS"
-    printf "ET.indent(tree, space='  ')\n"
-    printf "tree.write('%s', encoding='unicode', xml_declaration=True)\n" "$E2E_RESULTS"
-    printf '" 2>/dev/null; then\n'
-    printf '    echo "::warning::junit pretty-print failed (tolerated: artifact formatting only)"\n'
-    printf 'fi\n'
-    # 137 is the library's "ended without recording one", which is not a
-    # verdict about the code and must never be cached as one.
-    printf 'if [ "$1" -eq 137 ]; then exit 0; fi\n'
-    printf 'if [ "$1" -eq 0 ]; then\n'
-    printf '    printf "%%s PASS %%s\\n" %q %q > %q\n' "$CONTENT_HASH" "$E2E_ENV_SRC" "$E2E_CACHE"
-    printf 'else\n'
-    printf '    printf "%%s FAIL %%s\\n" %q %q > %q\n' "$CONTENT_HASH" "$E2E_ENV_SRC" "$E2E_CACHE"
-    printf 'fi\n'
+    printf 'RESULTS=%q\n' "$E2E_RESULTS"
+    printf 'CACHE=%q\n' "$E2E_CACHE"
+    printf 'MARKER=%q\n' "$E2E_NOVERDICT"
+    printf 'KEY_HASH=%q\n' "$CONTENT_HASH"
+    printf 'KEY_ENV=%q\n' "$E2E_ENV_SRC"
+    cat <<'FINISH'
+rc="$1"
+rm -f "$MARKER"
+no_verdict() {
+    echo "no-verdict: $1 (rc $rc); the cache is left as it was"
+    printf '%s (rc %s)\n' "$1" "$rc" > "$MARKER"
+    exit 0
+}
+case "$rc" in
+    # 2 is both an interrupt and a collection error -- a test module that will
+    # not import on this tree. Only the report tells them apart, so it is read
+    # below: errors in it are a verdict about the code, none is an interrupt.
+    0|1|2) ;;
+    99) no_verdict "the run could not change to the repository root" ;;
+    126) no_verdict "pytest could not be executed" ;;
+    127) no_verdict "pytest was not found" ;;
+    3) no_verdict "pytest hit an internal error" ;;
+    4) no_verdict "pytest was invoked wrongly (usage error)" ;;
+    5) no_verdict "pytest collected no tests" ;;
+    *)
+        if [ "$rc" -gt 128 ]; then
+            no_verdict "pytest was stopped by signal $((rc - 128))"
+        fi
+        no_verdict "pytest exited with an unrecognised code"
+        ;;
+esac
+if [ ! -s "$RESULTS" ]; then
+    no_verdict "the run wrote no junit report at $RESULTS"
+fi
+failures=$(python3 - "$RESULTS" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+path = sys.argv[1]
+try:
+    tree = ET.parse(path)
+except (ET.ParseError, OSError):
+    sys.exit(2)
+root = tree.getroot()
+failed = sum(
+    1 for case in root.iter("testcase")
+    if case.find("failure") is not None or case.find("error") is not None
+)
+if not failed:
+    for suite in root.iter("testsuite"):
+        for attribute in ("failures", "errors"):
+            try:
+                failed += int(suite.get(attribute) or 0)
+            except ValueError:
+                pass
+# Formatting only: the per-testcase file/line attributes are what the source
+# matcher binds on, and an indented report is what a reader opens.
+try:
+    ET.indent(tree, space="  ")
+    tree.write(path, encoding="unicode", xml_declaration=True)
+except OSError:
+    print("::warning::junit pretty-print failed (tolerated: artifact formatting only)",
+          file=sys.stderr)
+print(failed)
+PY
+) || no_verdict "the junit report at $RESULTS did not parse"
+if [ "$rc" -eq 0 ] && [ "$failures" -eq 0 ]; then
+    printf '%s PASS %s\n' "$KEY_HASH" "$KEY_ENV" > "$CACHE"
+elif [ "$rc" -ne 0 ] && [ "$failures" -gt 0 ]; then
+    printf '%s FAIL %s\n' "$KEY_HASH" "$KEY_ENV" > "$CACHE"
+elif [ "$rc" -eq 2 ]; then
+    no_verdict "pytest was interrupted before any test failed"
+else
+    no_verdict "pytest's exit code disagrees with its report, which holds $failures failure(s)"
+fi
+FINISH
 } > "$E2E_RUN_DIR/finish.sh"
+}
+
+# A new run starts without the previous run's report, so a run that writes
+# none cannot leave an earlier one to be read -- by the finisher or by
+# `elspais checks` -- as its own. A run already in progress keeps its report.
+if ! tier_run_alive "$E2E_RUN_DIR"; then
+    rm -f "$E2E_RESULTS" "$E2E_NOVERDICT"
+    write_finisher
+fi
 
 E2E_RC=$(tier_execute "$E2E_RUN_DIR" "$CONTENT_HASH $E2E_ENV_SRC" "$REPO_ROOT" "e2e" \
     "$E2E_RUN_DIR/finish.sh" \
-    pytest tests/ -m "e2e" --tb=short -q \
+    "$PYTEST_BIN" tests/ -m "e2e" --tb=short -q \
     --junitxml="$E2E_RESULTS" -o junit_family=xunit1)
+
+if [ -f "$E2E_NOVERDICT" ]; then
+    echo -e "${RED}The e2e run produced no verdict: $(cat "$E2E_NOVERDICT")${NC}"
+    echo "Nothing was recorded for this tree. The run's output is in $E2E_RUN_DIR/log."
+    exit 1
+fi
 
 if [ "$E2E_RC" = "137" ]; then
     echo -e "${RED}The e2e run ended without recording a verdict.${NC}"

@@ -175,3 +175,37 @@ def build_test_id_from_nodeid(nodeid: str) -> str:
         parts[-1] = strip_parametrize_suffix(parts[-1])
     cleaned = "::".join(parts)
     return f"{TEST_ID_PREFIX}{cleaned}"
+
+
+# Implements: REQ-d00054-A, REQ-d00254-G
+def test_id_module_path(test_id: str) -> str | None:
+    """The module path a canonical test ID names, or None for any other ID.
+
+    Examples:
+        >>> test_id_module_path("test:tests/test_foo.py::TestBar::test_func")
+        'tests/test_foo.py'
+        >>> test_id_module_path("code:x") is None
+        True
+    """
+    if not test_id.startswith(TEST_ID_PREFIX):
+        return None
+    module_path, sep, _ = test_id[len(TEST_ID_PREFIX) :].partition("::")
+    return module_path if sep and module_path else None
+
+
+# Implements: REQ-d00054-A, REQ-d00254-G
+def with_module_path(test_id: str, module_path: str) -> str:
+    """The canonical test ID *test_id* names, read in *module_path* instead.
+
+    A runner records a module relative to the directory it ran in; this is
+    how that one identifier is re-read against the repository, without
+    spelling a test ID anywhere else.
+
+    Examples:
+        >>> with_module_path("test:tests/test_foo.py::test_bar", "pkg/tests/test_foo.py")
+        'test:pkg/tests/test_foo.py::test_bar'
+    """
+    current = test_id_module_path(test_id)
+    if current is None:
+        raise ValueError(f"{test_id!r} is not a canonical test ID")
+    return f"{TEST_ID_PREFIX}{module_path}{test_id[len(TEST_ID_PREFIX) + len(current) :]}"

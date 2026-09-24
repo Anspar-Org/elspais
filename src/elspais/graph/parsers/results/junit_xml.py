@@ -53,23 +53,39 @@ def _attr_value(text: str, attr: str) -> str | None:
     return unescape(m.group(1), _XML_ENTITIES) if m else None
 
 
-# Implements: REQ-d00254-F
-def _testcase_line_index(content: str) -> dict[tuple[str, str], int]:
-    """Map ``(classname, name)`` to the 1-based line of its ``<testcase``.
+# Implements: REQ-d00254-F, REQ-d00294-A
+def _testcase_line_index(content: str) -> dict[tuple[str, str], list[int]]:
+    """Map ``(classname, name)`` to the 1-based lines of its ``<testcase`` tags.
 
     Works when the XML is pretty-printed so each ``<testcase`` open tag sits
     on its own line; a minified (single-line) document maps everything to
-    line 1. Only the first occurrence of a duplicate key is kept.
+    line 1. Every occurrence of a key is kept, in document order: Playwright
+    writes one ``<testcase>`` per project with the same classname and name,
+    and pytest writes a second one for a teardown error, and each of those
+    records is a result of its own that a reader must be pointed at.
     """
-    index: dict[tuple[str, str], int] = {}
+    index: dict[tuple[str, str], list[int]] = {}
     for line_no, text in enumerate(content.splitlines(), start=1):
         if "<testcase" not in text:
             continue
         cn = _attr_value(text, "classname")
         nm = _attr_value(text, "name")
         if cn is not None and nm is not None:
-            index.setdefault((cn, nm), line_no)
+            index.setdefault((cn, nm), []).append(line_no)
     return index
+
+
+def _record_line(
+    tc_lines: dict[tuple[str, str], list[int]],
+    key_counts: dict[tuple[str, str], int],
+    key: tuple[str, str],
+    occurrence: int,
+) -> int | None:
+    """The line of the *occurrence*-th ``<testcase>`` carrying *key*, or None."""
+    lines = tc_lines.get(key, [])
+    if len(lines) != key_counts.get(key, 0) or occurrence >= len(lines):
+        return None
+    return lines[occurrence]
 
 
 if TYPE_CHECKING:
@@ -158,10 +174,24 @@ class JUnitXMLParser(DiagnosticRecorder):
         # within the results file (None when the XML is minified).
         tc_lines = _testcase_line_index(content)
 
-        # Handle both <testsuites> and <testsuite> as root
-        testsuites = root.findall(".//testsuite")
-        if not testsuites and root.tag == "testsuite":
-            testsuites = [root]
+        # Implements: REQ-d00294-A
+        # Every suite in the document, the root included where it is one:
+        # a root <testsuite> holding its own <testcase>s beside nested suites
+        # is still a suite, and each record in it is a result. Each testcase
+        # is read once, under the suite directly holding it.
+        testsuites = list(root.iter("testsuite"))
+
+        # Implements: REQ-d00294-A
+        # The k-th <testcase> with a given (classname, name) in document order
+        # sits on the k-th line recorded for that key. Where the counts differ
+        # (a tag the line scan could not read) no line is named, because a
+        # wrong line points a reader at another record's verdict.
+        occurrence: dict[int, int] = {}
+        key_counts: dict[tuple[str, str], int] = {}
+        for element in root.iter("testcase"):
+            key = (element.get("classname", ""), element.get("name", ""))
+            occurrence[id(element)] = key_counts.get(key, 0)
+            key_counts[key] = occurrence[id(element)] + 1
         if not testsuites:
             # Implements: REQ-d00285-G
             # A well-formed XML document holding no test suite was still read
@@ -244,7 +274,9 @@ class JUnitXMLParser(DiagnosticRecorder):
                     "test_id": test_id,
                     "line": line_no,
                     "result_file": source_path or None,
-                    "result_line": tc_lines.get((classname, name)),
+                    "result_line": _record_line(
+                        tc_lines, key_counts, (classname, name), occurrence[id(testcase)]
+                    ),
                     "suite_hostname": suite_hostname,
                 }
 

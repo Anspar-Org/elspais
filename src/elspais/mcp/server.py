@@ -60,8 +60,10 @@ from elspais.config.schema import ElspaisConfig
 from elspais.graph import NodeKind
 from elspais.graph.aggregation import (
     COVERAGE_DIMENSIONS,
+    FAILING_STATUSES,
     HEADLINE_MEASURE,
     MEASURES,
+    PASSING_STATUSES,
     WORK_LIST_MEASURE,
     assertion_measures,
     covered_labels,
@@ -408,10 +410,11 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
                     if result.kind != NodeKind.RESULT:
                         continue
                     s = (result.get_field("status") or "").lower()
-                    if s in ("failed", "fail", "failure", "error"):
+                    # Implements: REQ-d00294-E
+                    if s in FAILING_STATUSES:
                         result_status = "fail"
                         break
-                    elif s in ("passed", "pass", "success"):
+                    elif s in PASSING_STATUSES:
                         result_status = "pass"
                 # Reuse the unified TEST serializer so each entry carries
                 # file/line/label/name/results (viewer renders one clickable

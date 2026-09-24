@@ -435,10 +435,12 @@ _TWO_PROJECTS = """\
 <?xml version="1.0" encoding="utf-8"?>
 <testsuites>
   <testsuite name="checkout" hostname="chromium" tests="1">
-    <testcase classname="checkout.spec" name="pays" file="tests/e2e/test_login.py" time="0.5"/>
+    <testcase classname="checkout.spec" name="test_logs_in" file="tests/e2e/test_login.py"
+              time="0.5"/>
   </testsuite>
   <testsuite name="checkout" hostname="firefox" tests="1">
-    <testcase classname="checkout.spec" name="pays" file="tests/e2e/test_login.py" time="0.7"/>
+    <testcase classname="checkout.spec" name="test_logs_in" file="tests/e2e/test_login.py"
+              time="0.7"/>
   </testsuite>
 </testsuites>
 """

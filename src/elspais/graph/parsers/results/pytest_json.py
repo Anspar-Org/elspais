@@ -95,6 +95,13 @@ class PytestJSONParser(DiagnosticRecorder):
             )
             return results
 
+        # Implements: REQ-d00285-G, REQ-d00294-E
+        # Records whose outcome this reporter cannot read, as (name, outcome).
+        # Such a record is neither a pass nor a failure; reading it as either
+        # is a guess, and a guess towards passing hides a failure. It is
+        # declined and reported instead.
+        self._unread: list[tuple[str, Any]] = []
+
         # Handle pytest-json-report format
         if isinstance(data, dict) and "tests" in data:
             for test in data["tests"]:
@@ -121,7 +128,31 @@ class PytestJSONParser(DiagnosticRecorder):
                 "pytest JSON parsed but holds neither a 'tests' mapping nor a list of tests",
             )
 
+        for name, outcome in self._unread:
+            described = "no outcome" if outcome is None else f"outcome {outcome!r}"
+            self._record_diagnostic(
+                source_path,
+                f"pytest JSON record {name!r} carries {described}, which this "
+                f"reporter does not read as a pass, a failure or a skip",
+                partial=bool(results),
+            )
         return results
+
+    # Implements: REQ-d00285-G, REQ-d00294-E
+    def _read_outcome(self, raw: Any, table: dict[str, str | None], name: str) -> str | None:
+        """The status *raw* reads as, or None where the record is declined.
+
+        A value is compared without regard to case or surrounding space. A
+        value the table maps to None is an attempt rather than a verdict (a
+        rerun that a later record of the same test settles) and is declined
+        without a report; a value the table does not hold, or a missing one,
+        is declined and reported.
+        """
+        key = str(raw).strip().lower() if raw is not None else None
+        if key is not None and key in table:
+            return table[key]
+        self.__dict__.setdefault("_unread", []).append((name, raw))
+        return None
 
     def _parse_pytest_json_report_test(
         self, test: dict[str, Any], source_path: str
@@ -136,7 +167,6 @@ class PytestJSONParser(DiagnosticRecorder):
             Parsed test result dict or None.
         """
         nodeid = test.get("nodeid", "")
-        outcome = test.get("outcome", "passed")
 
         # Parse nodeid to get module and test name
         # Format: path/to/test.py::TestClass::test_method
@@ -150,15 +180,18 @@ class PytestJSONParser(DiagnosticRecorder):
             name = nodeid
 
         # Map outcome to status
-        status_map = {
+        status_map: dict[str, str | None] = {
             "passed": "passed",
             "failed": "failed",
             "skipped": "skipped",
             "error": "error",
             "xfailed": "skipped",  # Expected failure
             "xpassed": "passed",  # Unexpected pass
+            "rerun": None,  # an attempt; the test's own record carries its verdict
         }
-        status = status_map.get(outcome, "passed")
+        status = self._read_outcome(test.get("outcome"), status_map, nodeid)
+        if status is None:
+            return None
 
         # Get duration
         duration = 0.0
@@ -212,19 +245,24 @@ class PytestJSONParser(DiagnosticRecorder):
             return None
 
         classname = test.get("classname", test.get("module", ""))
-        status = test.get("status", test.get("outcome", "passed"))
 
         # Normalize status
-        status_map = {
+        status_map: dict[str, str | None] = {
             "pass": "passed",
             "passed": "passed",
             "fail": "failed",
             "failed": "failed",
+            "failure": "failed",
             "skip": "skipped",
             "skipped": "skipped",
             "error": "error",
+            "xfailed": "skipped",
+            "xpassed": "passed",
+            "rerun": None,
         }
-        status = status_map.get(status.lower(), "passed")
+        status = self._read_outcome(test.get("status", test.get("outcome")), status_map, name)
+        if status is None:
+            return None
 
         duration = float(test.get("duration", 0))
         message = test.get("message", test.get("longrepr"))

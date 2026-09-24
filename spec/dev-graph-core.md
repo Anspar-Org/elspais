@@ -584,7 +584,7 @@ E. A reporter registry SHALL map each `reporter` format name to a parser and an 
 
 F. For each configured target, the system SHALL obtain the reporter's output (captured from the command's stdout for stdout-channel reporters, or read from the `results` glob for file-channel reporters), build RESULT nodes carrying the real test-file path (`source_file`, repo-relative) and the target's `match` mode, and ingest the target's `coverage` file. Coverage crediting SHALL be derived from the targets' `credit_coverage`/`min_coverage_fraction`. File-channel results SHALL additionally record where each result was recorded — the results artifact's repo-relative path and, when derivable from the artifact (e.g. one JUnit `<testcase>` per line), the per-result line — as provenance distinct from the test's source path, and result links in reporting surfaces SHALL point at that artifact location.
 
-G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step reference (in the configured reference form) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the result's real source-file path and `test()` source line to the specific test node at that `(path, line)`. A result that binds at neither scope SHALL credit nothing. `aggregate` SHALL derive the per-app green/red signal, which informs the line-coverage dimension only.
+G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step reference (in the configured reference form) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the result's real source-file path and `test()` source line to the specific test node at that `(path, line)`. A record a runner wrote because a test file failed to load, so that none of the tests in it ran, SHALL bind to every test scanned in that file as the failure of each. A result that binds at neither scope SHALL credit nothing. `aggregate` SHALL derive the per-app green/red signal, which informs the line-coverage dimension only.
 
 H. `elspais checks --run-tests` SHALL accept a `--targets` selector naming a subset of `[[scanning.test.targets]]` to execute; an unknown target name SHALL be an error, and an absent selector SHALL execute the targets a run executes when no selection is made (REQ-d00283). The same `--targets` flag on `summary`/`trace` SHALL mark provenance without executing anything.
 
@@ -628,6 +628,7 @@ Q is the half that bites. Evidence read in part yields a figure whose basis is n
 
 ### Changelog
 
+- 2026-09-24 | c1636520 | - | Claude (<noreply@anthropic.com>) | Auto-fix: update hash
 - 2026-09-12 | 2de47895 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-11 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: a citation no function encloses stops at the next function declaration, its first decorator line where decorated (D)
 - 2026-09-06 | 4ec40251 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -659,7 +660,7 @@ Q is the half that bites. Evidence read in part yields a figure whose basis is n
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 2de47895
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: c1636520
 
 ---
 

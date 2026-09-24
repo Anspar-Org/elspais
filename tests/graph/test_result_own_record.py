@@ -42,6 +42,7 @@ _FLUTTER_STREAM = (
     '{"type":"testStart","test":{"id":2,"name":"renders","suiteID":0,'
     '"line":10,"column":5,"metadata":{},"root_line":10,"root_column":5}}\n'
     '{"type":"testDone","testID":2,"result":"failure","hidden":false,"time":43}\n'
+    '{"type":"done","success":false,"time":44}\n'
 )
 
 

@@ -287,26 +287,29 @@ def test_primary_scope_is_test_when_direct_match(graph_primary_wins):
 
 
 # ---------------------------------------------------------------------------
-# Tests: both line and root_line miss -> file fallback
+# Tests: both line and root_line miss -> bound to no test
 # ---------------------------------------------------------------------------
 
 
-def test_both_miss_falls_back_to_all_tests(graph_both_miss):
-    """When both line and root_line don't match, fall back to all tests."""
+# Verifies: REQ-d00254-G, REQ-d00294-E
+def test_both_miss_binds_to_no_test(graph_both_miss):
+    """When both line and root_line miss, no test in the file holds the result."""
     tests = list(graph_both_miss.iter_by_kind(NodeKind.TEST))
     assert len(tests) == 2
     for test_node in tests:
         result_ids = {c.id for c in test_node.iter_children() if c.kind == NodeKind.RESULT}
-        assert "r_both_miss" in result_ids, (
-            f"r_both_miss should be in {test_node.id} children (fallback); got {result_ids}"
+        assert "r_both_miss" not in result_ids, (
+            f"r_both_miss names no one test, so {test_node.id} must not hold it"
         )
 
 
-def test_both_miss_scope_is_file(graph_both_miss):
-    """When both attempts fail, match_scope='file'."""
+# Verifies: REQ-d00254-G
+def test_both_miss_carries_why_it_bound_nowhere(graph_both_miss):
+    """When both attempts fail the result is unbound and says why."""
     r = graph_both_miss.find_by_id("r_both_miss")
     assert r is not None
-    assert r.get_field("match_scope") == "file"
+    assert r.get_field("match_scope") not in ("test", "file")
+    assert "where none of the 2 test(s)" in (r.get_field("unbound_reason") or "")
 
 
 # ---------------------------------------------------------------------------

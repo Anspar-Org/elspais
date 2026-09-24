@@ -7,8 +7,8 @@ attribute all used to fan out to every TEST in that source file, so each
 journey step displayed all steps' results. The builder now resolves a
 source-matched result whose name embeds exactly ONE ``<journey>/N`` step id
 to the TEST(s) that VERIFIES that STEP (``match_scope == "step"``); names
-with no step id, or with two different step ids, still fall through to the
-file-scope fanout (``match_scope == "file"``).
+with no step id, or with two different step ids, and no line bind to NO
+test: they name no one test, so none holds them (REQ-d00294-E).
 
 Uses the on-disk ``tests/fixtures/journey-uat/junit-step-binding`` fixture:
 a 2-step journey, ONE test source file with per-step ``Verifies:`` tests,
@@ -90,22 +90,26 @@ def test_step_results_are_not_conflated_across_steps(step_binding_graph):
     assert STEP1_NAME not in names2, "step 2's test must not hold step 1's result"
 
 
-# Verifies: REQ-d00254-G
+# Verifies: REQ-d00254-G, REQ-d00294-E
 @pytest.mark.parametrize(
     "name",
     [NO_STEP_NAME, AMBIGUOUS_NAME],
     ids=["no-step-id", "two-different-step-ids"],
 )
-def test_non_step_results_fall_back_to_file_scope(step_binding_graph, name):
-    """No step id (or an ambiguous pair) falls through to file-scope fanout."""
-    result = _result_by_name(step_binding_graph, name)
-    assert result.get_field("match_scope") == "file"
+def test_non_step_results_bind_to_no_test(step_binding_graph, name):
+    """No step id (or an ambiguous pair) and no line: no test holds the result.
 
-    # File scope still fans out to every TEST in the source file.
+    Fanning it out to every TEST in the file would make each of them read a
+    sibling's verdict as its own.
+    """
+    result = _result_by_name(step_binding_graph, name)
+    assert result.get_field("match_scope") not in ("step", "test", "file")
+    assert "recorded no line" in (result.get_field("unbound_reason") or "")
+
     test1 = _test_node(step_binding_graph, "test_step1")
     test2 = _test_node(step_binding_graph, "test_step2")
-    assert name in _result_names(test1)
-    assert name in _result_names(test2)
+    assert name not in _result_names(test1)
+    assert name not in _result_names(test2)
 
 
 # Verifies: REQ-d00254-F

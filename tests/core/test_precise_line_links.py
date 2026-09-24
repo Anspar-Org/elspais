@@ -1,12 +1,13 @@
 # Verifies: REQ-d00254-G
 """Source RESULT->TEST linking by (file, line): a result carrying ``line=L``
 resolves to ONLY the TEST node whose ``parse_line`` equals L (not all tests in
-the file).  A result with ``line=None`` (or a line that matches no TEST) falls
-back to every TEST in the file -- the existing file-granular behaviour.
+the file).  A result with ``line=None`` (or a line that matches no TEST) binds
+to NO test: it names none of them, so none of them holds it (REQ-d00254-G,
+REQ-d00294-E), and it carries why it bound nowhere.
 
 This tests the Task-3 extension to the source resolver in ``build()``:
   * ``tests_by_file_line[(rel_path, parse_line)]`` for O(1) single-test lookup.
-  * ``match_scope`` field: "test" for a line-resolved link, "file" for fallback.
+  * ``match_scope`` field: "test" for a line-resolved link, unset where unbound.
 """
 
 from __future__ import annotations
@@ -220,46 +221,32 @@ def test_line_matched_edge_kind_is_yields(graph_line_matched):
 # ---------------------------------------------------------------------------
 
 
-def test_null_line_falls_back_to_all_tests(graph_fallback):
-    """A precise result with line=None links to every TEST in the file."""
-    tests = list(graph_fallback.iter_by_kind(NodeKind.TEST))
+# Verifies: REQ-d00254-G, REQ-d00294-E
+@pytest.mark.parametrize(
+    ("graph_name", "result_id", "reason"),
+    [
+        ("graph_fallback", "r3", "recorded no line"),
+        ("graph_nonmatch_line", "r4", "recorded line 9999"),
+    ],
+    ids=["null-line", "nonmatch-line"],
+)
+def test_unresolved_line_binds_to_no_test(request, graph_name, result_id, reason):
+    """A result naming no one test is held by none of the tests in its file.
+
+    Handing it to every test in the file would give each of them a sibling's
+    verdict as its own. It is left unbound, carrying the reason, so the
+    unmatched-results check can say what to mend.
+    """
+    graph = request.getfixturevalue(graph_name)
+    tests = list(graph.iter_by_kind(NodeKind.TEST))
     assert len(tests) == 2, f"expected 2 TEST nodes, got {len(tests)}"
     for test_node in tests:
         result_ids = {c.id for c in test_node.iter_children() if c.kind == NodeKind.RESULT}
-        assert "r3" in result_ids, (
-            f"r3 should be a child of {test_node.id} (fallback), got {result_ids}"
-        )
+        assert result_id not in result_ids, f"{result_id} must not be held by {test_node.id}"
 
-
-def test_match_scope_is_file_for_null_line(graph_fallback):
-    """A fallback precise result (line=None) carries match_scope='file'."""
-    r3 = graph_fallback.find_by_id("r3")
-    assert r3 is not None
-    assert r3.get_field("match_scope") == "file", (
-        f"r3 match_scope should be 'file', got {r3.get_field('match_scope')!r}"
-    )
-
-
-# ---------------------------------------------------------------------------
-# Tests: non-matching line fallback
-# ---------------------------------------------------------------------------
-
-
-def test_nonmatch_line_falls_back_to_all_tests(graph_nonmatch_line):
-    """A precise result whose line matches no TEST parse_line falls back to all tests."""
-    tests = list(graph_nonmatch_line.iter_by_kind(NodeKind.TEST))
-    assert len(tests) == 2, f"expected 2 TEST nodes, got {len(tests)}"
-    for test_node in tests:
-        result_ids = {c.id for c in test_node.iter_children() if c.kind == NodeKind.RESULT}
-        assert "r4" in result_ids, (
-            f"r4 should be a child of {test_node.id} (line-mismatch fallback), got {result_ids}"
-        )
-
-
-def test_match_scope_is_file_for_nonmatch_line(graph_nonmatch_line):
-    """A precise result with a non-matching line carries match_scope='file'."""
-    r4 = graph_nonmatch_line.find_by_id("r4")
-    assert r4 is not None
-    assert r4.get_field("match_scope") == "file", (
-        f"r4 match_scope should be 'file', got {r4.get_field('match_scope')!r}"
-    )
+    result = graph.find_by_id(result_id)
+    assert result is not None
+    assert list(result.iter_parents(edge_kinds={EdgeKind.YIELDS})) == []
+    assert result.get_field("match_scope") not in ("test", "step", "file")
+    assert reason in (result.get_field("unbound_reason") or "")
+    assert "2 test(s)" in result.get_field("unbound_reason")

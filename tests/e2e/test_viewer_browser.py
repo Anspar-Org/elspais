@@ -1164,15 +1164,15 @@ class TestJunitStepBindingBrowser:
         self, page_step_binding, step_binding_viewer_url
     ):
         # Verifies: REQ-d00256-E
-        # Verifies: REQ-d00254-F
+        # Verifies: REQ-d00254-F, REQ-d00254-G
         """Open the journey card, toggle step-1's Result panel and assert:
 
         1. No conflation (end-to-end): step-1's panel holds exactly one
            STEP-scoped result row -- its own (``results.xml:3``) -- and NOT
            the sibling step's uniquely-lined result (``results.xml:4``).
-           The two no-step-id/ambiguous testcases legitimately fan out to
-           both tests at file scope, so the panel's expected total is 3
-           rows (1 step-scoped + 2 file-scoped).
+           The no-step-id and ambiguous testcases carry no line in a file
+           holding two tests, so they name no one test and bind to neither
+           (REQ-d00254-G): the panel holds that one row alone.
         2. Provenance: every result row's link text points at the results
            ARTIFACT (``results.xml:<line>``), never the test source file.
         """
@@ -1199,11 +1199,11 @@ class TestJunitStepBindingBrowser:
         panel.wait_for(state="visible", timeout=5_000)
 
         rows = panel.locator(".journey-step-result-row")
-        # 1 step-scoped result + 2 file-scope fanout results (no-step-id and
-        # ambiguous testcases) = 3. Before the step-scope fix, step 2's
-        # per-step result also fanned out here, making it 4.
-        assert rows.count() == 3, (
-            f"Expected 3 result rows (1 step-scoped + 2 file-scope), got "
+        # The step-scoped result alone. The no-step-id and ambiguous
+        # testcases bind to no test (REQ-d00254-G), and step 2's per-step
+        # result stays on step 2.
+        assert rows.count() == 1, (
+            f"Expected 1 result row (the step-scoped one), got "
             f"{rows.count()}: {panel.inner_text()!r}"
         )
 

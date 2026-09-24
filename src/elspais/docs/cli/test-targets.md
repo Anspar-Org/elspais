@@ -11,8 +11,7 @@ suite.  Each entry tells elspais two things:
    where results are pre-produced), the `reporter` that parses output, and
    optional `coverage` file to ingest.
 2. **How to match results back to assertions** -- `match` selects between
-   per-test source attribution (with file-granular fallback) or whole-app
-   aggregate credit, and `credit_coverage` controls the `lcov_tested` dimension.
+   per-test source attribution or whole-app aggregate credit, and `credit_coverage` controls the `lcov_tested` dimension.
 
 ### Produce vs ingest split
 
@@ -38,7 +37,7 @@ This is the correct pattern for CI.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `name` | string | (required) | Unique label for this target; appears in output |
+| `name` | string | (required) | Unique label for this target (compared without regard to case); appears in output and places the results read from its output |
 | `cwd` | string | `""` (repo root) | Directory relative to repo root where the command runs |
 | `command` | string | (omit in CI) | Shell command to execute when `--run-tests` is passed |
 | `reporter` | string | (required) | Parser format -- one of the names in the reporters table below |
@@ -73,7 +72,13 @@ this table does not name.
 <!-- /generated: reporters -->
 
 A **stdout-channel** reporter captures output directly from the running
-`command`; the `results` field is not used.  Capturing it does not hide it: each
+`command`.  Where such a target also declares `results` (for example
+`flutter test --machine --file-reporter=json:coverage/machine.jsonl`), a run
+reads the artifact when every file it matches was written during this run,
+so a result keeps the identity its artifact gives it; an artifact older than
+the run -- left by an earlier run that this one failed before replacing -- is
+not this run's record, and the output the run captured is read instead.
+Without `--run-tests` the artifact is read as usual.  Capturing it does not hide it: each
 line is echoed to elspais's stderr as it arrives, so the run is visible live
 while the text itself is kept for the parser.  The command's own stderr is never
 captured and passes straight through.
@@ -90,12 +95,33 @@ target need not name one.
 
 **`match = "source"` (default):** Per-test attribution.  elspais matches each
 result record to the specific `test()` by its source path AND line number
-(e.g., the `suite.path` + test line from `flutter-machine`).  When a line does
-not resolve to a known test node (shared-helper or generated tests), it falls
-back to file granularity: all passing results for that file credit the file's
-`Verifies:` assertions; any failure flags them.  Requires a reporter that emits
-real file paths and, for per-test resolution, the test's source line
-(`flutter-machine`); results without a line fall back to file granularity.
+(e.g., the `suite.path` + test line from `flutter-machine`).  A record whose
+recorded name embeds one journey-step reference binds to the test verifying
+that step instead.  A record with no line still binds to the test where its
+file holds exactly one scanned test, every record naming that file names
+the same test, and that name is the scanned test's -- its title, which
+Playwright may prefix with its `describe` titles joined by ` › ` --
+Playwright's built-in JUnit reporter writes `file` and no `line`, and a grid
+runs that one test once per environment.  A filtered run (`--grep`,
+`--last-failed`, a shard) that ran only an unscanned sibling therefore binds
+to nothing rather than to the one scanned test.  The runner's record that a
+test file failed to load (`flutter test`'s `loading <file>`, written for a
+compile error) is the failure of every test scanned in that file, since none
+of them ran, and binds to each.  A record that binds at none of these -- no
+line in a file holding several tests (or whose records name more tests than
+were scanned there, or another test than the one scanned), a line where no
+scanned test starts, or a runner's own pseudo-test such as `(tearDownAll)`
+or `X (setUpAll)` -- binds to **no** test: it names no one test, and handing
+it to every test in its file would give each of them a sibling's verdict.
+A producer writing `line` for every record (the shipped Playwright reporter
+does) never depends on the one-test rule.  It credits nothing, is still counted under
+`tests.results`, and `elspais checks` reports it under
+`tests.unmatched_results` saying why it bound nowhere.
+
+A relative path a producer records (a `suite.path`, a JUnit `file`) is read
+relative to the target's `cwd`, the directory the runner ran in, wherever that
+names a scanned test; otherwise it is read relative to the repository root, so
+a producer that already writes repo-relative paths keeps working.
 
 The `junit` reporter also supports `match = "source"` when the JUnit XML
 carries a per-`<testcase>` `file` attribute naming the test's real source path
@@ -103,9 +129,10 @@ carries a per-`<testcase>` `file` attribute naming the test's real source path
 the result to the scanned test node at that path instead of trying to
 reconstruct a Python `test:...` identifier from the JUnit `classname` -- which
 is how non-Python suites (e.g. Playwright `.spec.ts`) reach source matching at
-all.  Because most JUnit reporters emit no true per-test source *line*, the
-binding is typically **file-granular** (all of a passing spec's `Verifies:`
-edges are credited; any failure flags them).  When the XML carries no `file`
+all.  A record binds to one test only where it also carries the `line` that
+test starts on (or a journey-step reference in its name); a `file` with no
+`line` binds to no test and is reported under `tests.unmatched_results`.  The
+Playwright reporter elspais ships writes both.  When the XML carries no `file`
 attribute (standard pytest JUnit), behavior is unchanged -- use
 `match = "aggregate"` (see the Playwright recipe below).
 
@@ -132,8 +159,9 @@ This is the recommended setup for Flutter/Dart packages.  Use
 `reporter = "flutter-machine"` with `match = "source"` to get real per-test
 attribution -- elspais reads the `suite.path` and test source line emitted by
 the Flutter test machine protocol and matches each result to the specific test
-node at that `(path, line)` in the graph, with a file-granular fallback for
-shared helpers and generated tests.
+node at that `(path, line)` in the graph.  A record matching no test there
+(a shared helper, a generated test, a `setUpAll`/`tearDownAll` failure) binds
+to none and is reported under `tests.unmatched_results`.
 
 ### Single-package example
 
@@ -352,8 +380,10 @@ Where it picks out none, or more than one, the result binds to nothing and
 `elspais checks` reports it under `tests.unmatched_results` saying which
 happened -- a name pointing at a file that is not there, or two files sharing
 one name.  Post-processing the XML to inject `file="<repo-relative path>"` into
-each `<testcase>` still works and takes precedence, since a producer that names
-the source file leaves nothing to resolve.
+each `<testcase>` takes precedence, since a producer that names the source file
+leaves nothing to resolve -- but a record then binds to one test only where it
+also carries that test's `line` (or a journey-step reference in its name), so
+prefer the reporter below, which writes both.
 
 ### A reporter that names each test's source
 
@@ -372,12 +402,26 @@ reporter: [['./elspais-junit-reporter.mjs', { outputFile: 'junit.xml' }]]
 ```toml
 [[scanning.test.targets]]
 name        = "e2e"
+cwd         = "path/to/the/playwright/project"   # the directory holding playwright.config
 reporter    = "junit"
 results     = "junit.xml"
 match       = "source"
 environment = "suite-hostname"
 line_base   = 1
 ```
+
+The reporter writes `outputFile` and each `file` relative to the directory
+holding the Playwright config -- not Playwright's `rootDir`, which is the test
+directory -- so the target's `cwd` is that directory. Pass the reporter a
+`rootDir` option to write `file` relative to another directory instead.
+
+It writes one record for each test in each project, carrying the outcome
+Playwright itself gives the test over all of its attempts: a test that failed
+and passed on a retry is flaky and reads as passing, and a `test.fail()` test
+that failed as expected reads as passing. Every record in a results file is a
+result of the run, so a producer must write outcomes, not attempts -- and the
+step that runs the suite must clear the previous run's report first, since the
+tool reads whatever the results directory holds.
 
 `line_base` is required and is the part most easily missed. The `junit`
 reporter declares that its producers count lines from zero, because that is
@@ -389,9 +433,9 @@ The reporter keeps `hostname` on each suite, so one report serves both
 readings: each project's records are told apart, and each result names the
 project it came from.
 
-Because JUnit `line` values are not true source lines, binding is
-**file-granular**: a passing spec credits all of its `// Verifies:` step-edges;
-any failing case flags them.  The journey verdict is all-or-nothing -- `full`
+A record carrying neither a `line` that a scanned test starts on nor a
+journey-step reference in its name binds to no test and is reported under
+`tests.unmatched_results`.  The journey verdict is all-or-nothing -- `full`
 only when every step is verified-passing, `partial` if any step is uncovered,
 `fail` if any is failing.  If you cannot inject `file=`, fall back to
 `match = "aggregate"` for a whole-suite pass/fail signal.

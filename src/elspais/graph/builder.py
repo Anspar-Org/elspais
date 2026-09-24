@@ -80,7 +80,7 @@ from elspais.graph.template_subtree import (
 )
 from elspais.graph.terms import TermDictionary, TermEntry, compute_definition_hash
 from elspais.utilities.patterns import INSTANCE_SEPARATOR, GrammarUnavailable
-from elspais.utilities.test_identity import build_test_id
+from elspais.utilities.test_identity import build_test_id, strip_parametrize_suffix
 
 
 def _canonicalize_list_spacing(text: str) -> str:
@@ -4299,6 +4299,83 @@ class TraceGraph:
         return self._comment_index.source_file_for(anchor)
 
 
+# Implements: REQ-d00254-G, REQ-d00284-C
+def _source_result_unbound_reason(
+    source_file: str,
+    line: int | None,
+    candidates: int,
+    names_in_file: int = 0,
+    name: str = "",
+) -> str:
+    """Why a source-matched result bound to no test, in the words a reader acts on.
+
+    A record matching at neither step nor test scope names no one test. Which
+    condition it is tells an author what to mend: the producer wrote no line
+    where the file holds several tests, wrote no line and its records name
+    more tests than were scanned there, wrote a line where no scanned test
+    starts, or named a file where no test was scanned at all.
+    """
+    if not candidates:
+        return f"names {source_file}, where no test was scanned"
+    if line is None and candidates == 1 and names_in_file > 1:
+        return (
+            f"recorded no line, and the records naming {source_file} name "
+            f"{names_in_file} different tests where 1 test was scanned, so "
+            f"which of them ran as that test cannot be told"
+        )
+    if line is None and candidates == 1 and names_in_file == 1:
+        return (
+            f"recorded no line, and its name {name!r} does not name the 1 test "
+            f"scanned in {source_file}"
+        )
+    if line is None:
+        return (
+            f"recorded no line, so nothing picks one of the {candidates} test(s) in {source_file}"
+        )
+    return f"recorded line {line}, where none of the {candidates} test(s) in {source_file} starts"
+
+
+# Implements: REQ-d00284-B
+def _record_names_test(name: str, test_node: GraphNode) -> bool:
+    """Whether a result's recorded *name* names the scanned *test_node*.
+
+    A record with no line can only be told to belong to a test by its name.
+    The name a runner writes is the test's title, prefixed by the titles of
+    the groups holding it, which Playwright joins with `` › ``. Where the
+    scan gave the test a name, the record's must end in it; where it gave
+    none, the title has to be written as a string literal on the line the
+    test is declared at. Anything else is not evidence that this record came
+    from this test, so it names none.
+    A test the scan named by line alone is anchored at the citation written
+    above it, so the declaration is the first line from there on that is
+    neither blank nor a comment.
+    """
+    from elspais.graph.parsers.prescan import is_comment_line
+
+    name = strip_parametrize_suffix(name.strip())
+    if not name:
+        return False
+    parts = test_node.id.split("::")
+    if len(parts) >= 2:
+        scanned = parts[-1].strip()
+        return bool(scanned) and (name == scanned or name.endswith(" \u203a " + scanned))
+    leaf = name.split(" \u203a ")[-1].strip()
+    file_node = test_node.file_node()
+    path = file_node.get_field("absolute_path") if file_node else None
+    decl_line = test_node.get_field("parse_line")
+    if not leaf or not path or not decl_line:
+        return False
+    try:
+        with open(path, encoding="utf-8", errors="replace") as handle:
+            for number, text in enumerate(handle, 1):
+                if number < decl_line or not text.strip() or is_comment_line(text):
+                    continue
+                return any(f"{q}{leaf}{q}" in text for q in ("'", '"', "`"))
+    except OSError:
+        return False
+    return False
+
+
 class GraphBuilder:
     """Builder for constructing TraceGraph from parsed content.
 
@@ -5356,6 +5433,10 @@ class GraphBuilder:
             # rather than silently contributing no verdict.
             "name_match": data.get("name_match"),
             "name_candidates": data.get("name_candidates"),
+            # Implements: REQ-d00254-G
+            # The runner's record that a test file failed to load, so that
+            # none of the tests in it ran.
+            "suite_load_failure": bool(data.get("suite_load_failure")),
         }
         self._nodes[result_id] = node
 
@@ -5374,7 +5455,7 @@ class GraphBuilder:
             # they match RESULT->TEST by real source-file path + test() source
             # line. Queue (result_id, source_file, line) resolved once all
             # TEST/FILE nodes exist (see build()): line-precise when it
-            # resolves, file-granular fallback otherwise.
+            # resolves, and linked to nothing where it does not.
             source_file = node.get_field("source_file")
             if source_file:
                 self._pending_source_result_links.append(
@@ -6051,13 +6132,17 @@ class GraphBuilder:
         #     (``<journey>/N``); bind to the TEST(s) that VERIFIES that STEP
         #     in the same source file, match_scope="step". Needs no line attr.
         #   test-scope: the single TEST at (source_file, line),
-        #     match_scope="test" (per-test crediting).
-        #   file-scope: fall back to every TEST sharing the file,
-        #     match_scope="file" (the file-level all-pass/any-fail crediting
-        #     the annotator's source_file_index applies).
-        # An unmatched file links nothing (no broken reference, unlike test_id
-        # resolution). Done before orphan/root classification so RESULT nodes
-        # count as YIELDS-parented, exactly like test_id-based YIELDS edges.
+        #     match_scope="test" (per-test crediting). A record with no line
+        #     binds at this scope only where its file holds exactly one
+        #     scanned test and the records naming that file name one test
+        #     between them (REQ-d00284-B).
+        # A result that binds at neither scope links NOTHING (REQ-d00254-G):
+        # it names no one test, and attaching it to every test in its file
+        # would hand each of them a sibling's verdict as its own, against
+        # REQ-d00254-A and REQ-d00294-E. It carries why it bound nowhere, so
+        # tests.unmatched_results reports it rather than it being repaired.
+        # Done before orphan/root classification so RESULT nodes count as
+        # YIELDS-parented, exactly like test_id-based YIELDS edges.
         if self._pending_source_result_links:
             tests_by_file: dict[str, list[GraphNode]] = {}
             tests_by_file_line: dict[tuple[str, int], GraphNode] = {}
@@ -6072,6 +6157,18 @@ class GraphBuilder:
                 pl = candidate.get_field("parse_line")
                 if pl:
                     tests_by_file_line[(rel, pl)] = candidate
+            # Implements: REQ-d00284-B, REQ-d00294-A
+            # The distinct test names the records naming each source file
+            # carry, whether or not they carry a line. The environment a
+            # record ran in is not part of the name, so one test run across a
+            # grid is one name here; a runner's own `(tearDownAll)` beside a
+            # test's lined record is a second.
+            names_in_file: dict[str, set[str]] = {}
+            for result_id, source_file, *_ in self._pending_source_result_links:
+                pending = self._nodes.get(result_id)
+                if pending is None or pending.get_field("suite_load_failure"):
+                    continue
+                names_in_file.setdefault(source_file, set()).add(pending.get_field("name") or "")
             for (
                 result_id,
                 source_file,
@@ -6081,6 +6178,16 @@ class GraphBuilder:
             ) in self._pending_source_result_links:
                 result_node = self._nodes.get(result_id)
                 if result_node is None:
+                    continue
+                in_file = tests_by_file.get(source_file, ())
+                if result_node.get_field("suite_load_failure") and in_file:
+                    # Implements: REQ-d00254-G, REQ-d00294-E
+                    # The file failed to load, so none of its tests ran: the
+                    # record is each one's own failure, not a sibling's
+                    # verdict handed to it.
+                    for test_node in in_file:
+                        test_node.link(result_node, EdgeKind.YIELDS)
+                    result_node.set_field("match_scope", "suite")
                     continue
                 # Attempt 0: step-scope match via the step id embedded in the
                 # testcase name (REQ-d00254-G / REQ-d00256).
@@ -6096,13 +6203,42 @@ class GraphBuilder:
                     # Attempt 2: root fallback for testWidgets() whose test.line
                     # is a framework wrapper line (REQ-d00254-G).
                     target = tests_by_file_line.get((root_file or source_file, root_line))
+                if target is None and line is None:
+                    # Attempt 3 (REQ-d00284-B): a record carrying no line
+                    # still names one test where its file holds exactly one
+                    # scanned test and every record naming that file names
+                    # one test between them. Playwright's own
+                    # JUnit reporter writes a file and no line, and a grid
+                    # runs that one test in several environments, so its
+                    # records differ in nothing but the suite they sit in.
+                    # Records naming two tests in a file where one was
+                    # scanned say another test ran there too, and which of
+                    # them is the scanned one cannot be told.
+                    # The record's name must also name that test: a filtered
+                    # or sharded run writes records only for the tests it
+                    # ran, and one of them may be an unscanned sibling of the
+                    # scanned test (REQ-d00284-B).
+                    if (
+                        len(in_file) == 1
+                        and len(names_in_file.get(source_file, ())) == 1
+                        and _record_names_test(result_node.get_field("name") or "", in_file[0])
+                    ):
+                        target = in_file[0]
                 if target is not None:
                     target.link(result_node, EdgeKind.YIELDS)
                     result_node.set_field("match_scope", "test")
                 else:
-                    for test_node in tests_by_file.get(source_file, ()):
-                        test_node.link(result_node, EdgeKind.YIELDS)
-                    result_node.set_field("match_scope", "file")
+                    # Implements: REQ-d00254-G, REQ-d00294-E
+                    result_node.set_field(
+                        "unbound_reason",
+                        _source_result_unbound_reason(
+                            source_file,
+                            line,
+                            len(in_file),
+                            len(names_in_file.get(source_file, ())),
+                            result_node.get_field("name") or "",
+                        ),
+                    )
 
         # Implements: REQ-d00132-F, REQ-d00132-G
         # Re-scope the stored implements/refines fields to unresolved

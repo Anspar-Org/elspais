@@ -294,6 +294,11 @@ reference_keyword = "Verifies"
 # [scanning.test.groups]
 # uat = "End-to-end journeys needing a live stack"
 
+# Each target's name must be unique (compared without regard to case): it
+# selects the target for a run and places the results read from its output.
+# A relative path a runner records (suite.path, a JUnit `file`) is read
+# against the target's cwd. A result binding to no single test binds to none
+# and is reported under tests.unmatched_results.
 [[scanning.test.targets]]
 name     = "app"
 cwd      = "app"                    # relative to repo root; empty = repo root

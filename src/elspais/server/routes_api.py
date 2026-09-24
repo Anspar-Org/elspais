@@ -136,9 +136,13 @@ def _get_result_status(test_or_jny_node: Any) -> str | None:
                 statuses.append(s)
     if not statuses:
         return None
-    if any(s in ("failed", "fail", "failure", "error") for s in statuses):
+    # Implements: REQ-d00294-E
+    # The one vocabulary behind every verdict (graph/aggregation.py).
+    from elspais.graph.aggregation import FAILING_STATUSES, PASSING_STATUSES
+
+    if any(s in FAILING_STATUSES for s in statuses):
         return "failed"
-    if all(s in ("passed", "pass", "success") for s in statuses):
+    if all(s in PASSING_STATUSES for s in statuses):
         return "passed"
     return "mixed"
 

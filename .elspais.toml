@@ -183,9 +183,14 @@ results = ".results/junit-e2e.xml"
 groups = ["push"]
 
 # 34 of the browser tier's 41 tests also carry `e2e`, so this target and
-# `elspais-e2e` overlap by design. Both belong to `push`, and a result matched
-# twice is the same result; what matters is that the 7 browser-only tests reach
-# a figure at all.
+# `elspais-e2e` overlap by design: what matters is that the 7 browser-only
+# tests reach a figure at all. Each artifact's records are results of their own
+# (REQ-d00294-B), so an overlapping test holds one result from each tier that
+# ran it, and a failure in EITHER makes it read as failing (REQ-d00294-E). After
+# re-running only one tier -- the pre-push hook runs only e2e -- the other
+# tier's older report still counts: re-run the whole group
+# (`elspais checks --run-tests --targets push`) before reading a verdict, or
+# delete .results/junit-browser.xml when the browser tier is not being run.
 [[scanning.test.targets]]
 name = "elspais-browser"
 command = "pytest -m browser -q --no-cov --junitxml=.results/junit-browser.xml -o junit_family=xunit1"

@@ -1641,19 +1641,11 @@ def annotate_coverage(
             for result in test_node.iter_children():
                 if result.kind != NodeKind.RESULT:
                     continue
-                # Implements: REQ-d00254-G
-                # A source-match result that resolved to neither a step nor a
-                # test bound at file granularity only, so it names no test and
-                # credits nothing. Precisely-resolved source results
-                # (match_scope "test" or "step") credit inline like test_id
-                # results: their pass credits their assertions; their fail
-                # flags only their own test.
-                if (
-                    (result.get_field("match") or "") == "source"
-                    and not result.get_field("test_id")
-                    and result.get_field("match_scope") not in ("test", "step")
-                ):
-                    continue
+                # Implements: REQ-d00254-G, REQ-d00294-E
+                # Every RESULT child is one of this test's own results: the
+                # builder links a source-match result only where it binds at
+                # step or test scope, so a pass credits the test's assertions
+                # and a failure flags only this test.
                 status = (result.get_field("status", "") or "").lower()
                 if status in PASSING_STATUSES:
                     if assertion_targets:

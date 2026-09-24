@@ -209,6 +209,7 @@ def test_flutter_machine_does_not_report_the_runners_own_chatter():
         '{"type":"suite","suite":{"id":1,"path":"test/a_test.dart"}}\n'
         '{"type":"testStart","test":{"id":2,"suiteID":1,"name":"works","line":7}}\n'
         '{"type":"testDone","testID":2,"result":"success"}\n'
+        '{"type":"done","success":true}\n'
     )
 
     results = parser.parse(content, "target:app")

@@ -1160,8 +1160,14 @@ def external_prescan(
             heuristic_end = sorted_entries[i + 1]["line"] - 1
         else:
             heuristic_end = lines[-1][0] if lines else start
-        # Use explicit end_line for func_end_line; heuristic for range matching
-        end = heuristic_end
+        # Implements: REQ-d00254-D+N
+        # A declared end_line bounds the test: the lines after it and before
+        # the next test -- the comment block written above that next test --
+        # belong to no test here, so the binding below hands them forward to
+        # the test they were written for. Read to the next test's line
+        # instead, every citation above a test after the first was taken by
+        # the test before it.
+        end = min(heuristic_end, explicit_end) if explicit_end >= start else heuristic_end
         func_end_line = explicit_end if explicit_end else heuristic_end
         func_ranges.append((start, end, fname, cname, func_end_line))
 

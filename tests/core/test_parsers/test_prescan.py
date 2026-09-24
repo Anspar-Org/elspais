@@ -267,6 +267,35 @@ class TestExternalPrescan:
         )
         assert line_context[2][2] == 4, "and is anchored at the test's own line"
 
+    # Verifies: REQ-d00254-D, REQ-d00254-N
+    def test_REQ_d00254_D_a_citation_above_a_later_test_belongs_to_it(self):
+        """A test's declared end leaves the next test's citation to that test.
+
+        Read to the next record's line, the comment block above every test
+        after the first fell inside the test before it, and each citation
+        was attributed one test early.
+        """
+        entries = [
+            {"function": "first", "class": None, "line": 2, "end_line": 3},
+            {"function": "second", "class": None, "line": 6, "end_line": 7},
+        ]
+        lines = [
+            (1, "// Verifies: REQ-d00001-A"),
+            (2, 'test("first", async () => {'),
+            (3, "});"),
+            (4, ""),
+            (5, "// Verifies: REQ-d00001-B"),
+            (6, 'test("second", async () => {'),
+            (7, "});"),
+        ]
+
+        line_context, _funcs, _first = external_prescan(entries, lines)
+
+        assert line_context[1][0] == "first"
+        assert line_context[5][0] == "second"
+        assert line_context[5][2] == 6
+        assert line_context[3][0] == "first"
+
     # Verifies: REQ-d00254-D
     def test_REQ_d00254_D_a_comment_owned_already_is_left_alone(self):
         """A comment already inside a test's range keeps the range it had.

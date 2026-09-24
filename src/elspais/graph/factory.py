@@ -110,10 +110,99 @@ def _repo_relative(path: str | Path, repo_root: Path) -> str:
     else the graph records about a file is repo-relative, and a finding that
     alone spelled it absolutely would not line up with any of it.
     """
+    # Implements: REQ-d00294-A+B
+    # The lexical form is tried first, so a file reached through a symlink
+    # that leaves the repository -- a results directory linked to a CI cache
+    # -- keeps the repo-relative name it is written under, and the same run
+    # reads the same way in every checkout. Only a file with no repo-relative
+    # spelling at all keeps the path it has.
+    lexical = Path(os.path.abspath(path))
+    root = Path(os.path.abspath(repo_root))
+    for base in (root, root.resolve()):
+        try:
+            return str(lexical.relative_to(base))
+        except ValueError:
+            pass
     try:
-        return str(Path(path).resolve().relative_to(Path(repo_root).resolve()))
+        return str(Path(path).resolve().relative_to(root.resolve()))
     except ValueError:
         return str(path)
+
+
+# Implements: REQ-d00254-F+G, REQ-d00294-A
+def _producer_path(
+    raw: str, run_dir: Path, repo_root: Path, scanned: frozenset[str] = frozenset()
+) -> str:
+    """A path a producer recorded, as the repository names it.
+
+    A runner writes a relative path relative to the directory it ran in --
+    `dart test` writes `suite.path` relative to its package, pytest writes a
+    JUnit `file` relative to its rootdir -- so a relative path is read against
+    the target's run directory. A producer that already writes repo-relative
+    paths (a post-processed report naming `apps/x/e2e/a.spec.ts` from a target
+    whose cwd is `apps/x`) keeps what it said: the run-directory reading is
+    taken only where it names a scanned test, or where the producer's own
+    reading names none and the run-directory reading names a file that
+    exists. With the run directory at the repository root the two readings
+    are one, so a target run from the root reads exactly as it always has.
+    """
+    if not raw:
+        return raw
+    if os.path.isabs(raw):
+        return _repo_relative(raw, repo_root)
+    as_written = os.path.normpath(raw.replace("\\", "/"))
+    joined = _repo_relative(run_dir / raw, repo_root)
+    if joined == as_written or joined in scanned:
+        return joined
+    if as_written in scanned:
+        return as_written
+    if (run_dir / raw).exists() and not (Path(repo_root) / raw).exists():
+        return joined
+    return as_written
+
+
+# Implements: REQ-d00254-G, REQ-d00294-E
+def _test_id_in_run_dir(
+    test_id: str, run_dir: Path, repo_root: Path, scanned: frozenset[str]
+) -> str:
+    """*test_id* with its module path read against the runner's directory.
+
+    pytest names a module relative to its rootdir, the target's cwd, so a
+    classname or nodeid read as though relative to the repository names a
+    file that is not there. The module path is re-read by the one rule every
+    recorded path is (`_producer_path`), and the identifier respelled only
+    where that reading differs.
+    """
+    from elspais.utilities.test_identity import test_id_module_path, with_module_path
+
+    module_path = test_id_module_path(test_id)
+    if module_path is None:
+        return test_id
+    reread = _producer_path(module_path, run_dir, repo_root, scanned)
+    return test_id if reread == module_path else with_module_path(test_id, reread)
+
+
+# Seconds an artifact's recorded modification time may trail the moment its
+# run began and still be the run's own: filesystems that keep a coarse
+# timestamp (FAT keeps two seconds, HFS+ one) can round a file written just
+# after the run began to a moment just before it.
+_MTIME_TOLERANCE_SECONDS = 2.0
+
+
+# Implements: REQ-d00294-A+B
+def _written_during_run(paths: list[str], run_started_at: float | None) -> bool:
+    """Whether every one of *paths* was written by the run that began then.
+
+    A run whose start is unknown proves nothing about any file, so no file
+    is taken as its own.
+    """
+    if run_started_at is None:
+        return False
+    threshold = run_started_at - _MTIME_TOLERANCE_SECONDS
+    try:
+        return all(os.path.getmtime(p) >= threshold for p in paths)
+    except OSError:
+        return False
 
 
 # Implements: REQ-d00285-F, REQ-d00285-G
@@ -228,11 +317,30 @@ def _wildcard_stood_for(pattern_segment: str, path_segment: str) -> tuple[str | 
             expression += "(.)"
             wildcards += 1
         elif char == "[":
-            close = pattern_segment.find("]", index + 1)
+            # Implements: REQ-d00294-C
+            # A class is read the way fnmatch reads it, because fnmatch is
+            # what the glob that selected this file used: `!` negates, `^`
+            # and `\` are ordinary members, and a `]` written first is a
+            # member rather than the close. Copied into a regular expression
+            # unchanged, `[!x]` would be the class of `!` and `x`.
+            body_start = index + 1
+            if body_start < len(pattern_segment) and pattern_segment[body_start] == "!":
+                body_start += 1
+            search_from = body_start
+            if search_from < len(pattern_segment) and pattern_segment[search_from] == "]":
+                search_from += 1
+            close = pattern_segment.find("]", search_from)
             if close == -1:
                 expression += re.escape(char)
             else:
-                expression += "(" + pattern_segment[index : close + 1] + ")"
+                stuff = pattern_segment[index + 1 : close].replace("\\", "\\\\")
+                # Set operations and a nested `[` mean nothing to fnmatch.
+                stuff = re.sub(r"([&~|\[])", r"\\\1", stuff)
+                if stuff.startswith("!"):
+                    stuff = "^" + stuff[1:]
+                elif stuff.startswith("^"):
+                    stuff = "\\" + stuff
+                expression += "([" + stuff + "])"
                 wildcards += 1
                 index = close
         else:
@@ -244,9 +352,25 @@ def _wildcard_stood_for(pattern_segment: str, path_segment: str) -> tuple[str | 
             f"the pattern's wildcard segment holds {wildcards} wildcards, "
             "so no one part of it names the environment"
         )
-    match = re.fullmatch(expression, path_segment)
+    # Implements: REQ-d00294-C
+    # Case is folded exactly where the glob that admitted the file folded it
+    # (fnmatch folds through os.path.normcase), so the two readings of one
+    # path cannot disagree. The name is returned in the file's own spelling.
+    flags = re.IGNORECASE if os.path.normcase("A") != "A" else 0
+    match = re.fullmatch(expression, path_segment, flags)
     if match is None:
         return None, "the results file name does not read as the pattern's wildcard segment"
+    # Implements: REQ-d00294-D
+    # A wildcard that matched nothing -- `junit*.xml` against `junit.xml` --
+    # stood for no part of the name, and an empty string is not a name.
+    if not match.group(1):
+        return (
+            None,
+            (
+                "the pattern's wildcard matched nothing in this file's name, "
+                "so it names no environment"
+            ),
+        )
     return match.group(1), ""
 
 
@@ -263,6 +387,7 @@ def _ingest_target_results(
     scanned_tests: frozenset[str] = frozenset(),
     results_pattern: str = "",
     results_base: Path | None = None,
+    run_dir: Path | None = None,
 ) -> int:
     """Parse a target's reporter output and add RESULT ParsedContent.
 
@@ -271,6 +396,10 @@ def _ingest_target_results(
 
     Only "results"-kind reporters are handled; coverage-kind reporters are
     skipped (returns 0 immediately).
+
+    ``run_dir`` is the directory the target's runner ran in (its ``cwd``); a
+    relative path a record carries is read against it. It defaults to the
+    repository root.
     """
     from elspais.graph.parsers import ParsedContent
     from elspais.graph.parsers.results.registry import get_reporter
@@ -326,11 +455,18 @@ def _ingest_target_results(
     # exactly one test scanned for this target; otherwise it binds to nothing
     # and carries why, so the result can be reported rather than dropped.
     form = target.classname or spec.classname
+    run_dir = Path(run_dir) if run_dir is not None else Path(repo_root)
     for rec in records:
         if not rec.get("test_id"):
             continue  # already bound by a source file the producer named
         if form == "python-module":
-            continue  # the synthesized identifier already reads it that way
+            # Implements: REQ-d00254-G, REQ-d00294-E
+            # The synthesized identifier names the module as the runner saw
+            # it, relative to the directory it ran in. Where that is not the
+            # repository root, the identifier is read against it, so a
+            # failing record reaches the test it names.
+            rec["test_id"] = _test_id_in_run_dir(rec["test_id"], run_dir, repo_root, scanned_tests)
+            continue
         matches = _tests_named(rec.get("classname", ""), scanned_tests) if form else []
         rec["test_id"] = None
         if len(matches) == 1:
@@ -376,47 +512,26 @@ def _ingest_target_results(
                 target=target.name,
             )
 
-    repo_root_resolved = Path(repo_root).resolve()
     count = 0
     for rec in records:
         raw_src = rec.get("source_path", "")
-        # Normalize absolute source_path to repo-relative for source_file.
-        # If already relative or outside the repo, keep as-is.
-        if raw_src and os.path.isabs(raw_src):
-            try:
-                source_file = str(Path(raw_src).resolve().relative_to(repo_root_resolved))
-            except ValueError:
-                source_file = raw_src  # outside repo root -- keep absolute
-        else:
-            source_file = raw_src
-
-        # Normalize root_path (from root_url after stripping file://) the same
-        # way. root_path is set only by flutter-machine for testWidgets() calls
-        # whose test.line is a framework wrapper rather than the user call site.
+        # Implements: REQ-d00254-F, REQ-d00294-A
+        # Every path a record carries is made repo-relative in one place:
+        # the test's source file (the RESULT->TEST match key), the call site
+        # a testWidgets() result reports, and the artifact that recorded it.
+        # A relative one is read against the directory the runner ran in.
+        source_file = _producer_path(raw_src, run_dir, repo_root, scanned_tests)
         raw_root = rec.get("root_path") or None
-        if raw_root and os.path.isabs(raw_root):
-            try:
-                root_file: str | None = str(
-                    Path(raw_root).resolve().relative_to(repo_root_resolved)
-                )
-            except ValueError:
-                root_file = raw_root  # outside repo root -- keep absolute
-        else:
-            root_file = raw_root
-
+        root_file: str | None = (
+            _producer_path(raw_root, run_dir, repo_root, scanned_tests) if raw_root else None
+        )
         # Results-file provenance (REQ-d00254): repo-relative path + line of
         # the artifact that recorded this result, distinct from source_file
         # (the TEST's source, which stays the RESULT->TEST match key).
         raw_result_file = rec.get("result_file") or None
-        if raw_result_file and os.path.isabs(raw_result_file):
-            try:
-                result_file: str | None = str(
-                    Path(raw_result_file).resolve().relative_to(repo_root_resolved)
-                )
-            except ValueError:
-                result_file = raw_result_file  # outside repo root -- keep absolute
-        else:
-            result_file = raw_result_file
+        result_file: str | None = (
+            _producer_path(raw_result_file, run_dir, repo_root) if raw_result_file else None
+        )
         result_line = rec.get("result_line")
 
         # Implements: REQ-d00294-A+B
@@ -487,6 +602,8 @@ def _ingest_target_results(
             # Implements: REQ-d00284-C
             "name_match": rec.get("name_match"),
             "name_candidates": rec.get("name_candidates"),
+            # Implements: REQ-d00254-G
+            "suite_load_failure": bool(rec.get("suite_load_failure")),
         }
         content = ParsedContent(
             content_type="test_result",
@@ -560,10 +677,8 @@ def create_file_node(
             f"Cannot make a FILE id for {file_path} without a namespace: the id "
             f"names the repository holding the file."
         )
-    try:
-        rel_path = str(file_path.resolve().relative_to(repo_root.resolve()))
-    except ValueError:
-        rel_path = str(file_path)
+    # Implements: REQ-d00294-A
+    rel_path = _repo_relative(file_path, repo_root)
 
     file_id = make_file_id(namespace, rel_path)
     node = GraphNode(
@@ -968,6 +1083,7 @@ def build_graph(
     captured_results: dict[str, str] | None = None,
     fresh_targets: set[str] | None = None,
     federation_resolvers: list[IdResolver] | None = None,
+    run_started_at: float | None = None,
 ) -> FederatedGraph:
     """Build a FederatedGraph from spec directories.
 
@@ -1001,6 +1117,12 @@ def build_graph(
             its own configuration; sharing the set is what lets a member's
             code and tests name the identifiers its siblings own. Resolved
             here from the declarations when not supplied.
+        run_started_at: Wall-clock time (``time.time()``) at which this
+            invocation began running its targets. A target that both captured
+            its output and declares a results artifact reads the artifact only
+            where every matched file was written at or after this moment;
+            otherwise the artifact predates the run and the captured output is
+            read. Unknown (None) never proves an artifact fresh.
 
     Returns:
         FederatedGraph wrapping one or more TraceGraph instances.
@@ -1343,7 +1465,62 @@ def build_graph(
                 target_tests = frozenset(
                     f for f in scanned_test_files if not prefix or f.startswith(prefix)
                 )
-                if target.name in _captured:
+                # Implements: REQ-d00294-A+B
+                # Where the target declares an artifact the run wrote, the
+                # artifact is the place of record, whichever channel this
+                # invocation also captured: one run that wrote both its
+                # report and its stream names each result by where it was
+                # recorded, and the same test in the same run must not change
+                # identity with the channel read. An artifact this invocation
+                # cannot show its run wrote -- one last modified before the
+                # run began, left by an earlier run that a failure before the
+                # reporter opened did not replace -- is not this run's
+                # record, and reading it would report an earlier verdict as
+                # this run's. The captured stream, which this run did
+                # produce, is read instead. The captured stream is likewise
+                # read for a target declaring no artifact, or whose artifact
+                # no run left.
+                matched = (
+                    [
+                        f
+                        for f in glob(str(cwd_path / target.results), recursive=True)
+                        if Path(f).is_file()
+                    ]
+                    if target.results
+                    else []
+                )
+                if matched and target.name in _captured:
+                    if not _written_during_run(matched, run_started_at):
+                        _log.info(
+                            "target %r: results artifact %r predates this run; "
+                            "reading the output this run captured instead",
+                            target.name,
+                            target.results,
+                        )
+                        matched = []
+                if matched:
+                    for f in matched:
+                        # Implements: REQ-d00128-A
+                        _get_or_create_file_node(Path(f), FileType.RESULT)
+                        _ingest_target_results(
+                            builder,
+                            target,
+                            Path(f).read_text(encoding="utf-8", errors="replace"),
+                            repo_root,
+                            str(Path(f)),
+                            namespace=typed_config.project.namespace,
+                            carried=carried,
+                            scanned_tests=target_tests,
+                            # Implements: REQ-d00294-C
+                            # The pattern and the directory it was read
+                            # from, so a target declaring `results-path`
+                            # can read back the part of the path its
+                            # wildcard stood for.
+                            results_pattern=target.results,
+                            results_base=cwd_path,
+                            run_dir=cwd_path,
+                        )
+                elif target.name in _captured:
                     _ingest_target_results(
                         builder,
                         target,
@@ -1353,47 +1530,24 @@ def build_graph(
                         namespace=typed_config.project.namespace,
                         carried=carried,
                         scanned_tests=target_tests,
+                        run_dir=cwd_path,
                     )
                 elif target.results:
-                    matched = glob(str(cwd_path / target.results), recursive=True)
-                    if matched:
-                        for f in matched:
-                            if Path(f).is_file():
-                                # Implements: REQ-d00128-A
-                                _get_or_create_file_node(Path(f), FileType.RESULT)
-                                _ingest_target_results(
-                                    builder,
-                                    target,
-                                    Path(f).read_text(encoding="utf-8", errors="replace"),
-                                    repo_root,
-                                    str(Path(f)),
-                                    namespace=typed_config.project.namespace,
-                                    carried=carried,
-                                    scanned_tests=target_tests,
-                                    # Implements: REQ-d00294-C
-                                    # The pattern and the directory it was
-                                    # read from, so a target declaring
-                                    # `results-path` can read back the part
-                                    # of the path its wildcard stood for.
-                                    results_pattern=target.results,
-                                    results_base=cwd_path,
-                                )
-                    else:
-                        # Implements: REQ-d00285-G
-                        # A results pattern matching nothing is a run that
-                        # left no report where the target says one is written
-                        # -- not a run whose report said nothing.
-                        _log.debug("target %r: no files matched %r", target.name, target.results)
-                        if target_spec.kind == "results":
-                            builder.record_ingestion_fault(
-                                path=_repo_relative(cwd_path / target.results, repo_root),
-                                stage="results",
-                                cause=(
-                                    "no file matched this target's results pattern, so "
-                                    "no test results were read for it"
-                                ),
-                                target=target.name,
-                            )
+                    # Implements: REQ-d00285-G
+                    # A results pattern matching nothing is a run that
+                    # left no report where the target says one is written
+                    # -- not a run whose report said nothing.
+                    _log.debug("target %r: no files matched %r", target.name, target.results)
+                    if target_spec.kind == "results":
+                        builder.record_ingestion_fault(
+                            path=_repo_relative(cwd_path / target.results, repo_root),
+                            stage="results",
+                            cause=(
+                                "no file matched this target's results pattern, so "
+                                "no test results were read for it"
+                            ),
+                            target=target.name,
+                        )
                 elif target_spec.kind == "results":
                     _log.debug(
                         "target %r: stdout reporter with no captured output and no results"

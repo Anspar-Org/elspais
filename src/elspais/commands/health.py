@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -4540,8 +4541,12 @@ def check_unmatched_results(
         target = result.get_field("target") or "?"
         recorded = result.get_field("classname") or result.get_field("name") or result.id
         candidates = result.get_field("name_candidates") or []
+        unbound_reason = result.get_field("unbound_reason")
         if candidates:
             detail = f"matched {len(candidates)} tests: {', '.join(candidates)}"
+        elif unbound_reason:
+            # Implements: REQ-d00254-G
+            detail = f"matched no test: it {unbound_reason}"
         else:
             detail = "matched no test"
         findings.append(
@@ -5189,6 +5194,10 @@ def run(args: argparse.Namespace) -> int:
             )
             return 2
         repo_root = find_git_root() or Path.cwd()
+        # Implements: REQ-d00294-A+B
+        # Taken before any target runs, so an artifact a target left from an
+        # earlier run is told from one this run wrote.
+        args._run_started_at = time.time()
         results, captured_map = run_configured_targets(
             cfg, repo_root, fail_fast=fail_fast, only=only
         )
@@ -5333,6 +5342,7 @@ def _run_local_checks(args: argparse.Namespace, request: ChecksRequest) -> dict[
     lenient = request.lenient
     captured = getattr(args, "_captured_results", None)
     fresh_targets = getattr(args, "_fresh_targets", None)
+    run_started_at = getattr(args, "_run_started_at", None)
 
     report = HealthReport()
 
@@ -5365,6 +5375,7 @@ def _run_local_checks(args: argparse.Namespace, request: ChecksRequest) -> dict[
             config_path=config_path,
             captured_results=captured,
             fresh_targets=fresh_targets,
+            run_started_at=run_started_at,
         )
         if config is None:
             config = get_config(config_path, start_path=start_path)

@@ -783,6 +783,25 @@ class TestScanningConfig(ScanningKindConfig):
                         f"declared groups are {', '.join(sorted(known))}"
                     )
 
+        # Implements: REQ-d00294-A+B
+        # A target's name selects it for a run, keys the output a run
+        # captured from it, and places a result read from that output. Two
+        # targets sharing one name would overwrite one another's output and
+        # give their results one identity, so a failing record from one
+        # vanished behind the other's. Refused rather than resolved: a run
+        # names targets without regard to case or surrounding spaces.
+        seen_targets: dict[str, str] = {}
+        for target in self.targets:
+            key = target.name.strip().lower()
+            if key in seen_targets:
+                raise ValueError(
+                    f'test targets "{seen_targets[key]}" and "{target.name}" share a name; '
+                    f"a target's name is how a run selects it and where the results "
+                    f"read from its output are recorded, so each target needs its own. "
+                    f"Rename one of them."
+                )
+            seen_targets[key] = target.name
+
         # Implements: REQ-d00283-G
         # A group is an alias for a set of targets and is named where a target
         # is named, so the two share one namespace: a name meaning a target to

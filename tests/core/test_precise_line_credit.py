@@ -6,9 +6,9 @@ specific Dart test() call) credits only ITS own assertion-targets: the
 passing result credits its assertions; the failing result flags only its own
 test without dragging down unrelated assertions.
 
-A source RESULT that resolves no further than its file carries
-``match_scope = "file"``: it names every test written there and so names none
-of them, and contributes no verdict in either direction.
+A source RESULT that resolves no further than a file holding several tests
+names every test written there and so names none of them: it binds to no
+test and contributes no verdict in either direction.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ import pytest
 from elspais.config.schema import ElspaisConfig
 from elspais.graph.annotators import CoverageCreditConfig, annotate_coverage
 from elspais.graph.parsers.lark import FileDispatcher
+from elspais.graph.relations import EdgeKind
 from elspais.utilities.patterns import IdPatternConfig, IdResolver
 from tests.core.graph_test_helpers import (
     MockSourceContext,
@@ -152,7 +153,7 @@ def graph_per_test_credit(resolver):
 
 @pytest.fixture(scope="module")
 def graph_file_scope_fallback(resolver):
-    """Both results use match_scope=file (line=None -> fallback to all tests).
+    """Both results carry line=None in a file holding two tests.
 
     Mixed pass+fail, and neither result resolved to a test: no verdict reaches
     either assertion.
@@ -226,7 +227,7 @@ def test_per_test_match_scope_is_test_for_line_resolved_results(graph_per_test_c
 
 # Verifies: REQ-d00254-A
 def test_file_scope_results_carry_no_verdict(graph_file_scope_fallback):
-    """match_scope='file' results (line=None fallback) credit nothing and
+    """Results resolving no further than their file credit nothing and
     flag nothing.
 
     A failing result in the file is not evidence against an assertion the
@@ -243,15 +244,11 @@ def test_file_scope_results_carry_no_verdict(graph_file_scope_fallback):
     assert m.verified.total_by_label.get("B", 0.0) == 0.0
 
 
-def test_file_scope_match_scope_is_file_for_null_line(graph_file_scope_fallback):
-    """Results with line=None carry match_scope='file'."""
-    r_pass = graph_file_scope_fallback.find_by_id("r_pass2")
-    r_fail = graph_file_scope_fallback.find_by_id("r_fail2")
-    assert r_pass is not None
-    assert r_fail is not None
-    assert r_pass.get_field("match_scope") == "file", (
-        f"r_pass2 should have match_scope='file', got {r_pass.get_field('match_scope')!r}"
-    )
-    assert r_fail.get_field("match_scope") == "file", (
-        f"r_fail2 should have match_scope='file', got {r_fail.get_field('match_scope')!r}"
-    )
+# Verifies: REQ-d00254-G, REQ-d00294-E
+def test_null_line_results_are_held_by_no_test(graph_file_scope_fallback):
+    """Results with line=None bind to no test, so no test holds a sibling's verdict."""
+    for rid in ("r_pass2", "r_fail2"):
+        r = graph_file_scope_fallback.find_by_id(rid)
+        assert r is not None
+        assert list(r.iter_parents(edge_kinds={EdgeKind.YIELDS})) == [], f"{rid} names no one test"
+        assert "recorded no line" in (r.get_field("unbound_reason") or "")

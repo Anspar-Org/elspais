@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from elspais import __version__
 from elspais.graph.aggregation import (
+    FAILING_STATUSES,
     HEADLINE_MEASURE,
     assertion_measures,
     dimension_measures,
@@ -1216,7 +1217,7 @@ class HTMLGenerator:
                         is_uncommitted=False,
                         is_unsaved=False,
                         has_children=False,
-                        has_failures=child_result_status in ("failed", "fail", "failure", "error"),
+                        has_failures=child_result_status in FAILING_STATUSES,
                         is_associated=False,
                         result_status=child_result_status,
                     )
@@ -1260,7 +1261,7 @@ class HTMLGenerator:
                 is_uncommitted=False,
                 is_unsaved=False,
                 has_children=False,
-                has_failures=result_status in ("failed", "fail", "failure", "error"),
+                has_failures=result_status in FAILING_STATUSES,
                 is_associated=False,
                 result_status=result_status,
             )
