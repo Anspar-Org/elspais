@@ -173,7 +173,7 @@ class FlutterMachineParser(DiagnosticRecorder):
                     and meta["line"] is None
                     and meta["name"] == f"loading {rec['source_path']}"
                 ):
-                    rec["suite_load_failure"] = True
+                    rec["suite_load_record"] = True
                 results.append(rec)
                 run.recorded[tid] = rec
                 run.records.append(rec)

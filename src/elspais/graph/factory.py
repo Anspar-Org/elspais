@@ -9,6 +9,7 @@ implementing their own file reading logic.
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import re
@@ -149,16 +150,48 @@ def _producer_path(
     if not raw:
         return raw
     if os.path.isabs(raw):
-        return _repo_relative(raw, repo_root)
+        return _scanned_spelling(raw, repo_root, scanned) or _repo_relative(raw, repo_root)
     as_written = os.path.normpath(raw.replace("\\", "/"))
     joined = _repo_relative(run_dir / raw, repo_root)
-    if joined == as_written or joined in scanned:
+    if joined in scanned:
         return joined
     if as_written in scanned:
         return as_written
+    # Neither reading is a scanned spelling, but either may still name a
+    # scanned file another way -- through a symlinked directory -- and that
+    # holds for a target run from the root as much as for one run elsewhere.
+    for reading in (run_dir / raw, Path(repo_root) / as_written):
+        spelled = _scanned_spelling(reading, repo_root, scanned)
+        if spelled:
+            return spelled
+    if joined == as_written:
+        return joined
     if (run_dir / raw).exists() and not (Path(repo_root) / raw).exists():
         return joined
     return as_written
+
+
+# Implements: REQ-d00254-G, REQ-d00294-E
+def _scanned_spelling(path: str | Path, repo_root: Path, scanned: frozenset[str]) -> str | None:
+    """The spelling under which a scanned test file is the file *path* names.
+
+    A test file is known by the path it was scanned under, and a producer
+    may reach the same file another way -- through a symlinked directory
+    inside the repository, or through the directory it links to. Two
+    spellings of one file are one file, so a record naming either reaches
+    the test; which file a path names is asked of the filesystem, the one
+    authority on it.
+    """
+    if not scanned:
+        return None
+    return _resolved_index(scanned, str(repo_root)).get(str(Path(os.path.abspath(path)).resolve()))
+
+
+@functools.lru_cache(maxsize=64)
+def _resolved_index(scanned: frozenset[str], repo_root: str) -> dict[str, str]:
+    """Each scanned spelling keyed by the file it resolves to."""
+    root = Path(repo_root)
+    return {str((root / spelling).resolve()): spelling for spelling in sorted(scanned)}
 
 
 # Implements: REQ-d00254-G, REQ-d00294-E
@@ -362,13 +395,22 @@ def _wildcard_stood_for(pattern_segment: str, path_segment: str) -> tuple[str | 
         return None, "the results file name does not read as the pattern's wildcard segment"
     # Implements: REQ-d00294-D
     # A wildcard that matched nothing -- `junit*.xml` against `junit.xml` --
-    # stood for no part of the name, and an empty string is not a name.
+    # stood for no part of the name, and an empty string is not a name; nor
+    # is one of nothing but whitespace, which reads as blank beside a result.
     if not match.group(1):
         return (
             None,
             (
                 "the pattern's wildcard matched nothing in this file's name, "
                 "so it names no environment"
+            ),
+        )
+    if not match.group(1).strip():
+        return (
+            None,
+            (
+                "the pattern's wildcard matched only whitespace in this file's "
+                "name, so it names no environment"
             ),
         )
     return match.group(1), ""
@@ -551,19 +593,28 @@ def _ingest_target_results(
                 f"ordinal, so the record cannot be told from the other records "
                 f"of the same test. Every results reporter numbers its records."
             )
-        result_id = make_result_id(namespace, result_file or target.name, ordinal)
+        if result_file:
+            result_id = make_result_id(namespace, result_file, ordinal)
+        else:
+            result_id = make_result_id(namespace, target.name, ordinal, read_from_target=True)
 
         # Implements: REQ-d00294-C+D
         if env_source == "results-path":
             environment = path_environment
         elif env_source == "suite-hostname":
+            # A hostname of nothing but whitespace names nothing a reader
+            # could tell apart from a blank, so it is no environment.
             environment = rec.get("suite_hostname") or None
+            if environment is not None and not environment.strip():
+                environment = None
             if environment is None:
                 # A format that records no suite hostname at all and a suite
                 # that left the attribute out are two conditions, and an
                 # author fixes them differently: one by declaring another
                 # source, the other by mending the producer.
-                if "suite_hostname" in rec:
+                if rec.get("suite_hostname"):
+                    reason = "the suite that holds this record gives a blank hostname"
+                elif "suite_hostname" in rec:
                     reason = "the suite that holds this record names no hostname"
                 else:
                     reason = (
@@ -603,7 +654,7 @@ def _ingest_target_results(
             "name_match": rec.get("name_match"),
             "name_candidates": rec.get("name_candidates"),
             # Implements: REQ-d00254-G
-            "suite_load_failure": bool(rec.get("suite_load_failure")),
+            "suite_load_record": bool(rec.get("suite_load_record")),
         }
         content = ParsedContent(
             content_type="test_result",
@@ -1392,15 +1443,15 @@ def build_graph(
                             fn = None
                             if source_path:
                                 fn = _get_or_create_file_node(Path(source_path), FileType.TEST)
-                                # Implements: REQ-d00284-B
+                                # Implements: REQ-d00284-B, REQ-d00294-E
                                 # The candidates a result's recorded name is
-                                # resolved among, gathered as they are scanned.
-                                try:
-                                    scanned_test_files.add(
-                                        str(Path(source_path).resolve().relative_to(resolved_root))
-                                    )
-                                except ValueError:
-                                    pass
+                                # resolved among, gathered as they are scanned
+                                # and spelled as the FILE node spells them, so
+                                # a result bound to one reaches the test the
+                                # builder files under it.
+                                spelling = fn.get_field("relative_path")
+                                if spelling and not os.path.isabs(spelling):
+                                    scanned_test_files.add(spelling)
                             builder.add_parsed_content(parsed_content, file_node=fn)
 
                         _record_declined_files(builder, domain_file, "test", repo_root)
@@ -1411,6 +1462,33 @@ def build_graph(
             # When targets is empty (the default) this loop is a no-op.
             _captured = captured_results or {}
             from elspais.graph.parsers.results.registry import get_reporter as _get_reporter
+
+            # Implements: REQ-d00294-A+B+E
+            # Which captured targets name each artifact file. An artifact two
+            # captured targets both declare was written by whichever of them
+            # ran last, and nothing on the file says which: read as either
+            # target's record it would discard the other target's own
+            # output. Each such target reads the stream it produced instead.
+            # Every target declaring each artifact file, captured or not. A
+            # target this invocation did not run reads an artifact another
+            # target also declares nowhere: the file holds whichever target
+            # wrote it last -- possibly one that ran just now -- and read as
+            # this target's record it would hand it another target's
+            # verdicts, under the same identity as that target's own.
+            _artifact_claimants: dict[str, set[str]] = {}
+            _artifact_declarers: dict[str, list[str]] = {}
+            for _t in typed_config.scanning.test.targets:
+                if not (_t.reporter and _t.results):
+                    continue
+                _t_cwd = (repo_root / _t.cwd) if _t.cwd else repo_root
+                for _f in glob(str(_t_cwd / _t.results), recursive=True):
+                    if Path(_f).is_file():
+                        _key = str(Path(_f).resolve())
+                        _declarers = _artifact_declarers.setdefault(_key, [])
+                        if _t.name not in _declarers:
+                            _declarers.append(_t.name)
+                        if _t.name in _captured:
+                            _artifact_claimants.setdefault(_key, set()).add(_t.name)
 
             for target in typed_config.scanning.test.targets:
                 if not target.reporter:
@@ -1457,13 +1535,18 @@ def build_graph(
                 # The candidates are the tests scanned under this target's own
                 # cwd: a name matching a file some other target scans says
                 # nothing about where this result came from.
-                try:
-                    cwd_rel = str(cwd_path.resolve().relative_to(resolved_root))
-                except ValueError:
-                    cwd_rel = ""
+                # Asked of the files the spellings name, because a test
+                # scanned through a symlinked directory is spelled under the
+                # link and still lies under the target's cwd.
+                cwd_rel = _repo_relative(cwd_path, repo_root)
                 prefix = "" if cwd_rel in ("", ".") else cwd_rel.rstrip("/") + "/"
+                resolved_cwd = cwd_path.resolve()
                 target_tests = frozenset(
-                    f for f in scanned_test_files if not prefix or f.startswith(prefix)
+                    f
+                    for f in scanned_test_files
+                    if not prefix
+                    or f.startswith(prefix)
+                    or (repo_root / f).resolve().is_relative_to(resolved_cwd)
                 )
                 # Implements: REQ-d00294-A+B
                 # Where the target declares an artifact the run wrote, the
@@ -1489,8 +1572,46 @@ def build_graph(
                     if target.results
                     else []
                 )
+                if matched and target.name not in _captured:
+                    # Implements: REQ-d00294-A+E
+                    unshared = []
+                    for f in matched:
+                        others = [
+                            other
+                            for other in _artifact_declarers.get(str(Path(f).resolve()), ())
+                            if other != target.name
+                        ]
+                        if not others:
+                            unshared.append(f)
+                            continue
+                        builder.record_ingestion_fault(
+                            path=_repo_relative(Path(f), repo_root),
+                            stage="results",
+                            cause=(
+                                "this results file is also declared by target(s) "
+                                + ", ".join(repr(o) for o in others)
+                                + ", and nothing in it says which target wrote it, "
+                                "so it was not read as this target's results"
+                            ),
+                            target=target.name,
+                        )
+                    matched = unshared
+                    if not matched:
+                        continue
                 if matched and target.name in _captured:
-                    if not _written_during_run(matched, run_started_at):
+                    if any(
+                        len(_artifact_claimants.get(str(Path(f).resolve()), ())) > 1
+                        for f in matched
+                    ):
+                        _log.info(
+                            "target %r: results artifact %r is also another "
+                            "captured target's; reading the output this target "
+                            "captured instead",
+                            target.name,
+                            target.results,
+                        )
+                        matched = []
+                    elif not _written_during_run(matched, run_started_at):
                         _log.info(
                             "target %r: results artifact %r predates this run; "
                             "reading the output this run captured instead",

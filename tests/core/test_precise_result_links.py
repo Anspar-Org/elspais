@@ -121,12 +121,13 @@ def test_a_lineless_record_naming_another_test_binds_to_none():
     assert "'u' does not name" in (g.find_by_id("bad").get_field("unbound_reason") or "")
 
 
-# Verifies: REQ-d00254-A, REQ-d00284-B
+# Verifies: REQ-d00254-A, REQ-d00284-B+C
 def test_lineless_records_naming_two_tests_bind_to_neither():
-    """Line-less records naming two different tests, in a file where one test
-    was scanned, say an unscanned test ran there too. Which record is the
-    scanned test's cannot be told, so neither binds and neither is a verdict
-    about A: a sibling's failure is never handed to the scanned test."""
+    """Line-less records carrying two different names, in a file where one
+    test was scanned and neither name is its title, name no scanned test.
+    Neither binds and neither is a verdict about A -- a sibling's failure is
+    never handed to the scanned test -- and each is reported as a name that
+    names no test, not as a choice between tests (REQ-d00284-C)."""
     req = make_requirement("REQ-p00001", assertions=[{"label": "A", "text": "SHALL A"}])
     test = make_test_ref(verifies=["REQ-p00001-A"], source_path=FILE, start_line=1)
     passed = make_test_result("ok", status="passed", source_file=FILE, match="source", name="a")
@@ -135,7 +136,7 @@ def test_lineless_records_naming_two_tests_bind_to_neither():
 
     test_node = _the_test_node(g)
     assert [c for c in test_node.iter_children() if c.kind == NodeKind.RESULT] == []
-    assert "2 different tests" in (g.find_by_id("bad").get_field("unbound_reason") or "")
+    assert "'b' does not name the 1 test" in (g.find_by_id("bad").get_field("unbound_reason") or "")
 
     annotate_coverage(g, CoverageCreditConfig())
     m = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")

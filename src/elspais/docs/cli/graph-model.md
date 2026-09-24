@@ -111,8 +111,10 @@ pytest --junitxml=results/report.xml
 ID format: `result:<namespace>:<place>:<position>`, e.g.
 `result:REQ:results/report.xml:7`. The place is the results file that
 holds the record. Where a reporter reads the runner's output, no file
-holds the record, and the place is the name of the test target. The
-position is the place of the record among the records read from there.
+holds the record, and the place is the name of the test target followed
+by `/` (`result:REQ:widgets/:3`) -- a file's path never ends in `/`, so a
+target's results never share a place with an artifact's, however the
+target is named. The position is the place of the record among the records read from there.
 One test that runs in more than one environment writes one record for
 each of them, and the position keeps each verdict.
 

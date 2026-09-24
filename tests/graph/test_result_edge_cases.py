@@ -413,9 +413,10 @@ void main() {
 def test_a_hook_in_a_one_test_file_is_not_that_tests_result(tmp_path):
     """A line-less pseudo-test beside the one test of its file names no test.
 
-    The file holds one scanned test, but its records name two -- the test
-    and the runner's `(tearDownAll)` -- so the line-less one cannot be told
-    to be that test's and binds nowhere, leaving the test's own pass alone.
+    The file holds one scanned test, and its records name two -- the test
+    and the runner's `(tearDownAll)`. The line-less one's name is not the
+    title the test declares, so it binds nowhere, leaving the test's own
+    pass alone.
     """
     project = _flutter_project(
         tmp_path, _DART_ONE_TEST_WITH_HOOK, results="coverage/machine.jsonl", stream=None
@@ -438,7 +439,7 @@ def test_a_hook_in_a_one_test_file_is_not_that_tests_result(tmp_path):
     assert _verdict(graph, a1) is EvidenceResult.PASSED
     (pseudo,) = [r for r in _results(graph) if r.get_field("name") == "(tearDownAll)"]
     assert _holders(pseudo) == []
-    assert "2 different tests" in pseudo.get_field("unbound_reason")
+    assert "'(tearDownAll)' does not name" in pseudo.get_field("unbound_reason")
 
 
 # ===========================================================================
@@ -670,7 +671,7 @@ def test_a_saved_stream_records_the_line_of_each_testdone():
     [
         (True, True, "coverage/machine.jsonl"),
         (False, True, "coverage/machine.jsonl"),
-        (True, False, "widgets"),
+        (True, False, "widgets/"),
     ],
     ids=["both-channels", "artifact-only", "stdout-only"],
 )
@@ -738,9 +739,104 @@ def test_an_artifact_older_than_the_run_does_not_hide_the_runs_failure(tmp_path,
     graph = _build(project, **kwargs)
 
     (result,) = _results(graph)
-    assert result.id == "result:REQ:widgets:1"
+    assert result.id == "result:REQ:widgets/:1"
     assert result.get_field("status") == "failed"
     assert _verdict(graph, _test(graph, ":3")) is EvidenceResult.FAILED
+
+
+# Verifies: REQ-d00294-A, REQ-d00294-B, REQ-d00294-E
+def test_captured_targets_sharing_an_artifact_each_read_their_own_output(tmp_path):
+    """An artifact two captured targets both declare is neither one's record.
+
+    Whichever target ran last left the file, and nothing on it says which.
+    Read as each target's record it would hand every target the last one's
+    verdicts and discard the rest -- here the first target's failure -- so
+    each reads the output it captured itself.
+    """
+    targets = (
+        _FLUTTER_TARGET.format(name="unit", extra='results = "coverage/machine.jsonl"\n')
+        + "\n"
+        + _FLUTTER_TARGET.format(name="golden", extra='results = "coverage/machine.jsonl"\n')
+    )
+    project = _project(
+        tmp_path,
+        files={"test/login_test.dart": _DART_TWO_TESTS},
+        targets=targets,
+        directories=("test",),
+        patterns=("*_test.dart",),
+    )
+    path = str(project / "test" / "login_test.dart")
+    unit = _jsonl(_suite(path), _start(2, "a1", 3), _done(2, "failure"), _end(False))
+    golden = _jsonl(_suite(path), _start(2, "b1", 8), _done(2), _end(True))
+    # `golden` ran last and overwrote the shared artifact.
+    (project / "coverage").mkdir()
+    (project / "coverage" / "machine.jsonl").write_text(golden, encoding="utf-8")
+
+    graph = _build(
+        project,
+        captured_results={"unit": unit, "golden": golden},
+        run_started_at=time.time() - 60,
+    )
+
+    assert sorted(r.id for r in _results(graph)) == [
+        "result:REQ:golden/:1",
+        "result:REQ:unit/:1",
+    ]
+    assert _verdict(graph, _test(graph, ":3")) is EvidenceResult.FAILED
+    assert _verdict(graph, _test(graph, ":8")) is EvidenceResult.PASSED
+
+
+# Verifies: REQ-d00294-A, REQ-d00294-E
+@pytest.mark.parametrize("ran", [True, False], ids=["one-ran", "none-ran"])
+def test_a_target_that_did_not_run_reads_no_shared_artifact(tmp_path, ran):
+    """An artifact another target also declares is not a stale target's record.
+
+    `unit` and `golden` both write `coverage/machine.jsonl`. Where only
+    `unit` ran, the file holds `unit`'s fresh failure: it is `unit`'s result,
+    and `golden`, which did not run, holds nothing from it. Where neither
+    ran, nothing says which wrote it, so neither reads it and each is told why.
+    """
+    from elspais.commands.health import check_ingestion_faults
+
+    targets = (
+        _FLUTTER_TARGET.format(name="unit", extra='results = "coverage/machine.jsonl"\n')
+        + "\n"
+        + _FLUTTER_TARGET.format(name="golden", extra='results = "coverage/machine.jsonl"\n')
+    )
+    project = _project(
+        tmp_path,
+        files={"test/login_test.dart": _DART_TWO_TESTS},
+        targets=targets,
+        directories=("test",),
+        patterns=("*_test.dart",),
+    )
+    path = str(project / "test" / "login_test.dart")
+    unit = _jsonl(_suite(path), _start(2, "a1", 3), _done(2, "failure"), _end(False))
+    (project / "coverage").mkdir()
+    (project / "coverage" / "machine.jsonl").write_text(unit, encoding="utf-8")
+    run = (
+        {
+            "captured_results": {"unit": unit},
+            "fresh_targets": {"unit"},
+            "run_started_at": time.time() - 60,
+        }
+        if ran
+        else {}
+    )
+
+    graph = _build(project, **run)
+
+    results = _results(graph)
+    faults = [f.message for f in check_ingestion_faults(graph).findings]
+    if ran:
+        (result,) = results
+        assert result.get_field("target") == "unit"
+        assert result.get_field("carried") is False
+        assert _verdict(graph, _test(graph, ":3")) is EvidenceResult.FAILED
+        assert len(faults) == 1 and "golden" in faults[0] and "'unit'" in faults[0]
+    else:
+        assert results == []
+        assert len(faults) == 2
 
 
 # ===========================================================================
@@ -1318,6 +1414,64 @@ def test_a_line_less_record_naming_the_scanned_test_binds_in_every_environment(t
     assert _verdict(graph, scanned) is EvidenceResult.FAILED
 
 
+# Verifies: REQ-d00284-B
+def test_a_line_less_grid_reads_the_tests_source_once(tmp_path, monkeypatch):
+    """Binding a grid's line-less records reads the scanned test's file once.
+
+    What a recorded name reads as against the scanned test does not change
+    from one record to the next, so the build must not reread the source for
+    every record and every name: that cost grows as records times names and
+    is paid on every rebuild.
+    """
+    from elspais.graph import builder
+
+    reads: list[str] = []
+    real = builder._source_lines
+
+    def counting(test_node):
+        reads.append(test_node.id)
+        return real(test_node)
+
+    monkeypatch.setattr(builder, "_source_lines", counting)
+    source = "".join(
+        f"test('t{i}', async () => {{\n  expect(1).toBe(1);\n}});\n\n" for i in range(8)
+    )
+    source += _TS_ONE_CITED_ONE_NOT
+    hosts = [f"h{e}" for e in range(4)]
+    records = [(h, f"t{i}", False) for h in hosts for i in range(8)]
+    records += [(h, "logs in", h == "h2") for h in hosts]
+    project = _project(
+        tmp_path,
+        files={"tests/e2e/login.spec.ts": source, "test-results/junit.xml": _pw_junit(*records)},
+        targets=_PW_TARGET,
+        patterns=("*.spec.ts",),
+    )
+    graph = _build(project)
+
+    (scanned,) = list(graph.iter_by_kind(NodeKind.TEST))
+    assert len(_own_results(scanned)) == len(hosts)
+    assert _verdict(graph, scanned) is EvidenceResult.FAILED
+    assert len(reads) == 1
+
+
+# Verifies: REQ-d00294-F
+def test_an_unmatched_record_is_reported_beside_its_environment(tmp_path):
+    """Two environments' unbound records of one test read apart in the report.
+
+    A grid run of an unscanned sibling leaves one unbound record per
+    environment, alike in everything but the suite each sits in. Without the
+    environment the two findings would say the same thing.
+    """
+    junit = _pw_junit(("pixel6", "other", True), ("iphone15", "other", True))
+    graph = _build(_pw_project(tmp_path, junit))
+
+    messages = sorted(f.message for f in check_unmatched_results(graph).findings)
+
+    assert len(messages) == 2
+    assert "[iphone15]" in messages[0] and "[pixel6]" not in messages[0]
+    assert "[pixel6]" in messages[1] and "[iphone15]" not in messages[1]
+
+
 # ===========================================================================
 # G -- a test file that failed to load fails every test in it
 # ===========================================================================
@@ -1378,3 +1532,451 @@ def test_a_loading_record_that_passed_is_not_held(tmp_path):
 
     assert [r.get_field("name") for r in _results(graph)] == ["A a1"]
     assert all(r.get_field("match_scope") == "test" for r in _results(graph))
+
+
+# pytest's record of a module as a whole, as `junit_family=xunit1` writes it:
+# no classname, the module's dotted path as its name, its file and no line.
+_PYTEST_MODULE_RECORD = """\
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="pytest" tests="1">
+    <testcase classname="" name="tests.test_login" file="tests/test_login.py" time="0.0">
+      {outcome}
+    </testcase>
+  </testsuite>
+</testsuites>
+"""
+
+
+# Verifies: REQ-d00294-E, REQ-d00254-G
+@pytest.mark.parametrize(
+    "outcome,status,verdict",
+    [
+        ('<error message="collection failure">ImportError</error>', "error", "FAILED"),
+        ('<skipped message="collection skipped">importorskip</skipped>', "skipped", None),
+    ],
+    ids=["import-error", "module-skip"],
+)
+def test_a_pytest_module_record_is_the_outcome_of_every_test_in_it(
+    tmp_path, outcome, status, verdict
+):
+    """A module that failed to import or skipped at load ran none of its tests.
+
+    pytest writes one record for the module, naming no test. It is not a
+    sibling's verdict: it is the outcome of every test in the file, so each
+    holds it, and nothing is reported as matching no test.
+    """
+    project = _project(
+        tmp_path,
+        files={
+            "tests/test_login.py": _PY_TWO_TESTS,
+            "results/junit.xml": _PYTEST_MODULE_RECORD.format(outcome=outcome),
+        },
+        targets=(
+            '[[scanning.test.targets]]\nname = "unit"\nreporter = "junit"\n'
+            'results = "results/junit.xml"\n'
+        ),
+    )
+    graph = _build(project)
+
+    (record,) = _results(graph)
+    tests = sorted(graph.iter_by_kind(NodeKind.TEST), key=lambda n: n.id)
+    assert len(tests) == 2
+    assert record.get_field("status") == status
+    assert _holders(record) == [t.id for t in tests]
+    if verdict is not None:
+        for test_node in tests:
+            assert _verdict(graph, test_node) is EvidenceResult[verdict]
+    assert check_unmatched_results(graph).passed is True
+
+
+# ===========================================================================
+# E -- a record reaching its test by another spelling of the same file
+# ===========================================================================
+
+
+# Verifies: REQ-d00294-E, REQ-d00254-G
+@pytest.mark.parametrize("absolute", [True, False], ids=["absolute", "relative"])
+def test_a_record_naming_its_test_through_a_symlink_binds_to_it(tmp_path, absolute):
+    """A symlinked directory inside the repository is one file reached two ways.
+
+    The test is scanned where it lies and the producer writes a path through
+    a link to that directory -- absolute, or relative to the root the target
+    ran from, as pytest writes a JUnit `file`; both name the one file, so the
+    failure is that test's own.
+    """
+    project = _project(
+        tmp_path,
+        files={"tests/real/test_login.py": _PY_TWO_TESTS},
+        targets=(
+            '[[scanning.test.targets]]\nname = "py"\nreporter = "junit"\n'
+            'results = "out/junit.xml"\nmatch = "source"\n'
+        ),
+    )
+    try:
+        os.symlink("real", project / "tests" / "link", target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are not available here")
+    recorded = (
+        project / "tests" / "link" / "test_login.py" if absolute else "tests/link/test_login.py"
+    )
+    (project / "out").mkdir()
+    (project / "out" / "junit.xml").write_text(
+        '<?xml version="1.0"?>\n<testsuites><testsuite name="pytest">\n'
+        f'<testcase classname="x" name="test_rejects" file="{recorded}" line="6">'
+        '<failure message="boom"/></testcase>\n</testsuite></testsuites>\n',
+        encoding="utf-8",
+    )
+    graph = _build(project)
+
+    (result,) = _results(graph)
+    rejects = _test(graph, "::test_rejects")
+    assert _holders(result) == [rejects.id]
+    assert _verdict(graph, rejects) is EvidenceResult.FAILED
+    assert _verdict(graph, _test(graph, "::test_logs_in")) is EvidenceResult.NONE
+
+
+# ===========================================================================
+# B -- a target's own results never share a place with an artifact's
+# ===========================================================================
+
+
+# Verifies: REQ-d00294-A, REQ-d00294-B, REQ-d00294-E
+def test_a_target_named_like_another_targets_results_file_keeps_both(tmp_path):
+    """A target read from its output, named `out/junit.xml`, beside that artifact.
+
+    The name is free text, so it can be spelled like the file another target
+    writes. The two are different places of record, and each record is held
+    by its own test: neither verdict replaces the other.
+    """
+    junit = (
+        '<?xml version="1.0"?>\n<testsuites><testsuite name="pytest">\n'
+        '<testcase classname="x" name="test_logs_in" file="tests/test_login.py" '
+        'line="1"/>\n</testsuite></testsuites>\n'
+    )
+    project = _project(
+        tmp_path,
+        files={
+            "tests/test_login.py": _PY_TWO_TESTS,
+            "test/login_test.dart": _DART_TWO_TESTS,
+            "out/junit.xml": junit,
+        },
+        targets=(
+            '[[scanning.test.targets]]\nname = "out/junit.xml"\n'
+            'reporter = "flutter-machine"\nmatch = "source"\n'
+            'command = "flutter test --machine"\n\n'
+            '[[scanning.test.targets]]\nname = "py"\nreporter = "junit"\n'
+            'results = "out/junit.xml"\nmatch = "source"\n'
+        ),
+        directories=("tests", "test"),
+        patterns=("test_*.py", "*_test.dart"),
+    )
+    stream = _jsonl(
+        _suite(str(project / "test" / "login_test.dart")),
+        _start(2, "a1", 3),
+        _done(2, "failure"),
+        _end(False),
+    )
+    graph = _build(project, captured_results={"out/junit.xml": stream})
+
+    results = _results(graph)
+    assert [r.id for r in results] == ["result:REQ:out/junit.xml/:1", "result:REQ:out/junit.xml:1"]
+    assert _verdict(graph, _test(graph, ":3")) is EvidenceResult.FAILED
+    assert _verdict(graph, _test(graph, "::test_logs_in")) is EvidenceResult.PASSED
+
+
+# ===========================================================================
+# C+D -- an environment of nothing but whitespace is none, and is reported
+# ===========================================================================
+
+
+# Verifies: REQ-d00294-C, REQ-d00294-D
+def test_a_blank_suite_hostname_is_no_environment(tmp_path):
+    """`hostname="  "` names nothing a reader could tell from a blank."""
+    graph = _build(_pw_project(tmp_path, _pw_junit(("  ", "logs in", False))))
+
+    (result,) = _results(graph)
+    assert result.get_field("environment") is None
+    (fault,) = graph.ingestion_faults()
+    assert "blank hostname" in fault.cause
+
+
+# Verifies: REQ-d00294-C, REQ-d00294-D
+def test_a_wildcard_matching_only_whitespace_is_no_environment(tmp_path):
+    """A results directory named with spaces alone names no environment."""
+    junit = (
+        '<?xml version="1.0"?>\n<testsuites><testsuite name="pytest">\n'
+        '<testcase classname="tests.test_login" name="test_logs_in"/>\n'
+        "</testsuite></testsuites>\n"
+    )
+    project = _project(
+        tmp_path,
+        files={"tests/test_login.py": _PY_PARAM_TEST, "ev/  /junit.xml": junit},
+        targets=(
+            '[[scanning.test.targets]]\nname = "grid"\nreporter = "junit"\n'
+            'results = "ev/*/junit.xml"\nenvironment = "results-path"\n'
+        ),
+    )
+    graph = _build(project)
+
+    (result,) = _results(graph)
+    assert result.get_field("environment") is None
+    (fault,) = graph.ingestion_faults()
+    assert "only whitespace" in fault.cause
+
+
+# ===========================================================================
+# B -- a line-less record is matched against the title the test declares
+# ===========================================================================
+
+
+# Verifies: REQ-d00284-B, REQ-d00294-E
+@pytest.mark.parametrize(
+    "declaration,title",
+    [
+        ("test('login [smoke]', async () => {", "login [smoke]"),
+        (
+            "test(\n  'logs in with a title a formatter wrapped',\n  async () => {",
+            "logs in with a title a formatter wrapped",
+        ),
+        ('test(\n  // why\n  "it\\\'s wrapped",\n  async () => {', "it's wrapped"),
+    ],
+    ids=["bracketed-title", "wrapped-title", "wrapped-past-a-comment"],
+)
+def test_a_line_less_record_names_the_title_its_test_declares(tmp_path, declaration, title):
+    """The title is the declaration's first string literal, taken as written.
+
+    A Playwright title ending in `[...]` is that title rather than a pytest
+    parametrization, and a formatter that moves the title onto a line of its
+    own leaves it the same title.
+    """
+    spec_ts = f"// Verifies: REQ-p00001-A\n{declaration}\n    expect(true).toBe(true);\n  }},\n);\n"
+    project = _project(
+        tmp_path,
+        files={
+            "tests/e2e/login.spec.ts": spec_ts,
+            "test-results/junit.xml": _pw_junit(("chromium", f"Login › {title}", True)),
+        },
+        targets=_PW_TARGET,
+        patterns=("*.spec.ts",),
+    )
+    graph = _build(project)
+
+    (scanned,) = list(graph.iter_by_kind(NodeKind.TEST))
+    (result,) = _results(graph)
+    assert _holders(result) == [scanned.id]
+    assert _verdict(graph, scanned) is EvidenceResult.FAILED
+
+
+# Verifies: REQ-d00284-B, REQ-d00294-E
+@pytest.mark.parametrize("hosts", [("chromium",), ("chromium", "firefox")], ids=["one", "grid"])
+def test_a_line_less_record_names_its_test_beside_an_uncited_sibling(tmp_path, hosts):
+    """One cited test beside an uncited one that also ran: the usual Playwright file.
+
+    The records name two tests, but only `logs in` is the title the scanned
+    test declares, so its records are its own and `other`'s are nobody's.
+    The scanned test fails where its own record failed.
+    """
+    records = [(h, "other", False) for h in hosts]
+    records += [(h, "logs in", h == "chromium") for h in hosts]
+    graph = _build(_pw_project(tmp_path, _pw_junit(*records)))
+
+    (scanned,) = list(graph.iter_by_kind(NodeKind.TEST))
+    held = _own_results(scanned)
+    assert sorted(r.get_field("name") for r in held) == ["logs in"] * len(hosts)
+    assert _verdict(graph, scanned) is EvidenceResult.FAILED
+    others = [r for r in _results(graph) if r.get_field("name") == "other"]
+    assert len(others) == len(hosts)
+    for other in others:
+        assert _holders(other) == []
+        assert "'other' does not name" in other.get_field("unbound_reason")
+
+
+# Verifies: REQ-d00284-B, REQ-d00294-E
+def test_line_less_records_under_two_groups_matching_one_title_bind_to_neither(tmp_path):
+    """`A › logs in` and `B › logs in` both end in the one scanned title.
+
+    Only one test was scanned, yet two tests of that title ran, so which of
+    them is the scanned one cannot be told and neither verdict is its own.
+    """
+    junit = _pw_junit(("chromium", "A › logs in", False), ("chromium", "B › logs in", True))
+    graph = _build(_pw_project(tmp_path, junit))
+
+    (scanned,) = list(graph.iter_by_kind(NodeKind.TEST))
+    assert _own_results(scanned) == []
+    for result in _results(graph):
+        assert _holders(result) == []
+        assert "2 different names" in result.get_field("unbound_reason")
+
+
+# Verifies: REQ-d00284-B, REQ-d00294-E
+@pytest.mark.parametrize(
+    "declaration",
+    ["test(LOGIN_TITLE, loginFlow);", "test(\n  LOGIN_TITLE,\n  loginFlow,\n);"],
+    ids=["one-line", "wrapped"],
+)
+def test_a_title_that_is_no_literal_is_not_read_off_the_next_test(tmp_path, declaration):
+    """A test titled by a constant declares no title a record can be matched to.
+
+    The next string literal in the file is the NEXT test's title. A filtered
+    run that ran only that unscanned sibling says nothing about the scanned
+    test, so its failure is reported unmatched rather than held.
+    """
+    spec_ts = f"// Verifies: REQ-p00001-A\n{declaration}\ntest('logs out', logoutFlow);\n"
+    project = _project(
+        tmp_path,
+        files={
+            "tests/e2e/login.spec.ts": spec_ts,
+            "test-results/junit.xml": _pw_junit(("chromium", "logs out", True)),
+        },
+        targets=_PW_TARGET,
+        patterns=("*.spec.ts",),
+    )
+    graph = _build(project)
+
+    (scanned,) = list(graph.iter_by_kind(NodeKind.TEST))
+    (result,) = _results(graph)
+    assert _holders(result) == []
+    assert _verdict(graph, scanned) is EvidenceResult.NONE
+
+
+# Verifies: REQ-d00284-B+C, REQ-d00294-E
+def test_a_title_declared_twice_in_the_file_is_not_read_off_a_sibling(tmp_path):
+    """`test('x')` under `describe('A')` is cited; `describe('B')` holds another.
+
+    A filtered or sharded run that ran only `B › x` writes one record ending
+    in the scanned title. The groups the scanned test sits in are not read
+    from its source, so that record may be either test, and handing B's
+    failure to A -- which did not run -- is refused and reported.
+    """
+    spec_ts = (
+        "test.describe('A', () => {\n"
+        "  // Verifies: REQ-p00001-A\n"
+        "  test('x', async () => {});\n"
+        "});\n"
+        "\n"
+        "test.describe('B', () => {\n"
+        "  test('x', async () => {});\n"
+        "});\n"
+    )
+    project = _project(
+        tmp_path,
+        files={
+            "tests/e2e/login.spec.ts": spec_ts,
+            "test-results/junit.xml": _pw_junit(("chromium", "B › x", True)),
+        },
+        targets=_PW_TARGET,
+        patterns=("*.spec.ts",),
+    )
+    graph = _build(project)
+
+    (scanned,) = list(graph.iter_by_kind(NodeKind.TEST))
+    (result,) = _results(graph)
+    assert _holders(result) == []
+    assert _verdict(graph, scanned) is EvidenceResult.NONE
+    assert "declares 2 tests titled 'x'" in result.get_field("unbound_reason")
+
+
+# Verifies: REQ-d00284-C
+def test_line_less_records_naming_no_scanned_test_say_so_by_their_own_names(tmp_path):
+    """Records `y` and `z` ran; the cited `x` was deselected.
+
+    Neither name picks out the one scanned test, so each is reported as a
+    name that names no test -- not as an ambiguity between tests -- and each
+    finding is labelled with the record's own name, not only the file every
+    record of the report shares.
+    """
+    spec_ts = (
+        "// Verifies: REQ-p00001-A\n"
+        "test('x', async () => {});\n"
+        "test('y', async () => {});\n"
+        "test('z', async () => {});\n"
+    )
+    project = _project(
+        tmp_path,
+        files={
+            "tests/e2e/login.spec.ts": spec_ts,
+            "test-results/junit.xml": _pw_junit(("chromium", "y", True), ("chromium", "z", True)),
+        },
+        targets=_PW_TARGET,
+        patterns=("*.spec.ts",),
+    )
+    graph = _build(project)
+
+    for result in _results(graph):
+        name = result.get_field("name")
+        assert f"its name {name!r} does not name" in result.get_field("unbound_reason")
+    messages = sorted(f.message for f in check_unmatched_results(graph).findings)
+    assert len(messages) == 2
+    assert "result named 'y' in 'login.spec.ts'" in messages[0]
+    assert "result named 'z' in 'login.spec.ts'" in messages[1]
+    assert all("cannot be told" not in m for m in messages)
+
+
+# Verifies: REQ-d00284-B, REQ-d00294-E
+@pytest.mark.parametrize(
+    "literal", ["r'a1'", "'''a1'''", 'r"""a1"""'], ids=["raw", "triple", "raw-triple"]
+)
+def test_a_dart_title_written_as_a_raw_or_triple_literal_is_its_title(tmp_path, literal):
+    """`test(r'a1', ...)` declares the title `a1`, as `test('a1', ...)` does.
+
+    Dart code writes a raw string for a title holding `$`; a record naming
+    `a1` with no line is that test's, and its failure is the test's own.
+    """
+    dart = (
+        "void main() {\n"
+        "  // Verifies: REQ-p00001-A\n"
+        f"  test({literal}, () {{\n"
+        "    expect(1, 2);\n"
+        "  });\n"
+        "}\n"
+    )
+    stream = _jsonl(
+        _suite("test/login_test.dart"), _start(1, "a1", None), _done(1, "failure"), _end(False)
+    )
+    project = _flutter_project(tmp_path, dart, results="coverage/machine.jsonl", stream=stream)
+    graph = _build(project)
+
+    (scanned,) = list(graph.iter_by_kind(NodeKind.TEST))
+    (result,) = _results(graph)
+    assert _holders(result) == [scanned.id]
+    assert _verdict(graph, scanned) is EvidenceResult.FAILED
+
+
+# Verifies: REQ-d00284-B, REQ-d00294-E
+def test_every_parametrization_of_one_pytest_test_is_that_tests(tmp_path):
+    """`test_x[1]` and `test_x[2]` both ran as the one scanned `test_x`.
+
+    They are two records of one test, not two tests of that title, so both
+    bind to it and the failing one fails it.
+    """
+    py = (
+        "import pytest\n\n"
+        "# Verifies: REQ-p00001-A\n"
+        "@pytest.mark.parametrize('v', [1, 2])\n"
+        "def test_x(v):\n"
+        "    assert v\n"
+    )
+    junit = (
+        '<?xml version="1.0"?>\n<testsuites><testsuite name="pytest">\n'
+        '<testcase classname="tests.test_p" name="test_x[1]" file="tests/test_p.py"/>\n'
+        '<testcase classname="tests.test_p" name="test_x[2]" file="tests/test_p.py">'
+        '<failure message="b"/></testcase>\n'
+        "</testsuite></testsuites>\n"
+    )
+    project = _project(
+        tmp_path,
+        files={"tests/test_p.py": py, "out/j.xml": junit},
+        targets=(
+            '[[scanning.test.targets]]\nname = "py"\nreporter = "junit"\n'
+            'results = "out/j.xml"\nmatch = "source"\n'
+        ),
+    )
+    graph = _build(project)
+
+    scanned = _test(graph, "tests/test_p.py::test_x")
+    assert sorted(r.get_field("name") for r in _own_results(scanned)) == [
+        "test_x[1]",
+        "test_x[2]",
+    ]
+    assert _verdict(graph, scanned) is EvidenceResult.FAILED

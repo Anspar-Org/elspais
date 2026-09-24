@@ -305,7 +305,7 @@ def test_a_captured_target_places_its_records_by_the_target(tmp_path):
     graph = _build(project, captured_results={"widgets": stream})
 
     results = _results(graph)
-    assert [node.id for node in results] == ["result:REQ:widgets:1", "result:REQ:widgets:2"]
+    assert [node.id for node in results] == ["result:REQ:widgets/:1", "result:REQ:widgets/:2"]
     assert {node.get_field("status") for node in results} == {"passed", "failed"}
 
 

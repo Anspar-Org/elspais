@@ -4539,7 +4539,23 @@ def check_unmatched_results(
         if result.get_field("match") == "aggregate":
             continue  # an aggregate result names no test and never matches one
         target = result.get_field("target") or "?"
-        recorded = result.get_field("classname") or result.get_field("name") or result.id
+        # Implements: REQ-d00284-C
+        # The record's own name first: the class a runner files it under is
+        # often the file every record of it shares, and a finding labelled by
+        # that alone cannot say which record went unbound.
+        name = result.get_field("name") or ""
+        classname = result.get_field("classname") or ""
+        if name and classname and classname != name:
+            label = f"result named {name!r} in {classname!r}"
+        else:
+            label = f"result named {(name or classname or result.id)!r}"
+        # Implements: REQ-d00294-F
+        # One test run across a grid leaves one unbound record per
+        # environment, alike in everything else, so the environment stands
+        # beside the result here exactly as it does under tests.results.
+        environment = result.get_field("environment")
+        if environment:
+            label += f" [{environment}]"
         candidates = result.get_field("name_candidates") or []
         unbound_reason = result.get_field("unbound_reason")
         if candidates:
@@ -4551,7 +4567,7 @@ def check_unmatched_results(
             detail = "matched no test"
         findings.append(
             HealthFinding(
-                message=(f"target {target!r}: result named {recorded!r} {detail}"),
+                message=(f"target {target!r}: {label} {detail}"),
                 node_id=result.id,
                 file_path=result.get_field("result_file"),
                 line=result.get_field("result_line"),

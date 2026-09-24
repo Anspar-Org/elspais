@@ -14,7 +14,7 @@ import re
 from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from elspais.graph.comment_store import update_anchors_on_rename
 from elspais.graph.comments import CommentIndex, CommentThread
@@ -4306,24 +4306,37 @@ def _source_result_unbound_reason(
     candidates: int,
     names_in_file: int = 0,
     name: str = "",
+    names_naming_test: int = 0,
+    title_declarations: int = 0,
+    title: str = "",
+    names_test: bool = False,
 ) -> str:
     """Why a source-matched result bound to no test, in the words a reader acts on.
 
     A record matching at neither step nor test scope names no one test. Which
     condition it is tells an author what to mend: the producer wrote no line
-    where the file holds several tests, wrote no line and its records name
-    more tests than were scanned there, wrote a line where no scanned test
-    starts, or named a file where no test was scanned at all.
+    where the file holds several tests; wrote no line, and the file declares
+    more than one test of the scanned test's title, or the records carry
+    more than one name ending in it, so more than one test answers to it;
+    wrote no line and a name that names no scanned test; wrote a line where
+    no scanned test starts; or named a file where no test was scanned at all.
     """
     if not candidates:
         return f"names {source_file}, where no test was scanned"
-    if line is None and candidates == 1 and names_in_file > 1:
+    if line is None and candidates == 1 and names_test and title_declarations > 1:
         return (
-            f"recorded no line, and the records naming {source_file} name "
-            f"{names_in_file} different tests where 1 test was scanned, so "
-            f"which of them ran as that test cannot be told"
+            f"recorded no line, and {source_file} declares {title_declarations} "
+            f"tests titled {title!r} where 1 of them was scanned, so which of "
+            f"them ran as that test cannot be told"
         )
-    if line is None and candidates == 1 and names_in_file == 1:
+    if line is None and candidates == 1 and names_test and names_naming_test > 1:
+        return (
+            f"recorded no line, and the records naming {source_file} carry "
+            f"{names_naming_test} different names that each end in the title of "
+            f"the 1 test scanned there, so which of them ran as that test "
+            f"cannot be told"
+        )
+    if line is None and candidates == 1 and names_in_file >= 1:
         return (
             f"recorded no line, and its name {name!r} does not name the 1 test "
             f"scanned in {source_file}"
@@ -4335,45 +4348,196 @@ def _source_result_unbound_reason(
     return f"recorded line {line}, where none of the {candidates} test(s) in {source_file} starts"
 
 
-# Implements: REQ-d00284-B
-def _record_names_test(name: str, test_node: GraphNode) -> bool:
-    """Whether a result's recorded *name* names the scanned *test_node*.
+class _ScannedTitle(NamedTuple):
+    """What a record with no line is read against, taken from the test's source once.
 
-    A record with no line can only be told to belong to a test by its name.
+    ``title`` is the scanned test's title, or None where it declares none a
+    record can be read against. ``named`` says the scan named the test (a
+    Python function), so a parametrize suffix is read through. ``declarations``
+    counts the calls in the file declaring that title with the test's own call.
+    """
+
+    title: str | None
+    named: bool
+    declarations: int
+
+
+# Implements: REQ-d00284-B
+def _test_name_read(name: str, scanned: _ScannedTitle) -> str | None:
+    """The name *name* reads as where it names the scanned test, else None.
+
     The name a runner writes is the test's title, prefixed by the titles of
     the groups holding it, which Playwright joins with `` › ``. Where the
     scan gave the test a name, the record's must end in it; where it gave
-    none, the title has to be written as a string literal on the line the
-    test is declared at. Anything else is not evidence that this record came
-    from this test, so it names none.
-    A test the scan named by line alone is anchored at the citation written
-    above it, so the declaration is the first line from there on that is
-    neither blank nor a comment.
+    none, it must end in the title the declaration writes -- the first
+    argument of the declaring call, where that is a string literal.
+    Anything else is not evidence that this record came from this test, so
+    it names none.
+
+    Only a test the scan named -- a Python function, whose name cannot hold
+    ``[`` -- is read through pytest's parametrize suffix, and every
+    parametrization of it reads as the one name, since each ran as that one
+    test. Any other title is free text, and one ending in ``[...]`` is that
+    title, not a parametrization of another, so it is compared as recorded.
+    """
+    recorded = name.strip()
+    if scanned.named:
+        recorded = strip_parametrize_suffix(recorded)
+    title = scanned.title
+    if not title or not recorded:
+        return None
+    if recorded == title or recorded.endswith(" › " + title):
+        return recorded
+    return None
+
+
+# The most lines a declaration may run over before its title is written.
+_TITLE_SEARCH_LINES = 10
+
+_QUOTES = ("'", '"', "`")
+
+
+def _source_lines(test_node: GraphNode) -> list[str] | None:
+    """The lines of the file *test_node* was scanned in, or None."""
+    file_node = test_node.file_node()
+    path = file_node.get_field("absolute_path") if file_node else None
+    if not path:
+        return None
+    try:
+        with open(path, encoding="utf-8", errors="replace") as handle:
+            return handle.readlines()
+    except OSError:
+        return None
+
+
+# Implements: REQ-d00284-B
+def _declared_call(test_node: GraphNode, lines: list[str] | None) -> tuple[str, str] | None:
+    """The call and title a test the scan named by line alone declares itself with.
+
+    *lines* are the lines of the test's file. Such a test is anchored at the
+    citation written above it, so the declaration is the first line from
+    there on that is neither blank nor a comment. Its title is the FIRST
+    ARGUMENT of the call that line opens, where that argument is a string
+    literal, which a formatter may have moved onto a line of its own
+    (``test(`` / ``'title',``). A declaration whose first argument is
+    anything else -- a constant, an expression -- declares no title a record
+    can be read against: the next literal in the file belongs to some other
+    call, often the next test's declaration, and reading it would hand that
+    sibling's records to this test.
     """
     from elspais.graph.parsers.prescan import is_comment_line
 
-    name = strip_parametrize_suffix(name.strip())
-    if not name:
-        return False
+    decl_line = test_node.get_field("parse_line")
+    if not lines or not decl_line:
+        return None
+    for index in range(decl_line - 1, len(lines)):
+        text = lines[index]
+        if text.strip() and not is_comment_line(text):
+            return _call_at(lines, index)
+    return None
+
+
+# Implements: REQ-d00284-B
+def _scanned_title(test_node: GraphNode) -> _ScannedTitle:
+    """The title records naming *test_node*'s file are read against, and its declarations.
+
+    Read from the test's source once, however many records name its file.
+    A record naming its file and no line is read against the title alone,
+    and the groups the scanned test sits in are not read from the source. So
+    where the file declares that title with that call more than once --
+    ``test('x')`` in one ``describe`` and ``test('x')`` in another -- a
+    record ending in it may be any of them, the scanned test or an uncited
+    sibling that ran without it, and which one cannot be told. A test the
+    scan named is known by its name, and counts as its one declaration.
+    """
+    from elspais.graph.parsers.prescan import is_comment_line
+
     parts = test_node.id.split("::")
     if len(parts) >= 2:
-        scanned = parts[-1].strip()
-        return bool(scanned) and (name == scanned or name.endswith(" \u203a " + scanned))
-    leaf = name.split(" \u203a ")[-1].strip()
-    file_node = test_node.file_node()
-    path = file_node.get_field("absolute_path") if file_node else None
-    decl_line = test_node.get_field("parse_line")
-    if not leaf or not path or not decl_line:
-        return False
-    try:
-        with open(path, encoding="utf-8", errors="replace") as handle:
-            for number, text in enumerate(handle, 1):
-                if number < decl_line or not text.strip() or is_comment_line(text):
-                    continue
-                return any(f"{q}{leaf}{q}" in text for q in ("'", '"', "`"))
-    except OSError:
-        return False
-    return False
+        return _ScannedTitle(parts[-1].strip() or None, True, 1)
+    lines = _source_lines(test_node)
+    declared = _declared_call(test_node, lines)
+    if not declared or not lines:
+        return _ScannedTitle(None, False, 0)
+    declarations = sum(
+        1
+        for index, text in enumerate(lines)
+        if text.strip() and not is_comment_line(text) and _call_at(lines, index) == declared
+    )
+    return _ScannedTitle(declared[1], False, declarations)
+
+
+def _call_at(lines: list[str], start: int) -> tuple[str, str] | None:
+    """The callee and literal first argument of a call opening at line *start*."""
+    from elspais.graph.parsers.prescan import is_comment_line
+
+    searched = 0
+    callee: list[str] = []
+    opened = False
+    for text in lines[start:]:
+        if not text.strip() or is_comment_line(text):
+            continue
+        searched += 1
+        if searched > _TITLE_SEARCH_LINES:
+            return None
+        index = 0
+        while index < len(text):
+            char = text[index]
+            if text.startswith("//", index):
+                break
+            if char.isspace():
+                index += 1
+                continue
+            if opened:
+                # The first thing inside the call's parentheses is its first
+                # argument: a literal is the title, and anything else means
+                # the call declares none.
+                title = _literal_at(text, index)
+                return ("".join(callee), title) if title is not None else None
+            if char == "(":
+                if not callee:
+                    return None
+                opened = True
+            elif char.isalnum() or char in "_.$":
+                # Only the callee's name -- `test`, `test.only`,
+                # `testWidgets` -- stands before the call opens.
+                callee.append(char)
+            else:
+                return None
+            index += 1
+    return None
+
+
+# Implements: REQ-d00284-B
+def _literal_at(text: str, start: int) -> str | None:
+    """The string literal opening at *start* in *text*, or None if none does.
+
+    Read as written on the one line: a quote (``'``, ``"`` or `````), a
+    tripled quote (``'''``, ``\"\"\"``), each optionally raw (Dart's ``r'...'``,
+    whose backslashes are its text), and escapes read in the others.
+    """
+    raw = False
+    if text[start] in "rR" and start + 1 < len(text) and text[start + 1] in _QUOTES:
+        raw = True
+        start += 1
+    if text[start] not in _QUOTES:
+        return None
+    quote = text[start]
+    if text.startswith(quote * 3, start) and quote != "`":
+        quote = quote * 3
+    value: list[str] = []
+    index = start + len(quote)
+    while index < len(text):
+        if text.startswith(quote, index):
+            return "".join(value)
+        char = text[index]
+        if char == "\\" and not raw and index + 1 < len(text):
+            value.append(text[index + 1])
+            index += 2
+            continue
+        value.append(char)
+        index += 1
+    return None
 
 
 class GraphBuilder:
@@ -5434,9 +5598,10 @@ class GraphBuilder:
             "name_match": data.get("name_match"),
             "name_candidates": data.get("name_candidates"),
             # Implements: REQ-d00254-G
-            # The runner's record that a test file failed to load, so that
-            # none of the tests in it ran.
-            "suite_load_failure": bool(data.get("suite_load_failure")),
+            # The runner's record of loading a test file that failed to
+            # load or skipped itself as it loaded, so that none of the tests
+            # in it ran.
+            "suite_load_record": bool(data.get("suite_load_record")),
         }
         self._nodes[result_id] = node
 
@@ -6134,8 +6299,9 @@ class GraphBuilder:
         #   test-scope: the single TEST at (source_file, line),
         #     match_scope="test" (per-test crediting). A record with no line
         #     binds at this scope only where its file holds exactly one
-        #     scanned test and the records naming that file name one test
-        #     between them (REQ-d00284-B).
+        #     scanned test, its name is that test's, and nothing else the
+        #     file declares or the records name answers to the same title
+        #     (REQ-d00284-B).
         # A result that binds at neither scope links NOTHING (REQ-d00254-G):
         # it names no one test, and attaching it to every test in its file
         # would hand each of them a sibling's verdict as its own, against
@@ -6166,9 +6332,14 @@ class GraphBuilder:
             names_in_file: dict[str, set[str]] = {}
             for result_id, source_file, *_ in self._pending_source_result_links:
                 pending = self._nodes.get(result_id)
-                if pending is None or pending.get_field("suite_load_failure"):
+                if pending is None or pending.get_field("suite_load_record"):
                     continue
                 names_in_file.setdefault(source_file, set()).add(pending.get_field("name") or "")
+            # For a file holding one scanned test: that test's title, and
+            # what each name the records naming the file carry reads as
+            # against it. Read from the test's source once per file, however
+            # many records name it.
+            line_less: dict[str, tuple[_ScannedTitle, dict[str, str | None]]] = {}
             for (
                 result_id,
                 source_file,
@@ -6180,11 +6351,11 @@ class GraphBuilder:
                 if result_node is None:
                     continue
                 in_file = tests_by_file.get(source_file, ())
-                if result_node.get_field("suite_load_failure") and in_file:
+                if result_node.get_field("suite_load_record") and in_file:
                     # Implements: REQ-d00254-G, REQ-d00294-E
-                    # The file failed to load, so none of its tests ran: the
-                    # record is each one's own failure, not a sibling's
-                    # verdict handed to it.
+                    # The file failed to load, or skipped itself as it
+                    # loaded, so none of its tests ran: the record is each
+                    # one's own outcome, not a sibling's verdict handed to it.
                     for test_node in in_file:
                         test_node.link(result_node, EdgeKind.YIELDS)
                     result_node.set_field("match_scope", "suite")
@@ -6203,26 +6374,42 @@ class GraphBuilder:
                     # Attempt 2: root fallback for testWidgets() whose test.line
                     # is a framework wrapper line (REQ-d00254-G).
                     target = tests_by_file_line.get((root_file or source_file, root_line))
-                if target is None and line is None:
+                names_naming_test = 0
+                title_declarations = 0
+                title = ""
+                names_test = False
+                if line is None and len(in_file) == 1:
+                    reading = line_less.get(source_file)
+                    if reading is None:
+                        scanned = _scanned_title(in_file[0])
+                        reads = {
+                            recorded: _test_name_read(recorded, scanned)
+                            for recorded in names_in_file.get(source_file, ())
+                        }
+                        reading = line_less[source_file] = (scanned, reads)
+                    scanned, reads = reading
+                    title_declarations = scanned.declarations
+                    title = scanned.title or ""
+                    names_naming_test = len({read for read in reads.values() if read is not None})
+                    names_test = reads.get(result_node.get_field("name") or "") is not None
+                if target is None and line is None and len(in_file) == 1:
                     # Attempt 3 (REQ-d00284-B): a record carrying no line
                     # still names one test where its file holds exactly one
-                    # scanned test and every record naming that file names
-                    # one test between them. Playwright's own
-                    # JUnit reporter writes a file and no line, and a grid
-                    # runs that one test in several environments, so its
+                    # scanned test and its name is that test's. Playwright's
+                    # own JUnit reporter writes a file and no line, and a
+                    # grid runs that one test in several environments, so its
                     # records differ in nothing but the suite they sit in.
-                    # Records naming two tests in a file where one was
-                    # scanned say another test ran there too, and which of
+                    # Records of uncited siblings that ran beside it carry
+                    # names that are not its title, so they name nothing and
+                    # take nothing from it; a filtered or sharded run that
+                    # ran only such a sibling is the same case. The groups the
+                    # scanned test sits in are not read from its source, so
+                    # where its file declares its title more than once --
+                    # `test('x')` in two `describe`s -- a record ending in it
+                    # may be any of those tests, and so may two different
+                    # names both ending in it (`A › x`, `B › x`): which of
                     # them is the scanned one cannot be told.
-                    # The record's name must also name that test: a filtered
-                    # or sharded run writes records only for the tests it
-                    # ran, and one of them may be an unscanned sibling of the
-                    # scanned test (REQ-d00284-B).
-                    if (
-                        len(in_file) == 1
-                        and len(names_in_file.get(source_file, ())) == 1
-                        and _record_names_test(result_node.get_field("name") or "", in_file[0])
-                    ):
+                    if title_declarations <= 1 and names_naming_test == 1 and names_test:
                         target = in_file[0]
                 if target is not None:
                     target.link(result_node, EdgeKind.YIELDS)
@@ -6237,6 +6424,10 @@ class GraphBuilder:
                             len(in_file),
                             len(names_in_file.get(source_file, ())),
                             result_node.get_field("name") or "",
+                            names_naming_test,
+                            title_declarations,
+                            title,
+                            names_test,
                         ),
                     )
 

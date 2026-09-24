@@ -85,8 +85,8 @@ def test_a_stream_places_its_records_by_target(tmp_path: Path):
     graph = builder.build()
     results = sorted(graph.iter_by_kind(NodeKind.RESULT), key=lambda n: n.id)
     assert [n.id for n in results] == [
-        "result:REQ:widgets:1",
-        "result:REQ:widgets:2",
+        "result:REQ:widgets/:1",
+        "result:REQ:widgets/:2",
     ]
     assert {n.get_field("status") for n in results} == {"passed", "failed"}
 

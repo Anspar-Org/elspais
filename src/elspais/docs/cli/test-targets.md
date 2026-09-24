@@ -78,7 +78,14 @@ reads the artifact when every file it matches was written during this run,
 so a result keeps the identity its artifact gives it; an artifact older than
 the run -- left by an earlier run that this one failed before replacing -- is
 not this run's record, and the output the run captured is read instead.
-Without `--run-tests` the artifact is read as usual.  Capturing it does not hide it: each
+So is an artifact another captured target also declares (two targets sharing
+one `cwd` and `results`): whichever ran last wrote it, and nothing on it says
+which, so each target reads the output it captured itself.  A target that
+did not run in this invocation -- every target, without `--run-tests` --
+reads such a shared artifact as nobody's: it may hold a result another
+target has just written, and nothing on it says which target wrote it, so
+it is reported under `tests.ingestion_fault` rather than read.  An artifact
+only one target declares is read as usual.  Capturing output does not hide it: each
 line is echoed to elspais's stderr as it arrives, so the run is visible live
 while the text itself is kept for the parser.  The command's own stderr is never
 captured and passes straight through.
@@ -98,18 +105,26 @@ result record to the specific `test()` by its source path AND line number
 (e.g., the `suite.path` + test line from `flutter-machine`).  A record whose
 recorded name embeds one journey-step reference binds to the test verifying
 that step instead.  A record with no line still binds to the test where its
-file holds exactly one scanned test, every record naming that file names
-the same test, and that name is the scanned test's -- its title, which
-Playwright may prefix with its `describe` titles joined by ` › ` --
-Playwright's built-in JUnit reporter writes `file` and no `line`, and a grid
-runs that one test once per environment.  A filtered run (`--grep`,
-`--last-failed`, a shard) that ran only an unscanned sibling therefore binds
-to nothing rather than to the one scanned test.  The runner's record that a
-test file failed to load (`flutter test`'s `loading <file>`, written for a
-compile error) is the failure of every test scanned in that file, since none
-of them ran, and binds to each.  A record that binds at none of these -- no
-line in a file holding several tests (or whose records name more tests than
-were scanned there, or another test than the one scanned), a line where no
+file holds exactly one scanned test and the record's name is that test's --
+its title, the first argument of the declaring call where that is a string
+literal, which Playwright may prefix with its `describe` titles joined by
+` › `.  Playwright's built-in JUnit reporter writes `file` and no `line`,
+and a grid runs that one test once per environment.  Records of uncited
+siblings that ran beside it carry other names, so they bind to nothing and
+take nothing from it; a filtered run (`--grep`, `--last-failed`, a shard)
+that ran only such a sibling likewise binds to nothing.  The groups the test
+sits in are not read from its source, so where the file declares the
+scanned test's title more than once with the same call (`test('x')` in two
+`describe`s), or its records carry two different names ending in that title
+(`A › x`, `B › x`), which of them is the scanned test cannot be told and
+none binds.  The parametrizations of one pytest function (`test_x[1]`,
+`test_x[2]`) are that one test and all bind to it.  The runner's record that
+a test file failed to load (`flutter test`'s `loading <file>`, written for a
+compile error; pytest's record of a module that failed to import, or that
+skipped itself at load with `pytest.importorskip`) is the outcome of every
+test scanned in that file, since none of them ran, and binds to each.  A record that binds at none of these -- no
+line in a file holding several tests (or a name that is not the one scanned
+test's, or one of that title that cannot be told apart), a line where no
 scanned test starts, or a runner's own pseudo-test such as `(tearDownAll)`
 or `X (setUpAll)` -- binds to **no** test: it names no one test, and handing
 it to every test in its file would give each of them a sibling's verdict.

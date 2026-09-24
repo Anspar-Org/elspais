@@ -35,6 +35,20 @@ from xml.sax.saxutils import unescape
 from elspais.graph.parsers.results.diagnostics import DiagnosticRecorder
 from elspais.utilities.test_identity import build_test_id_from_result
 
+
+def _is_module_record(name: str, file_attr: str) -> bool:
+    """Whether a ``<testcase>`` is pytest's record of a module as a whole.
+
+    pytest names such a record by the module's nodeid, with its path
+    separators written as dots and its ``.py`` dropped, and writes the same
+    path as its ``file``. A test's own record always carries a classname.
+    """
+    module = file_attr.replace("\\", "/")
+    if module.endswith(".py"):
+        module = module[: -len(".py")]
+    return bool(name) and name == module.replace("/", ".")
+
+
 # Pattern to extract a named XML attribute value from a raw text line.
 _ATTR_RE: dict[str, re.Pattern[str]] = {}
 
@@ -279,6 +293,23 @@ class JUnitXMLParser(DiagnosticRecorder):
                     ),
                     "suite_hostname": suite_hostname,
                 }
+
+                # Implements: REQ-d00254-G, REQ-d00294-E
+                # pytest writes a module that failed to import, or that
+                # skipped itself at load (`pytest.importorskip`,
+                # `pytest.skip(allow_module_level=True)`), as one record of
+                # the module's own: no classname, the module's dotted path as
+                # its name, its file and no line. None of the module's tests
+                # ran, so that record is the outcome of each of them -- the
+                # same case as `flutter test`'s `loading <file>` record.
+                if (
+                    file_attr
+                    and not classname
+                    and line_no is None
+                    and status != "passed"
+                    and _is_module_record(name, file_attr)
+                ):
+                    result["suite_load_record"] = True
 
                 results.append(result)
 

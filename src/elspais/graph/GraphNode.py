@@ -127,14 +127,23 @@ def make_definition_id(namespace: str, relative_path: str, start_line: int) -> s
 
 
 # Implements: REQ-d00294-A+B
-def make_result_id(namespace: str, place: str, ordinal: int) -> str:
+def make_result_id(
+    namespace: str, place: str, ordinal: int, *, read_from_target: bool = False
+) -> str:
     """Canonical RESULT node id for a place of record and a position in it.
 
     The place is the repo-relative path of the artifact that holds the
-    record, or the name of the target the record was read from where the
-    producer wrote no artifact. One test run in several environments writes
-    one record for each of them, and those records agree about the test, the
-    class and often the line, so the position is what tells them apart.
+    record, or -- with *read_from_target* -- the name of the target the
+    record was read from where the producer wrote no artifact. One test run
+    in several environments writes one record for each of them, and those
+    records agree about the test, the class and often the line, so the
+    position is what tells them apart.
+
+    A target's name is free text and may be spelled like a path, so a target
+    place is written with a trailing ``/``, which the path of a file never
+    ends in. Without it a target named ``out/r.xml`` and another target's
+    artifact at ``out/r.xml`` would spell one id, and one record would
+    silently replace the other.
     """
     _require_namespace(namespace, place)
     if not place:
@@ -142,6 +151,9 @@ def make_result_id(namespace: str, place: str, ordinal: int) -> str:
             "Cannot make a result id without a place of record: the id names "
             "the artifact or the target the record was read from."
         )
+    # Implements: REQ-d00294-A+B
+    if read_from_target:
+        place = f"{place}/"
     return f"{RESULT_ID_PREFIX}{namespace}:{place}:{ordinal}"
 
 
