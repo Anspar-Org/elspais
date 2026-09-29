@@ -337,13 +337,13 @@ function isProtectedBranch(branch, patterns) {
     });
 }
 
+// Project state: remembered with the viewer that saved it (REQ-d00300-C).
 function getMonorepoMode() {
-    var key = 'elspais_monorepo_{{ config.project.name | default("default") }}';
-    return localStorage.getItem(key) !== 'false';
+    return editState.monorepo !== false;
 }
 function setMonorepoMode(val) {
-    var key = 'elspais_monorepo_{{ config.project.name | default("default") }}';
-    localStorage.setItem(key, val ? 'true' : 'false');
+    editState.monorepo = !!val;
+    saveState();
 }
 
 // =====================================================================

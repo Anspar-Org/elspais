@@ -3808,6 +3808,487 @@ class TestViewerUnderBasePath:
         assert get_daemon_mutation_count(info) == 0
 
 
+# ---------------------------------------------------------------------------
+# Remembered state (REQ-d00300): Project State stays with the viewer that
+# saved it; a Reader Preference follows the reader across the host
+# ---------------------------------------------------------------------------
+
+# A second prefix, for a second viewer the browser sees at the same origin as
+# the ``prefixed_viewer`` one -- the layout of a hub serving workspaces.
+_SECOND_BASE_PATH = "/w/xyz"
+
+# A fake origin the browser loads both prefixed viewers from. Requests to it
+# are answered in the test (``_route_hub``), so it needs no resolver.
+_HUB_ORIGIN = "http://hub.test"
+
+# The filter typed and the card opened as the Project State under test.
+_REMEMBERED_FILTER = "Rendering"
+_REMEMBERED_CARD = "REQ-p00001"
+_REMEMBERED_CARD_TITLE = "Table Rendering Example"
+
+# A save follows a change: the filter's is behind a debounce and a search
+# round-trip, so a page is held this long before the reader moves on.
+_SAVE_SETTLE_MS = 1_000
+
+# How long a reopened page is given to restore cards, which it fetches.
+_RESTORE_SETTLE_MS = 1_500
+
+
+@pytest.fixture(scope="module")
+def static_viewer_site(tmp_path_factory):
+    """One static viewer page served at ``/``, ``/a/`` and ``/b/`` of two
+    origins. Yields ``(first_origin, second_origin)``, each without a
+    trailing slash.
+
+    The page is generated with ``--embed-content``: without it a static page
+    carries no tree and no nodes, so there would be no card to open. Both
+    servers serve the same directory, so the same page stands at the same
+    paths on two ports of one host.
+    """
+    import functools
+    import http.server
+    import threading
+
+    elspais_bin = resolve_elspais()
+    if elspais_bin is None:
+        pytest.skip("elspais CLI not found on PATH")
+
+    src = REPO_ROOT / "tests" / "fixtures" / "viewer-tables"
+    if not src.exists():
+        pytest.skip(f"viewer-tables fixture not present at {src}")
+    project = tmp_path_factory.mktemp("remembered-static-project")
+    _copy_project(src, project)
+
+    site = tmp_path_factory.mktemp("remembered-static-site")
+    page_file = site / "index.html"
+    result = subprocess.run(
+        [
+            elspais_bin,
+            "viewer",
+            "--static",
+            "--embed-content",
+            "-o",
+            str(page_file),
+            "--path",
+            str(project),
+        ],
+        cwd=str(project),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _REMEMBERED_CARD in page_file.read_text(), "the static page embedded no nodes"
+    for sub in ("a", "b"):
+        (site / sub).mkdir()
+        shutil.copy2(page_file, site / sub / "index.html")
+
+    class Quiet(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+    handler = functools.partial(Quiet, directory=str(site))
+    servers = []
+    try:
+        for _ in range(2):
+            server = http.server.ThreadingHTTPServer(("127.0.0.1", _find_free_port()), handler)
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            servers.append(server)
+        yield tuple(f"http://127.0.0.1:{s.server_address[1]}" for s in servers)
+    finally:
+        for server in servers:
+            server.shutdown()
+            server.server_close()
+
+
+@pytest.fixture(scope="module")
+def second_prefixed_viewer(tmp_path_factory):
+    """A second viewer started with ``--base-path``, under a prefix other
+    than ``prefixed_viewer``'s, over its own copy of the same project.
+    Yields ``(root_url, prefixed_url)``.
+
+    Its own copy for the reason ``prefixed_viewer`` gives. The same project
+    name is kept on purpose: two workspaces of one project under one hub is
+    the case in which a name-keyed memory is shared.
+    """
+    elspais_bin = resolve_elspais()
+    if elspais_bin is None:
+        pytest.skip("elspais CLI not found on PATH")
+
+    src = REPO_ROOT / "tests" / "fixtures" / "viewer-tables"
+    if not src.exists():
+        pytest.skip(f"viewer-tables fixture not present at {src}")
+    dest = tmp_path_factory.mktemp("viewer-second-prefixed-run")
+    _copy_project(src, dest)
+
+    port = _find_free_port()
+    root_url = f"http://127.0.0.1:{port}"
+    base_url = root_url + _SECOND_BASE_PATH
+
+    proc, log_path = _spawn_viewer(
+        [
+            elspais_bin,
+            "viewer",
+            "--server",
+            "--port",
+            str(port),
+            "--base-path",
+            _SECOND_BASE_PATH,
+            "--path",
+            str(dest),
+        ],
+        cwd=str(dest),
+    )
+
+    try:
+        _wait_for_server(base_url, proc=proc, log_path=log_path)
+        yield root_url, base_url
+    finally:
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(f"{base_url}/api/shutdown", method="POST")
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
+
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                proc.wait(timeout=5)
+
+
+@pytest.fixture()
+def remembering_context():
+    """One fresh browser context: one reader's browser, shared by every page
+    a test opens in it, and by nothing another test opened."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        context.set_default_timeout(10_000)
+        yield context
+        browser.close()
+
+
+def _route_hub(context, backends: dict[str, str]) -> None:
+    """Answer ``_HUB_ORIGIN`` by forwarding each request to the viewer whose
+    prefix it starts with -- one origin in front of several prefixed viewers,
+    as a hub presents them.
+
+    The event stream is refused rather than forwarded: a forwarded request
+    is answered only once its whole body has arrived, and that stream's
+    body never ends.
+    """
+    prefixes = sorted(backends, key=len, reverse=True)
+
+    def handle(route):
+        path = route.request.url[len(_HUB_ORIGIN) :]
+        if "/api/events" in path:
+            route.abort()
+            return
+        for prefix in prefixes:
+            if path == prefix or path.startswith(prefix + "/"):
+                response = route.fetch(url=backends[prefix] + path)
+                route.fulfill(response=response)
+                return
+        route.fulfill(status=404, body="")
+
+    context.route(f"{_HUB_ORIGIN}/**", handle)
+
+
+def _open_viewer(context, url: str):
+    """Open ``url`` in a new page of ``context`` once the page has settled."""
+    page = context.new_page()
+    page.goto(url, wait_until="networkidle", timeout=_PAGE_LOAD_TIMEOUT)
+    page.locator("#edit-filter-text").wait_for(state="attached")
+    page.wait_for_timeout(_RESTORE_SETTLE_MS)
+    return page
+
+
+def _leave_project_state(page) -> None:
+    """Type a filter and open a card, as a reader would, and let it save."""
+    page.fill("#edit-filter-text", _REMEMBERED_FILTER)
+    page.evaluate("(id) => window.openCard(id)", _REMEMBERED_CARD)
+    page.locator("#card-stack-body").filter(has_text=_REMEMBERED_CARD_TITLE).wait_for(
+        state="visible"
+    )
+    page.wait_for_timeout(_SAVE_SETTLE_MS)
+
+
+def _project_state(page) -> dict:
+    """What of the Project State under test the page is showing."""
+    return {
+        "filter": page.input_value("#edit-filter-text"),
+        "card_open": _REMEMBERED_CARD_TITLE in page.locator("#card-stack-body").inner_text(),
+    }
+
+
+_NO_PROJECT_STATE = {"filter": "", "card_open": False}
+_LEFT_PROJECT_STATE = {"filter": _REMEMBERED_FILTER, "card_open": True}
+
+
+def _leave_reader_preferences(page) -> None:
+    """Choose the dark theme and a larger font, and let it save."""
+    page.evaluate("() => { setTheme('dark'); adjustFontSize(2); }")
+    page.wait_for_timeout(_SAVE_SETTLE_MS)
+
+
+def _reader_preferences(page) -> dict:
+    """The theme and the font size the page is applying."""
+    return page.evaluate(
+        """() => ({
+            dark: document.documentElement.classList.contains('theme-dark'),
+            fontSize: document.documentElement.style.fontSize || null,
+        })"""
+    )
+
+
+_LEFT_READER_PREFERENCES = {"dark": True, "fontSize": "16px"}
+
+
+class TestViewerRememberedState:
+    """Validates REQ-d00300: a viewer restores the Project State it saved,
+    and only that, while a Reader Preference follows the reader to every
+    viewer on the host.
+
+    Every test observes what a page shows on reopening -- the filter text,
+    the open cards, the theme, the font size -- and never how or where the
+    page stored it. Each test that looks for state in a second viewer first
+    reopens the first and sees it restored, so a save that never happened
+    cannot pass as a viewer that kept to itself.
+    """
+
+    # Verifies: REQ-d00300-A
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00300_A_a_reopened_viewer_restores_its_project_state(
+        self, static_viewer_site, remembering_context
+    ):
+        first, _second = static_viewer_site
+        page = _open_viewer(remembering_context, f"{first}/a/")
+        assert _project_state(page) == _NO_PROJECT_STATE, "a fresh browser restored state"
+        _leave_project_state(page)
+        page.close()
+
+        reopened = _open_viewer(remembering_context, f"{first}/a/")
+        assert _project_state(reopened) == _LEFT_PROJECT_STATE
+
+    # Verifies: REQ-d00300-B
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00300_B_a_viewer_on_another_port_restores_none_of_it(
+        self, static_viewer_site, remembering_context
+    ):
+        first, second = static_viewer_site
+        page = _open_viewer(remembering_context, f"{first}/")
+        _leave_project_state(page)
+        page.close()
+        assert _project_state(_open_viewer(remembering_context, f"{first}/")) == (
+            _LEFT_PROJECT_STATE
+        ), "the saving viewer did not restore its own state"
+
+        other = _open_viewer(remembering_context, f"{second}/")
+        assert _project_state(other) == _NO_PROJECT_STATE, (
+            f"a viewer at {second}/ restored Project State saved at {first}/"
+        )
+
+    # Verifies: REQ-d00300-C
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00300_C_a_static_page_at_another_path_restores_none_of_it(
+        self, static_viewer_site, remembering_context
+    ):
+        first, _second = static_viewer_site
+        page = _open_viewer(remembering_context, f"{first}/a/")
+        _leave_project_state(page)
+        page.close()
+        assert _project_state(_open_viewer(remembering_context, f"{first}/a/")) == (
+            _LEFT_PROJECT_STATE
+        ), "the saving viewer did not restore its own state"
+
+        other = _open_viewer(remembering_context, f"{first}/b/")
+        assert _project_state(other) == _NO_PROJECT_STATE, (
+            "a page at /b/ restored Project State saved at /a/"
+        )
+
+    # Verifies: REQ-d00300-C
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00300_C_a_page_under_a_path_restores_none_of_the_roots(
+        self, static_viewer_site, remembering_context
+    ):
+        first, _second = static_viewer_site
+        page = _open_viewer(remembering_context, f"{first}/")
+        _leave_project_state(page)
+        page.close()
+        assert _project_state(_open_viewer(remembering_context, f"{first}/")) == (
+            _LEFT_PROJECT_STATE
+        ), "the saving viewer did not restore its own state"
+
+        under = _open_viewer(remembering_context, f"{first}/a/")
+        assert _project_state(under) == _NO_PROJECT_STATE, (
+            "a page at /a/ restored Project State saved by the viewer at /"
+        )
+
+    # Verifies: REQ-d00300-C
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00300_C_viewers_under_two_prefixes_of_one_origin_keep_apart(
+        self, prefixed_viewer, second_prefixed_viewer, remembering_context
+    ):
+        """Two workspaces of one project served under two prefixes, seen by
+        the browser at one origin.
+
+        The edit-mode monorepo toggle is set through the page's own
+        ``setMonorepoMode`` and read through ``getMonorepoMode``: the
+        checkbox is drawn only when the repository status reports several
+        repositories, which a single-repository fixture never does. Its
+        default is on, so a second workspace reading it off is reading the
+        first workspace's choice.
+        """
+        first_root, _first_base, _log, _dir = prefixed_viewer
+        second_root, _second_base = second_prefixed_viewer
+        _route_hub(
+            remembering_context,
+            {_BASE_PATH: first_root, _SECOND_BASE_PATH: second_root},
+        )
+        first_url = f"{_HUB_ORIGIN}{_BASE_PATH}/"
+        second_url = f"{_HUB_ORIGIN}{_SECOND_BASE_PATH}/"
+
+        page = _open_viewer(remembering_context, first_url)
+        assert page.evaluate("() => getMonorepoMode()") is True, (
+            "the monorepo toggle does not start on"
+        )
+        page.evaluate("() => setMonorepoMode(false)")
+        _leave_project_state(page)
+        page.close()
+
+        reopened = _open_viewer(remembering_context, first_url)
+        assert _project_state(reopened) == _LEFT_PROJECT_STATE, (
+            "the saving viewer did not restore its own state"
+        )
+        assert reopened.evaluate("() => getMonorepoMode()") is False, (
+            "the saving viewer did not keep its own monorepo toggle"
+        )
+        reopened.close()
+
+        other = _open_viewer(remembering_context, second_url)
+        observed = {
+            **_project_state(other),
+            "monorepo_mode": other.evaluate("() => getMonorepoMode()"),
+        }
+        assert observed == {**_NO_PROJECT_STATE, "monorepo_mode": True}, (
+            f"the workspace at {_SECOND_BASE_PATH}/ restored Project State saved "
+            f"at {_BASE_PATH}/ (a leaked filter, card or monorepo_mode=False): {observed}"
+        )
+
+    # Verifies: REQ-d00300-D
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00300_D_reader_preferences_follow_to_other_ports_and_paths(
+        self, static_viewer_site, remembering_context
+    ):
+        first, second = static_viewer_site
+        page = _open_viewer(remembering_context, f"{first}/a/")
+        assert _reader_preferences(page) != _LEFT_READER_PREFERENCES, (
+            "a fresh browser already applies the preferences under test"
+        )
+        _leave_reader_preferences(page)
+        page.close()
+
+        observed = {
+            url: _reader_preferences(_open_viewer(remembering_context, url))
+            for url in (f"{second}/a/", f"{first}/b/", f"{first}/")
+        }
+        assert observed == dict.fromkeys(observed, _LEFT_READER_PREFERENCES), observed
+
+    # Verifies: REQ-d00300-D
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00300_D_reader_preferences_follow_across_prefixes(
+        self, prefixed_viewer, second_prefixed_viewer, remembering_context
+    ):
+        first_root, _first_base, _log, _dir = prefixed_viewer
+        second_root, _second_base = second_prefixed_viewer
+        _route_hub(
+            remembering_context,
+            {_BASE_PATH: first_root, _SECOND_BASE_PATH: second_root},
+        )
+        page = _open_viewer(remembering_context, f"{_HUB_ORIGIN}{_BASE_PATH}/")
+        _leave_reader_preferences(page)
+        page.close()
+
+        other = _open_viewer(remembering_context, f"{_HUB_ORIGIN}{_SECOND_BASE_PATH}/")
+        assert _reader_preferences(other) == _LEFT_READER_PREFERENCES, (
+            f"the workspace at {_SECOND_BASE_PATH}/ did not apply the preferences "
+            f"set at {_BASE_PATH}/"
+        )
+
+    # Verifies: REQ-d00300-B, REQ-d00300-C
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00300_BC_state_not_naming_where_it_was_saved_is_not_restored(
+        self, static_viewer_site, remembering_context
+    ):
+        """State in the form the viewer kept before it recorded where state
+        was saved -- one record for the whole host -- cannot show that the
+        viewer reading it saved it, so it is not restored even at the root.
+        """
+        import urllib.parse
+
+        first, _second = static_viewer_site
+        legacy = {
+            "_v": 16,
+            "editEnabled": False,
+            "openCardIds": [_REMEMBERED_CARD],
+            "activeNavTab": "req",
+            "collapsedTreeNodes": [],
+            "collapsedCards": [],
+            "filterState": {
+                "git": {"on": ["unsaved", "uncommitted", "changed", "unchanged"]},
+                "hierarchy": {"on": ["root", "internal", "leaf"]},
+                "status": {"on": ["active"]},
+                "coverage": {"on": ["failing", "missing", "partial", "full"]},
+                "level": {"on": ["prd", "ops", "dev"]},
+                "repo": {"on": ["req"]},
+                "showHiddenParents": True,
+            },
+            "fontSize": 14,
+            "theme": "system",
+            "toolbarHidden": False,
+            "cardViewMode": "compact",
+            "assertionBadgeMode": "abbrev",
+            "viewMode": "tree",
+            "treeDisplayMode": "compact",
+            "levelAtEnd": False,
+            "navPanelWidth": None,
+            "fileViewerWidth": None,
+            "refsCollapsedCards": [],
+            "filterText": _REMEMBERED_FILTER,
+        }
+        remembering_context.add_cookies(
+            [
+                {
+                    "name": "elspais_trace_state",
+                    "value": urllib.parse.quote(json.dumps(legacy), safe=""),
+                    "domain": "127.0.0.1",
+                    "path": "/",
+                    "expires": time.time() + 86_400,
+                    "sameSite": "Lax",
+                }
+            ]
+        )
+
+        page = _open_viewer(remembering_context, f"{first}/")
+        assert _project_state(page) == _NO_PROJECT_STATE, (
+            "a viewer restored Project State from a record naming no origin or path"
+        )
+
+
 # ─────────────────────────────────────────────────────────────────
 # Proposing a pushed branch from the page (REQ-d00297)
 # ─────────────────────────────────────────────────────────────────

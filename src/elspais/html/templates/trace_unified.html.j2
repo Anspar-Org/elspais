@@ -212,19 +212,18 @@ const editState = {
     termsLookup: {},
     termsRegex: null
 };
+{% include "partials/js/_cookie-persistence.js.j2" %}
+
 // Apply theme early to prevent flash of wrong theme
 (function() {
-    try {
-        var m = document.cookie.match(new RegExp('(^| )elspais_trace_state=([^;]+)'));
-        if (m) {
-            var s = JSON.parse(decodeURIComponent(m[2]));
-            if (s.theme) editState.theme = s.theme;
-            if (s.fontSize) {
-                editState.fontSize = s.fontSize;
-                document.documentElement.style.fontSize = s.fontSize + 'px';
-            }
+    var s = loadReaderPrefs();
+    if (s) {
+        if (s.theme) editState.theme = s.theme;
+        if (s.fontSize) {
+            editState.fontSize = s.fontSize;
+            document.documentElement.style.fontSize = s.fontSize + 'px';
         }
-    } catch(e) {}
+    }
     // Apply theme immediately
     var html = document.documentElement;
     html.className = html.className.replace(/\btheme-\S+/g, '');
@@ -235,8 +234,6 @@ const editState = {
     }
     html.classList.add('theme-' + _resolved);
 })();
-
-{% include "partials/js/_cookie-persistence.js.j2" %}
 
 {% include "partials/js/_search.js.j2" %}
 
