@@ -14,6 +14,18 @@
 : A domain-specific word or phrase whose meaning is formally declared in a definition block and tracked across the specification corpus.
 *Defined in: file:REQ:spec/glossary.md (REQ)*
 
+## P
+
+**Project State**
+: Viewer state that the viewer remembers for a reader and that has a meaning only in the project that saved it, such as a filter, an open card or a collapsed node.
+*Defined in: file:REQ:spec/glossary.md (REQ)*
+
+## R
+
+**Reader Preference**
+: Viewer state that the viewer remembers for a reader and that is not project state, such as the theme, the font size or the width of a panel.
+*Defined in: file:REQ:spec/glossary.md (REQ)*
+
 ## S
 
 **Specification**

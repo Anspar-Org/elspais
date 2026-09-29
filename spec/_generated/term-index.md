@@ -10,6 +10,23 @@
 - REQ-d00237-G
 - REQ-d00264-A
 
+## Project State
+
+**REQ:**
+
+- REQ-d00300-B
+- REQ-d00300-C
+- REQ-d00300:section:0
+- REQ-d00300:section:1
+
+## Reader Preference
+
+**REQ:**
+
+- REQ-d00300-D
+- REQ-d00300:section:0
+- REQ-d00300:section:1
+
 ## Specification
 
 **REQ:**

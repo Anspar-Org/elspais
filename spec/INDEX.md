@@ -214,11 +214,12 @@
 | REQ-d00292 | Viewer Coverage Presentation                                  | dev-graph-core.md       | db9415cd |
 | REQ-d00293 | Configurable Viewer Presentation                              | dev-graph-core.md       | 31848b5c |
 | REQ-d00294 | A Result Is Its Own Record                                    | dev-graph-core.md       | 66e2737b |
-| REQ-d00295 | Viewer Served Under a Configured Prefix                       | dev-traceview-review.md | b3c8493f |
+| REQ-d00295 | Viewer Served Under a Configured Prefix                       | dev-traceview-review.md | ae94b103 |
 | REQ-d00296 | Request Identity From a Trusted Proxy                         | prd-features.md         | fe4f3620 |
 | REQ-d00297 | Opening a Pull Request From the Viewer                        | prd-core.md             | 006e3f69 |
 | REQ-d00298 | Report Export                                                 | dev-cli.md              | 8c1b78eb |
 | REQ-d00299 | Configuration as Graph Content                                | dev-graph-config.md     | 0577c0a5 |
+| REQ-d00300 | Viewer Remembered State                                       | dev-traceview-review.md | f794104b |
 
 ## User Journeys
 

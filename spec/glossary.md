@@ -15,3 +15,9 @@ Defined Term
 
 Specification
 : A structured Markdown document containing requirements, assertions, and metadata that serves as the authoritative source of truth for system behavior.
+
+Project State
+: Viewer state that the viewer remembers for a reader and that has a meaning only in the project that saved it, such as a filter, an open card or a collapsed node.
+
+Reader Preference
+: Viewer state that the viewer remembers for a reader and that is not project state, such as the theme, the font size or the width of a panel.

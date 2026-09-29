@@ -3789,43 +3789,6 @@ class TestViewerUnderBasePath:
         names = asyncio.run(asyncio.wait_for(scenario(), 60))
         assert "get_requirement" in names, names
 
-    # Verifies: REQ-d00295-F
-    @pytest.mark.browser
-    @pytest.mark.e2e
-    def test_REQ_d00295_F_the_page_keeps_its_state_under_the_prefix(
-        self, page_prefixed, prefixed_viewer
-    ):
-        """The state cookie is scoped to the prefix, so another workspace's
-        page on the same host, under another prefix, neither sends nor
-        reads it."""
-        _root, base_url, _log, _dir = prefixed_viewer
-        page_prefixed.goto(base_url, wait_until="networkidle")
-        page_prefixed.evaluate("() => window.openCard('REQ-p00001')")
-        card = page_prefixed.locator("#card-stack-body").filter(has_text="REQ-p00001")
-        card.wait_for(state="visible", timeout=10_000)
-
-        cookies = {c["name"]: c for c in page_prefixed.context.cookies()}
-        assert "elspais_trace_state" in cookies, sorted(cookies)
-        assert cookies["elspais_trace_state"]["path"] == _BASE_PATH
-
-    # Verifies: REQ-d00295-I
-    @pytest.mark.browser
-    @pytest.mark.e2e
-    def test_REQ_d00295_I_the_page_keeps_its_state_at_the_root_without_a_prefix(
-        self, page, viewer_url
-    ):
-        """With no prefix the state cookie keeps the scope it always had,
-        the root of the host, so a viewer started without the flag reads
-        the state it wrote before the flag existed."""
-        page.goto(viewer_url, wait_until="networkidle")
-        page.evaluate("() => window.openCard('REQ-p00001')")
-        card = page.locator("#card-stack-body").filter(has_text="REQ-p00001")
-        card.wait_for(state="visible", timeout=10_000)
-
-        cookies = {c["name"]: c for c in page.context.cookies()}
-        assert "elspais_trace_state" in cookies, sorted(cookies)
-        assert cookies["elspais_trace_state"]["path"] == "/"
-
     # Verifies: REQ-o00076-E
     @pytest.mark.browser
     @pytest.mark.e2e
