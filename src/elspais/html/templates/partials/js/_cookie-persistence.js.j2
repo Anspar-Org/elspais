@@ -1,14 +1,56 @@
-// Partial: _cookie-persistence.js.j2 — Unified state save/load (both modes)
-{# Implements: REQ-p00006-A, REQ-d00295-F, REQ-d00295-I #}
-// Single cookie shared between edit and view modes for seamless state transfer
+// Partial: _cookie-persistence.js.j2 — Remembered viewer state (both modes)
+{# Implements: REQ-d00300-A, REQ-d00300-B, REQ-d00300-C, REQ-d00300-D #}
+// The reader's preferences go in a cookie scoped to the whole host, which
+// the browser sends to every viewer there whatever its port or path.
+// Project state goes in local storage, which the browser keeps apart per
+// origin, under a key naming the page's path: a filter or an open card
+// means something only in the project that saved it.
 
-const COOKIE_NAME = 'elspais_trace_state';
-const COOKIE_DAYS = 30;
-const COOKIE_VERSION = 16;  // v16: + treeDisplayMode, levelAtEnd (folded in from localStorage)
-// The cookie lives under the prefix this page is served at, so pages
-// served under other prefixes on the same host keep state of their own.
-// At the root the path is '/', as it always was.
-const COOKIE_PATH = URL_PREFIX || '/';
+const PREFS_COOKIE = 'elspais_reader_prefs';
+const PREFS_DAYS = 365;
+const STATE_VERSION = 1;
+const PROJECT_STATE_KEY = 'elspais_project_state:' + location.pathname.replace(/[^/]*$/, '');
+const PROJECT_FIELDS = [
+    'openCardIds', 'collapsedCards', 'refsCollapsedCards', 'collapsedTreeNodes',
+    'filterState', 'filterText', 'monorepo'
+];
+
+// State saved before the split cannot show which viewer saved it, so it is
+// never read; it is expired wherever this page could have written it.
+(function expireUnscopedState() {
+    var paths = URL_PREFIX ? ['/', URL_PREFIX] : ['/'];
+    paths.forEach(function(p) {
+        document.cookie = 'elspais_trace_state=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=' + p + '; SameSite=Lax';
+    });
+})();
+
+function _readVersioned(text) {
+    if (!text) return null;
+    try {
+        var saved = JSON.parse(text);
+        return saved && saved._v === STATE_VERSION ? saved : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+function loadReaderPrefs() {
+    var match = document.cookie.match(new RegExp('(^| )' + PREFS_COOKIE + '=([^;]+)'));
+    if (!match) return null;
+    try {
+        return _readVersioned(decodeURIComponent(match[2]));
+    } catch (e) {
+        return null;
+    }
+}
+
+function loadProjectState() {
+    try {
+        return _readVersioned(window.localStorage.getItem(PROJECT_STATE_KEY));
+    } catch (e) {
+        return null;
+    }
+}
 
 function saveState() {
     // Serialize filter groups
@@ -22,7 +64,6 @@ function saveState() {
     filterState.showHiddenParents = showParentsCb ? showParentsCb.checked : true;
 
     const stateToSave = {
-        _v: COOKIE_VERSION,
         editEnabled: editState.enabled,
         openCardIds: editState.openCardOrder,
         activeNavTab: editState.activeNavTab,
@@ -37,6 +78,7 @@ function saveState() {
         viewMode: editState.viewMode || 'tree',
         treeDisplayMode: editState.treeDisplayMode,
         levelAtEnd: !!editState.levelAtEnd,
+        monorepo: editState.monorepo,
         navPanelWidth: document.getElementById('nav-panel').style.width || null,
         fileViewerWidth: document.getElementById('file-viewer-panel').style.width || null
     };
@@ -46,25 +88,46 @@ function saveState() {
         if (info.collapsed) stateToSave.collapsedCards.push(id);
         if (info.refsCollapsed) stateToSave.refsCollapsedCards.push(id);
     });
-    // Persist filterText
     if (editState.filterText) stateToSave.filterText = editState.filterText;
-    var expires = new Date(Date.now() + COOKIE_DAYS * 864e5).toUTCString();
-    document.cookie = COOKIE_NAME + '=' + encodeURIComponent(JSON.stringify(stateToSave)) +
-        '; expires=' + expires + '; path=' + COOKIE_PATH + '; SameSite=Lax';
-}
 
-function loadState() {
-    var match = document.cookie.match(new RegExp('(^| )' + COOKIE_NAME + '=([^;]+)'));
-    if (!match) return null;
+    var project = { _v: STATE_VERSION };
+    var prefs = { _v: STATE_VERSION };
+    for (var key in stateToSave) {
+        if (PROJECT_FIELDS.indexOf(key) >= 0) project[key] = stateToSave[key];
+        else prefs[key] = stateToSave[key];
+    }
+    var expires = new Date(Date.now() + PREFS_DAYS * 864e5).toUTCString();
+    document.cookie = PREFS_COOKIE + '=' + encodeURIComponent(JSON.stringify(prefs)) +
+        '; expires=' + expires + '; path=/; SameSite=Lax';
     try {
-        var saved = JSON.parse(decodeURIComponent(match[2]));
-        if (!saved._v || saved._v < COOKIE_VERSION) return null;  // discard stale cookie
-        return saved;
+        window.localStorage.setItem(PROJECT_STATE_KEY, JSON.stringify(project));
     } catch (e) {
-        return null;
+        // Storage refused (private mode, quota): project state is not kept.
     }
 }
 
-function clearState() {
-    document.cookie = COOKIE_NAME + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=' + COOKIE_PATH + '; SameSite=Lax';
+function loadState() {
+    var prefs = loadReaderPrefs();
+    var project = loadProjectState();
+    if (!prefs && !project) return null;
+    var saved = {};
+    [prefs, project].forEach(function(part) {
+        if (!part) return;
+        for (var key in part) saved[key] = part[key];
+    });
+    return saved;
 }
+
+function clearState() {
+    document.cookie = PREFS_COOKIE + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax';
+    try {
+        window.localStorage.removeItem(PROJECT_STATE_KEY);
+    } catch (e) {
+        // Nothing stored, or storage refused.
+    }
+}
+
+(function restoreMonorepoMode() {
+    var project = loadProjectState();
+    if (project && typeof project.monorepo === 'boolean') editState.monorepo = project.monorepo;
+})();

@@ -178,7 +178,7 @@ Global toggle in the **card column header**, applies to all open cards:
 - **Compact** (default): Current card layout (metadata, relationships, assertions)
 - **Complete**: Adds body `##` sections as collapsible blocks between metadata and assertions
 
-Persisted in the UI state cookie (`elspais_trace_state`).
+Remembered as one of the reader's preferences, so it follows the reader to every viewer on the host.
 
 ---
 

@@ -106,13 +106,13 @@ D. The agent surface SHALL be reachable under the same prefix as the page.
 
 E. A prefix that is not empty and is not one or more path segments, each introduced by a single slash and made only of ASCII letters, ASCII digits and the characters `-`, `_`, `.` and `~`, no segment being `.` or `..`, SHALL be refused with a message naming that form.
 
-F. State the page keeps in the browser SHALL be kept apart per configured prefix, so that pages served under different prefixes on one host do not read each other's.
+F. <RETIRED> Superseded by REQ-d00300-C.
 
 G. A prefix applies to the served surface; a request to generate the page as a file while naming a prefix SHALL be refused with a message naming that the prefix applies to the server alone.
 
 H. With no prefix configured, the served page SHALL request the same URLs as it does without this capability.
 
-I. With no prefix configured, the state the page keeps in the browser SHALL have the same scope as it does without this capability.
+I. <RETIRED> Superseded by REQ-d00300-B.
 
 ### Rationale
 
@@ -120,10 +120,39 @@ A hosted deployment runs one viewer per workspace behind a single router that te
 
 ### Changelog
 
+- 2026-09-28 | ae94b103 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-18 | b3c8493f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-18 | 041a7999 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-17 | c1ac9032 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-17 | cd69f63b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-17 | - | - | Michael Lewis (<michael@anspar.org>) | Initial version
 
-*End* *Viewer Served Under a Configured Prefix* | **Hash**: b3c8493f
+*End* *Viewer Served Under a Configured Prefix* | **Hash**: ae94b103
+
+---
+
+## REQ-d00300: Viewer Remembered State
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+The viewer remembers how a reader left it and restores that the next time the reader opens it. *Project State* stays with the viewer that saved it. A *Reader Preference* follows the reader to every viewer on the host.
+
+### Assertions
+
+A. When a reader opens a viewer again in the same browser, the viewer SHALL restore the state that it saved for that reader.
+
+B. The viewer SHALL restore *Project State* only from a viewer at the same origin. The origin is the scheme, the host and the port of the page address.
+
+C. The viewer SHALL restore *Project State* only from a viewer at the same path. The path is the page address up to its last slash.
+
+D. The viewer SHALL restore each *Reader Preference* as the reader last set it in any viewer on the same host.
+
+### Rationale
+
+Each viewer shows one project, and a filter, an open card or a collapsed node means something only in that project. Restored into a viewer for another project, such state can hide the whole tree with nothing on screen to say why. Two viewers can share a host in two ways: on different ports, as when a reader runs one viewer per repository or worktree, or under different paths of one origin, as with workspaces served under a configured prefix (REQ-d00295) or static pages published side by side. Both ways must keep *Project State* apart, so a viewer is told apart by its origin and by its path. A served viewer is always loaded at its prefix followed by a slash, and a static page loaded by its directory or by its file name ends at the same last slash, so each viewer has exactly one path. *Project State* that does not show which origin and path saved it cannot meet B or C, so a viewer does not restore it. A *Reader Preference* such as the theme, the font size or a panel width is how the reader likes to work, not a fact about a project, so it follows the reader.
+
+### Changelog
+
+- 2026-09-28 | f794104b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
+
+*End* *Viewer Remembered State* | **Hash**: f794104b

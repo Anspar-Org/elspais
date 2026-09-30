@@ -1072,8 +1072,8 @@ function setViewMode(mode) {
 }
 
 // On script load, restore the tree display mode + "level at end" toggle from
-// the shared cookie state (see _cookie-persistence.js.j2). One persistence
-// mechanism for all viewer settings — no separate localStorage path.
+// the remembered state (see _cookie-persistence.js.j2), the one place every
+// viewer setting is saved and restored.
 (function initTreeDisplayState() {
     var saved = (typeof loadState === 'function') ? loadState() : null;
     var savedMode = saved ? saved.treeDisplayMode : null;
