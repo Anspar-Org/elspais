@@ -205,17 +205,22 @@ B. When a reader clicks a control that acts only on a gesture other than a click
 
 C. A control that acts only on a gesture other than a click SHALL perform no operation on the repository in response to a click.
 
+D. When a save from the viewer changes text that no edit changed, the viewer SHALL show the reader who saved each requirement and each file-level text section that the save changed in that way.
+
 ### Rationale
 
 The viewer is put in front of readers who have never run the tool and do not know its git vocabulary. A control whose label does not say what it does to the repository reads as broken, and a reader who learns only afterwards that a click published their commits has lost the chance to decide. Naming the operation in its own vocabulary (saving to disk, committing, pushing) lets a reader who knows git predict the result and lets a reader who does not look it up. Publishing commits to the remote is guarded by a gesture so that a stray click cannot publish them; the guard stays, and the click it absorbs answers with how to perform the gesture rather than with silence.
+
+A save is a control whose effect can reach past what the reader edited: a file it writes is written whole, in canonical form. D tells the reader who saved what else changed, before they commit it.
 
 ---
 
 ### Changelog
 
+- 2026-10-01 | e8010396 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-01 | 646a8606 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
 
-*End* *Viewer Edit Controls State What They Do* | **Hash**: 646a8606
+*End* *Viewer Edit Controls State What They Do* | **Hash**: e8010396
 
 ## REQ-d00321: Static View Embedded Content
 

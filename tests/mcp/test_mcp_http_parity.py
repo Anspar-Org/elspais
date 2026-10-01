@@ -809,3 +809,111 @@ class TestSetStereotypeSafetyGuardSurvivesVersioning:
 
         assert result["success"] is True, result.get("error")
         assert result.get("blocked") is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Both save surfaces name the text a save changed that no edit changed
+# ─────────────────────────────────────────────────────────────────────────────
+
+EDITED = "REQ-d00001"
+
+
+def _untidy_canonical_project(root: Path) -> Path:
+    """A canonical repository whose edited file holds an untidy neighbour and
+    file-level prose with an unmarked term."""
+    from tests.core.graph_test_helpers import (
+        MARKED_PROSE,
+        TIDY_NEIGHBOUR,
+        UNMARKED_PROSE,
+        UNTIDY_NEIGHBOUR,
+        replace_in_file,
+        write_canonical_repo,
+    )
+
+    root.mkdir()
+    spec = write_canonical_repo(root)
+    replace_in_file(spec / "dev.md", TIDY_NEIGHBOUR, UNTIDY_NEIGHBOUR)
+    replace_in_file(spec / "dev.md", MARKED_PROSE, UNMARKED_PROSE)
+    return root
+
+
+def _served_state(root: Path):
+    """The state a viewer or daemon serving ``root`` holds."""
+    from elspais.server.state import AppState
+
+    return AppState.from_config(repo_root=root)
+
+
+def _log_tip(graph) -> str:
+    entries = list(graph.mutation_log.iter_entries())
+    return entries[-1].id if entries else ""
+
+
+class TestSaveSurfacesNameTextNoEditChanged:
+    """Validates REQ-d00132-J, REQ-o00062-O: the viewer's ``/api/save`` and the
+    MCP ``save_mutations`` reach one save path, so the same edit over the same
+    files names the same text changed beyond it; a save the daemon performs
+    for nobody records that account for the next client."""
+
+    # Verifies: REQ-d00132-J, REQ-o00062-O
+    def test_REQ_d00132_J_http_and_mcp_saves_name_the_same_parts(self, tmp_path):
+        pytest.importorskip("mcp")
+        from starlette.testclient import TestClient
+
+        from elspais.mcp.server import create_server
+        from elspais.server.app import create_app
+
+        http_root = _untidy_canonical_project(tmp_path / "http")
+        mcp_root = _untidy_canonical_project(tmp_path / "mcp")
+
+        http_state = _served_state(http_root)
+        client = TestClient(create_app(state=http_state, mount_mcp=False))
+        version = node_version(http_state.graph.find_by_id(EDITED))
+        resp = client.post(
+            "/api/mutate/title",
+            json={"node_id": EDITED, "new_title": "Beta Renamed", "if_version": version},
+        )
+        assert resp.status_code == 200, resp.text
+        resp = client.post(
+            "/api/save",
+            json={"if_tip_mutation_id": _log_tip(http_state.graph), "message": "parity"},
+        )
+        assert resp.status_code == 200, resp.text
+        http_result = resp.json()
+
+        mcp_state = _served_state(mcp_root)
+        server = create_server(mcp_state.graph, working_dir=mcp_root)
+        tools = {name: tool.fn for name, tool in server._tool_manager._tools.items()}
+        graph = mcp_state.graph
+        edited = tools["mutate_update_title"](
+            node_id=EDITED,
+            new_title="Beta Renamed",
+            if_version=node_version(graph.find_by_id(EDITED)),
+        )
+        assert edited["success"] is True, edited
+        mcp_result = tools["save_mutations"](if_tip_mutation_id=_log_tip(graph), message="parity")
+        assert mcp_result["success"] is True, mcp_result
+
+        named = [(c["kind"], c["node_id"]) for c in http_result["changed_beyond_edits"]]
+        assert [kind for kind, _id in named] == ["remainder", "requirement"], named
+        assert ("requirement", "REQ-d00002") in named
+        assert ("requirement", EDITED) not in named
+        assert mcp_result["changed_beyond_edits"] == http_result["changed_beyond_edits"]
+
+    # Verifies: REQ-d00132-J
+    def test_REQ_d00132_J_an_automatic_save_records_the_parts_it_changed(self, tmp_path):
+        from elspais.mcp.daemon import read_automatic_save
+        from elspais.mcp.shared_state import persist_pending
+
+        root = _untidy_canonical_project(tmp_path / "project")
+        state = _served_state(root)
+        state.graph.update_title(EDITED, "Beta Renamed")
+
+        result = persist_pending(state.shared, automatic=True, trigger="t")
+
+        assert result.get("success"), result
+        record = read_automatic_save(root)
+        assert record is not None, "an automatic save left no record"
+        assert record["changed_beyond_edits"] == result["changed_beyond_edits"]
+        assert [c["node_id"] for c in record["changed_beyond_edits"]][-1] == "REQ-d00002"
+        assert len(record["changed_beyond_edits"]) == 2, record["changed_beyond_edits"]

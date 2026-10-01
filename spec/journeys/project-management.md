@@ -13,7 +13,7 @@ Validates: REQ-p00003, REQ-p00004, REQ-p00006
 
 ## Steps
 
-1. Elvira runs `elspais viewer --static` to generate an interactive HTML traceability view.
+1. Elvira runs `elspais viewer --static` to generate an interactive HTML *Traceability* view.
 2. She opens the HTML file in her browser and navigates to the reporting module requirements.
 3. She expands the hierarchy for REQ-p00005 to see all OPS and DEV children.
 4. She runs `elspais changed` to see which spec files have been modified during the sprint.
@@ -45,11 +45,11 @@ Validates: REQ-p00001, REQ-p00002, REQ-p00005
 4. The checks report a broken link: a sponsor DEV requirement references a core PRD that was recently renamed.
 5. She coordinates with the sponsor development team to update the implements reference.
 6. She re-runs `elspais checks` and confirms all cross-repository links are intact.
-7. She generates a combined traceability matrix with `elspais trace --mode combined --format html` showing the full hierarchy.
+7. She generates a combined *Traceability Matrix* with `elspais trace --mode combined --format html` showing the full hierarchy.
 
 ## Expected Outcome
 
-The core platform and sponsor-specific requirements are validated together with no broken links. The combined traceability matrix shows the complete hierarchy spanning both repositories, giving Elvira confidence in cross-repo consistency.
+The core platform and sponsor-specific requirements are validated together with no broken links. The combined *Traceability Matrix* shows the complete hierarchy spanning both repositories, giving Elvira confidence in cross-repo consistency.
 
 *End* *Coordinate Cross-Repository Requirements*
 

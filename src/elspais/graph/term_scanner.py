@@ -431,6 +431,15 @@ def _find_emphasis_spans(text: str) -> list[tuple[int, int]]:
     return spans
 
 
+_ATX_HEADING_RE = re.compile(r"^ {0,3}#{1,6}(?:[ \t][^\n]*)?$", re.MULTILINE)
+
+
+# Implements: REQ-d00223-J
+def _heading_spans(text: str) -> list[tuple[int, int]]:
+    """Return ``(start, end)`` ranges of every ATX heading line in *text*."""
+    return [(m.start(), m.end()) for m in _ATX_HEADING_RE.finditer(text)]
+
+
 # Implements: REQ-d00237-G
 def _canonicalize_text(
     text: str, td: TermDictionary, markup_style: str, styles_set: set[str]
@@ -520,10 +529,15 @@ def _canonicalize_text(
         # a term that's already inside **...** would emit garbage like
         # ``****term** ...**``).
         word_pat = re.compile(r"\b" + re.escape(term) + r"\b", re.IGNORECASE)
+        # Implements: REQ-d00223-J
+        # A heading names a part of the document; a term in it is syntax.
+        headings = _heading_spans(text)
         new_text = []
         last_end = 0
         for m in word_pat.finditer(text):
             if _in_code_span(m.start(), m.end()):
+                continue
+            if any(hs <= m.start() and m.end() <= he for hs, he in headings):
                 continue
             if any(not (m.end() <= cs or m.start() >= ce) for cs, ce in claimed):
                 continue
@@ -591,10 +605,7 @@ def canonicalize_node_terms(
         new, repls = _canonicalize_text(old, td, markup_style, styles_set)
         if repls:
             node.set_field("body", new)
-            # Journey nodes are top-level, mark their own file dirty
-            fn = node.file_node()
-            if fn:
-                fn._content.setdefault("parse_dirty", True)
+            _mark_req_dirty(node, "non_canonical_term", repls)
             return True
     # REQUIREMENT titles are in headings — skip canonicalization
     return False
@@ -605,7 +616,12 @@ def _mark_req_dirty(
     reason: str,
     replacements: list[tuple[str, str]] | None = None,  # noqa: ANN001
 ) -> None:
-    """Walk up to the parent REQUIREMENT and mark it parse_dirty."""
+    """Mark the part of the file whose text canonicalization changed.
+
+    An *Assertion* or a section of a requirement is part of that
+    requirement, which is marked. A journey or a section of file-level prose
+    is a part of its file in its own right, and is marked itself.
+    """
     from elspais.graph.relations import EdgeKind
 
     # For ASSERTION/REMAINDER, the parent REQ is via STRUCTURES edge
@@ -624,6 +640,10 @@ def _mark_req_dirty(
                 existing.extend(replacements)
                 parent._content["term_replacements"] = existing
             return
+    # Implements: REQ-d00132-K
+    node.mark_parse_dirty(reason)
+    if replacements:
+        node._content.setdefault("term_replacements", []).extend(replacements)
 
 
 # Implements: REQ-d00238-D

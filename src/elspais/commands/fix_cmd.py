@@ -381,7 +381,7 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     from elspais.config import get_config
     from elspais.graph import NodeKind
     from elspais.graph.factory import build_graph
-    from elspais.graph.render import compute_hash_for_node, render_save
+    from elspais.graph.render import compute_hash_for_node, iter_untidy_prose, render_save
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
@@ -449,7 +449,16 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
                 file=sys.stderr,
             )
 
-    if not fixable_nodes:
+    # Implements: REQ-d00132-K
+    # A journey or a section of file-level prose whose term forms the build
+    # brought into canonical form is tidied with its file, like a requirement.
+    untidy_prose = [
+        n
+        for n in iter_untidy_prose(graph)
+        if n.file_node() is None or n.file_node().id not in unfixable_file_ids
+    ]
+
+    if not fixable_nodes and not untidy_prose:
         req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
         print(f"Validated {req_count} requirements")
         return _scan_and_report_unfixable(graph)
@@ -482,6 +491,17 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
                 print(line.format(prefix=prefix, node_id=node.id, detail=detail))
             else:
                 detail = _REASON_LABELS.get(r, r)
+                print(line.format(prefix=prefix, node_id=node.id, detail=detail))
+    for node in untidy_prose:
+        if not write_associates and _is_associate_owned(graph, node):
+            line = "[skipping] {node_id}: {detail} (associate-owned; write_associates=false)"
+        else:
+            line = "{prefix} {node_id}: {detail}"
+        seen_prose: set[tuple[str, str]] = set()
+        for old_form, new_form in node.get_field("term_replacements") or []:
+            if (old_form, new_form) not in seen_prose:
+                seen_prose.add((old_form, new_form))
+                detail = f"canonicalize term {old_form} -> {new_form}"
                 print(line.format(prefix=prefix, node_id=node.id, detail=detail))
 
     if dry_run:

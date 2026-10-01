@@ -906,13 +906,31 @@ _CITATION_RENDERED_KINDS = (EdgeKind.IMPLEMENTS, EdgeKind.REFINES)
 def _files_with_pending_mutations(graph: FederatedGraph) -> list[Any]:
     """Identify the FILE nodes whose subtree has pending mutations.
 
-    Walks the mutation log and for each mutated node, finds its FILE
-    ancestor. Returns the FILE NODES that need re-rendering, not their
-    ids: a structural id repeats across federation members, so a caller
-    that kept only the id would have to ask which member holds it and
-    could be answered with a different member that holds the same path.
-    Walking to the FILE ancestor of the node that was actually mutated
-    yields the file that was actually edited.
+    Returns the FILE NODES that need re-rendering, not their ids: a
+    structural id repeats across federation members, so a caller that kept
+    only the id would have to ask which member holds it and could be
+    answered with a different member that holds the same path.
+
+    Args:
+        graph: The traceability graph with pending mutations.
+
+    Returns:
+        The FILE nodes containing mutated content, unique by identity.
+    """
+    files, _nodes = _mutation_reach(graph)
+    return files
+
+
+# Implements: REQ-d00132-A, REQ-d00132-H, REQ-d00132-J
+def _mutation_reach(graph: FederatedGraph) -> tuple[list[Any], dict[int, Any]]:
+    """The files and the content nodes whose text the pending mutations change.
+
+    Walks the mutation log once. Each node a mutation changes the text of
+    is recorded, and so is the FILE holding it. Walking to the FILE ancestor
+    of the node that was actually mutated yields the file that was actually
+    edited. A save names, beside what it wrote, the text it changed that no
+    mutation reached, so the node half of the answer comes from this same
+    walk rather than from a second reading of the log.
 
     Handles deleted nodes by looking up parent requirement IDs from
     the mutation entry's before_state.
@@ -921,11 +939,13 @@ def _files_with_pending_mutations(graph: FederatedGraph) -> list[Any]:
         graph: The traceability graph with pending mutations.
 
     Returns:
-        The FILE nodes containing mutated content, unique by identity.
+        The FILE nodes containing mutated content, unique by identity, and
+        the reached content nodes keyed by identity.
     """
     from elspais.graph.declarations import DECLARATION_OPERATIONS
 
     dirty_files: dict[int, Any] = {}
+    reached: dict[int, Any] = {}
 
     def _mark(node: Any) -> None:
         if node is not None and node.kind == NodeKind.FILE:
@@ -940,6 +960,7 @@ def _files_with_pending_mutations(graph: FederatedGraph) -> list[Any]:
         if node.kind == NodeKind.FILE:
             _mark(node)
         else:
+            reached[id(node)] = node
             _mark(node.file_node())
 
     # Implements: REQ-d00251-L
@@ -981,6 +1002,7 @@ def _files_with_pending_mutations(graph: FederatedGraph) -> list[Any]:
                 if label is not None and label not in edge.assertion_targets:
                     continue
                 if edge.target.kind == NodeKind.REQUIREMENT:
+                    reached[id(edge.target)] = edge.target
                     _mark(edge.target.file_node())
 
     for entry in graph.mutation_log.iter_entries():
@@ -1101,10 +1123,38 @@ def _files_with_pending_mutations(graph: FederatedGraph) -> list[Any]:
             if new_file_id:
                 _mark(graph.find_by_id(new_file_id))
 
-    return list(dirty_files.values())
+    return list(dirty_files.values()), reached
 
 
-# Implements: REQ-d00132-H, REQ-d00132-I
+# Implements: REQ-d00132-K
+def iter_untidy_prose(graph: FederatedGraph, namespace: str | None = None) -> Any:
+    """Yield each part of a file outside any requirement that a build changed.
+
+    A journey and a section of file-level prose are parts of their file in
+    their own right. Building the graph brings their term forms into
+    canonical form, and a part whose text that changed is marked
+    ``parse_dirty``; a requirement records the same of itself.
+
+    Args:
+        graph: The traceability graph.
+        namespace: Only the parts of this repository, where given.
+
+    Yields:
+        The REMAINDER and USER_JOURNEY nodes a file holds directly whose text
+        the build changed.
+    """
+    for kind in (NodeKind.USER_JOURNEY, NodeKind.REMAINDER):
+        for node in graph.nodes_by_kind(kind, namespace=namespace):
+            if not node.get_field("parse_dirty"):
+                continue
+            if any(
+                parent.kind == NodeKind.FILE
+                for parent in node.iter_parents(edge_kinds={EdgeKind.CONTAINS})
+            ):
+                yield node
+
+
+# Implements: REQ-d00132-H, REQ-d00132-I, REQ-d00132-K
 def _find_dirty_files(graph: FederatedGraph, *, tidy: bool = False) -> list[Any]:
     """Every FILE node a save must rewrite.
 
@@ -1138,7 +1188,66 @@ def _find_dirty_files(graph: FederatedGraph, *, tidy: bool = False) -> list[Any]
             if owner is not None and owner.kind == NodeKind.FILE:
                 dirty_files[id(owner)] = owner
 
+    for node in iter_untidy_prose(graph):
+        owner = node.file_node()
+        if owner is not None and owner.kind == NodeKind.FILE:
+            dirty_files[id(owner)] = owner
+
     return list(dirty_files.values())
+
+
+# Implements: REQ-d00132-J
+def _changed_beyond_edits(
+    file_node: GraphNode,
+    disk_text: str,
+    reached: dict[int, Any],
+    resolver: Any | None,
+) -> list[dict[str, Any]]:
+    """Name each part of a file whose written text differs from disk though no mutation reached it.
+
+    A composed file is written whole, so a part nobody edited is written in
+    the form its renderer gives it. Each CONTAINS child records the lines it
+    was read from; where that slice of the file on disk differs from the
+    child's rendering, the save changes text nobody asked it to change.
+
+    Args:
+        file_node: The FILE about to be written.
+        disk_text: The file's text on disk before the write.
+        reached: The content nodes the pending mutations reach, by identity.
+        resolver: The grammar the file is rendered in.
+
+    Returns:
+        One entry per changed part, in file order.
+    """
+    lines = disk_text.split("\n")
+    changed: list[tuple[float, dict[str, Any]]] = []
+    for edge in file_node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.CONTAINS:
+            continue
+        child = edge.target
+        if id(child) in reached:
+            continue
+        start = edge.metadata.get("start_line")
+        end = edge.metadata.get("end_line")
+        if not isinstance(start, int) or not isinstance(end, int) or start < 1:
+            continue
+        rendered = render_node(child, resolver=resolver)
+        if rendered is None or rendered == "\n".join(lines[start - 1 : end]):
+            continue
+        changed.append(
+            (
+                edge.metadata.get("render_order", 0.0),
+                {
+                    "file": file_node.get_field("relative_path"),
+                    "node_id": child.id,
+                    "kind": child.kind.value,
+                    "label": child.get_label() or "",
+                    "line": start,
+                },
+            )
+        )
+    changed.sort(key=lambda pair: pair[0])
+    return [entry for _order, entry in changed]
 
 
 # Implements: REQ-d00132-A, REQ-d00132-C, REQ-d00134-D, REQ-d00134-E
@@ -1184,11 +1293,17 @@ def render_save(
         - files_modified: list of modified file paths
         - errors: list of error messages (if any)
         - skipped: list of skipped descriptions
+        - changed_beyond_edits: each requirement or file-level part whose
+          text the save changed although no pending mutation reached it, as
+          ``{file, node_id, kind, label, line}`` (REQ-d00132-J)
         - consistency: dict with check results (when consistency_check=True)
     """
     errors: list[str] = []
     files_modified: set[str] = set()
     skipped: list[str] = []
+    # Implements: REQ-d00132-J
+    # Text the save writes although no mutation changed it.
+    changed_beyond_edits: list[dict[str, Any]] = []
     # Implements: REQ-d00253-B
     # The ids of files this save declined to write, as against files it tried
     # to write and could not. A caller can act on the first -- write the
@@ -1263,6 +1378,7 @@ def render_save(
             "conflicts": [],
             "errors": errors,
             "skipped": skipped,
+            "changed_beyond_edits": [],
             **_decline_fields(held_back),
         }
 
@@ -1277,6 +1393,7 @@ def render_save(
             "conflicts": [],
             "errors": [],
             "skipped": skipped or ["No dirty files to save"],
+            "changed_beyond_edits": [],
         }
 
     # Defense-in-depth against cross-file REQ ID collisions: any file that
@@ -1332,6 +1449,8 @@ def render_save(
                     new_path.parent.mkdir(parents=True, exist_ok=True)
                     old_path.rename(new_path)
 
+    _reached_files, reached = _mutation_reach(graph)
+
     # Render and write each dirty FILE
     for file_node in sorted(dirty_files, key=lambda n: n.id):
         file_id = file_node.id
@@ -1371,6 +1490,15 @@ def render_save(
             # Ensure file ends with newline
             if content and not content.endswith("\n"):
                 content += "\n"
+            if abs_path.is_file():
+                changed_beyond_edits.extend(
+                    _changed_beyond_edits(
+                        file_node,
+                        abs_path.read_text(encoding="utf-8"),
+                        reached,
+                        file_resolver,
+                    )
+                )
             abs_path.write_text(content, encoding="utf-8")
             files_modified.add(str(abs_path))
             saved_count += 1
@@ -1389,6 +1517,7 @@ def render_save(
         "conflicts": [],
         "errors": errors,
         "skipped": skipped,
+        "changed_beyond_edits": changed_beyond_edits,
     }
 
     # Implements: REQ-d00132-C

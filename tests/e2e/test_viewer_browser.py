@@ -16,6 +16,7 @@ Validates REQ-d00255-D, REQ-d00256-D: journey UAT verdict badge and
 failing-step identification are visible in the viewer.
 """
 
+import contextlib
 import json
 import os
 import random
@@ -4527,6 +4528,11 @@ def _write_edit_controls_project(dest: Path) -> None:
     (dest / ".elspais.toml").write_text(_EDIT_CONTROLS_TOML, encoding="utf-8")
     (dest / "spec" / "prd.md").write_text(_EDIT_CONTROLS_PRD, encoding="utf-8")
     (dest / "spec" / "dev.md").write_text(_EDIT_CONTROLS_DEV, encoding="utf-8")
+    _commit_on_working_branch(dest, "edit-controls")
+
+
+def _commit_on_working_branch(dest: Path, branch: str) -> None:
+    """Make ``dest`` a git repository with its files committed, on ``branch``."""
     git_env = {
         **os.environ,
         "GIT_AUTHOR_NAME": "test",
@@ -4538,21 +4544,14 @@ def _write_edit_controls_project(dest: Path) -> None:
         ["git", "init"],
         ["git", "add", "."],
         ["git", "commit", "-m", "init"],
-        ["git", "checkout", "-b", "edit-controls"],
+        ["git", "checkout", "-b", branch],
     ):
         subprocess.run(argv, cwd=dest, capture_output=True, env=git_env, check=True)
 
 
-@pytest.fixture(scope="module")
-def edit_controls_viewer_url(tmp_path_factory):
-    """A viewer, run from this worktree's source, over a private project.
-
-    Private because the relationship-type test changes a relationship. The
-    project is on a working branch so the edit toggle activates directly.
-    """
-    dest = tmp_path_factory.mktemp("viewer-edit-controls")
-    _write_edit_controls_project(dest)
-
+@contextlib.contextmanager
+def _served_viewer(dest: Path):
+    """Serve ``dest`` with a viewer run from this worktree's source; yield its URL."""
     port = _find_free_port()
     base_url = f"http://127.0.0.1:{port}"
     proc, log_path = _spawn_viewer(
@@ -4590,6 +4589,19 @@ def edit_controls_viewer_url(tmp_path_factory):
             except subprocess.TimeoutExpired:
                 os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
                 proc.wait(timeout=5)
+
+
+@pytest.fixture(scope="module")
+def edit_controls_viewer_url(tmp_path_factory):
+    """A viewer, run from this worktree's source, over a private project.
+
+    Private because the relationship-type test changes a relationship. The
+    project is on a working branch so the edit toggle activates directly.
+    """
+    dest = tmp_path_factory.mktemp("viewer-edit-controls")
+    _write_edit_controls_project(dest)
+    with _served_viewer(dest) as base_url:
+        yield base_url
 
 
 @pytest.fixture()
@@ -4722,6 +4734,100 @@ class TestBrowserEditControlsStateWhatTheyDo:
         node = page.request.get(f"{base}/api/node/{_EDIT_CONTROLS_CITING}").json()
         kinds = [p["edge_kind"] for p in node["parents"] if p["id"] == _EDIT_CONTROLS_CITED]
         assert kinds == ["refines"], node["parents"]
+
+
+# ---------------------------------------------------------------------------
+# A save from the viewer shows the reader the text it changed that no edit
+# changed (REQ-d00320-D)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def save_disclosure_viewer_url(tmp_path_factory):
+    """A viewer over a canonical project whose one file holds an untidy neighbour.
+
+    The neighbour requirement and the file-level prose beside the requirement
+    the test edits are out of canonical form, so a save of that edit rewrites
+    them. Private because the test saves to disk.
+    """
+    from tests.core.graph_test_helpers import (
+        MARKED_PROSE,
+        TIDY_NEIGHBOUR,
+        UNMARKED_PROSE,
+        UNTIDY_NEIGHBOUR,
+        replace_in_file,
+        write_canonical_repo,
+    )
+
+    dest = tmp_path_factory.mktemp("viewer-save-disclosure")
+    spec = write_canonical_repo(dest)
+    replace_in_file(spec / "dev.md", TIDY_NEIGHBOUR, UNTIDY_NEIGHBOUR)
+    replace_in_file(spec / "dev.md", MARKED_PROSE, UNMARKED_PROSE)
+    # The edited requirement is a Draft: the page's own save sends no changelog
+    # reason, which a change to an Active requirement needs.
+    replace_in_file(
+        spec / "dev.md",
+        "**Status**: Active | **Implements**: -\n\nBeta body.",
+        "**Status**: Draft | **Implements**: -\n\nBeta body.",
+    )
+    _commit_on_working_branch(dest, "save-disclosure")
+    with _served_viewer(dest) as base_url:
+        yield base_url
+
+
+@pytest.fixture()
+def page_save_disclosure(save_disclosure_viewer_url):
+    """Launch headless Chromium against the save-disclosure viewer."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        pg = browser.new_context().new_page()
+        pg.set_default_timeout(10_000)
+        yield pg
+        browser.close()
+
+
+class TestBrowserSaveDisclosesTextNoEditChanged:
+    """Validates REQ-d00320-D."""
+
+    # Verifies: REQ-d00320-D
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00320_D_save_lists_the_parts_it_changed_beyond_the_edit(
+        self, page_save_disclosure, save_disclosure_viewer_url
+    ):
+        page = page_save_disclosure
+        js_errors: list[str] = []
+        page.on("pageerror", lambda err: js_errors.append(str(err)))
+        page.goto(save_disclosure_viewer_url, wait_until="networkidle")
+        _enter_edit_mode(page)
+
+        edited = page.evaluate(
+            """async () => await mutate('/api/mutate/title',
+                {node_id: 'REQ-d00001', new_title: 'Beta Renamed'})"""
+        )
+        assert edited and edited.get("success"), edited
+        page.wait_for_selector("#btn-save:not([disabled])", timeout=10_000)
+        saves: list = []
+        page.on("response", lambda r: saves.append(r) if r.url.endswith("/api/save") else None)
+        page.click("#btn-save")
+
+        try:
+            overlay = page.wait_for_selector("#save-disclosure-overlay", timeout=10_000)
+        except PlaywrightTimeoutError:
+            bodies = [r.text() for r in saves]
+            pytest.fail(f"no disclosure after save; /api/save answered {bodies}, JS {js_errors}")
+        named = page.locator("#save-disclosure-overlay li.save-disclosure-item").evaluate_all(
+            "(items) => items.map(i => i.dataset.nodeId)"
+        )
+        assert "REQ-d00002" in named, named
+        assert "REQ-d00001" not in named, named
+        assert any(n.startswith("rem:") for n in named), named
+        assert len(named) == 2, named
+        assert overlay.is_visible()
+        assert not js_errors, f"JS errors on save: {js_errors}"
+
+        page.click("#save-disclosure-dismiss")
+        page.wait_for_selector("#save-disclosure-overlay", state="detached")
 
 
 # ---------------------------------------------------------------------------

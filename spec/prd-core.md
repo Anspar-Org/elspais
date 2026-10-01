@@ -662,19 +662,22 @@ H. If a term occurrence functions as system syntax — a heading, a status value
 
 I. When scanning for unmarked usage, the tool SHALL recognize inflected forms of a term, including singular and plural variants, as occurrences of that term.
 
+J. When the tool brings term occurrences into canonical form, the tool SHALL leave unchanged each occurrence in a heading.
+
 ### Rationale
 
-Term declarations historically carried one bundled flag (`Indexed: false`) that both removed a term from the generated index and exempted it from colloquial-use checking, so deliberately unindexed terms could accumulate unmarked usages invisibly. G makes the behaviors orthogonal: inclusion in generated glossary/index output, unmarked-usage scanning, canonical-form fixing, and reference-panel visibility are separate per-term decisions, and excluding a term from one does not silently exempt it from another. The per-behavior flag names sketched during design (`Check Unmarked:`, `Syntax Word:`, `Show References:`) are proposed mechanism, not obligations — only the separability is asserted here. Per the project rule against backwards-compatibility paths, existing bundled `Indexed: false` declarations migrate outright to the separated settings when the mechanism lands; no compatibility mode preserves the bundled meaning. H and I make the scanner context-aware in both directions: a word serving as system syntax (a heading, a status value, a metadata key) is not colloquial use even though the same word in prose is, and an unmarked usage is not missed merely because it appears inflected. Existing behavior that contradicts these assertions — in particular the bundled indexed gate — is conformance-defect territory for later implementation tickets.
+Term declarations historically carried one bundled flag (`Indexed: false`) that both removed a term from the generated index and exempted it from colloquial-use checking, so deliberately unindexed terms could accumulate unmarked usages invisibly. G makes the behaviors orthogonal: inclusion in generated glossary/index output, unmarked-usage scanning, canonical-form fixing, and reference-panel visibility are separate per-term decisions, and excluding a term from one does not silently exempt it from another. The per-behavior flag names sketched during design (`Check Unmarked:`, `Syntax Word:`, `Show References:`) are proposed mechanism, not obligations — only the separability is asserted here. Per the project rule against backwards-compatibility paths, existing bundled `Indexed: false` declarations migrate outright to the separated settings when the mechanism lands; no compatibility mode preserves the bundled meaning. H and I make the scanner context-aware in both directions: a word serving as system syntax (a heading, a status value, a metadata key) is not colloquial use even though the same word in prose is, and an unmarked usage is not missed merely because it appears inflected. J applies the same reading to canonicalization: a heading names a part of the document, so marking a term in it would change what is syntax rather than mark a use. Existing behavior that contradicts these assertions — in particular the bundled indexed gate — is conformance-defect territory for later implementation tickets.
 
 ### Changelog
 
+- 2026-10-01 | 9763bc33 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | aac4da7f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-5: orthogonal term-declaration behaviors (G) and context-aware unmarked-usage scanning (H, I); decouple C from the bundled indexed flag
 - 2026-07-31 | b2d02a05 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 0d96cc34 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0d96cc34 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Term Health Checks* | **Hash**: aac4da7f
+*End* *Term Health Checks* | **Hash**: 9763bc33
 
 ## REQ-d00224: Glossary and Term Index Generators
 

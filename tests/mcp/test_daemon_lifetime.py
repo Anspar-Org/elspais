@@ -991,12 +991,14 @@ class TestAutomaticSaveRecordStatesFactsOnly:
             "mutation_count",
             "files_written",
             "trigger",
+            "changed_beyond_edits",
             "version",
         }, f"record fields drifted from the facts the requirement names: {sorted(record)}"
         assert record["saved_by"] == "daemon"
         assert record["mutation_count"] == 4
         assert record["files_written"] == 2
         assert record["trigger"] == "no recorded client was running"
+        assert record["changed_beyond_edits"] == []
 
     # Verifies: REQ-o00074-I
     def test_REQ_o00074_I_record_characterises_nothing(self, tmp_path):

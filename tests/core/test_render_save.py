@@ -7,6 +7,7 @@ Validates REQ-d00132-C: Consistency check (rebuild + compare)
 Validates REQ-d00132-D: persistence.py deleted
 Validates REQ-d00132-E: Mutation log cleared after save
 Validates REQ-d00132-F: Derives implements/refines from live graph edges
+Validates REQ-d00132-J: A save names the text it changed that no mutation changed
 """
 
 from __future__ import annotations
@@ -18,7 +19,15 @@ from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import FileType
 from elspais.graph.relations import EdgeKind
-from tests.core.graph_test_helpers import grammar_for
+from tests.core.graph_test_helpers import (
+    MARKED_PROSE,
+    TIDY_NEIGHBOUR,
+    UNMARKED_PROSE,
+    UNTIDY_NEIGHBOUR,
+    grammar_for,
+    replace_in_file,
+    write_canonical_repo,
+)
 
 
 def _build_graph_with_spec(tmp_path: Path) -> tuple[FederatedGraph, Path, GraphNode]:
@@ -648,3 +657,100 @@ class TestASaveWritesTheFilesCitingARenamedIdentifier:
         assert result["success"] is True, result["errors"]
         assert _modified_names(result) == {"prd.md"}
         assert (spec / "dev.md").read_bytes() == before
+
+
+class TestASaveNamesTheTextNoMutationChanged:
+    """Validates REQ-d00132-J: a file a save writes is written whole, so the
+    save names each requirement and each file-level text section whose text it
+    changed although no pending mutation changed it."""
+
+    @staticmethod
+    def _save_after_editing_beta(tmp_path: Path) -> dict:
+        from elspais.graph.factory import build_graph
+        from elspais.graph.render import render_save
+
+        graph = build_graph(repo_root=tmp_path)
+        graph.update_title("REQ-d00001", "Beta Renamed")
+        result = render_save(graph, repo_root=tmp_path)
+        assert result["success"] is True, result["errors"]
+        assert "dev.md" in _modified_names(result)
+        return result
+
+    # Verifies: REQ-d00132-J
+    def test_REQ_d00132_J_an_untidy_neighbour_of_the_edit_is_named(self, tmp_path: Path):
+        spec = write_canonical_repo(tmp_path)
+        replace_in_file(spec / "dev.md", TIDY_NEIGHBOUR, UNTIDY_NEIGHBOUR)
+        # The line named is where the neighbour stood in the file the save replaced.
+        before = (spec / "dev.md").read_text(encoding="utf-8").split("\n")
+        neighbour_line = before.index("## REQ-d00002: Delta") + 1
+
+        result = self._save_after_editing_beta(tmp_path)
+
+        assert result["changed_beyond_edits"] == [
+            {
+                "file": "spec/dev.md",
+                "node_id": "REQ-d00002",
+                "kind": "requirement",
+                "label": "Delta",
+                "line": neighbour_line,
+            }
+        ]
+        assert TIDY_NEIGHBOUR in (spec / "dev.md").read_text(encoding="utf-8")
+
+    # Verifies: REQ-d00132-J
+    def test_REQ_d00132_J_a_save_over_canonical_text_names_nothing(self, tmp_path: Path):
+        write_canonical_repo(tmp_path)
+
+        result = self._save_after_editing_beta(tmp_path)
+
+        assert result["changed_beyond_edits"] == []
+
+    # Verifies: REQ-d00132-J
+    def test_REQ_d00132_J_file_level_prose_whose_term_form_changes_is_named(self, tmp_path: Path):
+        spec = write_canonical_repo(tmp_path)
+        replace_in_file(spec / "dev.md", MARKED_PROSE, UNMARKED_PROSE)
+
+        result = self._save_after_editing_beta(tmp_path)
+
+        changed = result["changed_beyond_edits"]
+        assert [(c["kind"], c["label"]) for c in changed] == [("remainder", UNMARKED_PROSE)], (
+            changed
+        )
+        assert changed[0]["file"] == "spec/dev.md"
+        assert changed[0]["node_id"].startswith("rem:")
+        assert MARKED_PROSE in (spec / "dev.md").read_text(encoding="utf-8")
+
+    # Verifies: REQ-d00132-J
+    def test_REQ_d00132_J_a_journey_whose_term_form_changes_is_named(self, tmp_path: Path):
+        """A journey beside the edited one is a file-level part of its own."""
+        from elspais.graph.factory import build_graph
+        from elspais.graph.render import render_save
+
+        (tmp_path / ".elspais.toml").write_text(
+            _SAVE_SCOPE_TOML
+            + '\n[scanning.journey]\ndirectories = ["spec"]\n'
+            + '\n[terms]\nmarkup_styles = ["*", "**"]\n',
+            encoding="utf-8",
+        )
+        spec = tmp_path / "spec"
+        spec.mkdir()
+        (spec / "glossary.md").write_text("# Glossary\n\nWidget\n: A thing.\n", encoding="utf-8")
+        journeys = spec / "journeys.md"
+        journeys.write_text(
+            "# Journeys\n\n"
+            "### JNY-001: Count Things\n\n**Actor**: Operator\n\n"
+            "## Steps\n\n1. Operator counts the Widget\n\n*End* *Count Things*\n\n"
+            "### JNY-002: Ship Things\n\n**Actor**: Operator\n\n"
+            "## Steps\n\n1. Operator ships the order\n\n*End* *Ship Things*\n",
+            encoding="utf-8",
+        )
+        graph = build_graph(repo_root=tmp_path)
+        graph.update_journey_field("JNY-002", "actor", "Shipper")
+
+        result = render_save(graph, repo_root=tmp_path)
+
+        assert result["success"] is True, result["errors"]
+        changed = result["changed_beyond_edits"]
+        assert [(c["node_id"], c["kind"]) for c in changed] == [("JNY-001", "journey")], changed
+        text = journeys.read_text(encoding="utf-8")
+        assert "counts the *Widget*" in text and "**Actor**: Shipper" in text, text

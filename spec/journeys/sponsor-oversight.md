@@ -14,7 +14,7 @@ Validates: REQ-p00003, REQ-p00004, REQ-p00006
 ## Steps
 
 1. Dr. Chen receives notification that the milestone branch is ready for review.
-2. She clones the delivery branch and runs `elspais trace --format html -o milestone-3-trace.html` to generate the traceability matrix.
+2. She clones the delivery branch and runs `elspais trace --format html -o milestone-3-trace.html` to generate the *Traceability Matrix*.
 3. She opens the HTML report and reviews the PRD requirements committed to in the milestone statement of work.
 4. She runs `elspais summary` to check that all PRD requirements have corresponding DEV implementations.
 5. She runs `elspais changed --base-branch v2.0` to see what changed since the last accepted milestone.
@@ -24,7 +24,7 @@ Validates: REQ-p00003, REQ-p00004, REQ-p00006
 
 ## Expected Outcome
 
-Dr. Chen has verified that the milestone delivery meets contractual obligations. The traceability matrix and coverage report provide documented evidence of requirement fulfillment for the project record.
+Dr. Chen has verified that the milestone delivery meets contractual obligations. The *Traceability Matrix* and coverage report provide documented evidence of requirement fulfillment for the project record.
 
 *End* *Review Milestone Deliverables*
 
@@ -39,7 +39,7 @@ Validates: REQ-p00005, REQ-p00006
 
 ## Steps
 
-1. Dr. Chen runs `elspais trace --sponsor foundation-x --format html -o foundation-x-trace.html` to filter the traceability matrix to her sponsor's scope.
+1. Dr. Chen runs `elspais trace --sponsor foundation-x --format html -o foundation-x-trace.html` to filter the *Traceability Matrix* to her sponsor's scope.
 2. She opens the filtered report and reviews the sponsor-prefixed requirements (e.g., `REQ-FDX-d00001`).
 3. She also runs `elspais trace --sponsor foundation-x --format csv -o foundation-x-trace.csv` to get a spreadsheet-friendly export.
 4. She opens the CSV in a spreadsheet to annotate requirements with her own status tracking and notes.
@@ -57,8 +57,8 @@ Dr. Chen has a clean, sponsor-scoped view of the requirements relevant to her pr
 # JNY-Auditor-Validate-01: Conduct a Compliance Audit
 
 **Actor**: Janet (Validation Consultant)
-**Goal**: Verify requirement integrity, traceability, and hash consistency for a regulatory submission package
-**Context**: The system is being prepared for regulatory review. Janet, an independent validation consultant engaged by the sponsor, needs to verify that the requirements meet documentation standards: complete traceability, no orphaned requirements, and tamper-evident content hashes.
+**Goal**: Verify requirement integrity, *Traceability*, and hash consistency for a regulatory submission package
+**Context**: The system is being prepared for regulatory review. Janet, an independent validation consultant engaged by the sponsor, needs to verify that the requirements meet documentation standards: complete *Traceability*, no orphaned requirements, and tamper-evident content hashes.
 Validates: REQ-p00001, REQ-p00002, REQ-p00003, REQ-p00004
 
 ## Steps
@@ -66,15 +66,15 @@ Validates: REQ-p00001, REQ-p00002, REQ-p00003, REQ-p00004
 1. Janet receives access to the project repository at the tagged release commit.
 2. She runs `elspais checks` to confirm all content hashes match their requirement bodies. No tampering or undocumented changes are detected.
 3. She runs `elspais checks --spec` to identify any requirements without valid parent links. The report shows no structural orphans.
-4. She runs `elspais -v checks` to perform a comprehensive validation. All format, hierarchy, and traceability checks pass.
-5. She generates a complete traceability matrix with `elspais trace --format csv -o audit-trace.csv` for inclusion in the validation package.
+4. She runs `elspais -v checks` to perform a comprehensive validation. All format, hierarchy, and *Traceability* checks pass.
+5. She generates a complete *Traceability Matrix* with `elspais trace --format csv -o audit-trace.csv` for inclusion in the validation package.
 6. She generates the HTML version with `elspais viewer --static --embed-content` to review the full requirement text in context.
 7. She reviews the git history for the spec directory to confirm all changes follow the project's change control process.
-8. She documents her findings in the validation report, attaching the traceability matrix and validation output as evidence.
+8. She documents her findings in the validation report, attaching the *Traceability Matrix* and validation output as evidence.
 
 ## Expected Outcome
 
-Janet has independently verified the integrity and completeness of the requirements documentation. Her validation report includes machine-generated evidence (hash verification, validation output, traceability matrix) supporting the regulatory submission.
+Janet has independently verified the integrity and completeness of the requirements documentation. Her validation report includes machine-generated evidence (hash verification, validation output, *Traceability Matrix*) supporting the regulatory submission.
 
 *End* *Conduct a Compliance Audit*
 

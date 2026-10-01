@@ -4,7 +4,7 @@
 
 This document defines the **canonical grammar, structure, and authoring rules** for all formal requirements in the `spec/` directory.
 
-It is the **single source of truth** for how requirements are written, identified, hashed, decomposed, and referenced. Both humans and automated agents MUST follow this specification.
+It is the **single source of truth** for how requirements are written, identified, hashed, decomposed, and referenced. Both humans and automated agents MUST follow this *Specification*.
 
 This document intentionally avoids workflow, tooling, or process guidance. Those belong in tooling or developer documentation.
 
@@ -15,7 +15,7 @@ This document intentionally avoids workflow, tooling, or process guidance. Those
 - Requirements define **obligations**, not descriptions.
 - Obligations are stated using **SHALL** or **SHALL NOT**.
 - Each obligation appears **exactly once** in the repository.
-- Traceability is **one-way only**: more specific requirements reference more generic requirements via `Implements:` metadata.
+- *Traceability* is **one-way only**: more specific requirements reference more generic requirements via `Implements:` metadata.
 
 ---
 
@@ -38,7 +38,7 @@ Where:
 
 - `prefix` indicates audience:
   - `p` = PRD = Product Requirements Documention
-  - `d` = DEV = Development Specification
+  - `d` = DEV = Development *Specification*
   - `o` = OPS = Operations Documentation
 - `number` is a zero-padded integer
 - `assertion` is an optional single letter label [A-Z] for an Assertion
@@ -185,9 +185,9 @@ A directive the tool does not recognize is never silently treated as ordinary as
 
 #### The RETIRED Directive
 
-An assertion carrying the `RETIRED` directive does not exist for coverage and traceability purposes:
+An assertion carrying the `RETIRED` directive does not exist for coverage and *Traceability* purposes:
 
-- It is excluded from all coverage and traceability calculations — not counted among assertions expected to be implemented, tested, or validated.
+- It is excluded from all coverage and *Traceability* calculations — not counted among assertions expected to be implemented, tested, or validated.
 - References targeting it are invalid, exactly as references to a nonexistent assertion: they do not resolve, and surface as unresolved references.
 - Its label remains allocated — the letter is never reused, preserving the label-stability rule above.
 
@@ -413,7 +413,7 @@ The `Validates:` line:
 - appears after the JNY header block but before the `## Steps` section,
 - lists REQ IDs or assertion references separated by commas,
 - supports multi-assertion syntax (e.g., `REQ-p00001-A+B` expands to `REQ-p00001-A` and `REQ-p00001-B`),
-- creates `VALIDATES` edges in the traceability graph,
+- creates `VALIDATES` edges in the *Traceability* graph,
 - contributes to UAT coverage metrics (separate from automated test coverage),
 - is NOT part of the hashed content (JNYs have no hash).
 

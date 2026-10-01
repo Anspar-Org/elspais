@@ -117,7 +117,7 @@
 | REQ-d00129 | SourceLocation Removal and Consumer Migration                 | dev-graph-file-nodes.md | 6d11df36 |
 | REQ-d00130 | Parameterized Root Iteration and Kind-Based Index Query       | dev-graph-file-nodes.md | 5733741e |
 | REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | c81d018a |
-| REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | bd3e0684 |
+| REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | 6eb9b930 |
 | REQ-d00133 | MCP FILE Node Integration                                     | dev-mcp-tools.md        | 08e2973f |
 | REQ-d00134 | Mutation Round-Trip Fidelity                                  | dev-graph-file-nodes.md | 19cb065b |
 | REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | 67a9ca83 |
@@ -143,7 +143,7 @@
 | REQ-d00220 | TermDictionary Data Model                                     | prd-core.md             | 986251c3 |
 | REQ-d00221 | Grammar Extension for Definition Blocks                       | prd-core.md             | 5a3c278b |
 | REQ-d00222 | TraceGraph Terms and GraphBuilder Integration                 | prd-core.md             | 6f017c6d |
-| REQ-d00223 | Term Health Checks                                            | prd-core.md             | aac4da7f |
+| REQ-d00223 | Term Health Checks                                            | prd-core.md             | 9763bc33 |
 | REQ-d00224 | Glossary and Term Index Generators                            | prd-core.md             | c8ce4253 |
 | REQ-d00225 | CLI Registration for Glossary and Term Index                  | prd-core.md             | 2b8a5235 |
 | REQ-d00226 | Comment Data Models                                           | prd-features.md         | 6d420b96 |
@@ -223,7 +223,7 @@
 | REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | 4fe7db4a |
 | REQ-d00312 | Test Target Output Areas                                      | dev-graph-core.md       | a0788b2a |
 | REQ-d00313 | Served Graph Currency                                         | dev-traceview-review.md | e791c1a1 |
-| REQ-d00320 | Viewer Edit Controls State What They Do                       | dev-traceview-review.md | 646a8606 |
+| REQ-d00320 | Viewer Edit Controls State What They Do                       | dev-traceview-review.md | e8010396 |
 | REQ-d00321 | Static View Embedded Content                                  | dev-traceview-review.md | 38f520e0 |
 
 ## User Journeys

@@ -1541,6 +1541,42 @@ function reportRebuildAfterSave(result) {
     }
 }
 
+// A file a save writes is written whole, so text in it that nobody edited
+// can change form too. The save names each such part, and the person who
+// saved is shown the list before they commit it; a toast would be gone
+// before it was read.
+{# Implements: REQ-d00320-D #}
+function reportChangesBeyondEdits(result) {
+    var changed = (result && result.changed_beyond_edits) || [];
+    if (!changed.length) return;
+    var old = document.getElementById('save-disclosure-overlay');
+    if (old) old.remove();
+    var items = changed.map(function(c) {
+        var what = c.kind === 'requirement'
+            ? escapeHtml(c.node_id) + (c.label ? ' ' + escapeHtml(c.label) : '')
+            : escapeHtml(c.file || '') + ':' + escapeHtml(String(c.line || '')) +
+              (c.label ? ' ' + escapeHtml(c.label) : '');
+        return '<li class="save-disclosure-item" data-node-id="' + escapeAttr(c.node_id) + '">' +
+            what + '</li>';
+    }).join('');
+    var overlay = document.createElement('div');
+    overlay.id = 'save-disclosure-overlay';
+    overlay.className = 'modal-overlay visible';
+    overlay.innerHTML =
+        '<div class="modal-dialog">' +
+            '<div class="modal-title">Saved, and reformatted text you did not edit</div>' +
+            '<p>The files this save wrote are written whole, in canonical form. ' +
+            'The text of these parts changed although no edit changed it:</p>' +
+            '<ul class="save-disclosure-list">' + items + '</ul>' +
+            '<div class="modal-actions">' +
+                '<button class="btn" id="save-disclosure-dismiss">OK</button>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(overlay);
+    document.getElementById('save-disclosure-dismiss').onclick = function() { overlay.remove(); };
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+}
+
 async function doSave() {
     showLoadingOverlay('Saving...');
     const result = await mutate('/api/save', {});
@@ -1548,8 +1584,13 @@ async function doSave() {
     if (result && result.success) {
         showToast('Saved to disk', 'success');
         reportRebuildAfterSave(result);
+        reportChangesBeyondEdits(result);
         refreshFileViewer();
         loadTreeData();
+    } else if (result && result.success === false && result.error) {
+        // A refused save leaves the edits pending; saying nothing would
+        // read as a save that worked.
+        showErrorModal('Save failed', result.error);
     }
     // Even if it returns 501 (not yet implemented), display message
     if (result && result.message) {
@@ -2040,6 +2081,7 @@ function showCheckpointModal() {
                 // wrote, so a failed rebuild is reported and not a reason
                 // to stop.
                 reportRebuildAfterSave(saveResult);
+                reportChangesBeyondEdits(saveResult);
                 refreshDirtyCount();
                 _openCheckpointModal();
             } else {

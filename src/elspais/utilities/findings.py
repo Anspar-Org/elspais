@@ -267,7 +267,8 @@ _DESCRIPTIONS: dict[str, str] = {
     "spec.refines_resolve": "All Refines: references resolve",
     "spec.satisfies_resolve": "All Satisfies: references resolve",
     "spec.needs_rewrite": (
-        "Flags requirements that will be rewritten on next save (duplicate refs, stale hash)"
+        "Flags requirements, journeys and file-level prose that will be rewritten on next save "
+        "(duplicate refs, stale hash, spacing, term forms)"
     ),
     "spec.unfixable_issues": "Issues `elspais fix` cannot repair, so a person has to",
     "spec.undefined_levels": (

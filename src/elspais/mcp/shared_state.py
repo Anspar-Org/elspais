@@ -464,6 +464,7 @@ def persist_pending(
                 pending,
                 files if isinstance(files, int) else 0,
                 trigger=trigger,
+                changed_beyond_edits=result.get("changed_beyond_edits"),
             )
         else:
             clear_automatic_save(working_dir)

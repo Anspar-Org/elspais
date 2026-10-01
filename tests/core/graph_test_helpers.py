@@ -654,3 +654,101 @@ def metrics_string(node: GraphNode, *keys: str) -> str:
         if value is not None:
             parts.append(f"{key}={value}")
     return ",".join(parts)
+
+
+# === A repository in canonical form, for what a save rewrites ===
+
+# One defined term, so file-level prose has a term form to canonicalize.
+CANONICAL_REPO_TOML = """version = 5
+
+[project]
+name = "canonical"
+namespace = "REQ"
+
+[terms]
+markup_styles = ["*", "**"]
+"""
+
+CANONICAL_GLOSSARY = """# Glossary
+
+Widget
+: A thing the tool makes.
+"""
+
+# The file a save edits: a heading and a section of file-level prose naming
+# the term (marked), then two requirements. ``REQ-d00002`` is the neighbour
+# no edit touches.
+CANONICAL_DEV = """# Dev
+
+## Widget notes
+
+Every *Widget* is counted.
+
+## REQ-d00001: Beta
+
+**Level**: dev | **Status**: Active
+
+Beta body.
+
+### Assertions
+
+A. The tool SHALL beta.
+
+*End* *Beta* | **Hash**: 00000000
+
+## REQ-d00002: Delta
+
+**Level**: dev | **Status**: Active
+
+Delta body.
+
+### Assertions
+
+A. The tool SHALL delta.
+
+*End* *Delta* | **Hash**: 00000000
+"""
+
+# The neighbour's body and assertions as the save writes them, and the same
+# text with the blank lines a canonical requirement carries taken out.
+TIDY_NEIGHBOUR = "Delta body.\n\n### Assertions\n\nA. The tool SHALL delta."
+UNTIDY_NEIGHBOUR = "Delta body.\n### Assertions\nA. The tool SHALL delta."
+
+MARKED_PROSE = "Every *Widget* is counted."
+UNMARKED_PROSE = "Every Widget is counted."
+
+
+def write_canonical_repo(root: Path) -> Path:
+    """Write a repository whose spec files are exactly what a save writes.
+
+    Every requirement is put through a save once, so its hash, metadata and
+    spacing are the renderer's own; the repository is then rebuilt and
+    checked to need no rewriting. Returns the ``spec`` directory.
+    """
+    from elspais.graph.factory import build_graph as build_repo_graph
+    from elspais.graph.render import _find_dirty_files, render_save
+
+    (root / ".elspais.toml").write_text(CANONICAL_REPO_TOML, encoding="utf-8")
+    spec = root / "spec"
+    spec.mkdir()
+    (spec / "glossary.md").write_text(CANONICAL_GLOSSARY, encoding="utf-8")
+    (spec / "dev.md").write_text(CANONICAL_DEV, encoding="utf-8")
+
+    graph = build_repo_graph(repo_root=root)
+    for node in list(graph.nodes_by_kind(NodeKind.REQUIREMENT)):
+        graph.update_title(node.id, node.get_label())
+    result = render_save(graph, repo_root=root)
+    assert result["success"] is True, result["errors"]
+
+    rebuilt = build_repo_graph(repo_root=root)
+    assert _find_dirty_files(rebuilt, tidy=True) == [], "the canonical repository needs a rewrite"
+    text = (spec / "dev.md").read_text(encoding="utf-8")
+    assert TIDY_NEIGHBOUR in text and MARKED_PROSE in text, text
+    return spec
+
+
+def replace_in_file(path: Path, old: str, new: str) -> None:
+    """Replace the one occurrence of ``old`` in ``path``, failing if it is not there once."""
+    text = path.read_text(encoding="utf-8")
+    assert text.count(old) == 1, f"{old!r} occurs {text.count(old)} times in {path}"
+    path.write_text(text.replace(old, new), encoding="utf-8")

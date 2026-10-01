@@ -451,6 +451,15 @@ holding each changed node, and, for a rename, each file whose citations name
 the renamed identifier. A file that only needs its formatting tidied stays as
 it is on disk until `elspais fix` tidies it.
 
+A file a save does write is written whole, in canonical form, so text in it
+that no change reached can change form too. The result's
+`changed_beyond_edits` names each such part -- a requirement, a journey or a
+section of file-level prose -- as `{file, node_id, kind, label, line}`, and is
+empty where the save changed nothing beyond its edits. `save_mutations`, the
+viewer's `/api/save` and the record of a save the daemon made itself all
+carry the same list. `spec.needs_rewrite` reports the same parts before any
+save, so `elspais fix` can tidy them as a change of their own.
+
 A stale tip is not the only way a save comes back unsuccessful, and the
 `code` says which it was: `save_mutations` reports `write_scope_declined`
 where the save held back a file it was asked to write -- one an associate
