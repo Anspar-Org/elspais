@@ -5449,7 +5449,7 @@ def run(args: argparse.Namespace) -> int:
     run_tests = getattr(args, "run_tests", False)
     fail_fast = getattr(args, "fail_fast", False)
 
-    # Implements: REQ-d00283-W, REQ-d00085-Q
+    # Implements: REQ-d00283-Y, REQ-d00085-Q
     # Without --run-tests no target runs, so a selection of targets and a
     # request to stop at the first failing one would be read by nothing.
     if not run_tests:

@@ -425,7 +425,7 @@ class TestRefusedOptions:
         assert "--mode" in err
         assert out == ""
 
-    # Verifies: REQ-d00283-W, REQ-d00085-Q
+    # Verifies: REQ-d00283-Y, REQ-d00085-Q
     @pytest.mark.parametrize(
         "extra",
         [["--targets", "unit"], ["--fail-fast"], ["--targets", "unit", "--fail-fast"]],
