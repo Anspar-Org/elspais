@@ -76,7 +76,7 @@ Each requirement MUST begin with a **header line** immediately followed by a **m
 {#...} REQ-{id}: {Short Descriptive Title}
 ```
 
-The heading level (number of `#` characters) is unconstrained but SHOULD be consistent within a file.
+An author can choose any heading level (the number of `#` characters). An author should use one heading level throughout a file.
 
 ### Metadata Block
 
@@ -89,7 +89,7 @@ The metadata block immediately follows the header line. It consists of one or mo
 | `Level` | One of: `PRD`, `Dev`, `Ops` |
 | `Status` | One of: `Draft`, `Review`, `Active`, `Deprecated` |
 
-**Traceability fields** — each MAY appear zero or more times; each occurrence MAY carry a comma-delimited list of REQ IDs:
+**Traceability fields** — a requirement can declare each field zero or more times. Each declaration can hold a comma-delimited list of REQ IDs:
 
 | Field | Meaning |
 | ----- | ------- |
@@ -98,9 +98,9 @@ The metadata block immediately follows the header line. It consists of one or mo
 
 **Layout rules:**
 
-- Field declarations MAY appear in any order.
-- Field declarations MAY appear on the same line (separated by `|` or other punctuation) or on separate lines.
-- Any valid Markdown formatting MAY be applied to field names and values (e.g. `**Level**`, `Level`, `` `Level` `` are all equivalent).
+- An author can write field declarations in any order.
+- An author can write several field declarations on one line, separated by `|` or other punctuation. An author can also write each declaration on its own line.
+- An author can apply any valid Markdown formatting to field names and values. The parser reads `**Level**`, `Level` and `` `Level` `` as the same field name.
 - Multiple occurrences of `Implements` or `Refines` are **additive**: all listed references are collected.
 - Use `-` to explicitly declare that no references exist (e.g. `Implements: -`).
 
@@ -195,16 +195,16 @@ An assertion carrying the `RETIRED` directive does not exist for coverage and tr
 
 ### Assertion References
 
-Tests and other verification artifacts MAY reference:
+A test or another verification artifact can reference:
 
 - the entire requirement: `REQ-d00032`, or
 - a specific assertion: `REQ-d00032-F`.
 
 ## Rationale Block (Optional, Non-Normative)
 
-A requirement MAY include a `Rationale`, `Description`, `Discussion` or other non-normative blocks.
+A requirement can include a `Rationale`, `Description`, `Discussion` or other non-normative block.
 These are for context only and are NOT part of the testable requirements.
-Rationale blocks MAY exist before and after the Assertion block.
+A Rationale block can appear before or after the Assertion block.
 Any section not titled "Assertions" SHALL be treated as a Rationale block.
 
 ```markdown
@@ -285,8 +285,8 @@ Explanatory, contextual, or illustrative sections MUST NOT have requirement IDs.
 
 ## Document Structure Rules
 
-- Requirement documents SHOULD use a flat heading structure.
-- `REQ-` blocks SHOULD be a top-level section.
+- A requirement document should use a flat heading structure.
+- Each `REQ-` block should be a top-level section.
 - Subheadings within a requirement are limited to:
   - Assertions
   - Rationale
@@ -307,7 +307,7 @@ User Journeys exist to:
 
 User Journeys are **non-normative** with respect to obligations — they do not define system requirements and SHALL NOT use normative keywords (SHALL, SHALL NOT, MUST, MUST NOT, REQUIRED).
 
-However, User Journeys MAY declare `Validates:` references that link them to specific requirements or assertions. These links contribute to UAT coverage metrics and represent planned manual acceptance tests.
+A User Journey can declare `Validates:` references. Each reference links the journey to a requirement or an assertion. These links contribute to UAT coverage metrics. Each link represents a planned manual acceptance test.
 
 User Journeys SHALL NOT use normative keywords (SHALL, SHALL NOT, MUST, MUST NOT, REQUIRED).
 
@@ -333,7 +333,7 @@ Examples:
 
 ### User Journey Structure
 
-A User Journey SHOULD follow this structure:
+A User Journey should follow this structure:
 
 ```markdown
 # JNY-{Descriptor}-{number}: {Title}
@@ -369,7 +369,7 @@ Field guidance:
 
 ### Referencing User Journeys in Requirements
 
-Requirements MAY reference User Journeys they address. This reference appears after the REQ header line but before the body content (outside the hashed area):
+A requirement can reference the User Journeys it addresses. The reference appears after the REQ header line and before the body content, outside the hashed area:
 
 ```markdown
 # REQ-pXXXXX: Admin Site Management
@@ -391,7 +391,7 @@ The `Addresses:` line:
 
 ### User Journeys Declaring Validation Relationships
 
-User Journeys MAY declare which requirements or assertions they validate using the `Validates:` field. This is the primary mechanism for UAT coverage:
+A User Journey declares the requirements or assertions it validates in the `Validates:` field. This field is the primary mechanism for UAT coverage:
 
 ```markdown
 # JNY-Admin-Portal-01: Manage Admin Users

@@ -1,15 +1,16 @@
-# Verifies: REQ-d00249-D, REQ-d00249-E, REQ-p00019-J
-"""Missing-results and staleness behavior in tests.results / tests.results_stale."""
+# Verifies: REQ-d00249-D, REQ-p00019-J
+"""Missing-results behavior in tests.results.
+
+tests/test_result_freshness.py tests the freshness of results on disk.
+"""
 
 from __future__ import annotations
 
 import copy
-import os
-import time
 from collections.abc import Sequence
 from pathlib import Path
 
-from elspais.commands.health import check_test_results, check_test_results_stale
+from elspais.commands.health import check_test_results
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph, RepoEntry
 from elspais.graph.GraphNode import FileType, GraphNode, NodeKind, make_file_id
@@ -41,9 +42,7 @@ def _member_config(name: str, namespace: str, targets: Sequence[str]) -> dict:
         "project": {"name": name, "namespace": namespace},
         "scanning": {
             "test": {
-                "targets": [
-                    {"name": t, "results": f"{t}/*.json", "reporter": "junit"} for t in targets
-                ]
+                "targets": [{"name": t, "results": "*.json", "reporter": "junit"} for t in targets]
             }
         },
     }
@@ -71,9 +70,7 @@ def test_missing_results_fails_with_warning(tmp_path: Path):
     graph = _graph_with_files(spec_node)
     config = {
         "scanning": {
-            "test": {
-                "targets": [{"name": "unit", "results": "results/*.json", "reporter": "junit"}]
-            }
+            "test": {"targets": [{"name": "unit", "results": "*.json", "reporter": "junit"}]}
         }
     }
     chk = check_test_results(graph, config=config)
@@ -156,57 +153,5 @@ def test_no_result_files_configured_remains_info():
     graph = _graph_with_files()
     chk = check_test_results(graph, config=None)
     assert chk.name == "tests.results"
-    assert chk.passed is True
-    assert chk.severity == "info"
-
-
-def test_fresh_results_stale_check_passes(tmp_path: Path):
-    spec = tmp_path / "spec.md"
-    spec.write_text("# REQ-p00001\n")
-    older = time.time() - 60
-    os.utime(spec, (older, older))
-
-    result_file = tmp_path / "pytest.json"
-    result_file.write_text("{}")
-
-    spec_node = _make_file_node(spec, FileType.SPEC)
-    result_node = _make_file_node(result_file, FileType.RESULT)
-
-    graph = _graph_with_files(spec_node, result_node)
-
-    chk = check_test_results_stale(graph)
-    assert chk.name == "tests.results_stale"
-    assert chk.passed is True
-    assert chk.severity == "info"
-
-
-def test_stale_results_emits_named_warning(tmp_path: Path):
-    spec = tmp_path / "spec.md"
-    spec.write_text("# REQ-p00001\n")
-
-    result_file = tmp_path / "pytest.json"
-    result_file.write_text("{}")
-    older = time.time() - 3600
-    os.utime(result_file, (older, older))
-
-    spec_node = _make_file_node(spec, FileType.SPEC)
-    result_node = _make_file_node(result_file, FileType.RESULT)
-
-    graph = _graph_with_files(spec_node, result_node)
-
-    chk = check_test_results_stale(graph)
-    assert chk.name == "tests.results_stale"
-    assert chk.passed is False
-    assert chk.severity == "warning"
-    assert "stale" in (chk.message or "").lower()
-
-
-def test_stale_check_skipped_when_no_results(tmp_path: Path):
-    spec = tmp_path / "spec.md"
-    spec.write_text("# REQ-p00001\n")
-    spec_node = _make_file_node(spec, FileType.SPEC)
-    graph = _graph_with_files(spec_node)
-    chk = check_test_results_stale(graph)
-    assert chk.name == "tests.results_stale"
     assert chk.passed is True
     assert chk.severity == "info"

@@ -30,6 +30,7 @@ from elspais.commands.args import (
     ErrorsArgs,
     ExampleArgs,
     FailingArgs,
+    FingerprintArgs,
     FixArgs,
     GapsArgs,
     GlobalArgs,
@@ -118,9 +119,10 @@ class TestCliArgsDataclasses:
             GlossaryArgs,
             TermIndexArgs,
             CommentsArgs,
+            FingerprintArgs,
         }
         assert base_types == expected
-        assert len(args) == 36
+        assert len(args) == 37
 
     # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_health_args_defaults(self) -> None:

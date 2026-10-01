@@ -1323,13 +1323,13 @@ file_patterns = ["test_*.py"]
 [[scanning.test.targets]]
 name = "a"
 reporter = "junit"
-results = "results-a/results.xml"
+results = "results.xml"
 match = "source"
 
 [[scanning.test.targets]]
 name = "b"
 reporter = "junit"
-results = "results-b/results.xml"
+results = "results.xml"
 match = "source"
 
 [rules.hierarchy]
@@ -1401,12 +1401,12 @@ class TestSummaryCarriedFootnote:
             "# Verifies: REQ-d00002-A\ndef test_b():\n    pass\n", encoding="utf-8"
         )
 
-        (project / "results-a").mkdir(parents=True)
-        (project / "results-a" / "results.xml").write_text(
+        (project / ".results" / "a").mkdir(parents=True)
+        (project / ".results" / "a" / "results.xml").write_text(
             _JUNIT_ONE_PASSING_SUMMARY.format(suite="suite-a", name="test_a"), encoding="utf-8"
         )
-        (project / "results-b").mkdir(parents=True)
-        (project / "results-b" / "results.xml").write_text(
+        (project / ".results" / "b").mkdir(parents=True)
+        (project / ".results" / "b" / "results.xml").write_text(
             _JUNIT_ONE_PASSING_SUMMARY.format(suite="suite-b", name="test_b"), encoding="utf-8"
         )
 

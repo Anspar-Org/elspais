@@ -144,7 +144,7 @@ class TestSerializeJourneyInfo:
         info = _serialize_journey_info(jny, uat_graph)
 
         for entry in info["results"]:
-            assert entry["result_file"] == "results.xml"
+            assert entry["result_file"] == "results/junit/results.xml"
             assert entry["result_line"] > 0
 
     # Verifies: REQ-d00256-E

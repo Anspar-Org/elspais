@@ -235,7 +235,8 @@ match = "source"
         tests_dir.mkdir()
         (tests_dir / "test_a.py").write_text("# Verifies: REQ-p00001-A\ndef test_a():\n    pass\n")
 
-        (tmp_path / "results.xml").write_text(
+        (tmp_path / ".results" / "junit").mkdir(parents=True)
+        (tmp_path / ".results" / "junit" / "results.xml").write_text(
             '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<testsuite name="suite" tests="1">\n'
             '  <testcase name="test_a" classname="tests.test_a" time="0.1"/>\n'

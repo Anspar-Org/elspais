@@ -15,6 +15,7 @@ Complete reference for all elspais commands.
 | `changed` | Reports | Detect git changes to spec files |
 | `pdf` | Reports | Compile spec files into a PDF document |
 | `search` | Reports | Search requirements by keyword |
+| `fingerprint` | Reports | Record the fingerprint of a test run elspais did not execute |
 | `gaps` | Gaps & Issues | List which requirements fall short of each coverage dimension |
 | `uncovered` | Gaps & Issues | List requirements without code coverage |
 | `untested` | Gaps & Issues | List requirements without test coverage |
@@ -92,7 +93,9 @@ To see unresolved references, use: `elspais unresolved`
   `--include-passing-details`     Show full details for passing checks
   `--run-tests`    Execute each `[[scanning.test.targets]]` entry that carries a
                    command before evaluating checks, so coverage runs against
-                   fresh result files. Exits 2 if no target has a command.
+                   fresh result files. Each run empties the target's folder.
+                   The run then records a fingerprint of its inputs there.
+                   Exits 2 if no target has a command.
   `--fail-fast`    Stop at the first target failure and skip the checks pass.
                    Requires `--run-tests`.
   `--targets T...` Run and ingest only these test targets rather than the
@@ -103,6 +106,24 @@ To see unresolved references, use: `elspais unresolved`
 
 `-v, --verbose` is a global option (see Global Options above) and reports each
 check individually rather than only the summary.
+
+## fingerprint
+
+Record the fingerprint of a test run that elspais did not execute.
+`elspais checks` then uses the fingerprint to judge whether the results of
+that run are fresh.
+
+  $ out=$(elspais fingerprint start unit)   # empty the folder, record inputs
+  $ pytest --junitxml="$out/junit.xml"      # the run writes into the folder
+  $ elspais fingerprint finish unit         # note inputs that changed meanwhile
+
+`start TARGET` empties the target's folder (`<output_root>/<name>`). It then
+records a fingerprint of the target's inputs in the folder and prints the
+folder. `finish TARGET` notes any input that changed during the run. elspais
+refuses a `finish` that no `start` began, with exit 1. The reason is that
+`start` empties the folder. Without `start`, the results that an earlier run
+left there would carry the fingerprint of this run. An unknown target name exits 2. See
+`elspais docs test-targets`, *Target Folders and Fresh Results*.
 
 ## errors
 

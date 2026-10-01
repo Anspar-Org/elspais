@@ -960,6 +960,41 @@
       "title": "ScanningConfig",
       "type": "object"
     },
+    "ScanningKindConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "directories": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Directories",
+          "type": "array"
+        },
+        "file_patterns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "File Patterns",
+          "type": "array"
+        },
+        "skip_files": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Skip Files",
+          "type": "array"
+        },
+        "skip_dirs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Skip Dirs",
+          "type": "array"
+        }
+      },
+      "title": "ScanningKindConfig",
+      "type": "object"
+    },
     "SpecScanningConfig": {
       "additionalProperties": false,
       "properties": {
@@ -1213,6 +1248,11 @@
           },
           "title": "Targets",
           "type": "array"
+        },
+        "output_root": {
+          "default": ".results",
+          "title": "Output Root",
+          "type": "string"
         }
       },
       "title": "TestScanningConfig",
@@ -1294,6 +1334,9 @@
           ],
           "default": null,
           "title": "Line Base"
+        },
+        "inputs": {
+          "$ref": "#/$defs/ScanningKindConfig"
         }
       },
       "required": [

@@ -249,6 +249,10 @@ _FIELD_COMMENTS: dict[str, str] = {
     "scanning.test.groups": (
         "Declared test groups: keyword = description. `all`, `default` and `none` are reserved"
     ),
+    "scanning.test.output_root": (
+        "Directory holding one folder per test target; a target writes its results"
+        " and coverage into its own folder (default .results)"
+    ),
     "scanning.test.targets": ("Per-package/suite test-ingestion targets (array of tables)"),
     "scanning.test.targets.name": "Unique label for this target (required)",
     "scanning.test.targets.cwd": (
@@ -261,9 +265,16 @@ _FIELD_COMMENTS: dict[str, str] = {
         'Parser format: "flutter-machine" | "junit" | "pytest-json"'
     ),
     "scanning.test.targets.results": (
-        "Glob for result files (file-channel reporters: junit, pytest-json)"
+        "Glob for result files (file-channel reporters: junit, pytest-json),"
+        " relative to the target's folder <output_root>/<name>"
     ),
-    "scanning.test.targets.coverage": ("Path to lcov/coverage-json file, relative to cwd"),
+    "scanning.test.targets.coverage": (
+        "Path to lcov/coverage-json file, relative to the target's folder"
+    ),
+    "scanning.test.targets.inputs": (
+        "Files whose change makes this target's results stale: directories,"
+        " file_patterns, skip_dirs, skip_files (default: every file)"
+    ),
     "scanning.test.targets.match": (
         '"source" (per-file) | "aggregate" (whole-app green/red, default)'
     ),
@@ -493,7 +504,32 @@ _CORE_OVERRIDES: dict[str, Any] = {
         # A directory pattern is a path from the repository root, so "**/" is
         # what says "at any depth". A file pattern is a glob over a name and
         # needs none. See `elspais docs ignore`.
-        "skip": ["**/node_modules", "**/.git", "**/__pycache__", "*.pyc", "**/.venv", ".env"],
+        #
+        # The entries after ".env" name caches. Test and build tools write these
+        # caches during a test run. By default, every file in the repository is
+        # an input of a test target. If a file changes during every run, then
+        # every run is stale. See `elspais docs test-targets`.
+        "skip": [
+            "**/node_modules",
+            "**/.git",
+            ".elspais",
+            "**/__pycache__",
+            "*.pyc",
+            "**/.venv",
+            ".env",
+            "**/.pytest_cache",
+            "**/.mypy_cache",
+            "**/.ruff_cache",
+            "**/.tox",
+            "**/.nox",
+            "**/htmlcov",
+            ".coverage",
+            ".coverage.*",
+            "**/.dart_tool",
+            "**/.gradle",
+            "**/.next",
+            "**/.turbo",
+        ],
         "spec": {
             "directories": ["spec"],
             "file_patterns": ["*.md"],

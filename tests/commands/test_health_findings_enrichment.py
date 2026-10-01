@@ -462,7 +462,7 @@ directories = ["tests"]
 [[scanning.test.targets]]
 name = "unit"
 reporter = "junit"
-results = "results/junit.xml"
+results = "junit.xml"
 match = "source"
 """
         )
@@ -484,8 +484,8 @@ A. The system SHALL do something.
         )
 
         # Create a JUnit XML with a failed test
-        results_dir = tmp_path / "results"
-        results_dir.mkdir()
+        results_dir = tmp_path / ".results" / "unit"
+        results_dir.mkdir(parents=True)
         (results_dir / "junit.xml").write_text(
             """<?xml version="1.0" encoding="utf-8"?>
 <testsuites>

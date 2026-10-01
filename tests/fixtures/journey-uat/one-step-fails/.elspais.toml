@@ -24,6 +24,7 @@ directories = ["spec"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
+output_root = "results"
 
 [scanning.journey]
 directories = ["spec"]

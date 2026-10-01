@@ -48,6 +48,13 @@ The index step resolves this tree's `elspais` rather than whichever one is on
 `PATH`: a different version rewrites hashes across spec files the commit never
 touched, and reports success while doing it.
 
+The unit tier runs through `with-fingerprint`, which brackets it with
+`elspais fingerprint start` and `finish` for the `elspais-unit` target. Its
+results and coverage land in `.results/elspais-unit/` with a fingerprint of the
+tree they ran against, so `elspais checks` reads them as fresh until an input
+changes -- including after a later commit skips the run because the tree is
+unchanged. The e2e tier does the same for `elspais-e2e`.
+
 ### pre-push
 
 Runs before pushing, with PR-aware blocking behavior:

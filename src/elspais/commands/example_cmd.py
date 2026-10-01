@@ -93,25 +93,27 @@ Each assertion is a labeled statement using SHALL language:
 - alphanumeric: 0-9, A-Z (max 36)
 
 ## Keywords
-- SHALL: Required functionality (normative)
-- SHOULD: Recommended but not required
-- MAY: Optional functionality
+- SHALL: Required functionality (normative). Each assertion has exactly one SHALL.
+- SHALL NOT: Prohibition. Use it only if no positive statement can express the rule.
+- SHOULD, SHOULD NOT, MAY and MUST: not permitted in an assertion.
+  A deterministic test must pass or fail every assertion.
 
-## Placeholders for Removed Assertions
-When an assertion is removed, use a placeholder to maintain sequential labels:
+## Retired Assertions
+An author marks a removed assertion with the RETIRED directive.
+The assertion keeps its label:
 
     A. The system SHALL validate user input.
-    B. Removed.
+    B. <RETIRED> Superseded by REQ-d00005-B.
     C. The system SHALL log all transactions.
 
-Valid placeholder values: "Removed", "obsolete", "deprecated", "N/A", "-", "reserved"
+An author never reuses a retired label. See `elspais docs assertions`.
 
 ## Test References
-Tests can reference specific assertions:
+A test cites an assertion in a comment above it:
 
     # test_auth.py
+    # Verifies: REQ-d00001-A
     def test_user_validation():
-        \"\"\"Test REQ-d00001-A assertion.\"\"\"
         ...
 
 ## Configuration

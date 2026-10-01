@@ -2114,7 +2114,7 @@ class TestRunTestsFlag:
 
         scratch = tmp_path / "happy"
         shutil.copytree(project, scratch)
-        result_path = scratch / ".elspais" / "results" / "test-results.json"
+        result_path = scratch / ".results" / "stub" / "test-results.json"
         if result_path.exists():
             result_path.unlink()
         # Use --tests scope to avoid spec-level errors from the shared (mutated) project.
@@ -2289,13 +2289,14 @@ class TestRunTestsFailFast:
 
 
 class TestStaleResultsWarning:
-    """Verifies: REQ-d00249-E"""
+    """The fingerprint of a run determines the freshness of the results that the run wrote.
+
+    Verifies: REQ-d00311-C, REQ-d00311-D, REQ-d00311-E, REQ-d00311-F, REQ-d00311-G
+    """
 
     @staticmethod
-    def _build_stale_project(scratch, project):
-        import os
-        import time
-
+    def _results_without_a_run(scratch, project):
+        """Copy the project. Add results for the stub target without a fingerprint."""
         shutil.copytree(project, scratch)
         # The fixture's daemon.json points at the parent project's daemon,
         # which has cached its own graph and won't see the result file we're
@@ -2305,10 +2306,9 @@ class TestStaleResultsWarning:
             p = scratch / ".elspais" / daemon_file
             if p.exists():
                 p.unlink()
-        result_dir = scratch / ".elspais" / "results"
+        result_dir = scratch / ".results" / "stub"
         result_dir.mkdir(parents=True, exist_ok=True)
-        result_file = result_dir / "test-results.json"
-        result_file.write_text(
+        (result_dir / "test-results.json").write_text(
             json.dumps(
                 {
                     "created_at": "fixture",
@@ -2319,47 +2319,76 @@ class TestStaleResultsWarning:
                 }
             )
         )
-        old = time.time() - 7200
-        os.utime(result_file, (old, old))
-        # Touch every scanned spec markdown so at least one in-graph file
-        # is newer than the (back-dated) result. Touching just the first
-        # glob match can hit a file that the parser skipped, leaving the
-        # graph's source mtimes unchanged.
-        for spec_md in (scratch / "spec").glob("*.md"):
-            spec_md.touch()
 
-    def test_stale_results_emit_named_check_with_lenient(self, tmp_path, project):
+    @staticmethod
+    def _stale_check(out):
+        data = json.loads(out.stdout)
+        return data, next(
+            (c for c in data.get("checks", []) if c.get("name") == "tests.results_stale"),
+            None,
+        )
+
+    def test_results_with_no_recorded_run_are_stale_with_lenient(self, tmp_path, project):
         scratch = tmp_path / "stale_lenient"
-        self._build_stale_project(scratch, project)
+        self._results_without_a_run(scratch, project)
         out = run_elspais("checks", "--tests", "--format", "json", "--lenient", cwd=scratch)
         # --lenient mutes exit code; the check is still in the report.
         assert out.returncode == 0, (
             f"checks --tests --lenient failed: stdout={out.stdout!r} stderr={out.stderr!r}"
         )
-        data = json.loads(out.stdout)
-        stale_chk = next(
-            (c for c in data.get("checks", []) if c.get("name") == "tests.results_stale"),
-            None,
-        )
+        _, stale_chk = self._stale_check(out)
         assert stale_chk is not None, "expected tests.results_stale in checks"
         assert stale_chk.get("passed") is False
         assert stale_chk.get("severity") == "warning"
-        assert "stale" in (stale_chk.get("message") or "").lower()
+        (finding,) = stale_chk.get("findings")
+        assert "no fingerprint was recorded" in finding["message"]
 
     def test_stale_results_non_lenient_flips_exit_code(self, tmp_path, project):
         scratch = tmp_path / "stale_strict"
-        self._build_stale_project(scratch, project)
+        self._results_without_a_run(scratch, project)
         out = run_elspais("checks", "--tests", "--format", "json", cwd=scratch)
         # Without --lenient, the warning flips exit code.
         assert out.returncode != 0, (
             f"expected non-zero exit without --lenient when results are stale; "
             f"got {out.returncode}, stdout={out.stdout!r}"
         )
-        data = json.loads(out.stdout)
-        stale_chk = next(
-            (c for c in data.get("checks", []) if c.get("name") == "tests.results_stale"),
-            None,
-        )
+        data, stale_chk = self._stale_check(out)
         assert stale_chk is not None
         assert stale_chk.get("passed") is False
         assert data.get("healthy") is False
+
+    # Verifies: REQ-d00311-H
+    def test_recorded_results_are_fresh_until_an_input_changes(self, tmp_path, project):
+        scratch = tmp_path / "recorded"
+        self._results_without_a_run(scratch, project)
+        refused = run_elspais("fingerprint", "finish", "stub", cwd=scratch)
+        assert refused.returncode == 1, "a finish no start began must be refused"
+        started = run_elspais("fingerprint", "start", "stub", cwd=scratch)
+        assert started.returncode == 0, started.stderr
+        folder = scratch / ".results" / "stub"
+        assert [p.name for p in folder.iterdir()] == [".elspais-run.json"]
+        (folder / "test-results.json").write_text(
+            json.dumps(
+                {
+                    "created_at": "fixture",
+                    "summary": {"passed": 1, "failed": 0, "total": 1},
+                    "tests": [
+                        {"nodeid": "test_stub::test_ok", "outcome": "passed", "duration": 0.001}
+                    ],
+                }
+            )
+        )
+        recorded = run_elspais("fingerprint", "finish", "stub", cwd=scratch)
+        assert recorded.returncode == 0, recorded.stderr
+
+        out = run_elspais("checks", "--tests", "--format", "json", "--lenient", cwd=scratch)
+        _, stale_chk = self._stale_check(out)
+        assert stale_chk.get("passed") is True, stale_chk
+        assert stale_chk.get("findings") == []
+
+        (scratch / "src" / "added.py").write_text("ADDED = True\n")
+        out = run_elspais("checks", "--tests", "--format", "json", "--lenient", cwd=scratch)
+        _, stale_chk = self._stale_check(out)
+        assert stale_chk.get("passed") is False
+        (finding,) = stale_chk.get("findings")
+        assert "src/added.py" in finding["message"]

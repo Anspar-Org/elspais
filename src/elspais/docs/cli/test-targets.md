@@ -34,6 +34,88 @@ When `command` is absent, `elspais checks` skips execution and ingests
 whatever files are already on disk at the `results` glob or `coverage` path.
 This is the correct pattern for CI.
 
+## Target Folders and Fresh Results
+
+Every target writes into a folder of its own, `<output_root>/<name>`.
+`output_root` is set under `[scanning.test]` and defaults to `.results`. A
+target's `results` and `coverage` name files inside that folder. These paths
+are relative to the folder -- `results = "junit.xml"` -- for every value of the
+target's `cwd`. When elspais reads the configuration, it
+refuses an absolute path or a path that climbs out with `..`. The refusal
+message names the folder. Consequently, two targets never overwrite each
+other's reports.
+
+When elspais runs a target (`elspais checks --run-tests`), it takes these
+steps:
+
+1. It empties the target's folder. Consequently, elspais cannot read a file
+   from an earlier run as the results of this run.
+2. It records a fingerprint of the target's inputs in the folder. The
+   fingerprint holds the path of every input file and a digest of its content.
+3. It runs `command` with the absolute path of the folder in the
+   `ELSPAIS_TARGET_OUTPUT` environment variable. The command reads that
+   variable to find where to write.
+4. It notes any input that changed during the run.
+
+`elspais checks` then judges the results of each target separately. The
+results are **fresh** while no input has changed since the run began. This
+rule holds whichever run produced them. Results that a previous run left are
+as good as new ones against the same inputs. `elspais checks` reports nothing
+about fresh results. The results are **stale** when an input changed or when
+no run recorded a fingerprint for them. If an input changed, then the finding
+names it. `tests.results_stale` states which reason applies. File timestamps
+play no part.
+
+A target's **inputs** are every file in the repository by default, whether or
+not git tracks it. Two sets of paths are never inputs: the output root, and
+the paths that the global `[scanning] skip` list names. The per-kind
+`skip_dirs`/`skip_files` of `[scanning.spec]`, `[scanning.code]` and the rest
+do not apply here. Put anything that changes during every run in that global
+list. Examples are `.git`, `.elspais/`, and caches that a test tool writes
+while it runs, such as `.pytest_cache`. `elspais init` writes the common ones.
+A target narrows its inputs with `inputs`. `inputs` has exactly the same form
+as a scanning kind's file selection:
+
+```toml
+[[scanning.test.targets]]
+name    = "unit"
+command = "pytest tests/ --junitxml=$ELSPAIS_TARGET_OUTPUT/junit.xml"
+reporter = "junit"
+results = "junit.xml"
+inputs  = { skip_dirs = ["docs", "spec"], skip_files = ["*.md"] }
+```
+
+`directories` and `file_patterns` choose the files. `directories` names
+directories only, from the repository root. `skip_dirs` and `skip_files`
+remove files. A removal wins over a choice. The example keeps every file
+except documentation. Edits to documentation cannot change what the tests
+report.
+
+### Recording a run elspais did not execute
+
+A git hook or a CI job that runs a target's tests itself brackets the run.
+Consequently, its results carry a fingerprint:
+
+```bash
+out=$(elspais fingerprint start unit)      # empties the folder, prints it
+ELSPAIS_TARGET_OUTPUT="$out" pytest tests/ --junitxml="$out/junit.xml"
+elspais fingerprint finish unit            # notes inputs that changed meanwhile
+```
+
+elspais refuses a `finish` that no `start` began. The reason is that `start`
+empties the folder. Consequently, elspais cannot stamp results that already
+sit in the folder as the results of a run. Every recorder computes the
+fingerprint in the same way. The fingerprint records what a run saw. It is
+not evidence of where results came from.
+
+Copy results from elsewhere with their folder, fingerprint included. An
+example is a baseline that another job produced. Such results read as fresh
+exactly while the inputs here match the inputs they ran against.
+
+The word *fresh* in [Per-PR selectivity](#per-pr-selectivity) has another
+meaning. There it names the targets that the caller tells a reporting command
+ran in this invocation.
+
 ## Target Fields
 
 | Field | Type | Default | Description |
@@ -42,14 +124,20 @@ This is the correct pattern for CI.
 | `cwd` | string | `""` (repo root) | Directory relative to repo root where the command runs |
 | `command` | string | (omit in CI) | Shell command to execute when `--run-tests` is passed |
 | `reporter` | string | (required) | Parser format -- one of the names in the reporters table below |
-| `results` | string | `""` | Glob pattern for result files (file-channel reporters) |
-| `coverage` | string | `""` | Path to an lcov.info or coverage.py JSON file (format auto-detected), relative to `cwd` |
+| `results` | string | `""` | Glob pattern for result files (file-channel reporters), relative to the target's folder |
+| `coverage` | string | `""` | Path to an lcov.info, coverage.py JSON or `.coverage` file (format auto-detected), relative to the target's folder |
+| `inputs` | table | every file | The files whose change makes this target's results stale: `directories`, `file_patterns`, `skip_dirs`, `skip_files` |
 | `match` | string | `"source"` | `"source"` or `"aggregate"` -- matching strategy |
 | `classname` | string | `""` (the reporter's own) | `"python-module"` or `"source-file"` -- how this target's results name the test that produced them |
 | `environment` | string | `""` (the reporter's own) | `"results-path"` or `"suite-hostname"` -- where the environment a result was recorded in is read from |
 | `groups` | list | `[]` (the `default` group) | Which groups this target belongs to |
 | `credit_coverage` | string | `"off"` | `"off"`, `"tested"`, or `"verified"` -- lcov_tested credit |
 | `min_coverage_fraction` | float | `0.0` | Fraction of impl lines that must be covered (0.0-1.0) |
+
+The target's folder is `<output_root>/<name>`, from the repository root.
+elspais reads `results` and `coverage` from that folder. Consequently, a
+target with `cwd = "app"` still writes `coverage = "lcov.info"`. `cwd` sets
+only where the command runs.
 
 ## Reporters and Matching
 
@@ -144,17 +232,15 @@ shared helpers and generated tests.
 [[scanning.test.targets]]
 name        = "app"
 cwd         = "app"
-command     = "flutter test --machine --coverage"
+command     = "flutter test --machine --coverage --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"
 reporter    = "flutter-machine"
-coverage    = "coverage/lcov.info"
+coverage    = "lcov.info"
 match       = "source"
 credit_coverage = "verified"
 ```
 
-`flutter test --coverage` writes the lcov report to
-`<cwd>/coverage/lcov.info`.  The `coverage` field is relative to `cwd`, so
-`"coverage/lcov.info"` resolves to `app/coverage/lcov.info` from the repo
-root.
+`--coverage-path` writes the lcov report into the target's folder,
+`.results/app/`. `coverage` names the report relative to that folder.
 
 ### Two-package example (one with a shared DB)
 
@@ -162,24 +248,25 @@ root.
 [[scanning.test.targets]]
 name        = "app"
 cwd         = "app"
-command     = "flutter test --machine --coverage"
+command     = "flutter test --machine --coverage --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"
 reporter    = "flutter-machine"
-coverage    = "coverage/lcov.info"
+coverage    = "lcov.info"
 match       = "source"
 credit_coverage = "verified"
 
 [[scanning.test.targets]]
 name        = "backend"
 cwd         = "backend"
-command     = "flutter test --machine --coverage --concurrency=1"
+command     = "flutter test --machine --coverage --concurrency=1 --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"
 reporter    = "flutter-machine"
-coverage    = "coverage/lcov.info"
+coverage    = "lcov.info"
 match       = "source"
 credit_coverage = "verified"
 ```
 
 Use one `[[scanning.test.targets]]` block per package.  The `cwd` field
-isolates each package so `coverage/lcov.info` resolves correctly for each.
+runs each package's tests in its own directory. Each target's folder keeps
+its coverage apart from the other's.
 
 ### Gotchas
 
@@ -197,15 +284,17 @@ parallel test execution causes flakes.  Add `--concurrency=1` to the
 `command` to serialise test files within that package:
 
 ```toml
-command = "flutter test --machine --coverage --concurrency=1"
+command = "flutter test --machine --coverage --concurrency=1 --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"
 ```
 
-**Coverage file location.**  `flutter test --coverage` (without
-`--coverage-path`) always writes to `<package-root>/coverage/lcov.info`.
-The `coverage` field is relative to the target's `cwd`, so set:
+**Coverage file location.**  `flutter test --coverage` without
+`--coverage-path` writes to `<package-root>/coverage/lcov.info`. That path is
+outside the target's folder. Consequently, elspais refuses a `coverage` path
+there.  Pass
+`--coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info` and set:
 
 ```toml
-coverage = "coverage/lcov.info"
+coverage = "lcov.info"
 ```
 
 **One target per package.**  Each Flutter package must have its own
@@ -220,9 +309,9 @@ Use `reporter = "pytest-json"` with a pre-generated JSON report file:
 [[scanning.test.targets]]
 name     = "unit"
 cwd      = "."
-command  = "pytest tests/ --json-report --json-report-file=.elspais/results/pytest.json"
+command  = "pytest tests/ --json-report --json-report-file=$ELSPAIS_TARGET_OUTPUT/pytest.json"
 reporter = "pytest-json"
-results  = ".elspais/results/pytest.json"
+results  = "pytest.json"
 match    = "aggregate"
 ```
 
@@ -231,9 +320,9 @@ For JUnit XML output (compatible with many CI systems):
 ```toml
 [[scanning.test.targets]]
 name     = "unit"
-command  = "pytest tests/ --junit-xml=.elspais/results/TEST-unit.xml"
+command  = "pytest tests/ --junit-xml=$ELSPAIS_TARGET_OUTPUT/TEST-unit.xml"
 reporter = "junit"
-results  = ".elspais/results/TEST-*.xml"
+results  = "TEST-*.xml"
 match    = "aggregate"
 ```
 
@@ -246,9 +335,9 @@ If your suite produces no machine-readable results file (no `--json-report` /
 test files -- independent of this target.
 
 **Recommended: point `coverage` at the `.coverage` SQLite database.**
-coverage.py already writes this file (its own native data format) to the
-repo root whenever you run under `--cov`; nothing extra needs to be
-configured to produce it. elspais reads it directly via coverage.py's public
+coverage.py already writes this file (its own native data format) whenever you
+run under `--cov`. `COVERAGE_FILE` puts the file in the target's folder.
+elspais reads it directly via coverage.py's public
 API (`coverage.Coverage`/`coverage.CoverageData`), never by parsing the
 SQLite schema itself. Format detection sniffs the file's SQLite header, so
 no `reporter` field is required:
@@ -256,16 +345,12 @@ no `reporter` field is required:
 ```toml
 [[scanning.test.targets]]
 name     = "unit"
+command  = "COVERAGE_FILE=$ELSPAIS_TARGET_OUTPUT/.coverage pytest tests/ --cov=src/yourpkg --cov-context=test"
 coverage = ".coverage"
 ```
 
-Run pytest with `--cov-context=test` (pytest-cov's per-test dynamic context,
-keyed by pytest nodeid + `|run`/`|setup`/`|teardown`) to populate contexts in
-that database:
-
-```bash
-pytest tests/ --cov=src/yourpkg --cov-context=test
-```
+`--cov-context=test` (pytest-cov's per-test dynamic context, keyed by pytest
+nodeid + `|run`/`|setup`/`|teardown`) populates contexts in that database.
 
 Reading `.coverage` requires the `coverage` package to be importable in
 elspais's own interpreter -- install it with `pip install elspais[coverage]`
@@ -276,8 +361,9 @@ warning naming the extra to install -- it does not fail the build.
 
 A stale `.coverage` file misattributes contexts: line numbers were recorded
 against the source as it was at measurement time, so after editing source
-files the per-test attribution points at the old line numbers. Regenerate
-`.coverage` (rerun the suite) after editing sources.
+files the per-test attribution points at the old line numbers. The target's
+fingerprint reports exactly this condition. After a source edit, its results
+read as stale until the suite runs again.
 
 **Do not** also set `[tool.coverage.run] dynamic_context = "test_function"`.
 That is coverage.py's own context-switching (keyed by dotted test qualname,
@@ -294,7 +380,8 @@ contexts can instead be exported into the JSON report:
 ```toml
 [[scanning.test.targets]]
 name     = "unit"
-coverage = ".results/coverage.json"
+command  = "pytest tests/ --cov=src/yourpkg --cov-context=test --cov-report=json:$ELSPAIS_TARGET_OUTPUT/coverage.json"
+coverage = "coverage.json"
 ```
 
 ```toml
@@ -346,7 +433,7 @@ Three things must be true:
 [[scanning.test.targets]]
 name      = "e2e"
 reporter  = "junit"
-results   = "test-results/junit.xml"   # glob relative to cwd
+results   = "junit.xml"   # glob relative to the target's folder
 match     = "source"                    # per-spec binding
 classname = "source-file"               # <testcase classname="foo.spec.ts">
 ```
@@ -371,7 +458,7 @@ the repository that runs the tests.
 
 ```ts
 // playwright.config.ts
-reporter: [['./elspais-junit-reporter.mjs', { outputFile: 'junit.xml' }]]
+reporter: [['./elspais-junit-reporter.mjs', { outputFile: `${process.env.ELSPAIS_TARGET_OUTPUT}/junit.xml` }]]
 ```
 
 ```toml
@@ -414,21 +501,27 @@ name = "my-suite"
 # Omit or set to "." if running from repo root.
 cwd = "packages/my-package"
 
-# Command to run when `elspais checks --run-tests` is invoked.
+# Command to run when `elspais checks --run-tests` is invoked. The command
+# writes into the target's folder. The command reads the folder path from
+# ELSPAIS_TARGET_OUTPUT.
 # Omit this field in CI -- elspais will ingest pre-produced result files.
-command = "my-test-runner --output results.xml"
+command = "my-test-runner --output $ELSPAIS_TARGET_OUTPUT/results.xml"
 
 # Reporter format: "junit" | "pytest-json" | "flutter-machine"
 reporter = "junit"
 
-# Glob for result files (file-channel reporters).
-# Relative to cwd (not repo root).  With cwd = "packages/my-package",
-# this resolves to packages/my-package/results/*.xml from the repo root.
-results = "results/*.xml"
+# Glob for result files (file-channel reporters), relative to the target's
+# folder <output_root>/<name> -- here .results/my-suite/*.xml, for every cwd.
+results = "*.xml"
 
-# Path to an lcov.info or coverage.py JSON file (format auto-detected), relative to cwd.
-# Omit if no coverage report.
-# coverage = "coverage/lcov.info"
+# Path to an lcov.info or coverage.py JSON file (format auto-detected),
+# relative to the target's folder. Omit if no coverage report.
+# coverage = "lcov.info"
+
+# inputs names the files whose change makes this target's results stale. The
+# default is every file in the repository. inputs has the same form as a
+# scanning kind's file selection.
+# inputs = { directories = ["packages/my-package"] }
 
 # "source" (default): source-location attribution (requires file paths in results).
 # "aggregate" (opt-in): whole-suite green/red; use when results lack file paths.
@@ -444,7 +537,10 @@ match = "source"
 ## CI Usage
 
 In CI, omit `command` so elspais only ingests files that the pipeline already
-produced.  Point `results` and `coverage` at the paths your CI step writes:
+produced.  The CI step writes into the target's folder. The CI step also
+brackets its run with `elspais fingerprint start` and `finish` (see
+[Recording a run elspais did not execute](#recording-a-run-elspais-did-not-execute)).
+Consequently, the results read as fresh:
 
 ```toml
 [[scanning.test.targets]]
@@ -454,10 +550,10 @@ cwd      = "app"
 reporter = "flutter-machine"
 # flutter-machine is a stdout reporter, so `results` is unused.
 # To get per-test pass/fail attribution in CI, save `flutter test --machine`
-# output to a file in the CI step and point `results` at it (relative to cwd):
-#   results = "build/test-results.jsonl"
+# output to a file in the target's folder and point `results` at it:
+#   results = "test-results.jsonl"
 # Without `results`, only coverage credit is applied (no pass/fail signal).
-coverage = "coverage/lcov.info"
+coverage = "lcov.info"
 match    = "source"
 credit_coverage = "verified"
 ```
@@ -676,8 +772,8 @@ Use `results-path` where each environment writes its own artifact:
 [[scanning.test.targets]]
 name        = "devices"
 reporter    = "junit"
-results     = "evidence/*/journey-results.xml"
-environment = "results-path"            # evidence/pixel-8/... -> "pixel-8"
+results     = "*/journey-results.xml"
+environment = "results-path"            # .results/devices/pixel-8/... -> "pixel-8"
 ```
 
 The environment is what the wildcard stood for, and not the whole path
@@ -685,7 +781,7 @@ segment it sits in. A pattern names the environment inside a segment as
 readily as it names a whole one:
 
 ```toml
-results     = "evidence/junit-*.xml"    # evidence/junit-pixel-8.xml -> "pixel-8"
+results     = "junit-*.xml"    # junit-pixel-8.xml -> "pixel-8"
 ```
 
 Use `suite-hostname` where one artifact holds every environment and the
@@ -695,7 +791,7 @@ producer writes the environment into the suite:
 [[scanning.test.targets]]
 name        = "browsers"
 reporter    = "junit"
-results     = "test-results/junit.xml"
+results     = "junit.xml"
 environment = "suite-hostname"          # <testsuite hostname="firefox">
 ```
 

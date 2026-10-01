@@ -63,6 +63,9 @@ from elspais.commands.args import (
     ErrorsArgs,
     ExampleArgs,
     FailingArgs,
+    FingerprintArgs,
+    FingerprintFinishArgs,
+    FingerprintStartArgs,
     FixArgs,
     GapsArgs,
     GlobalArgs,
@@ -156,6 +159,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         UninstallArgs: "uninstall",
         McpArgs: "mcp",
         DaemonArgs: "daemon",
+        FingerprintArgs: "fingerprint",
         LinkArgs: "link",
         CompletionArgs: "completion",
         GlossaryArgs: "glossary",
@@ -206,6 +210,12 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
                 setattr(ns, field.name, getattr(cmd.action, field.name))
     elif isinstance(cmd, DaemonArgs):
         ns.daemon_action = "restart" if isinstance(cmd.action, DaemonRestartArgs) else None
+        if hasattr(cmd.action, "__dataclass_fields__"):
+            for field in dataclasses.fields(cmd.action):
+                setattr(ns, field.name, getattr(cmd.action, field.name))
+    elif isinstance(cmd, FingerprintArgs):
+        _FINGERPRINT_MAP = {FingerprintStartArgs: "start", FingerprintFinishArgs: "finish"}
+        ns.fingerprint_action = _FINGERPRINT_MAP.get(type(cmd.action), None)
         if hasattr(cmd.action, "__dataclass_fields__"):
             for field in dataclasses.fields(cmd.action):
                 setattr(ns, field.name, getattr(cmd.action, field.name))
@@ -462,6 +472,10 @@ def main(argv: list[str] | None = None) -> int:
             from elspais.commands import daemon_cmd
 
             return daemon_cmd.run(args)
+        elif args.command == "fingerprint":
+            from elspais.commands import fingerprint_cmd
+
+            return fingerprint_cmd.run(args)
         else:
             _print_help()
             return 1

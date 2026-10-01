@@ -377,7 +377,9 @@ _DESCRIPTIONS: dict[str, str] = {
         "several environments writes one result in each of them, so the count "
         "is a count of results, not of tests"
     ),
-    "tests.results_stale": "Test results older than the code they cover",
+    "tests.results_stale": (
+        "Test results whose inputs changed since they ran, or that carry no fingerprint"
+    ),
     "tests.unmatched_results": "Results matching no known test",
     "tests.tested": "The `tested` coverage dimension (TEST nodes linked to assertions)",
     "tests.verified": "The `verified` (Passing) coverage dimension",

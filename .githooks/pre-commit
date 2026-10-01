@@ -327,12 +327,19 @@ else
         printf 'fi\n'
     } > "$UNIT_RUN_DIR/finish.sh"
 
+    # UNIT_OUT is the output area of the `elspais-unit` target. The tier writes
+    # its results, coverage and fingerprint there. `elspais checks` reads these
+    # results as fresh until an input changes. If a later commit has an
+    # unchanged tree, then the hook skips the run. The results stay fresh.
+    UNIT_OUT="$REPO_ROOT/.results/elspais-unit"
     UNIT_RC=$(tier_execute "$UNIT_RUN_DIR" "$CONTENT_HASH" "$REPO_ROOT" "unit" \
         "$UNIT_RUN_DIR/finish.sh" \
+        "$REPO_ROOT/.githooks/with-fingerprint" elspais-unit \
+        env COVERAGE_FILE="$UNIT_OUT/.coverage" \
         pytest tests/ --tb=short -q \
-        --junitxml="$CACHE_DIR/junit.xml" -o junit_family=xunit1 \
+        --junitxml="$UNIT_OUT/junit.xml" -o junit_family=xunit1 \
         --cov=src/elspais --cov-context=test \
-        --cov-report=json:"$CACHE_DIR/coverage.json" --cov-report=)
+        --cov-report=json:"$UNIT_OUT/coverage.json" --cov-report=)
 
     if [ "$UNIT_RC" = "137" ]; then
         echo ""

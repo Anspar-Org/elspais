@@ -233,9 +233,9 @@ def test_an_unreadable_results_file_is_recorded_on_the_graph(tmp_path):
 [[scanning.test.targets]]
 name = "unit"
 reporter = "junit"
-results = "results/TEST-*.xml"
+results = "TEST-*.xml"
 """,
-        {"results/TEST-a.xml": _TRUNCATED_JUNIT},
+        {".results/unit/TEST-a.xml": _TRUNCATED_JUNIT},
     )
     graph = _build(project)
 
@@ -243,7 +243,7 @@ results = "results/TEST-*.xml"
     (fault,) = graph.ingestion_faults()
     assert fault.stage == "results"
     assert fault.target == "unit"
-    assert fault.path == "results/TEST-a.xml"
+    assert fault.path == ".results/unit/TEST-a.xml"
     assert fault.line is not None
     assert "did not parse" in fault.cause
 
@@ -256,9 +256,9 @@ def test_a_readable_results_file_leaves_the_graph_with_no_faults(tmp_path):
 [[scanning.test.targets]]
 name = "unit"
 reporter = "junit"
-results = "results/TEST-*.xml"
+results = "TEST-*.xml"
 """,
-        {"results/TEST-a.xml": _GOOD_JUNIT},
+        {".results/unit/TEST-a.xml": _GOOD_JUNIT},
     )
 
     assert _build(project).ingestion_faults() == []
@@ -273,9 +273,9 @@ def test_a_reporter_nothing_reads_is_recorded_once(tmp_path):
 [[scanning.test.targets]]
 name = "unit"
 reporter = "junitt"
-results = "results/TEST-*.xml"
+results = "TEST-*.xml"
 """,
-        {"results/TEST-a.xml": _GOOD_JUNIT},
+        {".results/unit/TEST-a.xml": _GOOD_JUNIT},
     )
 
     (fault,) = _build(project).ingestion_faults()
@@ -292,13 +292,13 @@ def test_a_results_pattern_matching_nothing_is_recorded(tmp_path):
 [[scanning.test.targets]]
 name = "unit"
 reporter = "junit"
-results = "results/TEST-*.xml"
+results = "TEST-*.xml"
 """,
     )
 
     (fault,) = _build(project).ingestion_faults()
     assert fault.stage == "results"
-    assert fault.path == "results/TEST-*.xml"
+    assert fault.path == ".results/unit/TEST-*.xml"
     assert "no file matched" in fault.cause
 
 
@@ -310,13 +310,13 @@ def test_a_coverage_file_that_is_not_there_is_recorded(tmp_path):
 [[scanning.test.targets]]
 name = "unit"
 reporter = "lcov"
-coverage = "coverage/lcov.info"
+coverage = "lcov.info"
 """,
     )
 
     (fault,) = _build(project).ingestion_faults()
     assert fault.stage == "coverage"
-    assert fault.path == "coverage/lcov.info"
+    assert fault.path == ".results/unit/lcov.info"
     assert fault.target == "unit"
 
 
@@ -328,9 +328,9 @@ def test_a_coverage_file_no_reader_recognises_is_recorded(tmp_path):
 [[scanning.test.targets]]
 name = "unit"
 reporter = "lcov"
-coverage = "coverage/report.txt"
+coverage = "report.txt"
 """,
-        {"coverage/report.txt": "some other format\n"},
+        {".results/unit/report.txt": "some other format\n"},
     )
 
     (fault,) = _build(project).ingestion_faults()
@@ -347,9 +347,9 @@ def test_a_coverage_report_the_reader_declined_reaches_the_graph(tmp_path):
 [[scanning.test.targets]]
 name = "unit"
 reporter = "lcov"
-coverage = "coverage/lcov.info"
+coverage = "lcov.info"
 """,
-        {"coverage/lcov.info": "SF:lib/a.dart\nDA:two,1\nend_of_record\n"},
+        {".results/unit/lcov.info": "SF:lib/a.dart\nDA:two,1\nend_of_record\n"},
     )
 
     (fault,) = _build(project).ingestion_faults()
@@ -368,7 +368,6 @@ def test_a_target_reaching_outside_the_repository_is_recorded(tmp_path):
 name = "unit"
 cwd = "../elsewhere"
 reporter = "junit"
-results = "TEST-*.xml"
 """,
     )
 
@@ -467,7 +466,7 @@ _UNPARSEABLE_TARGET = """
 [[scanning.test.targets]]
 name = "unit"
 reporter = "junit"
-results = "results/TEST-*.xml"
+results = "TEST-*.xml"
 """
 
 
@@ -478,18 +477,20 @@ def test_a_recorded_fault_is_reported_with_its_file_and_line(tmp_path):
     The finding NAMES the artifact and the line: a count would leave the
     reader the search the tool already performed (REQ-d00285-A).
     """
-    project = _project(tmp_path, _UNPARSEABLE_TARGET, {"results/TEST-a.xml": _TRUNCATED_JUNIT})
+    project = _project(
+        tmp_path, _UNPARSEABLE_TARGET, {".results/unit/TEST-a.xml": _TRUNCATED_JUNIT}
+    )
 
     check = _fault_check(project)
 
     assert check.name == "tests.ingestion_fault"
     assert check.passed is False
     (finding,) = check.findings
-    assert finding.file_path == "results/TEST-a.xml"
+    assert finding.file_path == ".results/unit/TEST-a.xml"
     assert finding.line is not None
-    assert "results/TEST-a.xml" in finding.message
+    assert ".results/unit/TEST-a.xml" in finding.message
     assert "did not parse" in finding.message
-    assert finding.location() == f"results/TEST-a.xml:{finding.line}"
+    assert finding.location() == f".results/unit/TEST-a.xml:{finding.line}"
 
 
 # Verifies: REQ-p00019-H
@@ -502,9 +503,9 @@ def test_a_fault_with_no_file_names_the_target_it_arose_under(tmp_path):
 [[scanning.test.targets]]
 name = "unit"
 reporter = "junitt"
-results = "results/TEST-*.xml"
+results = "TEST-*.xml"
 """,
-        {"results/TEST-a.xml": _GOOD_JUNIT},
+        {".results/unit/TEST-a.xml": _GOOD_JUNIT},
     )
 
     (finding,) = _fault_check(project).findings
@@ -514,7 +515,7 @@ results = "results/TEST-*.xml"
 
 # Verifies: REQ-p00019-H
 def test_a_build_that_read_everything_reports_a_passing_check(tmp_path):
-    project = _project(tmp_path, _UNPARSEABLE_TARGET, {"results/TEST-a.xml": _GOOD_JUNIT})
+    project = _project(tmp_path, _UNPARSEABLE_TARGET, {".results/unit/TEST-a.xml": _GOOD_JUNIT})
 
     check = _fault_check(project)
     assert check.passed is True
@@ -527,7 +528,9 @@ def test_the_severity_is_the_one_the_project_configures(tmp_path):
     ONE path the registry declares, and `off` stops the reporting."""
     from elspais.utilities.findings import NO_KNOWN_REMEDY, REGISTRY, remedy_for
 
-    project = _project(tmp_path, _UNPARSEABLE_TARGET, {"results/TEST-a.xml": _TRUNCATED_JUNIT})
+    project = _project(
+        tmp_path, _UNPARSEABLE_TARGET, {".results/unit/TEST-a.xml": _TRUNCATED_JUNIT}
+    )
 
     assert REGISTRY["tests.ingestion_fault"].default == "warning"
     assert _fault_check(project).severity == "warning"
@@ -554,12 +557,12 @@ def test_every_recorded_fault_reaches_the_report(tmp_path):
 [[scanning.test.targets]]
 name = "unit"
 reporter = "junit"
-results = "results/TEST-*.xml"
+results = "TEST-*.xml"
 
 [[scanning.test.targets]]
 name = "cover"
 reporter = "lcov"
-coverage = "coverage/lcov.info"
+coverage = "lcov.info"
 """,
     )
 
@@ -567,8 +570,8 @@ coverage = "coverage/lcov.info"
     check = _fault_check(project)
     assert len(check.findings) == len(graph.ingestion_faults()) == 2
     assert {f.file_path for f in check.findings} == {
-        "results/TEST-*.xml",
-        "coverage/lcov.info",
+        ".results/unit/TEST-*.xml",
+        ".results/cover/lcov.info",
     }
     assert check.details["count"] == 2
 
@@ -578,7 +581,9 @@ def test_the_check_runs_with_the_other_test_checks(tmp_path):
     """A check nothing invokes reports nothing."""
     from elspais.commands.health import run_test_checks
 
-    project = _project(tmp_path, _UNPARSEABLE_TARGET, {"results/TEST-a.xml": _TRUNCATED_JUNIT})
+    project = _project(
+        tmp_path, _UNPARSEABLE_TARGET, {".results/unit/TEST-a.xml": _TRUNCATED_JUNIT}
+    )
     names = {c.name for c in run_test_checks(_build(project), config={})}
     assert "tests.ingestion_fault" in names
 

@@ -35,6 +35,7 @@ directories = ["spec"]
 enabled = true
 directories = ["tests"]
 file_patterns = ["test_*.py"]
+output_root = "results"
 
 [[scanning.test.targets]]
 name = "browsers"
