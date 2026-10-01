@@ -6632,7 +6632,14 @@ def create_server(
 
         Use when: you need a fast overview of project health without running full checks.
         """
-        return _get_graph_status(_state["graph"], _state.get("working_dir"))
+        status = _get_graph_status(_state["graph"], _state.get("working_dir"))
+        # Implements: REQ-d00313-C
+        from elspais.server.watch import graph_predates
+
+        predates = graph_predates(_state)
+        if predates:
+            status["graph_predates"] = predates
+        return status
 
     # Implements: REQ-o00060-B, REQ-o00062-N
     @mcp.tool()

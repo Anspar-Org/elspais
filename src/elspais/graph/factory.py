@@ -1290,7 +1290,8 @@ def build_graph(
             # Implements: REQ-d00128-A+H
             # RemainderParser is NOT registered for RESULT file types.
             # When targets is empty (the default) this loop is a no-op.
-            from elspais.utilities.fingerprint import target_folder
+            from elspais.graph.builder import UnreadArtifact
+            from elspais.utilities.fingerprint import run_in_progress, target_folder
 
             _captured = captured_results or {}
             from elspais.graph.parsers.results.registry import get_reporter as _get_reporter
@@ -1348,6 +1349,31 @@ def build_graph(
                 target_tests = frozenset(
                     f for f in scanned_test_files if not prefix or f.startswith(prefix)
                 )
+                # Implements: REQ-d00311-N
+                # A run in progress has emptied the area and writes into it
+                # while it runs, so nothing there is read until it ends.
+                # Output this invocation captured is read: it is a run that
+                # has ended.
+                _running = run_in_progress(target_folder(repo_root, typed_config, target.name))
+                if target.name not in _captured and _running is not None:
+                    builder.record_unread_artifact(
+                        UnreadArtifact(
+                            target=target.name,
+                            artifact="results",
+                            path=(
+                                _repo_relative(
+                                    target_folder(repo_root, typed_config, target.name)
+                                    / target.results,
+                                    repo_root,
+                                )
+                                if target.results
+                                else ""
+                            ),
+                            reason="running",
+                            started_at=str(_running.get("started_at", "")),
+                        )
+                    )
+                    continue
                 if target.name in _captured:
                     _ingest_target_results(
                         builder,
@@ -1388,55 +1414,44 @@ def build_graph(
                                     results_pattern=target.results,
                                     results_base=area,
                                 )
-                    else:
-                        # Implements: REQ-d00285-G
-                        # A results pattern matching nothing is a run that
-                        # left no report where the target says one is written
-                        # -- not a run whose report said nothing.
+                    elif target_spec.kind == "results":
+                        # Implements: REQ-d00283-R+S+T
+                        # The build records that no results are there. Whether
+                        # that is a fault depends on what the run executed and
+                        # expected, which a health check judges.
                         _log.debug("target %r: no files matched %r", target.name, target.results)
-                        if target_spec.kind == "results":
-                            builder.record_ingestion_fault(
-                                path=_repo_relative(area / target.results, repo_root),
-                                stage="results",
-                                cause=(
-                                    "no file matched this target's results pattern, so "
-                                    "no test results were read for it"
-                                ),
+                        builder.record_unread_artifact(
+                            UnreadArtifact(
                                 target=target.name,
+                                artifact="results",
+                                path=_repo_relative(area / target.results, repo_root),
+                                reason="absent",
                             )
+                        )
                 elif target_spec.kind == "results":
+                    # Implements: REQ-d00283-R+S+T
+                    # The same fact as a results pattern that matched nothing,
+                    # for a target whose reporter reads its runner's output.
                     _log.debug(
-                        "target %r: stdout reporter with no captured output and no results"
-                        " glob -- skipping",
+                        "target %r: stdout reporter with no captured output and no results glob",
                         target.name,
                     )
-                    # Implements: REQ-d00285-G
-                    # Only where this build actually ran the targets: with no
-                    # run in this invocation, a target whose reporter reads a
-                    # runner's stdout has nothing to have produced, and
-                    # recording that would report the tool's own mode of
-                    # invocation as a defect in the project.
-                    if captured_results is not None:
-                        builder.record_ingestion_fault(
-                            path="",
-                            stage="results",
-                            cause=(
-                                f"reporter {target.reporter!r} reads a runner's output, "
-                                f"the run produced none, and the target names no "
-                                f"results file"
-                            ),
-                            target=target.name,
+                    builder.record_unread_artifact(
+                        UnreadArtifact(
+                            target=target.name, artifact="results", path="", reason="absent"
                         )
+                    )
 
     graph = builder.build()
 
     # 6c-target. Per-target coverage ingestion: scan coverage files and annotate FILE nodes.
     # When targets is empty (the default), this loop is a no-op.
     if typed_config.scanning.test.targets:
+        from elspais.graph.builder import UnreadArtifact
         from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
         from elspais.graph.parsers.results.coverage_sqlite import CoverageSqliteParser
         from elspais.graph.parsers.results.lcov import LcovParser
-        from elspais.utilities.fingerprint import target_folder
+        from elspais.utilities.fingerprint import run_in_progress, target_folder
 
         lcov_parser = LcovParser()
         cov_json_parser = CoverageJsonParser()
@@ -1467,19 +1482,34 @@ def build_graph(
                 )
                 continue
             # Implements: REQ-d00312-A+C
-            cov_path = (
-                target_folder(repo_root, typed_config, target.name) / target.coverage
-            ).resolve()
+            cov_area = target_folder(repo_root, typed_config, target.name)
+            cov_path = (cov_area / target.coverage).resolve()
+            # Implements: REQ-d00311-N
+            _running = run_in_progress(cov_area)
+            if _running is not None and target.name not in (captured_results or {}):
+                graph.record_unread_artifact(
+                    UnreadArtifact(
+                        target=target.name,
+                        artifact="coverage",
+                        path=_repo_relative(cov_path, repo_root),
+                        reason="running",
+                        started_at=str(_running.get("started_at", "")),
+                    )
+                )
+                continue
             if not cov_path.is_file():
-                # Implements: REQ-d00285-G
+                # Implements: REQ-d00283-V
                 # No coverage file and coverage measuring nothing are the same
-                # zero once the numbers are aggregated.
+                # zero once the numbers are aggregated, so the absence is
+                # recorded for a health check to judge.
                 _log.debug("target %r: coverage file not found: %s", target.name, cov_path)
-                graph.record_ingestion_fault(
-                    path=_repo_relative(cov_path, repo_root),
-                    stage="coverage",
-                    cause="the coverage file this target names is not there",
-                    target=target.name,
+                graph.record_unread_artifact(
+                    UnreadArtifact(
+                        target=target.name,
+                        artifact="coverage",
+                        path=_repo_relative(cov_path, repo_root),
+                        reason="absent",
+                    )
                 )
                 continue
             if lcov_parser.can_parse(cov_path):

@@ -284,8 +284,12 @@ results = "TEST-*.xml"
     assert "junit" in fault.cause  # the reader is told what it could have said
 
 
-# Verifies: REQ-d00285-G
+# Verifies: REQ-d00283-R+S
 def test_a_results_pattern_matching_nothing_is_recorded(tmp_path):
+    """The build records the absence and judges nothing: whether it is a fault
+    depends on what the run executed and expected."""
+    from elspais.graph.builder import UnreadArtifact
+
     project = _project(
         tmp_path,
         """
@@ -296,14 +300,19 @@ results = "TEST-*.xml"
 """,
     )
 
-    (fault,) = _build(project).ingestion_faults()
-    assert fault.stage == "results"
-    assert fault.path == ".results/unit/TEST-*.xml"
-    assert "no file matched" in fault.cause
+    graph = _build(project)
+    assert graph.ingestion_faults() == []
+    assert graph.unread_artifacts() == [
+        UnreadArtifact(
+            target="unit", artifact="results", path=".results/unit/TEST-*.xml", reason="absent"
+        )
+    ]
 
 
-# Verifies: REQ-d00285-G
+# Verifies: REQ-d00283-V
 def test_a_coverage_file_that_is_not_there_is_recorded(tmp_path):
+    from elspais.graph.builder import UnreadArtifact
+
     project = _project(
         tmp_path,
         """
@@ -314,10 +323,13 @@ coverage = "lcov.info"
 """,
     )
 
-    (fault,) = _build(project).ingestion_faults()
-    assert fault.stage == "coverage"
-    assert fault.path == ".results/unit/lcov.info"
-    assert fault.target == "unit"
+    graph = _build(project)
+    assert graph.ingestion_faults() == []
+    assert graph.unread_artifacts() == [
+        UnreadArtifact(
+            target="unit", artifact="coverage", path=".results/unit/lcov.info", reason="absent"
+        )
+    ]
 
 
 # Verifies: REQ-d00285-G
@@ -456,10 +468,10 @@ def test_a_file_that_cannot_be_decoded_is_named_in_the_failure(tmp_path):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _fault_check(project: Path, config: dict | None = None):
+def _fault_check(project: Path, config: dict | None = None, expected_targets: tuple[str, ...] = ()):
     from elspais.commands.health import check_ingestion_faults
 
-    return check_ingestion_faults(_build(project), config)
+    return check_ingestion_faults(_build(project), config, expected_targets)
 
 
 _UNPARSEABLE_TARGET = """
@@ -548,9 +560,10 @@ def test_the_severity_is_the_one_the_project_configures(tmp_path):
     assert remedy_for("tests.ingestion_fault") == NO_KNOWN_REMEDY
 
 
-# Verifies: REQ-p00019-H
+# Verifies: REQ-p00019-H, REQ-d00283-R+S+V
 def test_every_recorded_fault_reaches_the_report(tmp_path):
-    """Two targets, two faults, two findings: nothing is collapsed away."""
+    """Two expected targets, two missing artifacts, two findings: nothing is
+    collapsed away. The same two targets, expected by nobody, are not faults."""
     project = _project(
         tmp_path,
         """
@@ -567,13 +580,17 @@ coverage = "lcov.info"
     )
 
     graph = _build(project)
-    check = _fault_check(project)
-    assert len(check.findings) == len(graph.ingestion_faults()) == 2
+    check = _fault_check(project, expected_targets=("cover", "unit"))
+    assert len(check.findings) == len(graph.unread_artifacts()) == 2
     assert {f.file_path for f in check.findings} == {
         ".results/unit/TEST-*.xml",
         ".results/cover/lcov.info",
     }
     assert check.details["count"] == 2
+
+    unexpected = _fault_check(project)
+    assert unexpected.passed is True
+    assert unexpected.findings == []
 
 
 # Verifies: REQ-p00019-H
@@ -701,3 +718,180 @@ class TestPartialReads:
         assert result["total_executable_lines"] == 10
         assert result["total_covered_lines"] == 5
         assert result["unmeasured_files"] == 1
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Artifacts a build did not read: recorded as facts, judged by health checks
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+_FLUTTER_OUTPUT = (
+    '{"type":"suite","suite":{"id":1,"path":"test/a_test.dart"}}\n'
+    '{"type":"testStart","test":{"id":2,"suiteID":1,"name":"works","line":7}}\n'
+    '{"type":"testDone","testID":2,"result":"success"}\n'
+)
+
+
+def _build_captured(project: Path, captured_results: dict[str, str] | None):
+    from elspais.graph.factory import build_graph
+
+    return build_graph(
+        config_path=project / ".elspais.toml",
+        repo_root=project,
+        scan_code=False,
+        captured_results=captured_results,
+    )
+
+
+# Verifies: REQ-d00283-T
+@pytest.mark.parametrize(
+    "targets,captured,path",
+    [
+        (
+            '\n[[scanning.test.targets]]\nname = "unit"\nreporter = "junit"\n'
+            'results = "TEST-*.xml"\n',
+            None,
+            ".results/unit/TEST-*.xml",
+        ),
+        (
+            '\n[[scanning.test.targets]]\nname = "unit"\nreporter = "flutter-machine"\n',
+            None,
+            "",
+        ),
+        (
+            '\n[[scanning.test.targets]]\nname = "unit"\nreporter = "flutter-machine"\n',
+            {},
+            "",
+        ),
+        (
+            '\n[[scanning.test.targets]]\nname = "unit"\nreporter = "flutter-machine"\n',
+            {"other": _FLUTTER_OUTPUT},
+            "",
+        ),
+    ],
+    ids=[
+        "file-channel",
+        "runner-output-no-run",
+        "runner-output-empty-capture",
+        "runner-output-other-target-captured",
+    ],
+)
+def test_absent_results_are_one_fact_whichever_channel_delivers_them(
+    tmp_path, targets, captured, path
+):
+    """A target with no results is recorded the same way whether its results
+    come from a file or from its runner's output, and whether or not this
+    invocation ran anything. Neither is an ingestion fault by itself."""
+    from elspais.graph.builder import UnreadArtifact
+
+    graph = _build_captured(_project(tmp_path, targets), captured)
+
+    assert graph.ingestion_faults() == []
+    assert graph.unread_artifacts() == [
+        UnreadArtifact(target="unit", artifact="results", path=path, reason="absent")
+    ]
+
+
+# Verifies: REQ-d00283-T
+def test_runner_output_this_invocation_captured_is_read_not_recorded_absent(tmp_path):
+    """The negative of the absence above: captured output is results."""
+    from elspais.graph.GraphNode import NodeKind
+
+    project = _project(
+        tmp_path,
+        '\n[[scanning.test.targets]]\nname = "unit"\nreporter = "flutter-machine"\n',
+    )
+    graph = _build_captured(project, {"unit": _FLUTTER_OUTPUT})
+
+    assert graph.unread_artifacts() == []
+    assert len(list(graph.iter_by_kind(NodeKind.RESULT))) == 1
+
+
+_RUNNING_TARGET = """
+[[scanning.test.targets]]
+name = "unit"
+reporter = "junit"
+results = "junit.xml"
+coverage = "coverage.json"
+"""
+
+
+def _start_unfinished_run(project: Path) -> dict:
+    """Begin a run of `unit`, write its results and coverage, and record no end."""
+    from elspais.config import load_config
+    from elspais.utilities.fingerprint import read_record, start_run
+
+    folder = start_run(project, load_config(project / ".elspais.toml"), "unit")
+    (folder / "junit.xml").write_text(_GOOD_JUNIT, encoding="utf-8")
+    (folder / "coverage.json").write_text('{"files": {}}', encoding="utf-8")
+    return read_record(folder)
+
+
+# Verifies: REQ-d00311-N+O
+def test_an_unfinished_run_is_recorded_as_running_and_nothing_in_its_area_is_read(tmp_path):
+    """The results file is there and parseable, and still is not read: the run
+    writing it has not recorded its end."""
+    from elspais.graph.builder import UnreadArtifact
+    from elspais.graph.GraphNode import NodeKind
+
+    project = _project(tmp_path, _RUNNING_TARGET)
+    record = _start_unfinished_run(project)
+    assert record["started_at"]
+
+    graph = _build(project)
+
+    assert list(graph.iter_by_kind(NodeKind.RESULT)) == []
+    assert graph.ingestion_faults() == []
+    assert sorted(graph.unread_artifacts(), key=lambda a: a.artifact) == [
+        UnreadArtifact(
+            target="unit",
+            artifact="coverage",
+            path=".results/unit/coverage.json",
+            reason="running",
+            started_at=record["started_at"],
+        ),
+        UnreadArtifact(
+            target="unit",
+            artifact="results",
+            path=".results/unit/junit.xml",
+            reason="running",
+            started_at=record["started_at"],
+        ),
+    ]
+
+
+# Verifies: REQ-d00311-N
+def test_a_finished_run_is_read_as_it_always_was(tmp_path):
+    """The negative: once the run records its end, the same area is read."""
+    from elspais.config import load_config
+    from elspais.graph.GraphNode import NodeKind
+    from elspais.utilities.fingerprint import finish_run
+
+    project = _project(tmp_path, _RUNNING_TARGET)
+    _start_unfinished_run(project)
+    finish_run(project, load_config(project / ".elspais.toml"), "unit")
+
+    graph = _build(project)
+
+    assert len(list(graph.iter_by_kind(NodeKind.RESULT))) == 1
+    assert [a for a in graph.unread_artifacts() if a.reason == "running"] == []
+
+
+# Verifies: REQ-d00311-N
+def test_output_this_invocation_captured_is_read_though_the_record_shows_no_end(tmp_path):
+    """Output a runner handed this invocation comes from a run that has ended,
+    whatever the record in its area says."""
+    from elspais.config import load_config
+    from elspais.graph.GraphNode import NodeKind
+    from elspais.utilities.fingerprint import start_run
+
+    project = _project(
+        tmp_path,
+        '\n[[scanning.test.targets]]\nname = "unit"\nreporter = "flutter-machine"\n',
+    )
+    start_run(project, load_config(project / ".elspais.toml"), "unit")
+
+    graph = _build_captured(project, {"unit": _FLUTTER_OUTPUT})
+
+    assert graph.unread_artifacts() == []
+    assert len(list(graph.iter_by_kind(NodeKind.RESULT))) == 1

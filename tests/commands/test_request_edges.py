@@ -53,7 +53,9 @@ def test_the_params_edge_reaches_the_same_values_the_args_edge_did():
     (
         lambda R: R.GapsRequest(values=("tested",), command="untested", treat_active=("draft",)),
         lambda R: R.AnalysisRequest(values=("id",), top=5, include_code=True, weights="pagerank"),
-        lambda R: R.ChecksRequest(spec_only=True, treat_active=("draft",)),
+        lambda R: R.ChecksRequest(
+            spec_only=True, treat_active=("draft",), expected_targets=("unit",)
+        ),
         lambda R: R.SearchRequest(q="widget", field="title", limit=5, regex=True),
     ),
 )
@@ -358,3 +360,22 @@ class TestTreatActiveSurvivesTheWire:
         )
         served = report_inputs_from_params(request.to_params(), OFFERED, identity_key="level")
         assert served.treat_active == local.treat_active == ("draft", "proposed")
+
+
+# Verifies: REQ-d00283-P
+@pytest.mark.parametrize(
+    "expected_targets",
+    [(), ("unit",), ("e2e", "unit")],
+    ids=["none-expected", "one", "several"],
+)
+def test_the_expected_targets_survive_the_trip_to_a_serving_process(expected_targets):
+    """A daemon judging missing results without the run's expectation would
+    report every expected target as merely not run."""
+    from elspais.commands._requests import ChecksRequest
+    from elspais.server.routes_api import checks_request_from_params
+
+    request = ChecksRequest(tests_only=True, expected_targets=expected_targets)
+
+    served = checks_request_from_params(request.to_params())
+
+    assert served == request

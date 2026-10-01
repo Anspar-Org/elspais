@@ -287,7 +287,9 @@ that changes to cross-cutting requirements are propagated to their consumers.
 | `tests.uncredited_evidence` | Evidence naming an assertion its dimension does not count -- a test on an assertion nothing implements -- so it reaches no coverage figure | error | `[rules.coverage] uncredited_evidence` | `elspais -v checks --tests` |
 | `tests.external` | A test that failed and reaches no requirement, so nobody will find the failure through the spec | warning | `[rules.coverage] external_test_failure` | `elspais failing` |
 | `tests.unbound_citation` | A citation in a scanned test file that found no test to attach to -- it names assertions but sits where no test was declared, so no result can ever reach it; it contributes no coverage and is reported here instead | warning | `[rules.severity]` | no command resolves this; resolve it by hand |
-| `tests.ingestion_fault` | An artifact ingestion could not read at all -- a results or coverage report that would not parse, one in a format no reporter reads, a reporter name that matches none, a results pattern that matched nothing, a coverage file that is not there, or a target whose working directory leaves the repository. What went unread is absent from every figure, and absence reads as a zero | warning | `[rules.severity]` | no command resolves this; resolve it by hand |
+| `tests.ingestion_fault` | An artifact ingestion could not read at all -- a results or coverage report that would not parse, one in a format no reporter reads, a reporter name that matches none, or a target whose working directory leaves the repository -- and results or coverage missing for a target the run executed or expected. What went unread is absent from every figure, and absence reads as a zero | warning | `[rules.severity]` | no command resolves this; resolve it by hand |
+| `tests.not_run` | A test target with no results that the run neither executed nor named as expected. The target has not run; that is information about the run, not a fault in the project | info | `[rules.severity]` | `elspais checks --run-tests` |
+| `tests.run_in_progress` | A test target whose run started and has not recorded its end. Nothing in its output area is read until the run ends, so its results and coverage are not judged | info | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `tests.partial_read` | An artifact ingestion read only in part -- a coverage report whose per-file re-analysis failed, so the lines it recorded as executed are known but the totals are not. Those files are left out of any line-coverage figure rather than counted at their executed size, and this says how many | info | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `tests.unrunnable_file` | A scanned test file that no configured test target can execute, so what it verifies can raise the Tested figure while Passing has no way to move | info | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `tests.retired_references` | Tests referencing requirements with retired status (Deprecated, Superseded, Rejected) | warning | `[rules.references] retired` | no command resolves this; resolve it by hand |
@@ -998,6 +1000,29 @@ run (exit 2). Name targets or groups instead. Per-PR selectivity rendering
 (`(baseline)` for carried results, `—` for no baseline) is produced by
 `summary --targets` / `trace --targets`, not by `checks`. See `elspais docs
 test-targets` for the full model.
+
+`--expect NAME ...` names the targets whose results the run requires without
+executing them -- results an earlier job left on disk. It is a separate
+question from `--targets`, which selects what `--run-tests` executes, and it
+is accepted with and without `--run-tests`. A name stands for a target or a
+group, as with `--targets`; an unknown name is exit code 2, and so is a
+selection standing for no target. `--expect none` expects nothing beyond what
+the run executes. Every target `--run-tests` executes is expected as well.
+
+What a target with no results is reported as depends on that:
+
+- executed or expected, with no results or no coverage it declares --
+  `tests.ingestion_fault` (warning);
+- neither executed nor expected, with no results -- `tests.not_run` (info);
+- results present but no coverage it declares -- `tests.ingestion_fault`
+  whether or not it was expected, because the target ran;
+- a run started and not finished -- `tests.run_in_progress` (info), stating
+  when the run started; nothing in that target's output area is read until it
+  ends.
+
+A target another federation member declares is never expected by a run in
+this repository, so an associate's targets read as not run unless their
+results are present.
 
 ## Error Drill-Down
 

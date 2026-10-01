@@ -37,6 +37,7 @@ if TYPE_CHECKING:
         IngestionFault,
         TraceGraph,
         UnboundCitation,
+        UnreadArtifact,
         UnscannedKeywordFile,
     )
     from elspais.graph.comments import CommentThread
@@ -971,6 +972,17 @@ class FederatedGraph:
         result: list[IngestionFault] = []
         for _name, graph in self._live_graphs():
             result.extend(graph.ingestion_faults())
+        return result
+
+    # Implements: REQ-d00283-R+S+T+V, REQ-d00311-N
+    def unread_artifacts(self) -> list[UnreadArtifact]:
+        """Every artifact a test target names that a build did not read, across all repos.
+
+        # Strategy: aggregate
+        """
+        result: list[UnreadArtifact] = []
+        for _name, graph in self._live_graphs():
+            result.extend(graph.unread_artifacts())
         return result
 
     # Implements: REQ-d00200-E

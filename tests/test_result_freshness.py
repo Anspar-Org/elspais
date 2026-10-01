@@ -23,6 +23,7 @@ from elspais.utilities.fingerprint import (
     input_files,
     judge,
     read_record,
+    run_in_progress,
     start_run,
     target_folder,
 )
@@ -155,6 +156,66 @@ def test_a_target_with_no_results_on_disk_is_not_judged(tmp_path):
 
     assert judge(root, config, "unit").state == "absent"
     assert _check(root, config).passed is True
+
+
+# Verifies: REQ-d00311-N
+@pytest.mark.parametrize("results_written", [False, True], ids=["empty-area", "results-written"])
+def test_a_run_that_recorded_no_end_is_running_whatever_the_area_holds(tmp_path, results_written):
+    """The record is read before the results. An area whose run has not ended
+    holds results that are partial or not yet written, so neither "absent" nor
+    "fresh" is reported, even where the inputs match the recorded manifest."""
+    root = _project(tmp_path)
+    config = _config([_target()])
+    folder = start_run(root, config, "unit")
+    if results_written:
+        (folder / "junit.xml").write_text(_JUNIT, encoding="utf-8")
+
+    verdict = judge(root, config, "unit")
+
+    assert verdict.state == "running"
+    assert verdict.record == read_record(folder)
+    assert verdict.record["started_at"]
+
+
+# Verifies: REQ-d00311-N
+def test_a_run_that_recorded_its_end_is_judged_on_its_results(tmp_path):
+    """The negative: finishing the run ends the in-progress state."""
+    root = _project(tmp_path)
+    config = _config([_target()])
+    folder = start_run(root, config, "unit")
+    assert run_in_progress(folder) == read_record(folder)
+
+    (folder / "junit.xml").write_text(_JUNIT, encoding="utf-8")
+    finish_run(root, config, "unit")
+
+    assert run_in_progress(folder) is None
+    assert judge(root, config, "unit").state == "fresh"
+
+
+# Verifies: REQ-d00311-N
+def test_an_area_with_no_record_has_no_run_in_progress(tmp_path):
+    root = _project(tmp_path)
+    folder = root / ".results" / "unit"
+
+    assert run_in_progress(folder) is None
+    folder.mkdir(parents=True)
+    (folder / "junit.xml").write_text(_JUNIT, encoding="utf-8")
+    assert run_in_progress(folder) is None
+
+
+# Verifies: REQ-d00311-N
+def test_the_stale_check_does_not_judge_a_run_in_progress(tmp_path):
+    """An input changed while the run goes on; the check still waits for the end."""
+    root = _project(tmp_path)
+    config = _config([_target()])
+    folder = start_run(root, config, "unit")
+    (folder / "junit.xml").write_text(_JUNIT, encoding="utf-8")
+    (root / "src" / "a.py").write_text("x = 2\n", encoding="utf-8")
+
+    check = _check(root, config)
+
+    assert check.passed is True
+    assert check.findings == []
 
 
 # Verifies: REQ-d00311-H, REQ-d00311-I, REQ-d00312-D

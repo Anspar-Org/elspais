@@ -1172,6 +1172,20 @@ N. When the system refuses a run that executes test targets because its selectio
 
 O. When the system refuses a run that names no target and no group because its selection reaches no test target, the system SHALL tell in the refusal that the group `default` holds no test target.
 
+P. A run SHALL be able to name the test targets whose results it expects, separately from the test targets it executes.
+
+Q. A run SHALL expect the results of every test target it executes.
+
+R. If a test target that a run executes or expects has no results, then the system SHALL report the results of that target as missing.
+
+S. If a test target that a run neither executes nor expects has no results, then the system SHALL report that target as not run rather than as missing results.
+
+T. The system SHALL judge whether the results of a test target are missing by the same rule whether the system reads them from a file or from the output of the runner.
+
+U. A run SHALL expect no test target of another member of the federation unless the run names that target.
+
+V. If a test target declares coverage and has none, and the run executes or expects that target or its results are present, then the system SHALL report the coverage of that target as missing.
+
 ### Rationale
 
 The cost of a target is not something the tool can read off its configuration, and it is not the tool's judgement to make. What the tool can do is let the project say it once, in a place a reader of the configuration will find, and then honour it. A description is required with each declaration for that reason: a group called `slow` tells a newcomer nothing about whether their change should have run it, and the declaration is the only place that explanation has to live.
@@ -1186,9 +1200,13 @@ G requires uniqueness across every group name rather than across the declared on
 
 E and I are one idea stated from both ends, and the idea is that a group is an ALIAS. A group is a name several targets claim so a run can refer to them at once — not a second dimension targets are classified on, and not a second way of selecting to be reconciled with the first. So a run has ONE thing it does: it names targets, some of them by a name standing for several, and it executes what it named. There is no rule about what two selectors mean together because there are not two selectors. The alternative, a separate group selector narrowing a target selector, has to answer a question this does not raise — what a run naming a target outside a group it also named should do — and every answer to it honours one name while disobeying the other. A reader wanting a narrower set has the exact instrument already: name the targets.
 
+P is not a second selector of the kind E rules out. E concerns which targets a run executes; P concerns which results a run requires to be there, and the two are separate questions. A tier can produce its results in an earlier job and leave them for a later run to read, and that later run has to be able to say it requires them without executing them again. A name in P stands for targets exactly as a name in E does, and a name that stands for nothing is refused as H refuses it. Q is the link between the two: a run that executes a target requires what that execution produces.
+
+R and S divide one fact, a target with no results, by the question the run asked. A target nobody executed or asked for has not run, which is information; a target the run executed or required that left nothing is a fault somebody must fix. Without the division the fault fires for every tier a run did not touch, so no project declaring tiers can treat it as a failure, and then it catches nothing. V applies the same division to coverage, and adds one case: a target whose results are present has run, so coverage it declares and did not leave is missing whatever the run expected. T keeps the division the same however a target delivers its results. U keeps a repository's run from failing on targets another repository declares for its own runs.
+
 G carries the cost of that aliasing, and it is the whole cost. One namespace means a name cannot be a target's and a group's at once, so a configuration holding both is refused when it is read rather than resolved by a precedence rule — a precedence rule being a thing every reader of that configuration would afterwards have to know. What makes the aliasing safe beyond that is that a run says which targets it executed, so what an invocation resolved to is answerable by looking at the run rather than by knowing any of this.
 
-*End* *Test Target Groups* | **Hash**: d7c9b246
+*End* *Test Target Groups* | **Hash**: 524538cc
 
 ## REQ-d00284: How a Result Names Its Test
 
@@ -1359,11 +1377,17 @@ L. Where a test target declares an exclude set, the system SHALL exclude from it
 
 M. The system SHALL exclude from the inputs of every test target the test output location and every path that the global skip list of the project names.
 
+N. While a run of a test target has started and has not recorded its end, the system SHALL report the run of that target as in progress in place of any judgement of its results or its coverage.
+
+O. When the system reports a run of a test target as in progress, the system SHALL state when the run started.
+
 ### Rationale
 
 The inputs of a test target are the files whose content can change what its run reports, so results stay current exactly as long as those files are unchanged, and reuse of results from an earlier run is legitimate. The default takes every file because a missed dependency makes old results look current, which is worse than a needless run. What a run writes, and what tools keep for themselves while it runs, changes during every run, so the project names those paths in its global skip list.
 
-*End* *Test Result Freshness* | **Hash**: 2b570228
+A run empties its output area when it starts and writes its results while it runs, so an area whose run has not finished holds results that are partial or not yet written. Judging them would report a run that is still going as one that produced nothing, or as one that is complete. N reports the fact instead, and O gives the time it started so a reader can decide for themselves whether the run is still going.
+
+*End* *Test Result Freshness* | **Hash**: 4fe7db4a
 
 ## REQ-d00312: Test Target Output Areas
 

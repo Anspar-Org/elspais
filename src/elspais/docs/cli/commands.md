@@ -102,6 +102,13 @@ To see unresolved references, use: `elspais unresolved`
                    `default` group. The command refuses a selection
                    standing for no target, `none` included (exit 2). It also
                    refuses a bare run if `default` holds no target.
+  `--expect T...`  Require the results of these test targets (or groups)
+                   without executing them, e.g. results an earlier job left.
+                   Missing results of an executed or expected target are
+                   `tests.ingestion_fault`; a target neither executed nor
+                   expected with no results is `tests.not_run` (info).
+                   Accepted with and without `--run-tests`; `none` expects
+                   nothing beyond what runs. Unknown names exit 2.
   `-o, --output PATH`  Write output to file instead of stdout
 
 `-v, --verbose` is a global option (see Global Options above) and reports each

@@ -299,7 +299,10 @@ output_root = ".results"
 # is no config field for it. All targets declared here are eligible; which
 # ones are "fresh" for a given invocation is a per-command-line decision, not
 # a persistent config setting. See `elspais docs test-targets` (Per-PR
-# selectivity section).
+# selectivity section). Which targets' results a run requires is the same
+# kind of decision: `elspais checks --expect NAME ...` names them, and a target
+# a run neither executes nor expects reads as not run rather than as missing
+# results (`elspais docs test-targets`, Expected results).
 
 # Test groups - which targets a run is about. Declared as a keyword and a
 # description; a target then claims the groups it belongs to via `groups`.

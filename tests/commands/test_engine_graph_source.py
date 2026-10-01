@@ -4,6 +4,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 
 def test_engine_call_local_includes_graph_source():
     """Local fallback should tag result with graph_source='local'."""
@@ -57,3 +59,61 @@ def test_engine_call_viewer_includes_graph_source():
         result = call("/api/run/checks", ChecksRequest(), lambda g, c, r: {}, skip_daemon=False)
 
     assert result["graph_source"]["type"] == "viewer"
+
+
+# Verifies: REQ-d00313-C
+def test_a_daemon_answer_from_a_graph_behind_the_disk_says_so(capsys):
+    """The files the serving graph predates move into graph_source, where the
+    answer's own content is untouched, and the reader is told on stderr."""
+    from elspais.commands._engine import call
+    from elspais.commands._requests import ChecksRequest
+
+    daemon_result = {
+        "healthy": True,
+        "checks": [],
+        "graph_predates": ["spec/prd.md", ".results/unit/junit.xml"],
+    }
+
+    with patch(
+        "elspais.commands._engine._try_daemon",
+        return_value=(daemon_result, {"type": "daemon", "port": 35121}),
+    ):
+        result = call("/api/run/checks", ChecksRequest(), lambda g, c, r: {}, skip_daemon=False)
+
+    assert "graph_predates" not in result
+    assert result["graph_source"]["graph_predates"] == [
+        "spec/prd.md",
+        ".results/unit/junit.xml",
+    ]
+    err = capsys.readouterr().err
+    assert "spec/prd.md" in err
+    assert ".results/unit/junit.xml" in err
+
+
+# Verifies: REQ-d00313-C
+def test_a_daemon_answer_from_a_current_graph_discloses_nothing(capsys):
+    from elspais.commands._engine import call
+    from elspais.commands._requests import ChecksRequest
+
+    with patch(
+        "elspais.commands._engine._try_daemon",
+        return_value=({"healthy": True, "checks": []}, {"type": "daemon", "port": 35121}),
+    ):
+        result = call("/api/run/checks", ChecksRequest(), lambda g, c, r: {}, skip_daemon=False)
+
+    assert "graph_predates" not in result["graph_source"]
+    assert capsys.readouterr().err == ""
+
+
+# Verifies: REQ-d00313-C
+@pytest.mark.parametrize(
+    "predates,shown",
+    [(["spec/prd.md", "spec/ops.md"], True), ([], False)],
+    ids=["graph-behind", "graph-current"],
+)
+def test_the_reports_source_line_counts_the_files_the_graph_predates(predates, shown):
+    from elspais.commands.health import _format_graph_source
+
+    line = _format_graph_source({"type": "daemon", "port": 35121, "graph_predates": predates})
+
+    assert ("graph predates 2 changed file(s)" in line) is shown

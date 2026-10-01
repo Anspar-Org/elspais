@@ -587,7 +587,7 @@ B. The system SHALL stream runner stdout and stderr live to the invoking termina
 
 C. The system SHALL stop at the first failing runner and skip the checks pass entirely when invoked with `elspais checks --run-tests --fail-fast`.
 
-D. When result file patterns are configured but no matching files exist on disk, the system SHALL return the `tests.results` health check with `passed = false` and severity `warning`, flipping the exit code unless `--lenient` is passed.
+D. <RETIRED> reported missing results under the results check whether or not the run executed or expected the target. REQ-d00283-R+S govern missing results.
 
 E. <RETIRED> judged the freshness of test results by file modification times. REQ-d00311 governs the freshness of test results.
 
@@ -604,6 +604,7 @@ are present are still current is REQ-d00311.
 
 ### Changelog
 
+- 2026-10-01 | fcac603a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-30 | 5375d51e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-30 | 99a07dd5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-13 | 36cbd540 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -611,7 +612,7 @@ are present are still current is REQ-d00311.
 - 2026-09-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: point the no-runners error at the document carrying target configuration examples (F)
 - 2026-09-12 | 784f8350 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Configured test runner execution* | **Hash**: 5375d51e
+*End* *Configured test runner execution* | **Hash**: fcac603a
 
 ## REQ-d00259: Requirement Format Reference Command
 

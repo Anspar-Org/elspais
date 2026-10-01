@@ -27,6 +27,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 
@@ -66,6 +67,12 @@ class SharedServerState(dict):
         # process that did not rebuild the daemon's graph would suppress a
         # restart that is genuinely needed.
         self.post_rebuild_hooks: list[Callable[[], None]] = []
+        # Implements: REQ-d00313-C
+        # The files the held graph was built from that changed since it was
+        # built. Registered by the process that watches those files; a
+        # process that watches nothing registers none, and then nothing is
+        # disclosed because nothing is known.
+        self.graph_predates: Callable[[], list[Path]] | None = None
         # Raised the instant this process decides to stop, before the
         # signal that starts the drain. Every write critical section
         # checks it under the same lock, so a write arriving after the

@@ -156,3 +156,35 @@ Each viewer shows one project, and a filter, an open card or a collapsed node me
 - 2026-09-28 | f794104b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
 
 *End* *Viewer Remembered State* | **Hash**: f794104b
+
+---
+
+## REQ-d00313: Served Graph Currency
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00015-E
+
+A process that serves a graph to many requests answers from a graph it built earlier. This requirement states what that process compares its graph against, and what it says when it answers from a graph that is behind the files on disk.
+
+### Assertions
+
+A. The system SHALL judge whether a served graph is current against every file that graph was built from, in every member of the federation.
+
+B. The files a served graph is built from SHALL include the results, the coverage and the run record of every test target that a member of the federation declares.
+
+C. While a served graph predates a file it was built from, the system SHALL disclose with each answer it serves from that graph that the graph predates that file, naming the file.
+
+D. While a run of a test target is in progress, the system SHALL treat a change in the output area of that target as a change to the files a served graph was built from only where the change is to the record of that run.
+
+### Rationale
+
+A served graph is current only against the files it was compared with. Results and coverage are files the graph was built from as surely as specifications are, and an associate's files are as much a part of the answer as the root repository's. A process that watches less than it reads reports a file that arrived after its build as absent, which is the reading a project that never ran its tests would get.
+
+A serving process does not rebuild over changes somebody has not saved, so a graph can stay behind the files on disk while it is served. C makes that state visible on the answer itself rather than in a separate place a reader has to know to look.
+
+A run writes into its output area for as long as it runs. Rebuilding on each write would read an area that is half written and repeat the work on every request. The record of the run changes when a run starts and when it finishes, and those are the two changes that say something about what the area holds.
+
+### Changelog
+
+- 2026-10-01 | e791c1a1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
+
+*End* *Served Graph Currency* | **Hash**: e791c1a1

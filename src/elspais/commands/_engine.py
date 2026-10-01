@@ -59,6 +59,11 @@ def call(
         if daemon_result is not None:
             result, source = daemon_result
             if isinstance(result, dict):
+                # Implements: REQ-d00313-C
+                predates = result.pop("graph_predates", None)
+                if predates:
+                    source["graph_predates"] = predates
+                    _disclose_graph_predates(predates)
                 result["graph_source"] = source
             return result
 
@@ -67,6 +72,26 @@ def call(
     result = compute_fn(graph, config, request)
     result["graph_source"] = {"type": "local"}
     return result
+
+
+# Implements: REQ-d00313-C
+def _disclose_graph_predates(predates: list[str]) -> None:
+    """Tell the reader that the answer comes from a graph older than files it reads.
+
+    Written to stderr so that it reaches the reader in every output format
+    and never changes the answer a format carries.
+    """
+    import sys
+
+    shown = ", ".join(predates[:5])
+    more = f" and {len(predates) - 5} more" if len(predates) > 5 else ""
+    print(
+        f"warning: this answer comes from a graph the serving process built before "
+        f"these files changed: {shown}{more}. A serving process does not rebuild "
+        f"while it holds unsaved changes or after a rebuild fails; save or discard "
+        f"the pending changes to have it rebuild.",
+        file=sys.stderr,
+    )
 
 
 def _build_daemon_source(info: dict) -> dict[str, Any]:

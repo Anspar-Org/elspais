@@ -244,6 +244,41 @@ def _record_ingestion_fault(
     store.append(fault)
 
 
+# Implements: REQ-d00283-R+S+T+V, REQ-d00311-N
+@dataclass(frozen=True)
+class UnreadArtifact:
+    """An artifact a test target names that the build did not read.
+
+    The build records the fact and makes no judgement about it. Whether a
+    target with no results is a fault or a target nobody ran depends on what
+    the run executed and expected, which is a question about a request and
+    not about the graph. A health check makes that judgement.
+
+    Attributes:
+        target: The ``[[scanning.test.targets]]`` entry that names the artifact.
+        artifact: ``"results"`` or ``"coverage"``.
+        path: The artifact, repo-relative. Empty where the target reads its
+            results from the output of its runner.
+        reason: ``"absent"`` when the artifact is not there, ``"running"`` when
+            a run of the target started and recorded no end, so that nothing
+            in its output area was read.
+        started_at: When the run in progress started. Empty unless ``reason``
+            is ``"running"``.
+    """
+
+    target: str
+    artifact: str
+    path: str
+    reason: str
+    started_at: str = ""
+
+
+def _record_unread_artifact(store: list[UnreadArtifact], artifact: UnreadArtifact) -> None:
+    """Record, once, an artifact a test target names that the build did not read."""
+    if artifact not in store:
+        store.append(artifact)
+
+
 # Implements: REQ-d00241-F
 @dataclass(frozen=True)
 class UnscannedKeywordFile:
@@ -445,6 +480,10 @@ class TraceGraph:
     # than dropped: an unreadable report and a suite that never ran are the
     # same absence downstream, and only this record tells them apart.
     _ingestion_faults: list[IngestionFault] = field(default_factory=list, init=False, repr=False)
+    # Implements: REQ-d00283-R+S+T+V, REQ-d00311-N
+    # Artifacts a test target names that the build did not read, because they
+    # were not there or because the run writing them had not finished.
+    _unread_artifacts: list[UnreadArtifact] = field(default_factory=list, init=False, repr=False)
 
     # Implements: REQ-d00222-A
     _terms: TermDictionary = field(default_factory=TermDictionary, init=False)
@@ -715,6 +754,16 @@ class TraceGraph:
         computed over less than was measured.
         """
         return list(self._ingestion_faults)
+
+    # Implements: REQ-d00283-R+S+T+V, REQ-d00311-N
+    def record_unread_artifact(self, artifact: UnreadArtifact) -> None:
+        """Record an artifact a test target names that the build did not read."""
+        _record_unread_artifact(self._unread_artifacts, artifact)
+
+    # Implements: REQ-d00283-R+S+T+V, REQ-d00311-N
+    def unread_artifacts(self) -> list[UnreadArtifact]:
+        """Every artifact a test target names that the build did not read."""
+        return list(self._unread_artifacts)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Reachability API
@@ -4445,6 +4494,8 @@ class GraphBuilder:
         self._duplicate_req_ids: dict[str, list[str]] = {}
         # Implements: REQ-d00285-G
         self._ingestion_faults: list[IngestionFault] = []
+        # Implements: REQ-d00283-R+S+T+V, REQ-d00311-N
+        self._unread_artifacts: list[UnreadArtifact] = []
 
     # Implements: REQ-d00285-G
     def record_ingestion_fault(
@@ -4458,6 +4509,11 @@ class GraphBuilder:
     ) -> None:
         """Record an artifact ingestion reached and could not read in full."""
         _record_ingestion_fault(self._ingestion_faults, path, stage, cause, line, target, partial)
+
+    # Implements: REQ-d00283-R+S+T+V, REQ-d00311-N
+    def record_unread_artifact(self, artifact: UnreadArtifact) -> None:
+        """Record an artifact a test target names that the build did not read."""
+        _record_unread_artifact(self._unread_artifacts, artifact)
 
     # Implements: REQ-d00241-F
     def record_unscanned_keyword_file(self, path: str, kind: str, keyword: str, line: int) -> None:
@@ -6238,6 +6294,7 @@ class GraphBuilder:
         graph._unbound_citations = list(self._unbound_citations)
         graph._duplicate_req_ids = {k: list(v) for k, v in self._duplicate_req_ids.items()}
         graph._ingestion_faults = list(self._ingestion_faults)
+        graph._unread_artifacts = list(self._unread_artifacts)
 
         # Implements: REQ-d00222-A, REQ-d00222-B
         # Populate _terms from pending definition data, resolving defined_in

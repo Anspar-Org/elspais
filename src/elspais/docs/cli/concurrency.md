@@ -290,8 +290,13 @@ act.
 
 `/api/check-freshness` therefore reports two independent signals:
 
-- `stale` (with `stale_files`) -- spec files changed **on disk**, e.g. a
-  git checkout or an outside editor. Reloading from disk is the fix.
+- `stale` (with `stale_files`) -- files the served graph was built from
+  changed **on disk**, e.g. a git checkout, an outside editor, or a test run
+  writing its results. The set is every member's configuration, spec, code
+  and test directories, and each test target's fingerprint, results and
+  coverage. A server rebuilds on its own when nothing is pending, so this
+  stays raised only while unsaved changes hold the rebuild back. Reloading
+  from disk is the fix.
 - `mutation_tip` -- the mutation-log tip. Compare it against the tip you
   last saw: if it moved, another writer mutated the shared in-memory
   graph. The live graph is already correct, so the fix is to re-read it

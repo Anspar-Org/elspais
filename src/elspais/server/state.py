@@ -1,8 +1,9 @@
 # Implements: REQ-d00010-A
 """Shared application state with auto-refresh.
 
-Holds the in-memory FederatedGraph, config, and file mtime snapshot.
-Detects spec file changes and rebuilds automatically.
+Holds the in-memory FederatedGraph, config, and a snapshot of the files the
+graph was built from. Detects changes to those files and rebuilds
+automatically.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from elspais.mcp.shared_state import SharedServerState, rebuild_shared_graph
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
+    from elspais.server.watch import WatchSet
 
 
 @dataclass
@@ -75,8 +77,13 @@ class AppState:
         self.repo_root = repo_root
         self._allowed_roots_override = allowed_roots
         self._mtimes: dict[str, float] = {}
+        self._watch: WatchSet | None = None
         self._last_stale_check = 0.0
         self.snapshot_mtimes()
+        # Implements: REQ-d00313-C
+        # Published on the holder so every surface reading this graph can
+        # disclose that it predates files on disk, the MCP tools included.
+        self.shared.graph_predates = self.changed_files
         # Change-detection state that lives outside the holder — this object's
         # mtime snapshot, and the config fingerprint recorded for the server
         # this object belongs to. Every rebuild must bring both forward,
@@ -176,30 +183,26 @@ class AppState:
             config=config,
         )
 
-    # Implements: REQ-p00004-J
+    # Implements: REQ-p00004-J, REQ-d00313-A+B
     def snapshot_mtimes(self) -> None:
-        """Record current mtimes of all scanned spec/code/test files.
+        """Record what the served graph was built from, and each file's modification time.
 
-        Also snapshots the config files (.elspais.toml, .elspais.local.toml)
-        so a long-running server notices config edits (REQ-p00004-J).
+        The set covers every member of the federation and the output area of
+        every test target, and the configuration documents, so a long-running
+        server notices a configuration edit (REQ-p00004-J) and results written
+        after it built its graph (REQ-d00313-B).
         """
-        self._mtimes = {}
-        scan_dirs = self._get_scan_dirs()
-        for d in scan_dirs:
-            if not d.is_dir():
-                continue
-            for f in d.rglob("*"):
-                if f.is_file():
-                    try:
-                        self._mtimes[str(f)] = f.stat().st_mtime
-                    except OSError:
-                        pass
-        for f in self._config_files():
-            if f.is_file():
-                try:
-                    self._mtimes[str(f)] = f.stat().st_mtime
-                except OSError:
-                    pass
+        from elspais.server.watch import snapshot, watch_set
+
+        self._watch = watch_set(self._members())
+        self._mtimes = snapshot(self._watch)
+
+    def _members(self) -> list[tuple[Path, dict[str, Any]]]:
+        """The root and configuration of every member of the served federation."""
+        iter_repos = getattr(self.graph, "iter_repos", None)
+        if iter_repos is None:
+            return [(self.repo_root, self.config)]
+        return [(Path(entry.repo_root), entry.config or {}) for entry in iter_repos()]
 
     # Implements: REQ-p00004-O
     def _refresh_daemon_config_hash(self) -> None:
@@ -221,57 +224,19 @@ class AppState:
 
         refresh_daemon_config_hash(self.repo_root)
 
-    def _config_files(self) -> list[Path]:
-        """Config files whose edits must trigger a graph rebuild."""
-        return [
-            self.repo_root / ".elspais.toml",
-            self.repo_root / ".elspais.local.toml",
-        ]
+    # Implements: REQ-p00015-E, REQ-d00313-A+D
+    def changed_files(self) -> list[Path]:
+        """The files the served graph was built from that changed since it was built."""
+        from elspais.server.watch import changed_files
 
-    def _get_scan_dirs(self) -> list[Path]:
-        """Return directories that contribute to the graph."""
-        dirs: list[Path] = []
-        spec = self.config.get("scanning", {}).get("spec", {})
-        spec_dirs = spec.get("directories", ["spec"])
-        for d in spec_dirs:
-            dirs.append(self.repo_root / d)
-
-        code = self.config.get("scanning", {}).get("code", {})
-        code_dirs = code.get("directories", [])
-        for d in code_dirs:
-            dirs.append(self.repo_root / d)
-
-        test = self.config.get("scanning", {}).get("test", {})
-        test_dirs = test.get("directories", [])
-        for d in test_dirs:
-            dirs.append(self.repo_root / d)
-
-        return dirs
+        if self._watch is None:
+            return []
+        return changed_files(self._watch, self._mtimes)
 
     # Implements: REQ-p00015-E
     def is_stale(self) -> bool:
-        """Check if any scanned files changed since last snapshot."""
-        for path_str, old_mtime in self._mtimes.items():
-            try:
-                current = Path(path_str).stat().st_mtime
-                if current != old_mtime:
-                    return True
-            except OSError:
-                return True  # file deleted = stale
-
-        # Check for new files
-        scan_dirs = self._get_scan_dirs()
-        for d in scan_dirs:
-            if not d.is_dir():
-                continue
-            for f in d.rglob("*"):
-                if f.is_file() and str(f) not in self._mtimes:
-                    return True
-        # Config file created after the last snapshot (e.g. new local overrides)
-        for f in self._config_files():
-            if f.is_file() and str(f) not in self._mtimes:
-                return True
-        return False
+        """Check if any file the served graph was built from changed since its build."""
+        return bool(self.changed_files())
 
     # Implements: REQ-p00015-F, REQ-p00015-B, REQ-p00019-B
     def ensure_fresh(self) -> bool:

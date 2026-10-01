@@ -1752,3 +1752,83 @@ class TestFederationContributionInvariance:
             f"b's reference into a should be an unresolved reference when a is "
             f"outside the federation: {from_b['b']['unresolved']}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Test: an associate's test targets are its own runs, not the root's
+# ---------------------------------------------------------------------------
+
+
+class TestAssociateTargetsAreNotTheRootsRun:
+    """A run from the core expects none of an associate's targets, so an
+    associate target with no results reads as not run rather than as
+    missing results.
+
+    Verifies: REQ-d00283-S, REQ-d00283-U
+    """
+
+    def _build(self, tmp_path):
+        core_root = tmp_path / "core"
+        assoc_root = tmp_path / "lib"
+
+        core_cfg = base_config(name="core-targets")
+        core_cfg["cli_ttl"] = 0
+        core_cfg["associates"] = {"lib": {"path": "../lib", "namespace": "LIB"}}
+        build_project(
+            core_root,
+            core_cfg,
+            spec_files={
+                "spec/prd.md": [
+                    Requirement(
+                        "REQ-p00001",
+                        "Core Requirement",
+                        "PRD",
+                        assertions=[("A", "The system SHALL run from the core.")],
+                    )
+                ]
+            },
+        )
+        build_associate(
+            assoc_root,
+            "lib",
+            "LIB",
+            "../core",
+            spec_files={
+                "spec/prd-lib.md": [
+                    Requirement(
+                        "LIB-p00001",
+                        "Library Requirement",
+                        "PRD",
+                        assertions=[("A", "The library SHALL test itself.")],
+                    )
+                ]
+            },
+            config_overrides={
+                "scanning": {
+                    "test": {
+                        "enabled": True,
+                        "targets": [
+                            {"name": "libunit", "reporter": "junit", "results": "junit.xml"}
+                        ],
+                    }
+                }
+            },
+            init_git=True,
+        )
+        return core_root
+
+    # Verifies: REQ-d00283-S+U
+    def test_an_associate_target_with_no_results_is_not_run(self, tmp_path):
+        core = self._build(tmp_path)
+
+        out = run_elspais("checks", "--tests", "--format", "json", "--lenient", cwd=core)
+
+        assert out.returncode == 0, f"stdout={out.stdout!r} stderr={out.stderr!r}"
+        checks = {c["name"]: c for c in json.loads(out.stdout).get("checks", [])}
+        not_run = checks["tests.not_run"]
+        assert any(
+            "libunit" in f["message"] and f.get("repo") == "lib"
+            for f in not_run.get("findings") or []
+        ), not_run
+        faults = checks["tests.ingestion_fault"]
+        assert faults["passed"] is True, faults
