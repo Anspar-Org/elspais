@@ -93,8 +93,8 @@ Passing alone would leave the remainder ambiguous -- an assertion missing
 from it either failed or never returned a verdict, and those ask for opposite
 things. `summary`'s level-aggregated
 Passing figure gets a trailing `*` (footnoted) when any underlying RESULT
-data was carried from a previous run -- see `elspais docs test-targets`
-(*Per-PR selectivity*).
+data was carried from a previous run. `--targets none` reports every result
+as carried. See `elspais docs test-targets` (*Per-PR selectivity*).
 
 **Code Tested: per-test or `n/a`.** The `Code Tested` value reports
 `code_tested.attributed_lines` -- implementation lines whose coverage.py **context**

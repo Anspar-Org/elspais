@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import argparse
 
+import pytest
+
 from elspais.commands import health
 from elspais.config.schema import (
     ElspaisConfig,
@@ -72,7 +74,7 @@ def test_unknown_target_name_errors(capsys, monkeypatch, tmp_path):
     # Both vocabularies, because `--targets` reads from both: a reader who
     # mistyped a group name learns the group names, not only the target ones.
     assert "Configured targets: a" in err
-    assert "Known groups: all, default" in err
+    assert "Known groups: all, default, none." in err
 
 
 # Verifies: REQ-d00283-H
@@ -91,7 +93,33 @@ def test_unknown_name_error_names_the_declared_groups_too(capsys, monkeypatch, t
 
     err = capsys.readouterr().err
     assert rc == 2
-    assert "Known groups: all, default, slow, uat" in err
+    assert "Known groups: all, default, none, slow, uat" in err
+
+
+# Verifies: REQ-d00283-H
+@pytest.mark.parametrize("named", [["nope"], ["uta"], ["a", "uta", "nope"]])
+def test_unknown_name_refusal_reads_the_same_on_every_surface(capsys, monkeypatch, named):
+    """`checks --run-tests` and the reporting commands refuse an unknown name
+    with one text. Consequently, every command shows the reader one refusal."""
+    from elspais.commands._targets import resolve_fresh_targets
+
+    cfg = _cfg_with_targets(
+        [TestTargetConfig(name="a", command="true", reporter="junit")],
+        groups={"uat": "needs a live backend"},
+    )
+    monkeypatch.setattr("elspais.config.get_config", lambda *a, **k: {})
+    monkeypatch.setattr("elspais.config.validate_config", lambda d: cfg)
+    monkeypatch.setattr(health, "_validate_config", lambda d: cfg)
+
+    rc = health.run(_base_args(named))
+    checks_err = capsys.readouterr().err
+
+    with pytest.raises(ValueError) as excinfo:
+        resolve_fresh_targets(argparse.Namespace(targets=named), {})
+
+    assert rc == 2
+    assert checks_err == f"error: {excinfo.value}\n"
+    assert str(excinfo.value).startswith("unknown --targets: ")
 
 
 # Verifies: REQ-d00254-H
@@ -267,6 +295,65 @@ def test_unknown_name_errors(capsys, monkeypatch, tmp_path):
     assert "uta" in err, "the refusal must name the group it could not resolve"
     assert not (tmp_path / "a.txt").exists(), "a refused selection must execute nothing"
     assert not (tmp_path / "b.txt").exists()
+
+
+def _refused_run(capsys, monkeypatch, tmp_path, named, targets=None):
+    """Run `checks --run-tests` over *targets* and assert the refusal.
+
+    The default *targets* are `a` in `default` and `b` in `uat`. The config
+    declares a `device` group that no target claims. The helper asserts that
+    the command refuses the run and executes nothing."""
+    cfg = _cfg_with_targets(
+        targets or _two_commandful_targets(tmp_path, groups_for_b=["uat"]),
+        groups={"uat": "needs a live backend", "device": "needs the device farm"},
+    )
+    monkeypatch.setattr("elspais.config.get_config", lambda *a, **k: {})
+    monkeypatch.setattr("elspais.config.find_git_root", lambda *a, **k: tmp_path)
+    monkeypatch.setattr(health, "_validate_config", lambda d: cfg)
+    captured = _capture_local_checks(monkeypatch)
+
+    rc = health.run(_base_args(named))
+
+    assert rc == 2
+    assert not (tmp_path / "a.txt").exists(), "a refused selection must execute nothing"
+    assert not (tmp_path / "b.txt").exists()
+    assert not captured, "a refused selection must report nothing"
+    return capsys.readouterr().err
+
+
+# Verifies: REQ-d00283-M+N
+def test_a_selection_naming_no_target_errors(capsys, monkeypatch, tmp_path):
+    """The project declares `device`, and no target claims it. Consequently,
+    the run has nothing to execute. The refusal lists the names it can use."""
+    err = _refused_run(capsys, monkeypatch, tmp_path, ["device"])
+
+    assert "names no test target to run" in err
+    assert "Configured targets: a, b." in err
+    assert "Groups: all, default, device, uat." in err
+    assert "--targets none" not in err, "running nothing is not an option to offer"
+
+
+# Verifies: REQ-d00283-M
+def test_naming_none_on_a_run_that_executes_targets_errors(capsys, monkeypatch, tmp_path):
+    """`none` states that no target ran. If a run executes targets and names
+    `none`, then the run has nothing to execute."""
+    err = _refused_run(capsys, monkeypatch, tmp_path, ["none"])
+
+    assert "nothing to run" in err
+
+
+# Verifies: REQ-d00283-D+M+N+O
+def test_a_bare_run_with_an_empty_default_group_errors(capsys, monkeypatch, tmp_path):
+    """Both targets claim a group. Consequently, the `default` group that a
+    bare run selects holds no target."""
+    both_claim = [
+        t.model_copy(update={"groups": ["uat"]})
+        for t in _two_commandful_targets(tmp_path, groups_for_b=["uat"])
+    ]
+    err = _refused_run(capsys, monkeypatch, tmp_path, None, targets=both_claim)
+
+    assert "`default` group holds no test target" in err
+    assert "Configured targets: a, b." in err
 
 
 def _three_commandful_targets(tmp_path):

@@ -1004,7 +1004,8 @@ name = "b"
 
     @staticmethod
     def _make_grouped_project(tmp_path):
-        """A project declaring one group, claimed by one of its two targets."""
+        """Write a project that declares three groups. One target claims
+        `uat`, and one target claims `slow`. No target claims `device`."""
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
         (spec_dir / "reqs.md").write_text(
@@ -1034,6 +1035,7 @@ directories = ["spec"]
 [scanning.test.groups]
 uat = "needs a live backend"
 slow = "runs for over a minute"
+device = "needs the device farm"
 
 [[scanning.test.targets]]
 name = "a"
@@ -1196,6 +1198,98 @@ groups = ["slow"]
         assert result == 2
         assert "uta" in capsys.readouterr().err
         assert "fresh_targets" not in captured, "nothing may be rendered under a refused selection"
+
+    # Verifies: REQ-d00283-J, REQ-d00254-I
+    @pytest.mark.parametrize("targets", [["none"], ["NONE"], [["none"]]])
+    def test_summary_naming_none_marks_no_target_fresh(self, tmp_path, monkeypatch, targets):
+        """`none` stands for no target. The report is selective over an empty
+        fresh set. Consequently, the report marks every result as carried."""
+        import argparse
+
+        from elspais.commands import summary
+
+        config_path = self._make_grouped_project(tmp_path)
+        captured = self._spy_build_graph(monkeypatch)
+
+        args = argparse.Namespace(
+            targets=targets,
+            format="json",
+            config=config_path,
+            spec_dir=None,
+        )
+
+        assert summary.run(args) == 0
+        assert captured["fresh_targets"] == set(), "no target is fresh, and the run is selective"
+
+    # Verifies: REQ-d00283-K+L
+    @pytest.mark.parametrize("targets", [["device"], ["DEVICE"]])
+    def test_summary_selection_standing_for_no_target_is_refused(
+        self, tmp_path, monkeypatch, capsys, targets
+    ):
+        """A group that no target claims is a known name for no target. The
+        command refuses the report. The refusal tells the reader how to
+        select no target on purpose."""
+        import argparse
+
+        from elspais.commands import summary
+
+        config_path = self._make_grouped_project(tmp_path)
+        captured = self._spy_build_graph(monkeypatch)
+
+        args = argparse.Namespace(
+            targets=targets,
+            format="json",
+            config=config_path,
+            spec_dir=None,
+        )
+        result = summary.run(args)
+
+        assert result == 2
+        assert "--targets none" in capsys.readouterr().err
+        assert "fresh_targets" not in captured, "nothing may be rendered under a refused selection"
+
+    # Verifies: REQ-d00283-D+K+L+O
+    def test_bare_summary_with_an_empty_default_group_is_refused(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """A run that names nothing selects `default`. Every target claims
+        another group. Consequently, the selection reaches no target. The
+        command refuses the report before it builds a graph or calls a
+        serving process."""
+        import argparse
+
+        from elspais.commands import summary
+
+        config_path = self._make_grouped_project(tmp_path)
+        text = config_path.read_text(encoding="utf-8")
+        claimed = text.replace('name = "a"\n', 'name = "a"\ngroups = ["slow"]\n', 1)
+        assert claimed != text
+        config_path.write_text(claimed, encoding="utf-8")
+        built = self._spy_build_graph(monkeypatch)
+
+        called: dict = {}
+
+        def fake_engine_call(*a, **k):
+            called["engine"] = True
+            return {"levels": [], "graph_source": {"type": "local"}}
+
+        monkeypatch.setattr("elspais.commands._engine.call", fake_engine_call)
+
+        args = argparse.Namespace(
+            targets=None,
+            format="json",
+            config=config_path,
+            spec_dir=None,
+        )
+        result = summary.run(args)
+
+        err = capsys.readouterr().err
+        assert result == 2
+        assert "`default` group holds no test target" in err
+        assert "--targets none" in err
+        assert "fresh_targets" not in built and "engine" not in called, (
+            "nothing may be rendered under a refused selection"
+        )
 
 
 _TWO_TARGET_CONFIG_SUMMARY = """\
@@ -1400,6 +1494,21 @@ class TestSummaryCarriedFootnote:
         md = render_summary(data, "markdown")
 
         assert "test results from previous runs" not in md
+
+    # Verifies: REQ-d00254-I
+    @pytest.mark.parametrize("fmt", ["text", "markdown"])
+    def test_render_every_result_carried_when_no_target_is_fresh(self, tmp_path, fmt):
+        """`--targets none` resolves to an empty fresh set. The summary marks
+        every result as carried."""
+        project = self._make_two_target_project(tmp_path)
+        graph, config = self._build(project, targets=[])
+        data = collect_coverage(graph, config=config)
+
+        assert data["carried_result_targets"] == data["total_result_targets"] == 2
+
+        rendered = render_summary(data, fmt)
+
+        assert "* 2/2 test results from previous runs" in rendered
 
     # Verifies: REQ-d00254-I
     def test_render_json_exposes_structured_counts_no_asterisk(self, tmp_path):

@@ -491,13 +491,20 @@ groups = ["uat"]
 command = "./scripts/run-enroll-e2e.sh"
 ```
 
-Two names are reserved and cannot be declared:
+Three names are reserved. A project cannot declare them, give them to a
+target, or have a target claim them:
 
 - **`default`** — what a run executes when it names nothing. A target that
   claims no group belongs here, so a project that declares no groups has every
-  target in `default` and a bare run does exactly what it always did.
+  target in `default` and a bare run does exactly what it always did. If
+  every target claims another group, then `default` holds no target. The tool
+  then refuses a run naming nothing (exit 2) and does not report on nothing.
+  Bare `summary`, bare `trace` and bare `checks --run-tests` are such runs.
 - **`all`** — every target. Every target belongs to it whether it says so or
   not, so naming `all` names everything.
+- **`none`** — no target. A run naming it marks no target fresh.
+  Consequently, `summary` and `trace` render every result read from disk as
+  carried from an earlier run.
 
 A group is an **alias for a set of targets**, so it is named where a target is
 named — there is no separate flag:
@@ -508,6 +515,7 @@ elspais checks --run-tests --targets uat    # every target in the `uat` group
 elspais checks --run-tests --targets all    # everything
 elspais checks --run-tests --targets uat elspais-unit   # the group, plus one more
 elspais checks --run-tests --targets uat --targets elspais-unit   # the same
+elspais trace --targets none                # every result carried
 ```
 
 A run executes every target it names, whether it named it directly or through a
@@ -518,7 +526,28 @@ newcomer nothing about whether their change should have run it, and this is the
 only place that explanation has to live. A name that is neither declared nor
 reserved is refused — whether a target claims it or a run selects it — because a
 selection that quietly selects nothing produces a report that reads exactly like
-one whose targets all passed.
+one whose targets all passed. For the same reason, the tool refuses a
+selection that resolves to no target (exit 2). One case is a named selection,
+such as a declared group no target claims. The other case is a run naming
+nothing where `default` holds no target. A project that configures no test
+targets at all is exempt. On `summary` and `trace`, a run names `none` to ask
+for a run in which nothing ran fresh. No other way exists. The refusal states
+this:
+
+```text
+error: --targets <names> stands for no configured target. To report every result as carried from an earlier run, name the reserved group `none` (--targets none).
+error: the `default` group holds no test target, so a run naming no targets selects none. Name targets or groups with --targets, or have a target claim the `default` group, or name the reserved group `none` (--targets none) to report every result as carried from an earlier run.
+```
+
+`checks --run-tests` executes what it selects. Consequently, a selection of
+no target leaves it nothing to run, `none` included. Its refusal lists the
+names the user could give instead:
+
+```text
+error: --targets <names> names no test target to run. Configured targets: .... Groups: ....
+error: --targets none selects no test target, so there is nothing to run. Configured targets: .... Groups: ....
+error: the `default` group holds no test target, so a run naming no targets selects none. Name targets or groups with --targets, or have a target claim the `default` group. Configured targets: .... Groups: ....
+```
 
 Because targets and groups are named in one place, they share one namespace: a
 configuration declaring a group with the same name as a test target is refused
@@ -546,7 +575,8 @@ The flag means something slightly different depending on the command:
   `--targets` tells them which targets' results were freshly produced *this
   invocation* (normally by a preceding `checks --run-tests --targets ...`
   with the same names) versus which targets' results are left over from an
-  earlier run.
+  earlier run. `--targets none` marks no target fresh. Consequently, every
+  result read from disk renders as carried.
 
 On `trace`, the complement (non-named) targets render one of two ways in the
 per-requirement `verified` value, depending on whether prior result data
@@ -594,7 +624,8 @@ footnote appears — output is unchanged from before this flag existed. The
 `--targets` for *execution* under `--run-tests`; it does not render
 `(baseline)`/`—`/`*` — that provenance rendering is `summary`/`trace`'s job.
 Running `elspais checks --targets NAME ...` without `--run-tests` accepts
-the flag but has no execution or rendering effect.
+the flag but has no execution or rendering effect. `checks --run-tests
+--targets none` selects nothing to run. Consequently, the command refuses it.
 
 ### Worked example
 

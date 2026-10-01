@@ -5147,24 +5147,21 @@ def run(args: argparse.Namespace) -> int:
         from elspais.commands._scope import flag_values
 
         selected = list(flag_values(args, "targets"))
-        target_names = {t.name for t in cfg.scanning.test.targets}
-        if selected:
-            # Implements: REQ-d00283-H
-            # A name is a target's or a group's -- one namespace, kept apart at
-            # config-read time (REQ-d00283-G) -- and a name that is neither is
-            # refused rather than resolved to nothing.
-            from elspais.config import known_group_names, unknown_target_names
+        # Implements: REQ-d00283-H
+        # Targets and groups share one namespace. The config reader keeps
+        # their names apart (REQ-d00283-G). If a name is neither a target nor
+        # a group, then the run refuses it and does not resolve it to nothing.
+        from elspais.config import unknown_target_refusal
 
-            groups = known_group_names(cfg)
-            unknown = unknown_target_names(cfg, selected)
-            if unknown:
-                print(
-                    f"error: unknown --targets: {', '.join(unknown)}. "
-                    f"Configured targets: {', '.join(sorted(target_names))}. "
-                    f"Known groups: {', '.join(sorted(groups))}.",
-                    file=sys.stderr,
-                )
-                return 2
+        if refusal := unknown_target_refusal(cfg, selected):
+            print(f"error: {refusal}", file=sys.stderr)
+            return 2
+        # Implements: REQ-d00283-D+K+M+N+O
+        from elspais.config import empty_selection_refusal
+
+        if refusal := empty_selection_refusal(cfg, selected, executes=True):
+            print(f"error: {refusal}", file=sys.stderr)
+            return 2
         # One authority resolves both selectors; None means every configured
         # target, which is what keeps a project declaring no groups rendering
         # exactly as it did before (REQ-d00254-J).

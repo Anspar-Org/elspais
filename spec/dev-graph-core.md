@@ -1154,6 +1154,18 @@ H. A run naming something that is neither a configured target nor a group the pr
 
 I. A run SHALL execute every target it names.
 
+J. Where a run reads results without executing test targets, the system SHALL let the run state explicitly that it selects no test target.
+
+K. If the project configures a test target, and the selection of a run reaches no test target, and the run does not state explicitly that it selects no test target, then the system SHALL refuse the run.
+
+L. When the system refuses a run that reads results without executing test targets because its selection reaches no test target, the system SHALL tell in the refusal how the run states explicitly that it selects no test target.
+
+M. If a run that executes test targets selects no test target, then the system SHALL refuse the run.
+
+N. When the system refuses a run that executes test targets because its selection reaches no test target, the system SHALL list in the refusal the targets and groups the run can name.
+
+O. When the system refuses a run that names no target and no group because its selection reaches no test target, the system SHALL tell in the refusal that the group `default` holds no test target.
+
 ### Rationale
 
 The cost of a target is not something the tool can read off its configuration, and it is not the tool's judgement to make. What the tool can do is let the project say it once, in a place a reader of the configuration will find, and then honour it. A description is required with each declaration for that reason: a group called `slow` tells a newcomer nothing about whether their change should have run it, and the declaration is the only place that explanation has to live.
@@ -1164,13 +1176,13 @@ C is what keeps this addition from changing what an existing project's run does.
 
 F and H are the same discipline reached from the two directions a name arrives from. A group that exists because a target claimed it can never be wrong, so a misspelling in configuration silently creates a group nobody selects and quietly removes that target from every run. A selection that resolves to nothing is indistinguishable, in the report it produces, from a selection whose targets all passed — and the second is the reading a reader will reach for. In both directions the undefined name is refused, because refusal is the only answer neither can be misread.
 
-G requires uniqueness across every group name rather than across the declared ones, which is what bars a project from declaring `all` or `default`. Their meanings are fixed by B, C and D; a project able to attach its own description to either could describe something the tool does not do, and a reader would have no way to tell which was true.
+G requires uniqueness across every group name rather than across the declared ones, which is what bars a project from declaring `all`, `default` or `none`. Their meanings are fixed by B, C, D and J; a project able to attach its own description to any of them could describe something the tool does not do, and a reader would have no way to tell which was true.
 
 E and I are one idea stated from both ends, and the idea is that a group is an ALIAS. A group is a name several targets claim so a run can refer to them at once — not a second dimension targets are classified on, and not a second way of selecting to be reconciled with the first. So a run has ONE thing it does: it names targets, some of them by a name standing for several, and it executes what it named. There is no rule about what two selectors mean together because there are not two selectors. The alternative, a separate group selector narrowing a target selector, has to answer a question this does not raise — what a run naming a target outside a group it also named should do — and every answer to it honours one name while disobeying the other. A reader wanting a narrower set has the exact instrument already: name the targets.
 
 G carries the cost of that aliasing, and it is the whole cost. One namespace means a name cannot be a target's and a group's at once, so a configuration holding both is refused when it is read rather than resolved by a precedence rule — a precedence rule being a thing every reader of that configuration would afterwards have to know. What makes the aliasing safe beyond that is that a run says which targets it executed, so what an invocation resolved to is answerable by looking at the run rather than by knowing any of this.
 
-*End* *Test Target Groups* | **Hash**: edcd4d69
+*End* *Test Target Groups* | **Hash**: d7c9b246
 
 ## REQ-d00284: How a Result Names Its Test
 

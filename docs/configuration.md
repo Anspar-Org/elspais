@@ -288,8 +288,16 @@ reference_keyword = "Verifies"
 
 # Test groups - which targets a run is about. Declared as a keyword and a
 # description; a target then claims the groups it belongs to via `groups`.
-# `default` (what a run selects nothing executes) and `all` (every target)
-# are reserved and cannot be declared. A target claiming no group belongs to
+# `default` (what a run selects nothing executes), `all` (every target) and
+# `none` (no target) are reserved. A project cannot declare them.
+# `--targets none` renders every result as carried.
+# No target may be named `none` or claim it.
+# The tool refuses a `--targets` selection standing for no target.
+# The exception is `none` on `summary`/`trace`.
+# `checks --run-tests` refuses `none` too. It has nothing to run.
+# If every target claims another group, then `default` holds no target.
+# The tool then refuses a run naming nothing. The run must name what it runs.
+# A target claiming no group belongs to
 # `default`, so declaring nothing here leaves every run as it was.
 # A group is an alias for its targets: name it with `--targets NAME ...`.
 # A group may not share a name with a test target.

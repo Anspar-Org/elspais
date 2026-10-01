@@ -626,13 +626,15 @@ class CodeScanningConfig(ScanningKindConfig):
 
 
 # Implements: REQ-d00254-C
-# Implements: REQ-d00283-B+C
-# The two group names the tool defines. REQ-d00283-G requires a declared
-# keyword to be unique among every group name, these included, so a project
-# cannot declare either.
+# Implements: REQ-d00283-B+C+J
+# The tool defines these three group names. REQ-d00283-G requires a declared
+# keyword to be unique among all group names, these included. Consequently, a
+# project cannot declare any of them. `none` stands for no target.
+# Consequently, no target may claim it either.
 GROUP_ALL = "all"
 GROUP_DEFAULT = "default"
-RESERVED_GROUPS = frozenset({GROUP_ALL, GROUP_DEFAULT})
+GROUP_NONE = "none"
+RESERVED_GROUPS = frozenset({GROUP_ALL, GROUP_DEFAULT, GROUP_NONE})
 
 # Implements: REQ-d00284-A
 # The forms a target may declare for the name its results give the test that
@@ -777,6 +779,12 @@ class TestScanningConfig(ScanningKindConfig):
         known = set(seen) | RESERVED_GROUPS
         for target in self.targets:
             for claimed in target.groups:
+                # Implements: REQ-d00283-J
+                if claimed.strip().lower() == GROUP_NONE:
+                    raise ValueError(
+                        f'test target "{target.name}" claims the group "{claimed}", '
+                        f"which stands for no target; remove it from the target's groups"
+                    )
                 if claimed.strip().lower() not in known:
                     raise ValueError(
                         f'test target "{target.name}" claims undeclared group "{claimed}"; '

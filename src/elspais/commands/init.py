@@ -247,7 +247,7 @@ _FIELD_COMMENTS: dict[str, str] = {
     "scanning.test.reference_keyword": 'Keyword for test->requirement refs (e.g. "Verifies")',
     "scanning.test.reference_patterns": "Additional regex patterns for reference detection",
     "scanning.test.groups": (
-        "Declared test groups: keyword = description. `all` and `default` are reserved"
+        "Declared test groups: keyword = description. `all`, `default` and `none` are reserved"
     ),
     "scanning.test.targets": ("Per-package/suite test-ingestion targets (array of tables)"),
     "scanning.test.targets.name": "Unique label for this target (required)",

@@ -1361,6 +1361,97 @@ def known_group_names(config: Any) -> set[str]:
     return {str(name).strip().lower() for name in config.scanning.test.groups} | RESERVED_GROUPS
 
 
+# Implements: REQ-d00283-D+J+K+L+M+N+O
+def empty_selection_refusal(config: Any, named: list[str] | None, *, executes: bool) -> str | None:
+    """Return the reason to refuse a run that selects no test target.
+
+    If *named* is ``None`` or empty, then the run names nothing and selects
+    the ``default`` group. *executes* is true for a run that executes the
+    targets it selects. *executes* is false for a reading run. A reading run
+    only reads results from disk. A reading run may name ``none`` to state
+    that no target ran fresh. If a run executes targets and selects none, then
+    it has nothing to run, whatever it named.
+
+    The function returns ``None`` in three cases. First, the selection reaches
+    a target. Second, the project configures no target at all. Then every
+    selection is empty, and an executing command reports the missing
+    configuration itself. Third, a reading run names ``none``.
+
+    This function resolves the target set from the names. It does not read
+    the set from ``selected_targets``. That function returns ``None`` for a
+    selection that covers every configured target. ``unknown_target_names``
+    handles a name that is neither a target nor a group. Callers call it first.
+    """
+    from elspais.config.schema import GROUP_DEFAULT, GROUP_NONE
+
+    configured = {t.name for t in config.scanning.test.targets}
+    if not configured:
+        return None
+    wanted = [n for n in (x.strip() for x in (named or [])) if n]
+    names_none = any(n.lower() == GROUP_NONE for n in wanted)
+    if names_none and not executes:
+        return None
+    groups = known_group_names(config)
+    if wanted:
+        covered = {n for n in wanted if n in configured}
+        as_groups = [n for n in wanted if n.lower() in groups]
+        if as_groups:
+            covered |= targets_in_groups(config, as_groups)
+    else:
+        covered = targets_in_groups(config, None)
+    if covered:
+        return None
+
+    choices = (
+        f"Configured targets: {', '.join(sorted(configured))}. "
+        f"Groups: {', '.join(sorted(groups - {GROUP_NONE}))}."
+    )
+    if not wanted:
+        cause = (
+            f"the `{GROUP_DEFAULT}` group holds no test target, so a run naming "
+            f"no targets selects none. Name targets or groups with --targets, "
+            f"or have a target claim the `{GROUP_DEFAULT}` group"
+        )
+        if executes:
+            return f"{cause}. {choices}"
+        return (
+            f"{cause}, or name the reserved group `{GROUP_NONE}` (--targets "
+            f"{GROUP_NONE}) to report every result as carried from an earlier run."
+        )
+    if executes:
+        if names_none:
+            return (
+                f"--targets {' '.join(wanted)} selects no test target, "
+                f"so there is nothing to run. {choices}"
+            )
+        return f"--targets {' '.join(wanted)} names no test target to run. {choices}"
+    return (
+        f"--targets {' '.join(wanted)} stands for no configured target. "
+        f"To report every result as carried from an earlier run, name the "
+        f"reserved group `{GROUP_NONE}` (--targets {GROUP_NONE})."
+    )
+
+
+# Implements: REQ-d00283-H
+def unknown_target_refusal(config: Any, named: list[str] | None) -> str | None:
+    """Return the reason to refuse a run that names an unknown target or group.
+
+    The function returns ``None`` if every name is a configured target or a
+    declared or reserved group. A run names targets and groups alike.
+    Consequently, the refusal lists both the targets and the groups. A reader
+    who corrects the name needs both lists.
+    """
+    unknown = unknown_target_names(config, named)
+    if not unknown:
+        return None
+    configured = sorted(t.name for t in config.scanning.test.targets)
+    return (
+        f"unknown --targets: {', '.join(unknown)}. "
+        f"Configured targets: {', '.join(configured)}. "
+        f"Known groups: {', '.join(sorted(known_group_names(config)))}."
+    )
+
+
 # Implements: REQ-d00283-H
 def unknown_target_names(config: Any, named: list[str] | None) -> list[str]:
     """The names in *named* that are neither a configured target nor a group.
