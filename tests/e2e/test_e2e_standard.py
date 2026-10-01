@@ -2189,7 +2189,7 @@ class TestRunTestsFlag:
     def test_summary_naming_none_reports_every_result_as_carried(self, tmp_path, project):
         scratch = tmp_path / "targets_none"
         shutil.copytree(project, scratch)
-        result_dir = scratch / ".elspais" / "results"
+        result_dir = scratch / ".results" / "stub"
         result_dir.mkdir(parents=True, exist_ok=True)
         (result_dir / "test-results.json").write_text(
             json.dumps(
