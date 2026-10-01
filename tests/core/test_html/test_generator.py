@@ -3,6 +3,9 @@
 # Validates REQ-d00052-A, REQ-d00052-D, REQ-d00052-E, REQ-d00052-F
 """Tests for HTML Generator."""
 
+import json
+import re
+
 import pytest
 
 from elspais.html.generator import HTMLGenerator
@@ -13,6 +16,15 @@ from tests.core.graph_test_helpers import (
     make_requirement,
     make_test_ref,
 )
+
+
+def _embedded_block(page: str, block_id: str):
+    """Decode the embedded JSON data block with the given id."""
+    match = re.search(
+        rf'<script type="application/json" id="{block_id}">(.*?)</script>', page, re.S
+    )
+    assert match, f"no embedded block {block_id!r}"
+    return json.loads(match.group(1))
 
 
 @pytest.fixture
@@ -263,9 +275,12 @@ class TestHTMLGeneratorTreeStructure:
         result = generator.generate(embed_content=True)
 
         # Depth data is now in the embedded tree-data JSON, not on table <tr> elements
-        assert 'id="tree-data"' in result
-        assert '"level": "PRD"' in result  # Root level
-        assert '"level": "OPS"' in result  # First level children
+        rows = {row["id"]: row for row in _embedded_block(result, "tree-data")}
+        assert rows["REQ-p00001"]["level"] == "PRD"
+        assert rows["REQ-p00001"]["depth"] == 0
+        assert rows["REQ-o00001"]["level"] == "OPS"
+        assert rows["REQ-o00001"]["depth"] == 1
+        assert rows["REQ-o00001"]["parent_id"] == "REQ-p00001"
 
     # Verifies: REQ-d00052-B
     def test_includes_parent_id(self, sample_graph):
@@ -435,11 +450,11 @@ class TestHTMLGeneratorGitIntegration:
         result = generator.generate(embed_content=True)
 
         # Node-index JSON contains serialized node data with requirement properties
-        assert 'id="node-index"' in result
-        # The JSON includes requirement-specific fields (level, status, hash)
-        assert '"level": "PRD"' in result
-        assert '"status": "Active"' in result
-        assert '"hash": "abc12345"' in result
+        props = _embedded_block(result, "node-index")["REQ-p00001"]["properties"]
+        # The entry carries the requirement-specific fields (level, status, hash)
+        assert props["level"] == "PRD"
+        assert props["status"] == "Active"
+        assert props["hash"] == "abc12345"
 
     # Verifies: REQ-d00052-D
     def test_REQ_d00052_D_includes_git_filter_buttons(self, sample_graph):

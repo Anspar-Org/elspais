@@ -9,6 +9,7 @@ Uses Jinja2 templates for rich interactive output.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -21,15 +22,37 @@ from elspais.graph.aggregation import (
     measure_phrase,
     relative_tier_for,
 )
+from elspais.graph.GraphNode import NodeKind
 from elspais.graph.parsers.directives import counted_assertion_labels
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.html.theme import get_catalog
 from elspais.utilities.patterns import INSTANCE_SEPARATOR
 
 if TYPE_CHECKING:
+    from markupsafe import Markup
+
     from elspais.graph.federated import FederatedGraph
     from elspais.graph.GraphNode import GraphNode
     from elspais.graph.metrics import CoverageDimension
+
+# The node kinds the static page never opens as a card (REQ-d00321-B).
+_NOT_INDEXED_KINDS = frozenset({NodeKind.REMAINDER, NodeKind.FILE})
+
+
+# Implements: REQ-d00321-C
+def script_json(value: Any) -> Markup:
+    """Serialize a value as JSON for a ``<script type="application/json">`` block.
+
+    A script data block ends at the first ``</`` that starts its end tag, and
+    a ``<!--`` in it changes how the browser finds that end. JSON can spell
+    both without the characters that do this, so only those are respelled.
+    Every other character stays as it is, which keeps highlighted source
+    markup at about its own size.
+    """
+    from markupsafe import Markup
+
+    text = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    return Markup(text.replace("</", "<\\/").replace("<!--", "<\\u0021--"))
 
 
 @dataclass
@@ -688,6 +711,7 @@ class HTMLGenerator:
                 loader=PackageLoader("elspais.html", "templates"),
                 autoescape=select_autoescape(["html", "xml"]),
             )
+            env.filters["script_json"] = script_json
             template = env.get_template("trace_unified.html.j2")
         except ImportError as err:
             raise ImportError(
@@ -1310,19 +1334,38 @@ class HTMLGenerator:
 
         return build_tree_rows(self.graph, self.config)
 
-    # Implements: REQ-p00006-A
+    # Implements: REQ-p00006-A, REQ-d00321-B
     def _build_node_index(self) -> dict[str, Any]:
         """Build node index for embedded JSON — matches /api/node/<id> response shape.
 
         Delegates to the MCP server's _serialize_node_generic() to produce
         identical JSON as the live API, ensuring view mode and edit mode
         see the same data structure.
+
+        The index holds the nodes the static page can open. A REMAINDER is
+        never opened: its text arrives inside the entry of the node that owns
+        it. A FILE is opened only where an indexed node links to it; its
+        source text is in the source-files block, and its own entry repeats
+        the text of everything it contains.
         """
+        from elspais.graph import NodeKind
         from elspais.mcp.server import _serialize_node_generic
 
         index: dict[str, Any] = {}
         for node in self.graph.all_nodes():
+            if node.kind in _NOT_INDEXED_KINDS:
+                continue
             index[node.id] = _serialize_node_generic(node, self.graph)
+        linked = {
+            link["id"]
+            for entry in index.values()
+            for link in entry.get("links") or ()
+            if link.get("kind") == NodeKind.FILE.value
+        }
+        for file_id in sorted(linked - index.keys()):
+            node = self.graph.find_by_id(file_id)
+            if node is not None:
+                index[file_id] = _serialize_node_generic(node, self.graph)
         return index
 
     # Implements: REQ-p00006-B
@@ -1358,7 +1401,7 @@ class HTMLGenerator:
 
         return _get_graph_status(self.graph)
 
-    # Implements: REQ-p00006-C
+    # Implements: REQ-p00006-C, REQ-d00321-A
     def _collect_source_files(self) -> dict[str, Any]:
         """Collect source file contents with syntax highlighting for inline viewer.
 
@@ -1368,7 +1411,8 @@ class HTMLGenerator:
 
         Returns:
             Dict mapping file paths to their content data:
-            {path: {lines: [highlighted_html_per_line], language: str, raw: str}}
+            {path: {lines: [highlighted_html_per_line], language: str}}
+            Each file's text is carried once, as its highlighted lines.
         """
         from elspais.html.highlighting import MAX_FILE_SIZE, highlight_file_content
 

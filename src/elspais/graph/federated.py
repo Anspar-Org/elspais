@@ -2003,14 +2003,37 @@ class FederatedGraph:
                 for idx, ref in enumerate(source_entry.graph._unresolved_references):
                     if idx in replacements:
                         rebuilt.extend(replacements[idx])
+                        self._sync_leftover_refs(source_entry, ref, replacements[idx])
                     elif idx not in dropped:
                         rebuilt.append(ref)
+                    else:
+                        self._sync_leftover_refs(source_entry, ref, [])
                 source_entry.graph._unresolved_references[:] = rebuilt
 
         # Demote wired source nodes from _roots — they now have parent edges
         for repo_name, source_ids in wired_sources.items():
             graph = self._repos[repo_name].graph
             graph._roots = [r for r in graph._roots if r.id not in source_ids]
+
+    # Implements: REQ-d00132-F, REQ-d00132-G
+    @staticmethod
+    def _sync_leftover_refs(
+        source_entry: RepoEntry, consumed: ReferenceFault, remaining: list[ReferenceFault]
+    ) -> None:
+        """Keep a citing requirement's stored references to the ones still unresolved.
+
+        A requirement renders its citations from its live edges together with
+        the references it stores because they never became edges. A reference
+        this pass wires is an edge now, so it leaves the stored list; a
+        reference that stays stored would render beside the edge and keep its
+        former spelling after a rename.
+        """
+        graph = source_entry.graph
+        source = graph.find_by_id(consumed.source_id)
+        kind = EdgeKind(consumed.edge_kind)
+        graph._remove_leftover_ref(source, kind, consumed.target_id)
+        for fault in remaining:
+            graph._add_leftover_ref(source, kind, fault.target_id)
 
     # Implements: REQ-d00269-B
     def _expand_foreign_multi_reference(

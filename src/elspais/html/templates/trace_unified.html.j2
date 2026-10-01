@@ -135,23 +135,23 @@ body {
      ===================================================================== -->
 
 <script type="application/json" id="tree-data">
-{{ tree_data | tojson }}
+{{ tree_data | script_json }}
 </script>
 
 <script type="application/json" id="source-files">
-{{ source_files | tojson }}
+{{ source_files | script_json }}
 </script>
 
 <script type="application/json" id="node-index">
-{{ node_index | tojson }}
+{{ node_index | script_json }}
 </script>
 
 <script type="application/json" id="coverage-index">
-{{ coverage_index | tojson }}
+{{ coverage_index | script_json }}
 </script>
 
 <script type="application/json" id="status-data">
-{{ status_data | tojson }}
+{{ status_data | script_json }}
 </script>
 {% endif %}
 

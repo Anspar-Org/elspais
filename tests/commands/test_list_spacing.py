@@ -110,7 +110,7 @@ class TestREQ_d00131_D_list_spacing_canonicalization:
             config_path=project / ".elspais.toml",
             repo_root=project,
         )
-        render_save(graph)
+        render_save(graph, tidy=True)
 
         # Re-read the file and check that list items have blank line before them
         content = (project / "spec" / "test.md").read_text(encoding="utf-8")

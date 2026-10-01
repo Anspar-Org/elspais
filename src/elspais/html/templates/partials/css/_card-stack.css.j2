@@ -274,8 +274,8 @@ body.edit-mode .view-only {
     display: none;
 }
 
-/* Kind toggle button (edit mode) */
-.card-parent-kind-toggle {
+/* Relationship type control (edit mode) */
+.card-parent-kind-select {
     border: 1px solid var(--kind-toggle-border);
     background: var(--kind-toggle-bg);
     border-radius: 4px;
@@ -289,7 +289,8 @@ body.edit-mode .view-only {
     white-space: nowrap;
 }
 
-.card-parent-kind-toggle:hover {
+.card-parent-kind-select:hover,
+.card-parent-kind-select:focus {
     border-color: var(--kind-toggle-hover-border);
     color: var(--kind-toggle-hover-text);
     background: var(--kind-toggle-hover-bg);

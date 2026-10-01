@@ -89,6 +89,16 @@ var _embeddedData = {
     sources: JSON.parse(document.getElementById('source-files').textContent)
 };
 
+{# Implements: REQ-d00321-A #}
+// The embedded source of a file is carried once, as its highlighted lines.
+// A line's plain text is that line with its markup removed and its
+// character references resolved.
+var _PLAIN_TEXT_DECODER = document.createElement('textarea');
+function plainTextOfHighlightedLine(line) {
+    _PLAIN_TEXT_DECODER.innerHTML = String(line || '').replace(/<[^>]*>/g, '');
+    return _PLAIN_TEXT_DECODER.value;
+}
+
 function apiFetch(url) {
     var m;
     // /api/node/<id>
@@ -123,9 +133,10 @@ function apiFetch(url) {
         var path = params.get('path') || '';
         var fileData = _embeddedData.sources[path];
         if (fileData) {
+            var highlighted = fileData.lines || [];
             return Promise.resolve({
-                lines: (fileData.raw || '').split('\n'),
-                highlighted_lines: fileData.lines || [],
+                lines: highlighted.map(plainTextOfHighlightedLine),
+                highlighted_lines: highlighted,
                 language: fileData.language || '',
                 line_count: (fileData.lines || []).length,
                 has_pending_mutations: false,

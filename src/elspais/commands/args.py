@@ -478,7 +478,7 @@ class ViewerArgs:
     """Generate interactive HTML file instead of starting server."""
 
     embed_content: bool = False
-    """Embed full requirement content in HTML for offline viewing."""
+    """Embed requirement content and every traced source file for offline viewing."""
 
     port: int | None = None
     """Port number for the server (default: 5001)."""

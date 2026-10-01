@@ -396,15 +396,18 @@ H. If a reference targets an *Assertion* carrying the RETIRED parsing directive,
 
 I. The tool SHALL NOT assign a label borne by an *Assertion* carrying the RETIRED parsing directive to a different *Assertion*.
 
+J. When a mutation renames or removes an *Assertion*, the tool SHALL leave unchanged every reference that designates an *Assertion* of another requirement.
+
 ## Changelog
 
+- 2026-10-01 | d2f70506 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | 3e4c9ddb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 8ddf7122 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: author RETIRED-directive semantics — coverage/traceability nonexistence (G), broken-reference resolution (H), permanent label allocation (I)
 - 2026-07-31 | c0aae59d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-20: author reference-integrity-under-mutation invariant (GI-3)
 
-*End* *Reference Integrity Under Mutation* | **Hash**: 3e4c9ddb
+*End* *Reference Integrity Under Mutation* | **Hash**: d2f70506
 ---
 
 # REQ-p00018: Compiled Risk Register

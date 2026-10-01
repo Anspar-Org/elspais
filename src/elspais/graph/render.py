@@ -899,6 +899,10 @@ def _decline_fields(held_back: list[str]) -> dict[str, Any]:
     }
 
 
+# The edge kinds a requirement renders its citations from (REQ-d00132-F).
+_CITATION_RENDERED_KINDS = (EdgeKind.IMPLEMENTS, EdgeKind.REFINES)
+
+
 def _files_with_pending_mutations(graph: FederatedGraph) -> list[Any]:
     """Identify the FILE nodes whose subtree has pending mutations.
 
@@ -959,6 +963,25 @@ def _files_with_pending_mutations(graph: FederatedGraph) -> list[Any]:
             if split is not None:
                 _mark_node_file(split[0])
                 return
+
+    # Implements: REQ-d00132-H
+    def _mark_citing_files(cited: Any, label: str | None) -> None:
+        """Mark the file of each requirement whose citation renders the renamed identifier.
+
+        A requirement renders its Implements and Refines lists from its live
+        edges, so a rename changes the text of every file holding a citing
+        requirement. The cited node is the source of a stored edge and the
+        citing node is its target. Where only one *Assertion* was renamed,
+        only a citation naming that *Assertion* changes.
+        """
+        if cited is None:
+            return
+        for kind in _CITATION_RENDERED_KINDS:
+            for edge in cited.iter_edges_by_kind(kind):
+                if label is not None and label not in edge.assertion_targets:
+                    continue
+                if edge.target.kind == NodeKind.REQUIREMENT:
+                    _mark(edge.target.file_node())
 
     for entry in graph.mutation_log.iter_entries():
         target_id = entry.target_id
@@ -1027,6 +1050,13 @@ def _files_with_pending_mutations(graph: FederatedGraph) -> list[Any]:
             new_id = entry.after_state.get("id", "")
             if new_id:
                 _mark_node_file(new_id)
+                _mark_citing_files(graph.find_by_id(new_id), label=None)
+
+        if entry.operation == "rename_assertion":
+            renamed = graph.find_by_id(entry.after_state.get("id", ""))
+            parent_id = entry.before_state.get("parent_id", "")
+            if renamed is not None and parent_id:
+                _mark_citing_files(graph.find_by_id(parent_id), label=renamed.get_field("label"))
 
         # For change_status, update_title - node should still exist
         if entry.operation in ("change_status", "update_title"):
@@ -1074,22 +1104,26 @@ def _files_with_pending_mutations(graph: FederatedGraph) -> list[Any]:
     return list(dirty_files.values())
 
 
-def _find_dirty_files(graph: FederatedGraph) -> list[Any]:
+# Implements: REQ-d00132-H, REQ-d00132-I
+def _find_dirty_files(graph: FederatedGraph, *, tidy: bool = False) -> list[Any]:
     """Every FILE node a save must rewrite.
 
     Two kinds, and which kind a file is matters to the caller: a file the
     MUTATION LOG names carries work somebody asked for, and a file that is
-    merely parse-dirty carries formatting the tool would tidy. A save that
-    declines to write the first owes the caller a word; declining the second
-    is routine.
+    merely parse-dirty carries formatting the tool would tidy. A save of
+    pending mutations writes the first kind only. The fix command asks for
+    the second kind with ``tidy``, because tidying is its work.
 
     Args:
         graph: The traceability graph with pending mutations.
+        tidy: Also return the files that are merely parse-dirty.
 
     Returns:
         The FILE nodes to rewrite, unique by identity.
     """
     dirty_files = {id(node): node for node in _files_with_pending_mutations(graph)}
+    if not tidy:
+        return list(dirty_files.values())
 
     # Files containing requirements with structural parse-dirty reasons.
     # "stale_hash" is excluded: that is a hash-value change only, handled by
@@ -1115,6 +1149,8 @@ def render_save(
     rebuild_fn: Any | None = None,
     resolver: Any | None = None,
     write_associates: bool = False,
+    *,
+    tidy: bool = False,
 ) -> dict[str, Any]:
     """Persist dirty FILE nodes to disk by rendering their CONTAINS children.
 
@@ -1137,6 +1173,9 @@ def render_save(
             are written; files owned by an associate repo (per the federation
             ownership map, with the FILE node's `repo` field as a fallback) are
             skipped. When True, associate files are written too.
+        tidy: Also rewrite the files that are merely parse-dirty. The fix
+            command sets it. A save of pending mutations does not, so it
+            writes only the files that the mutations change (REQ-d00132-I).
 
     Returns:
         Dict with:
@@ -1167,7 +1206,7 @@ def render_save(
     _wire_new_requirements_to_files(graph)
 
     # Find dirty FILE nodes
-    dirty_files = _find_dirty_files(graph)
+    dirty_files = _find_dirty_files(graph, tidy=tidy)
 
     # Federation: by default, fix/save writes only primary-repo files.
     # Ownership resolution lives in ONE place: is_associate_owned() in

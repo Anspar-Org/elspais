@@ -7,6 +7,9 @@ the API response shapes used by the Flask server.
 
 from __future__ import annotations
 
+import html as _html
+import json
+import re
 from pathlib import Path
 
 import pytest
@@ -37,14 +40,46 @@ def generator(graph):
 class TestBuildNodeIndex:
     """Validates REQ-p00006-A: Node index matches /api/node/ response shape."""
 
-    # Verifies: REQ-p00006-A
-    def test_REQ_p00006_A_node_index_has_all_nodes(self, generator, graph):
-        """Node index should contain an entry for every node in the graph."""
+    # Verifies: REQ-d00321-B
+    def test_REQ_d00321_B_node_index_holds_the_nodes_the_page_opens(self, generator, graph):
+        """The index holds an entry for every node the page can open, and no other.
+
+        The page opens a node from a tree row, or from a parent, a requirement
+        child or a link shown on an open card. A REMAINDER is never opened (its
+        text is inside its owner's entry), and a FILE only where a card links to it.
+        """
+        from elspais.graph import NodeKind
+
         index = generator._build_node_index()
         assert len(index) > 0
-        # Every node in the graph should be present
+
+        for row in generator._build_tree_data():
+            assert row["id"] in index, f"tree row {row['id']} has no index entry"
+
+        for entry_id, entry in index.items():
+            targets = list(entry.get("parents") or ())
+            targets += [c for c in entry.get("children") or () if c.get("kind") == "requirement"]
+            targets += [
+                link
+                for link in entry.get("links") or ()
+                if link.get("kind") != NodeKind.REMAINDER.value
+            ]
+            for target in targets:
+                assert target["id"] in index, f"{entry_id} opens {target['id']}, not indexed"
+
+        linked_files = {
+            link["id"]
+            for entry in index.values()
+            for link in entry.get("links") or ()
+            if link.get("kind") == NodeKind.FILE.value
+        }
         for node in graph.all_nodes():
-            assert node.id in index, f"Missing node {node.id} from index"
+            if node.kind == NodeKind.REMAINDER:
+                assert node.id not in index, f"REMAINDER {node.id} is indexed"
+            elif node.kind == NodeKind.FILE:
+                assert (node.id in index) == (node.id in linked_files), node.id
+            else:
+                assert node.id in index, f"Missing node {node.id} from index"
 
     # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_node_index_matches_api_shape(self, generator, graph):
@@ -166,3 +201,146 @@ class TestEmbeddedDataInHTML:
         # Empty dicts still get rendered as {} in script tags,
         # but the data should be minimal
         assert 'id="node-index"' in html  # Tag exists but empty
+
+
+# The five data blocks a static view with embedded content carries.
+DATA_BLOCK_IDS = ("tree-data", "source-files", "node-index", "coverage-index", "status-data")
+
+# A data block runs from its opening tag to the first end tag the browser finds.
+_DATA_BLOCK = re.compile(r'<script type="application/json" id="([^"]+)">(.*?)</script>', re.S)
+
+
+def _data_blocks(page: str) -> dict[str, str]:
+    """The text of each data block, cut where a browser would end it."""
+    blocks = dict(_DATA_BLOCK.findall(page))
+    assert set(DATA_BLOCK_IDS) <= set(blocks), f"missing data blocks: {sorted(blocks)}"
+    return blocks
+
+
+def _plain_lines(highlighted: list[str]) -> list[str]:
+    """The text of highlighted lines: markup removed, character references resolved."""
+    return [_html.unescape(re.sub(r"<[^>]*>", "", line)) for line in highlighted]
+
+
+# Text that ends a script element early, or makes the browser look for the end
+# of a comment before it will end one.
+SCRIPT_CLOSER = "</script>"
+COMMENT_OPENER = "<!-- a comment -->"
+# A line of a source file that no node's own content carries.
+SENTINEL = "UNCITED_SENTINEL_LINE"
+
+_HOSTILE_SPEC = f"""# Product
+
+## REQ-p00001: Alpha
+
+**Level**: prd | **Status**: Active
+
+Alpha body mentions {SCRIPT_CLOSER} and {COMMENT_OPENER} inline.
+
+### Assertions
+
+A. The tool SHALL alpha.
+
+*End* *Alpha* | **Hash**: 00000000
+"""
+
+_HOSTILE_CODE = f'''"""Module."""
+
+{SENTINEL} = "{SCRIPT_CLOSER}{COMMENT_OPENER}"
+
+
+# Implements: REQ-p00001-A
+def alpha():
+    return 1
+'''
+
+
+@pytest.fixture
+def hostile_repo(tmp_path: Path) -> Path:
+    """A repository whose spec and code text hold a script closer and a comment opener."""
+    (tmp_path / ".elspais.toml").write_text(
+        'version = 5\n\n[project]\nname = "emb"\nnamespace = "REQ"\n', encoding="utf-8"
+    )
+    (tmp_path / "spec").mkdir()
+    (tmp_path / "src").mkdir()
+    (tmp_path / "spec" / "prd.md").write_text(_HOSTILE_SPEC, encoding="utf-8")
+    (tmp_path / "src" / "app.py").write_text(_HOSTILE_CODE, encoding="utf-8")
+    return tmp_path
+
+
+def _embedded_page(repo: Path) -> str:
+    from elspais.html.generator import HTMLGenerator
+
+    graph = build_graph(repo_root=repo)
+    return HTMLGenerator(graph, base_path=str(repo)).generate(embed_content=True)
+
+
+class TestEmbeddedSourceIsCarriedOnce:
+    """Validates REQ-d00321-A: each embedded source file's text is carried once."""
+
+    # Verifies: REQ-d00321-A
+    def test_REQ_d00321_A_each_file_is_carried_once_as_highlighted_lines(self, hostile_repo):
+        blocks = _data_blocks(_embedded_page(hostile_repo))
+        sources = json.loads(blocks["source-files"])
+
+        assert set(sources) == {"spec/prd.md", "src/app.py"}
+        for path, entry in sources.items():
+            assert set(entry) == {"lines", "language"}, f"{path} carries {sorted(entry)}"
+            expected = (hostile_repo / path).read_text(encoding="utf-8").split("\n")
+            if expected[-1] == "":
+                expected.pop()
+            assert _plain_lines(entry["lines"]) == expected, path
+
+        others = {k: json.loads(v) for k, v in blocks.items() if k != "source-files"}
+        for block_id, value in others.items():
+            assert SENTINEL not in json.dumps(value, ensure_ascii=False), (
+                f"{block_id} carries source text a node's own content does not hold"
+            )
+
+    # Verifies: REQ-d00321-A
+    def test_REQ_d00321_A_source_block_is_proportionate_to_the_files(self, graph):
+        """The source-files block stays within a small multiple of the files it embeds.
+
+        Highlighting markup costs a few times the text. Carrying the text a
+        second time beside it, or once per containing node, exceeds the bound.
+        """
+        from elspais.html.generator import HTMLGenerator
+
+        page = HTMLGenerator(graph, base_path=str(FIXTURE_DIR)).generate(embed_content=True)
+        block = _data_blocks(page)["source-files"]
+        sources = json.loads(block)
+        assert sources, "the fixture embeds no source files, so this measures nothing"
+
+        embedded_bytes = sum(len((FIXTURE_DIR / path).read_bytes()) for path in sources)
+        ratio = len(block.encode("utf-8")) / embedded_bytes
+        assert ratio <= 5, f"source-files block is {ratio:.1f}x the embedded files"
+
+
+class TestEmbeddedValuesStayData:
+    """Validates REQ-d00321-C: every embedded value survives as data."""
+
+    # Verifies: REQ-d00321-C
+    def test_REQ_d00321_C_every_block_decodes_whole(self, hostile_repo):
+        """A value holding a script closer or a comment opener does not cut its block short."""
+        blocks = _data_blocks(_embedded_page(hostile_repo))
+
+        decoded = {block_id: json.loads(blocks[block_id]) for block_id in DATA_BLOCK_IDS}
+
+        app_lines = _plain_lines(decoded["source-files"]["src/app.py"]["lines"])
+        assert f'{SENTINEL} = "{SCRIPT_CLOSER}{COMMENT_OPENER}"' in app_lines
+        spec_lines = _plain_lines(decoded["source-files"]["spec/prd.md"]["lines"])
+        assert any(SCRIPT_CLOSER in line and COMMENT_OPENER in line for line in spec_lines)
+        body = json.dumps(decoded["node-index"]["REQ-p00001"], ensure_ascii=False)
+        assert SCRIPT_CLOSER in body and COMMENT_OPENER in body
+
+    # Verifies: REQ-d00321-C
+    def test_REQ_d00321_C_no_data_block_holds_a_closer_or_comment_opener(self, hostile_repo):
+        """Negative: the page text of a data block spells neither sequence."""
+        page = _embedded_page(hostile_repo)
+
+        for block_id, text in _data_blocks(page).items():
+            assert "</" not in text, f"{block_id} holds an end-tag opener"
+            assert "<!--" not in text, f"{block_id} holds a comment opener"
+        assert page.count("<script") == page.count(SCRIPT_CLOSER), (
+            "a script element ends where no script element was opened"
+        )

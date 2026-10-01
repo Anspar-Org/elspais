@@ -314,19 +314,26 @@ F. The render-based save SHALL derive implements and refines reference lists fro
 
 G. Rendering SHALL preserve reference entries that never resolved to graph edges (unresolved references), including when they coexist with edge-derived references, so a rewrite does not silently delete an author's unresolved reference.
 
+H. A save of pending mutations SHALL write each file that holds text those mutations change, including each file that cites an identifier a mutation renamed.
+
+I. A save of pending mutations SHALL leave unwritten each file that holds no text those mutations change, also where that file is not in canonical form.
+
 ### Rationale
 
 Render-based save replaces the brittle text surgery in persistence.py with graph-native serialization. Each FILE node renders its content from the graph, making the graph the single source of truth. The consistency check (rebuild + compare) proves round-trip fidelity.
 
+A save carries the edits somebody made. Bringing a file into canonical form is the work of the fix operation, which the author runs on purpose and reviews as its own change. A save that also rewrote every non-canonical file in the repository would turn a one-line edit into a broad change in files nobody opened, and a reviewer could not tell the edit from the tidying. A rename is the exception that proves the boundary: the files citing the renamed identifier hold text the rename changes, so they are part of the edit.
+
 ### Changelog
 
+- 2026-10-01 | bd3e0684 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | f5a4193c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | 91068610 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | c40e6417 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 7043f7af | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 7043f7af | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Render-Based Save Operation* | **Hash**: f5a4193c
+*End* *Render-Based Save Operation* | **Hash**: bd3e0684
 ---
 
 ## REQ-d00134: Mutation Round-Trip Fidelity

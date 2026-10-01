@@ -446,6 +446,11 @@ returning HTTP 409 with the identical rejection body, and its history
 routes `/api/save`, `/api/revert`, and `/api/reload` require
 `if_tip_mutation_id` in the JSON body.
 
+A save writes the files its pending changes reach and no other: the file
+holding each changed node, and, for a rename, each file whose citations name
+the renamed identifier. A file that only needs its formatting tidied stays as
+it is on disk until `elspais fix` tidies it.
+
 A stale tip is not the only way a save comes back unsuccessful, and the
 `code` says which it was: `save_mutations` reports `write_scope_declined`
 where the save held back a file it was asked to write -- one an associate

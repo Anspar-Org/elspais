@@ -404,8 +404,8 @@ class TestParseDirtyFileDetection:
         assert req_node is not None
         req_node.set_field("parse_dirty", True)
 
-        # render_save should detect parse_dirty and include the file
-        result = render_save(graph, tmp_path)
+        # A tidying save detects parse_dirty and includes the file
+        result = render_save(graph, tmp_path, tidy=True)
 
         assert result["success"] is True
         assert result["saved_count"] >= 1, (
@@ -440,3 +440,211 @@ class TestPersistenceDeleted:
         assert not persistence_path.exists(), (
             f"persistence.py should be deleted (replaced by render-based save): {persistence_path}"
         )
+
+
+# ---------------------------------------------------------------------------
+# What a save of pending mutations writes (REQ-d00132-H, REQ-d00132-I).
+#
+# A repository on disk with three spec files: the requirements that are cited
+# (prd.md), the requirements citing them by Assertion (dev.md), and a file
+# that is NOT in canonical form (ops-untidy.md: no blank lines between its
+# metadata, body, heading and assertions). The untidy file is parse-dirty from
+# the moment it is read, and no mutation below touches it.
+# ---------------------------------------------------------------------------
+
+_SAVE_SCOPE_TOML = 'version = 5\n\n[project]\nname = "scope"\nnamespace = "REQ"\n'
+
+_CITED_SPEC = """# Product
+
+## REQ-p00001: Alpha
+
+**Level**: prd | **Status**: Active
+
+Alpha body.
+
+### Assertions
+
+A. The tool SHALL alpha.
+
+B. The tool SHALL alpha two.
+
+*End* *Alpha* | **Hash**: 00000000
+
+## REQ-p00002: Gamma
+
+**Level**: prd | **Status**: Active
+
+Gamma body.
+
+### Assertions
+
+A. The tool SHALL gamma.
+
+*End* *Gamma* | **Hash**: 00000000
+"""
+
+_CITING_SPEC = """# Dev
+
+## REQ-d00001: Beta
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00001-A
+
+Beta body.
+
+### Assertions
+
+A. The tool SHALL beta.
+
+*End* *Beta* | **Hash**: 00000000
+
+## REQ-d00002: Delta
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002-A
+
+Delta body.
+
+### Assertions
+
+A. The tool SHALL delta.
+
+*End* *Delta* | **Hash**: 00000000
+"""
+
+_UNTIDY_SPEC = """# Untidy
+
+## REQ-o00001: Untidy
+
+**Level**: ops | **Status**: Active | **Implements**: -
+Body directly after metadata.
+## Assertions
+A. The tool SHALL one.
+B. The tool SHALL two.
+*End* *Untidy* | **Hash**: 00000000
+"""
+
+
+def _save_scope_repo(tmp_path: Path) -> tuple[FederatedGraph, Path]:
+    """Write the three-file repository and build its FederatedGraph."""
+    from elspais.graph.factory import build_graph
+
+    (tmp_path / ".elspais.toml").write_text(_SAVE_SCOPE_TOML, encoding="utf-8")
+    spec = tmp_path / "spec"
+    spec.mkdir()
+    (spec / "prd.md").write_text(_CITED_SPEC, encoding="utf-8")
+    (spec / "dev.md").write_text(_CITING_SPEC, encoding="utf-8")
+    (spec / "ops-untidy.md").write_text(_UNTIDY_SPEC, encoding="utf-8")
+    graph = build_graph(repo_root=tmp_path)
+    assert graph.find_by_id("REQ-o00001") is not None, "the untidy requirement did not load"
+    return graph, spec
+
+
+def _modified_names(result: dict) -> set[str]:
+    return {Path(path).name for path in result["files_modified"]}
+
+
+def _untidy_is_only_parse_dirty(graph: FederatedGraph) -> None:
+    """Fail when the fixture has stopped exercising a merely parse-dirty file."""
+    from elspais.graph.render import _files_with_pending_mutations, _find_dirty_files
+
+    def names(nodes):
+        return {node.get_field("relative_path") for node in nodes}
+
+    assert "spec/ops-untidy.md" not in names(_files_with_pending_mutations(graph))
+    assert "spec/ops-untidy.md" in names(_find_dirty_files(graph, tidy=True)), (
+        "the untidy file is not parse-dirty, so this fixture tests nothing"
+    )
+
+
+class TestASaveLeavesUntouchedFilesUnwritten:
+    """Validates REQ-d00132-I: a save writes the files its mutations change, and
+    no file that is merely not in canonical form."""
+
+    # Verifies: REQ-d00132-I
+    def test_REQ_d00132_I_a_non_canonical_file_the_mutation_misses_is_not_written(
+        self, tmp_path: Path
+    ):
+        from elspais.graph.render import render_save
+
+        graph, spec = _save_scope_repo(tmp_path)
+        untidy = spec / "ops-untidy.md"
+        before = untidy.read_bytes()
+
+        graph.update_title("REQ-p00002", "Gamma Renamed")
+        _untidy_is_only_parse_dirty(graph)
+        result = render_save(graph, repo_root=tmp_path)
+
+        assert result["success"] is True, result["errors"]
+        assert "ops-untidy.md" not in _modified_names(result)
+        assert untidy.read_bytes() == before
+        assert "## REQ-p00002: Gamma Renamed" in (spec / "prd.md").read_text(encoding="utf-8")
+
+    # Verifies: REQ-d00132-I
+    def test_REQ_d00132_I_a_tidying_save_does_rewrite_the_non_canonical_file(self, tmp_path: Path):
+        """The fix command's tidying save is what brings the file into canonical form."""
+        from elspais.graph.render import render_save
+
+        graph, spec = _save_scope_repo(tmp_path)
+        untidy = spec / "ops-untidy.md"
+        before = untidy.read_bytes()
+
+        graph.update_title("REQ-p00002", "Gamma Renamed")
+        result = render_save(graph, repo_root=tmp_path, tidy=True)
+
+        assert result["success"] is True, result["errors"]
+        assert "ops-untidy.md" in _modified_names(result)
+        assert untidy.read_bytes() != before
+        assert "### Assertions\n\nA. The tool SHALL one.\n\nB." in untidy.read_text(
+            encoding="utf-8"
+        )
+
+
+class TestASaveWritesTheFilesCitingARenamedIdentifier:
+    """Validates REQ-d00132-H: a rename changes the text of every file citing
+    the renamed identifier, so the save writes those files too."""
+
+    # Verifies: REQ-d00132-H
+    def test_REQ_d00132_H_renaming_a_requirement_rewrites_the_citing_file(self, tmp_path: Path):
+        from elspais.graph.render import render_save
+
+        graph, spec = _save_scope_repo(tmp_path)
+
+        graph.rename_node("REQ-p00001", "REQ-p00009")
+        result = render_save(graph, repo_root=tmp_path)
+
+        assert result["success"] is True, result["errors"]
+        assert {"prd.md", "dev.md"} <= _modified_names(result)
+        citing = (spec / "dev.md").read_text(encoding="utf-8")
+        assert "**Implements**: REQ-p00009-A" in citing
+        assert "REQ-p00001" not in citing
+
+    # Verifies: REQ-d00132-H
+    def test_REQ_d00132_H_renaming_an_assertion_rewrites_the_citing_file(self, tmp_path: Path):
+        from elspais.graph.render import render_save
+
+        graph, spec = _save_scope_repo(tmp_path)
+
+        graph.rename_assertion("REQ-p00001-A", "C")
+        result = render_save(graph, repo_root=tmp_path)
+
+        assert result["success"] is True, result["errors"]
+        assert "dev.md" in _modified_names(result)
+        citing = (spec / "dev.md").read_text(encoding="utf-8")
+        assert "**Implements**: REQ-p00001-C" in citing
+        assert "REQ-p00001-A" not in citing
+
+    # Verifies: REQ-d00132-H, REQ-d00132-I
+    def test_REQ_d00132_H_a_mutation_citing_nothing_renamed_leaves_the_citing_file_alone(
+        self, tmp_path: Path
+    ):
+        """Negative: a mutation that renames nothing does not reach the citing file."""
+        from elspais.graph.render import render_save
+
+        graph, spec = _save_scope_repo(tmp_path)
+        before = (spec / "dev.md").read_bytes()
+
+        graph.update_title("REQ-p00001", "Alpha Renamed")
+        result = render_save(graph, repo_root=tmp_path)
+
+        assert result["success"] is True, result["errors"]
+        assert _modified_names(result) == {"prd.md"}
+        assert (spec / "dev.md").read_bytes() == before

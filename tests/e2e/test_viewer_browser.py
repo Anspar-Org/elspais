@@ -4458,3 +4458,339 @@ class TestBrowserPullRequestModal:
 
         page.wait_for_function("() => !document.getElementById('pr-modal-overlay')")
         assert sent == [{"title": "Propose core", "body": "", "repo": "core"}]
+
+
+# ---------------------------------------------------------------------------
+# Edit controls state what they do (REQ-d00320) and offer every authorable
+# relationship type in one control (REQ-d00211-E)
+# ---------------------------------------------------------------------------
+
+_EDIT_CONTROLS_CITED = "REQ-p00001"
+_EDIT_CONTROLS_CITING = "REQ-d00001"
+
+_EDIT_CONTROLS_TOML = """version = 5
+
+[project]
+name = "edit-controls-fixture"
+namespace = "REQ"
+
+[rules.format]
+require_hash = false
+"""
+
+_EDIT_CONTROLS_PRD = f"""# Product
+
+## {_EDIT_CONTROLS_CITED}: Cited Requirement
+
+**Level**: prd | **Status**: Active
+
+The cited requirement.
+
+### Assertions
+
+A. The tool SHALL be cited.
+
+*End* *Cited Requirement*
+"""
+
+# The file opens with a blank line: a highlighter that drops it moves every
+# line number after it (REQ-d00321-A).
+_EDIT_CONTROLS_DEV = f"""
+# Dev
+
+## {_EDIT_CONTROLS_CITING}: Citing Requirement
+
+**Level**: dev | **Status**: Active | **Implements**: {_EDIT_CONTROLS_CITED}
+
+The citing requirement.
+
+### Assertions
+
+A. The tool SHALL cite.
+
+*End* *Citing Requirement*
+"""
+
+
+def _worktree_env() -> dict:
+    """The environment that runs this worktree's own elspais package."""
+    env = dict(os.environ)
+    worktree_src = str(REPO_ROOT / "src")
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{worktree_src}:{existing}" if existing else worktree_src
+    return env
+
+
+def _write_edit_controls_project(dest: Path) -> None:
+    """A project holding one relationship, as a git repository on a working branch."""
+    (dest / "spec").mkdir()
+    (dest / ".elspais.toml").write_text(_EDIT_CONTROLS_TOML, encoding="utf-8")
+    (dest / "spec" / "prd.md").write_text(_EDIT_CONTROLS_PRD, encoding="utf-8")
+    (dest / "spec" / "dev.md").write_text(_EDIT_CONTROLS_DEV, encoding="utf-8")
+    git_env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "test",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "test",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    for argv in (
+        ["git", "init"],
+        ["git", "add", "."],
+        ["git", "commit", "-m", "init"],
+        ["git", "checkout", "-b", "edit-controls"],
+    ):
+        subprocess.run(argv, cwd=dest, capture_output=True, env=git_env, check=True)
+
+
+@pytest.fixture(scope="module")
+def edit_controls_viewer_url(tmp_path_factory):
+    """A viewer, run from this worktree's source, over a private project.
+
+    Private because the relationship-type test changes a relationship. The
+    project is on a working branch so the edit toggle activates directly.
+    """
+    dest = tmp_path_factory.mktemp("viewer-edit-controls")
+    _write_edit_controls_project(dest)
+
+    port = _find_free_port()
+    base_url = f"http://127.0.0.1:{port}"
+    proc, log_path = _spawn_viewer(
+        [
+            sys.executable,
+            "-m",
+            "elspais",
+            "viewer",
+            "--server",
+            "--port",
+            str(port),
+            "--path",
+            str(dest),
+        ],
+        cwd=str(dest),
+        env=_worktree_env(),
+    )
+    try:
+        _wait_for_server(base_url, proc=proc, log_path=log_path)
+        yield base_url
+    finally:
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(f"{base_url}/api/shutdown", method="POST")
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                proc.wait(timeout=5)
+
+
+@pytest.fixture()
+def page_edit_controls(edit_controls_viewer_url):
+    """Launch headless Chromium against the edit-controls viewer."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        pg = context.new_page()
+        pg.set_default_timeout(10_000)
+        yield pg
+        browser.close()
+
+
+def _requests_to(page, path: str) -> list:
+    """Record every request the page makes whose URL path ends with ``path``."""
+    seen: list = []
+    page.on(
+        "request", lambda req: seen.append(req) if req.url.split("?")[0].endswith(path) else None
+    )
+    return seen
+
+
+class TestBrowserEditControlsStateWhatTheyDo:
+    """Validates REQ-d00320-A/B/C and REQ-d00211-E.
+
+    The relationship-type test changes the project, so it runs last.
+    """
+
+    # Verifies: REQ-d00320-A
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00320_A_repository_controls_name_their_operation(
+        self, page_edit_controls, edit_controls_viewer_url
+    ):
+        page = page_edit_controls
+        page.goto(edit_controls_viewer_url, wait_until="networkidle")
+        _enter_edit_mode(page)
+
+        assert page.get_attribute("#btn-save", "title") == "Save edits to disk"
+        assert page.get_attribute("#btn-checkpoint", "title") == "git commit saved edits"
+        assert page.get_attribute("#btn-share", "title") == "git push the commits"
+
+    # Verifies: REQ-d00320-B, REQ-d00320-C
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00320_BC_a_click_on_share_says_how_and_pushes_nothing(
+        self, page_edit_controls, edit_controls_viewer_url
+    ):
+        """Share acts on a drag or a held Enter. A click shows how, and sends no push."""
+        page = page_edit_controls
+        pushes = _requests_to(page, "/api/git/push")
+        page.goto(edit_controls_viewer_url, wait_until="networkidle")
+        _enter_edit_mode(page)
+        # The project has no remote, so nothing is ahead of it and Share
+        # starts disabled; enable it to reach the click handler.
+        page.evaluate("() => { document.getElementById('btn-share').disabled = false; }")
+
+        page.click("#btn-share")
+
+        hint = page.wait_for_selector("#share-hint", state="visible")
+        text = hint.text_content() or ""
+        assert "drag" in text and "hold Enter" in text, text
+        assert "git push" in text, text
+        assert hint.get_attribute("role") == "status"
+        page.wait_for_timeout(1500)
+        assert pushes == [], f"a click on Share sent a push: {[r.url for r in pushes]}"
+
+    # Verifies: REQ-d00320-C
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00320_C_holding_enter_on_share_does_push(
+        self, page_edit_controls, edit_controls_viewer_url
+    ):
+        """Companion: the gesture that operates Share does reach the push."""
+        page = page_edit_controls
+        pushes = _requests_to(page, "/api/git/push")
+        page.goto(edit_controls_viewer_url, wait_until="networkidle")
+        _enter_edit_mode(page)
+        page.evaluate("() => { document.getElementById('btn-share').disabled = false; }")
+
+        page.focus("#btn-share")
+        page.keyboard.down("Enter")
+        page.wait_for_timeout(1500)
+        page.keyboard.up("Enter")
+
+        deadline = time.monotonic() + 5
+        while not pushes and time.monotonic() < deadline:
+            page.wait_for_timeout(100)
+        assert len(pushes) == 1, f"holding Enter sent {len(pushes)} pushes"
+        assert pushes[0].method == "POST"
+
+    # Verifies: REQ-d00211-E
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00211_E_one_control_offers_every_relationship_type(
+        self, page_edit_controls, edit_controls_viewer_url
+    ):
+        page = page_edit_controls
+        base = edit_controls_viewer_url
+        edge_posts = _requests_to(page, "/api/mutate/edge")
+        page.goto(base, wait_until="networkidle")
+        _enter_edit_mode(page)
+        page.evaluate(f"() => window.openCard('{_EDIT_CONTROLS_CITING}')")
+        card = page.locator(f"#card-{_EDIT_CONTROLS_CITING}")
+        card.wait_for(state="visible", timeout=10_000)
+        card.locator(".outgoing-link-toggle").first.click()
+
+        control = card.locator(".card-parent-kind-select")
+        assert control.count() == 1, "the relationship has no single type control"
+        assert card.locator(".card-parent-kind-toggle").count() == 0
+        options = control.locator("option").evaluate_all(
+            "(opts) => opts.filter(o => !o.disabled).map(o => o.value)"
+        )
+        assert options == ["implements", "refines", "satisfies"], options
+        assert control.input_value() == "implements"
+
+        control.select_option("refines")
+
+        deadline = time.monotonic() + 5
+        while not edge_posts and time.monotonic() < deadline:
+            page.wait_for_timeout(100)
+        assert len(edge_posts) == 1, f"{len(edge_posts)} edge requests sent"
+        sent = json.loads(edge_posts[0].post_data or "{}")
+        assert sent["action"] == "change_kind"
+        assert sent["new_kind"] == "refines"
+        assert sent["source_id"] == _EDIT_CONTROLS_CITING
+        assert sent["target_id"] == _EDIT_CONTROLS_CITED
+
+        node = page.request.get(f"{base}/api/node/{_EDIT_CONTROLS_CITING}").json()
+        kinds = [p["edge_kind"] for p in node["parents"] if p["id"] == _EDIT_CONTROLS_CITED]
+        assert kinds == ["refines"], node["parents"]
+
+
+# ---------------------------------------------------------------------------
+# A static page with embedded content opens a card and its source (REQ-d00321)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def embedded_static_page(tmp_path_factory) -> tuple[str, Path]:
+    """A static page with embedded content, generated by this worktree's source.
+
+    Yields the page's ``file://`` URL and the project it was generated from.
+    """
+    project = tmp_path_factory.mktemp("embedded-static-project")
+    _write_edit_controls_project(project)
+    page_file = tmp_path_factory.mktemp("embedded-static-site") / "index.html"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "elspais",
+            "viewer",
+            "--static",
+            "--embed-content",
+            "-o",
+            str(page_file),
+            "--path",
+            str(project),
+        ],
+        cwd=str(project),
+        env=_worktree_env(),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return page_file.as_uri(), project
+
+
+class TestBrowserStaticEmbeddedContent:
+    """Validates REQ-d00321-A, REQ-d00321-B."""
+
+    # Verifies: REQ-d00321-A, REQ-d00321-B
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00321_AB_a_card_opens_its_source_with_every_line_numbered(
+        self, page, embedded_static_page
+    ):
+        """The card opens from the index, and its file's highlighted lines
+        are numbered from 1 and carry the file's text line for line."""
+        url, project = embedded_static_page
+        js_errors: list[str] = []
+        page.on("pageerror", lambda err: js_errors.append(str(err)))
+        page.goto(url, wait_until="load")
+
+        page.evaluate(f"() => window.openCard('{_EDIT_CONTROLS_CITING}')")
+        card = page.locator(f"#card-{_EDIT_CONTROLS_CITING}")
+        card.wait_for(state="visible", timeout=10_000)
+        card.locator("a", has_text="dev.md:").first.click()
+        page.wait_for_selector("#fv-body .source-line")
+        source_mode = page.locator(".file-viewer-mode-btn[data-mode='source']")
+        if source_mode.is_visible():
+            source_mode.click()
+        page.wait_for_selector("#fv-body code.line-content")
+
+        expected = (project / "spec" / "dev.md").read_text(encoding="utf-8").split("\n")
+        if expected[-1] == "":
+            expected.pop()
+        numbers = page.locator("#fv-body .line-num").all_text_contents()
+        texts = page.locator("#fv-body .line-content").all_text_contents()
+        assert numbers == [str(n) for n in range(1, len(expected) + 1)]
+        assert texts == expected
+        assert not js_errors, f"JS errors on the static page: {js_errors}"

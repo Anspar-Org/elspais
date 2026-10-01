@@ -20,7 +20,7 @@
 | REQ-p00014 | Satisfies Relationship                           | prd-features.md | ca4892c1 |
 | REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 1ad561d2 |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
-| REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | 3e4c9ddb |
+| REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | d2f70506 |
 | REQ-p00018 | Compiled Risk Register                           | prd-core.md     | 0f0438e9 |
 | REQ-p00019 | Truthful Reporting and Error Discipline          | prd-core.md     | 946a0e4c |
 | REQ-p00050 | Unified Graph Architecture                       | prd-features.md | 3a0fb899 |
@@ -117,7 +117,7 @@
 | REQ-d00129 | SourceLocation Removal and Consumer Migration                 | dev-graph-file-nodes.md | 6d11df36 |
 | REQ-d00130 | Parameterized Root Iteration and Kind-Based Index Query       | dev-graph-file-nodes.md | 5733741e |
 | REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | c81d018a |
-| REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | f5a4193c |
+| REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | bd3e0684 |
 | REQ-d00133 | MCP FILE Node Integration                                     | dev-mcp-tools.md        | 08e2973f |
 | REQ-d00134 | Mutation Round-Trip Fidelity                                  | dev-graph-file-nodes.md | 19cb065b |
 | REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | 67a9ca83 |
@@ -131,7 +131,7 @@
 | REQ-d00208 | JSON Schema Export for IDE Autocomplete                       | dev-graph-config.md     | 27ca773c |
 | REQ-d00209 | Schema-Driven Init Template Generation                        | dev-graph-config.md     | b25e4468 |
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | 59023724 |
-| REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | 254fcba9 |
+| REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | 6b90f87f |
 | REQ-d00212 | Configuration Schema                                          | dev-graph-config.md     | 492083b5 |
 | REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | cedd398b |
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | 5f372b62 |
@@ -223,6 +223,8 @@
 | REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | 4fe7db4a |
 | REQ-d00312 | Test Target Output Areas                                      | dev-graph-core.md       | a0788b2a |
 | REQ-d00313 | Served Graph Currency                                         | dev-traceview-review.md | e791c1a1 |
+| REQ-d00320 | Viewer Edit Controls State What They Do                       | dev-traceview-review.md | 646a8606 |
+| REQ-d00321 | Static View Embedded Content                                  | dev-traceview-review.md | 38f520e0 |
 
 ## User Journeys
 

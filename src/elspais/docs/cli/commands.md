@@ -558,7 +558,8 @@ also serves MCP tools at `/mcp` for AI agent integration.
   `--server`             Start server without opening browser
   `--port PORT`          Server port (default: 5001)
   `--base-path PATH`     URL prefix the server sits under (default: none)
-  `--embed-content`      Embed full markdown in HTML for offline viewing
+  `--embed-content`      Embed requirement content and every traced source
+                         file, highlighted, for offline viewing
   `--path DIR`           Path to repository root (default: auto-detect)
   `--session-lifetime`   Stop the server, saving held changes, once no
                          browser tab has held it open for the grace

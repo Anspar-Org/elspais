@@ -898,7 +898,7 @@ class TestAssertionPlacementInSeries:
             graph.make_assertion_id(req_id, existing[-1])
         ).get_label()
         new_text = "The system SHALL archive backups offsite."
-        graph.add_assertion(req_id, new_text)
+        federated.add_assertion(req_id, new_text)
         render_save(federated, repo_root=repo_root)
 
         block = _requirement_block((repo_root / spec_file).read_text(), req_id)
@@ -931,7 +931,7 @@ class TestAssertionPlacementInSeries:
 
         before = _assertion_labels(graph, req_id)
         new_label = _next_label(repo_root, len(before))
-        graph.add_assertion(req_id, "The system SHALL archive backups offsite.")
+        federated.add_assertion(req_id, "The system SHALL archive backups offsite.")
         render_save(federated, repo_root=repo_root)
 
         _, rebuilt = _root_graph(repo_root)
@@ -979,3 +979,175 @@ class TestAssertionPlacementInSeries:
         assert _assertion_labels(graph, "REQ-p00001") == ["A"], (
             "the first assertion must take the first label in the series"
         )
+
+
+# ---------------------------------------------------------------------------
+# A mutation of one requirement's Assertion leaves the citations of another
+# requirement's Assertions alone (REQ-p00017-J).
+#
+# Labels repeat across requirements: REQ-p00001 and REQ-p00002 both have an
+# Assertion A, and REQ-p00002 also has a C -- the label REQ-p00001-A is renamed
+# to. Each Assertion is cited by its own requirement in dev.md.
+# ---------------------------------------------------------------------------
+
+_SAME_LABELS_PRD = """# Product
+
+## REQ-p00001: Alpha
+
+**Level**: prd | **Status**: Active
+
+Alpha body.
+
+### Assertions
+
+A. The tool SHALL alpha.
+
+B. The tool SHALL alpha two.
+
+*End* *Alpha* | **Hash**: 00000000
+
+## REQ-p00002: Gamma
+
+**Level**: prd | **Status**: Active
+
+Gamma body.
+
+### Assertions
+
+A. The tool SHALL gamma.
+
+B. The tool SHALL gamma two.
+
+C. The tool SHALL gamma three.
+
+*End* *Gamma* | **Hash**: 00000000
+"""
+
+_SAME_LABELS_DEV = """# Dev
+
+## REQ-d00001: Cites alpha A
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00001-A
+
+Body.
+
+### Assertions
+
+A. The tool SHALL one.
+
+*End* *Cites alpha A* | **Hash**: 00000000
+
+## REQ-d00002: Cites gamma A
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002-A
+
+Body.
+
+### Assertions
+
+A. The tool SHALL two.
+
+*End* *Cites gamma A* | **Hash**: 00000000
+
+## REQ-d00003: Cites gamma C
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002-C
+
+Body.
+
+### Assertions
+
+A. The tool SHALL three.
+
+*End* *Cites gamma C* | **Hash**: 00000000
+"""
+
+
+@pytest.fixture
+def same_labels(tmp_path: Path):
+    """A repository whose requirements share Assertion labels, and its graph."""
+    (tmp_path / ".elspais.toml").write_text(
+        'version = 5\n\n[project]\nname = "labels"\nnamespace = "REQ"\n', encoding="utf-8"
+    )
+    (tmp_path / "spec").mkdir()
+    (tmp_path / "spec" / "prd.md").write_text(_SAME_LABELS_PRD, encoding="utf-8")
+    (tmp_path / "spec" / "dev.md").write_text(_SAME_LABELS_DEV, encoding="utf-8")
+    graph = build_graph(repo_root=tmp_path)
+    return graph, tmp_path
+
+
+def _cited_labels(graph, citing_id: str, cited_id: str) -> list[str]:
+    """The Assertion labels of *cited_id* that *citing_id* implements."""
+    citing = graph.find_by_id(citing_id)
+    return sorted(
+        label
+        for edge in citing.iter_incoming_edges()
+        if edge.source.id == cited_id
+        for label in edge.assertion_targets
+    )
+
+
+class TestAMutationLeavesOtherRequirementsCitationsAlone:
+    """Validates REQ-p00017-J."""
+
+    # Verifies: REQ-p00017-J
+    def test_REQ_p00017_J_rename_leaves_a_same_label_citation_of_another_requirement(
+        self, same_labels
+    ):
+        graph, _ = same_labels
+
+        graph.rename_assertion("REQ-p00001-A", "C")
+
+        assert _cited_labels(graph, "REQ-d00001", "REQ-p00001") == ["C"]
+        assert _cited_labels(graph, "REQ-d00002", "REQ-p00002") == ["A"]
+        assert _cited_labels(graph, "REQ-d00003", "REQ-p00002") == ["C"]
+
+    # Verifies: REQ-p00017-J
+    def test_REQ_p00017_J_rename_saves_the_other_requirements_citation_unchanged(self, same_labels):
+        graph, repo_root = same_labels
+
+        graph.rename_assertion("REQ-p00001-A", "C")
+        result = render_save(graph, repo_root=repo_root)
+
+        assert result["success"] is True, result["errors"]
+        text = (repo_root / "spec" / "dev.md").read_text(encoding="utf-8")
+        assert "**Implements**: REQ-p00001-C" in text
+        assert "**Implements**: REQ-p00002-A" in text
+        assert "**Implements**: REQ-p00002-C" in text
+
+    # Verifies: REQ-p00017-J
+    def test_REQ_p00017_J_undoing_a_rename_leaves_the_other_requirements_citations(
+        self, same_labels
+    ):
+        """Undo respells the renamed Assertion's citations back, and only those."""
+        graph, _ = same_labels
+
+        graph.rename_assertion("REQ-p00001-A", "C")
+        graph.undo_last()
+
+        assert _cited_labels(graph, "REQ-d00001", "REQ-p00001") == ["A"]
+        assert _cited_labels(graph, "REQ-d00002", "REQ-p00002") == ["A"]
+        assert _cited_labels(graph, "REQ-d00003", "REQ-p00002") == ["C"]
+
+    # Verifies: REQ-p00017-J
+    def test_REQ_p00017_J_delete_leaves_a_same_label_citation_of_another_requirement(
+        self, same_labels
+    ):
+        graph, _ = same_labels
+
+        graph.delete_assertion("REQ-p00001-A")
+
+        assert _cited_labels(graph, "REQ-d00002", "REQ-p00002") == ["A"]
+        assert _cited_labels(graph, "REQ-d00003", "REQ-p00002") == ["C"]
+
+    # Verifies: REQ-p00017-J
+    def test_REQ_p00017_J_undoing_a_delete_leaves_the_other_requirements_citations(
+        self, same_labels
+    ):
+        graph, _ = same_labels
+
+        graph.delete_assertion("REQ-p00001-A")
+        graph.undo_last()
+
+        assert _cited_labels(graph, "REQ-d00002", "REQ-p00002") == ["A"]
+        assert _cited_labels(graph, "REQ-d00003", "REQ-p00002") == ["C"]

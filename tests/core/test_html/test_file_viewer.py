@@ -74,16 +74,15 @@ def no_source_graph():
 class TestCollectSourceFilesStructure:
     """Validates REQ-p00006-C: _collect_source_files returns correct data structure."""
 
+    # Verifies: REQ-p00006-C, REQ-d00321-A
     def test_REQ_p00006_C_collect_source_files_returns_correct_keys(self, hht_graph):
-        """Each entry in source_files has lines, language, and raw keys."""
+        """Each entry carries its text once: highlighted lines and a language."""
         generator = HTMLGenerator(hht_graph)
         result = generator._collect_source_files()
 
         assert len(result) > 0, "Expected at least one source file from hht-like fixture"
         for path, data in result.items():
-            assert "lines" in data, f"Missing 'lines' key for {path}"
-            assert "language" in data, f"Missing 'language' key for {path}"
-            assert "raw" in data, f"Missing 'raw' key for {path}"
+            assert set(data) == {"lines", "language"}, f"Unexpected keys for {path}: {set(data)}"
 
 
 class TestCollectSourceFilesHighlighting:

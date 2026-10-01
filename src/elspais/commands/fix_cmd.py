@@ -523,6 +523,7 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
         graph,
         repo_root=repo_root,
         write_associates=config.get("federation", {}).get("write_associates", False),
+        tidy=True,
     )
     saved = result.get("saved_count", 0)
     if saved:
@@ -674,6 +675,7 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
         graph,
         repo_root=repo_root,
         write_associates=config.get("federation", {}).get("write_associates", False),
+        tidy=True,
     )
     if result.get("errors"):
         for err in result["errors"]:

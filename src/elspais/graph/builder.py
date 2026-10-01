@@ -354,6 +354,20 @@ def _keyword_as_written(raw_text: str) -> str:
     return match.group(0) if match else "Verifies"
 
 
+# Implements: REQ-p00017-B, REQ-p00017-J
+def _relabel_citations(requirement: GraphNode, old_label: str, new_label: str) -> None:
+    """Respell an *Assertion* label in the citations of one requirement.
+
+    A citation of an *Assertion* is an edge out of the requirement that owns
+    it, carrying the label. Labels repeat across requirements, so only the
+    owning requirement's edges designate the relabelled *Assertion*.
+    """
+    for edge in requirement.iter_outgoing_edges():
+        if old_label in edge.assertion_targets:
+            edge.assertion_targets.remove(old_label)
+            edge.assertion_targets.append(new_label)
+
+
 # A mutation is applied in place to this live graph, whatever level or kind of node
 # it touches, and the graph stays readable between one mutation and the next.
 # Implements: REQ-d00134-A, REQ-d00134-B, REQ-d00134-C
@@ -1376,11 +1390,9 @@ class TraceGraph:
                 self._index[old_id] = node
 
                 # Update edges back
-                for edge_parent in self._index.values():
-                    for edge in edge_parent.iter_outgoing_edges():
-                        if new_label in edge.assertion_targets:
-                            edge.assertion_targets.remove(new_label)
-                            edge.assertion_targets.append(old_label)
+                parent = self._index.get(entry.before_state.get("parent_id", ""))
+                if parent is not None:
+                    _relabel_citations(parent, new_label, old_label)
 
         # Restore the deleted assertion
         node_id = entry.target_id
@@ -1438,12 +1450,9 @@ class TraceGraph:
             self._index[old_id] = node
 
             # Update edges back
-            if old_label and new_label:
-                for edge_parent in self._index.values():
-                    for edge in edge_parent.iter_outgoing_edges():
-                        if new_label in edge.assertion_targets:
-                            edge.assertion_targets.remove(new_label)
-                            edge.assertion_targets.append(old_label)
+            parent = self._index.get(entry.before_state.get("parent_id", ""))
+            if old_label and new_label and parent is not None:
+                _relabel_citations(parent, new_label, old_label)
 
             # Restore parent hash (even if None)
             parent_id = entry.before_state.get("parent_id")
@@ -2178,7 +2187,7 @@ class TraceGraph:
 
         # Compute new ID
         old_label = node.get_field("label", "")
-        new_id = f"{parent.id}-{new_label}"
+        new_id = self.make_assertion_id(parent.id, new_label)
 
         if new_id in self._index:
             raise ValueError(f"Assertion '{new_id}' already exists")
@@ -2208,11 +2217,7 @@ class TraceGraph:
         self._index[new_id] = node
 
         # Update edges with assertion_targets referencing old label
-        for parent_node in self._index.values():
-            for edge in parent_node.iter_outgoing_edges():
-                if old_label in edge.assertion_targets:
-                    edge.assertion_targets.remove(old_label)
-                    edge.assertion_targets.append(new_label)
+        _relabel_citations(parent, old_label, new_label)
 
         # Recompute parent hash
         self._recompute_requirement_hash(parent)
@@ -2509,10 +2514,9 @@ class TraceGraph:
         self._deleted_nodes.append(node)
 
         # Remove edges referencing this assertion
-        for parent_node in self._index.values():
-            for edge in parent_node.iter_outgoing_edges():
-                if old_label in edge.assertion_targets:
-                    edge.assertion_targets.remove(old_label)
+        for edge in parent.iter_outgoing_edges():
+            if old_label in edge.assertion_targets:
+                edge.assertion_targets.remove(old_label)
 
         # Compact if requested
         if compact:
@@ -2526,7 +2530,7 @@ class TraceGraph:
                     # This sibling needs to be renamed to previous letter
                     prev_label = chr(ord(sib_label) - 1)
                     old_sib_id = sib_node.id
-                    new_sib_id = f"{parent.id}-{prev_label}"
+                    new_sib_id = self.make_assertion_id(parent.id, prev_label)
 
                     renames.append(
                         {
@@ -2544,11 +2548,7 @@ class TraceGraph:
                     self._index[new_sib_id] = sib_node
 
                     # Update edges referencing this assertion
-                    for edge_parent in self._index.values():
-                        for edge in edge_parent.iter_outgoing_edges():
-                            if sib_label in edge.assertion_targets:
-                                edge.assertion_targets.remove(sib_label)
-                                edge.assertion_targets.append(prev_label)
+                    _relabel_citations(parent, sib_label, prev_label)
 
         # Recompute parent hash
         new_hash = self._recompute_requirement_hash(parent)

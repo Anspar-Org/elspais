@@ -383,7 +383,7 @@ def test_render_save_skips_files_in_duplicates(tmp_path: Path) -> None:
     before_a = file_a_path.read_bytes()
     before_b = file_b_path.read_bytes()
 
-    # Mark both REQ-d00001 nodes parse_dirty so _find_dirty_files() picks up
+    # Mark both REQ-d00001 nodes parse_dirty so a tidying save picks up
     # their FILE ancestors. Without this, render_save would have no work to do
     # and the duplicate filter would never be exercised.
     canonical = graph.find_by_id("REQ-d00001")
@@ -397,7 +397,7 @@ def test_render_save_skips_files_in_duplicates(tmp_path: Path) -> None:
     # preserved (not cleared) when duplicate-induced skips block the save.
     before_log_len = sum(1 for _ in graph.mutation_log.iter_entries())
 
-    result = render_save(graph, repo_root=project)
+    result = render_save(graph, repo_root=project, tidy=True)
 
     assert result["saved_count"] == 0, (
         f"render_save must not save any files when duplicates exist, "

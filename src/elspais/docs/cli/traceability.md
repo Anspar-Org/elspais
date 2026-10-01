@@ -262,7 +262,8 @@ Journey verdicts: `pass` (all steps have a passing test, none failed), `fail`
   `--server`              Start server without opening browser
   `--port PORT`           Server port (default: 5001)
   `--base-path PATH`      URL prefix the server sits under (default: none)
-  `--embed-content`       Embed full markdown in HTML (offline viewing)
+  `--embed-content`       Embed requirement content and every traced source
+                          file, highlighted, for offline viewing
   `--path DIR`            Path to repository root (default: auto-detect)
 
 ### Exporting a report from the viewer
