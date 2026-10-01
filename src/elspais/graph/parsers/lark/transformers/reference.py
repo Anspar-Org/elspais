@@ -113,10 +113,10 @@ def read_reference_list(
 ) -> list[RefItem]:
     """The items a reference line names, each with its verdict.
 
-    One reading for every surface that has a whole annotation line in hand,
-    so a file-level default and the annotation above a function admit the
-    same targets.  A journey step belongs to its own grammar rather than to
-    any repository's identifiers, so it is offered alongside them.
+    Every surface that holds a whole annotation line calls this function.
+    Consequently, every annotation admits the same targets in every place.  A
+    journey step uses its own grammar, not the identifiers of a repository.
+    Consequently, this function offers journey steps beside those identifiers.
 
     Where a list ends needs no knowledge of the file's language: a list is
     identifiers, separators and whitespace, so it ends at the first content
@@ -140,13 +140,7 @@ class ReferenceTransformer:
         resolver: IdResolver for normalizing requirement IDs.
         content_type: Output content type -- "code_ref" or "test_ref".
         line_context: Pre-scan data mapping line_number -> (func_name, class_name, func_line).
-        file_default_verifies: File-level default verifies (for test files).
         all_test_funcs: All test functions from pre-scan (for emitting unlinked tests).
-        first_def_line: The line of the file's first class or function
-            definition (0 where it has none). A test-file citation above
-            it is the file-level default, which reaches every test in the
-            file; below it, a citation with no function context reached
-            nothing (REQ-d00274-G).
         reader: Reads the identifiers of every repository in this
             federation, normalizing each under the grammar of the member
             that claims it.  Defaults to this repository alone.
@@ -166,9 +160,7 @@ class ReferenceTransformer:
         resolver: IdResolver,
         content_type: str,
         line_context: dict[int, tuple[str | None, str | None, int, int]] | None = None,
-        file_default_verifies: list[str] | None = None,
         all_test_funcs: list[tuple[int, str, str | None]] | None = None,
-        first_def_line: int = 0,
         source_id: str = "",
         reader: FederatedIdReader | None = None,
         quoted_lines: set[int] | None = None,
@@ -180,9 +172,7 @@ class ReferenceTransformer:
         self.reader = reader if reader is not None else _Reader(resolver)
         self.content_type = content_type
         self.line_context = line_context or {}
-        self.file_default_verifies = file_default_verifies or []
         self.all_test_funcs = all_test_funcs or []
-        self.first_def_line = first_def_line
         self.source_id = source_id
         self.quoted_lines = quoted_lines or set()
         self.comment_markers: tuple[str, ...] = tuple(comment_markers)
@@ -223,11 +213,12 @@ class ReferenceTransformer:
     def transform(self, tree: Tree) -> list[ParsedContent]:
         """Transform parse tree into ParsedContent list.
 
-        A keyword line is the only kind dispatched into a relationship.  A
-        bare_ref is reported and produces nothing, a quoted line and an
-        other_line are text, and a test function's declaration reaches the
-        third pass carrying only the file-level default -- its NAME is never
-        read for an identifier (REQ-d00269-L).
+        A keyword line is the only kind dispatched into a relationship.  The
+        transformer reports a bare_ref and produces nothing from it.  It
+        treats a quoted line and an other_line as text.  If no citation binds
+        to a test function, then the function reaches the third pass with no
+        reference.  The transformer never reads its NAME for an identifier
+        (REQ-d00269-L).
         """
         results: list[ParsedContent] = []
         emitted_func_lines: set[int] = set()
@@ -337,7 +328,6 @@ class ReferenceTransformer:
         if self.content_type == "test_ref":
             for func_line, func_name, class_name in self.all_test_funcs:
                 if func_line not in emitted_func_lines:
-                    verifies = list(self.file_default_verifies)
                     results.append(
                         ParsedContent(
                             content_type="test_ref",
@@ -345,11 +335,10 @@ class ReferenceTransformer:
                             end_line=func_line,
                             raw_text="",
                             parsed_data={
-                                "verifies": verifies,
+                                "verifies": [],
                                 "function_name": func_name,
                                 "class_name": class_name,
                                 "function_line": func_line,
-                                "file_default_verifies": self.file_default_verifies,
                             },
                         )
                     )
@@ -512,8 +501,6 @@ class ReferenceTransformer:
                 "forbidden": targets,
                 "reference_verdicts": verdicts,
             }
-            if self.content_type == "test_ref":
-                parsed_data["file_default_verifies"] = self.file_default_verifies
             return ParsedContent(
                 content_type=self.content_type,
                 start_line=line_num,
@@ -597,10 +584,14 @@ class ReferenceTransformer:
                 "function_name": func_name,
                 "class_name": class_name,
                 "function_line": func_line,
-                "file_default_verifies": self.file_default_verifies,
+                "function_end_line": func_end_line,
                 "reference_verdicts": verdicts,
-                # Implements: REQ-d00274-G
-                "binds_to_test": self._binds_to_test(func_line, line_num),
+                # Implements: REQ-d00274-G, REQ-d00254-T
+                # A citation reaches a test only if the pre-scan found a test
+                # that encloses it or is declared below it. Otherwise, the
+                # citation reaches no test. This rule includes a citation
+                # above the file's first test.
+                "binds_to_test": bool(func_line),
             }
 
         return ParsedContent(
@@ -610,24 +601,6 @@ class ReferenceTransformer:
             raw_text=raw_text if raw_text is not None else text,
             parsed_data=parsed_data,
         )
-
-    # Implements: REQ-d00274-G
-    def _binds_to_test(self, func_line: int, line_num: int) -> bool:
-        """Whether a citation in a test file on *line_num* reached a test.
-
-        A citation the pre-scan placed inside a test declaration, or bound to
-        the declaration below it, reached that test. A citation above the
-        file's first definition is the file-level default, which reaches
-        every test the file declares -- and reaches none where the file
-        declares none. Anywhere else no test was found for it: the coverage
-        it appears to confer sits on a node no result can ever match, so the
-        assertions it names read as tested and never as passing.
-        """
-        if func_line:
-            return True
-        if not self.all_test_funcs:
-            return False
-        return bool(self.first_def_line) and line_num < self.first_def_line
 
     # ------------------------------------------------------------------
     # Helpers
@@ -797,10 +770,10 @@ class ReferenceTransformer:
 
         A code file keeps its ordinary context, since a refused code
         reference still anchors to the function it annotates. A test file
-        deliberately drops it: attaching ``function_line`` here would mark
-        that line "emitted" and suppress the third-pass unlinked-test
-        fallback, silently costing the actual test function the
-        file-default ``Verifies`` it is owed regardless of this refusal.
+        deliberately drops it.  If this method attached ``function_line``,
+        then that line would count as "emitted".  Consequently, the third
+        pass would not give the test function its own node.  The test would
+        then merge into the refused citation.
         """
         if self.content_type == "code_ref":
             return self.line_context.get(line_num, (None, None, 0, 0))

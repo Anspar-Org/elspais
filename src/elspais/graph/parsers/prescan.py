@@ -739,7 +739,6 @@ def ast_prescan(
 ) -> tuple[
     dict[int, tuple[str | None, str | None, int, int]],
     list[tuple[int, str, str | None]],
-    int,
 ]:
     """Pre-scan Python source using AST for accurate class/function context.
 
@@ -751,10 +750,9 @@ def ast_prescan(
         lines: List of (line_number, content) tuples.
 
     Returns:
-        Tuple of (line_context, all_test_funcs, first_def_line):
+        Tuple of (line_context, all_test_funcs):
         - line_context: Maps line_number -> (func_name, class_name, func_line, func_end_line)
         - all_test_funcs: List of (func_line, func_name, class_name)
-        - first_def_line: Line number of first class/function def (0 if none)
     """
     tree = ast.parse(source)
 
@@ -772,12 +770,9 @@ def ast_prescan(
     # (lineno, end_lineno, func_name, class_name)
     func_ranges: list[tuple[int, int, str, str | None]] = []
     all_test_funcs: list[tuple[int, str, str | None]] = []
-    first_def_line = 0
 
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef):
-            if not first_def_line:
-                first_def_line = node.lineno
             # Only process Test* classes
             if node.name.startswith("Test"):
                 for item in ast.walk(node):
@@ -787,20 +782,10 @@ def ast_prescan(
                             start = _start_line(item)
                             func_ranges.append((start, end, item.name, node.name))
                             all_test_funcs.append((start, item.name, node.name))
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if not first_def_line:
-                first_def_line = node.lineno
-            # Module-level test functions (not inside a class)
-            # Check parent is Module (not nested in class)
-            # ast.walk doesn't preserve parent, so we check if this
-            # function was already collected from a class walk above
-            pass
 
     # Second pass: collect module-level test functions
     for node in ast.iter_child_nodes(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if not first_def_line or node.lineno <= first_def_line:
-                first_def_line = node.lineno
             if node.name.startswith("test_"):
                 end = node.end_lineno or node.lineno
                 func_ranges.append((_start_line(node), end, node.name, None))
@@ -840,7 +825,7 @@ def ast_prescan(
         lambda ln, target: line_context.__setitem__(ln, target),
     )
 
-    return line_context, all_test_funcs, first_def_line
+    return line_context, all_test_funcs
 
 
 def text_prescan(
@@ -848,7 +833,6 @@ def text_prescan(
 ) -> tuple[
     dict[int, tuple[str | None, str | None, int, int]],
     list[tuple[int, str, str | None]],
-    int,
 ]:
     """Pre-scan source using text-based indent tracking.
 
@@ -868,7 +852,6 @@ def text_prescan(
     current_func: str | None = None
     current_func_indent: int = -1
     current_func_line: int = 0
-    first_def_line = 0
 
     line_context: dict[int, tuple[str | None, str | None, int, int]] = {}
     all_test_funcs: list[tuple[int, str, str | None]] = []
@@ -881,8 +864,6 @@ def text_prescan(
             current_class_indent = indent
             current_func = None
             current_func_indent = -1
-            if not first_def_line:
-                first_def_line = ln
 
         func_match = func_pattern.match(text)
         if func_match:
@@ -893,8 +874,6 @@ def text_prescan(
             current_func = func_match.group(2)
             current_func_indent = indent
             current_func_line = ln
-            if not first_def_line:
-                first_def_line = ln
             all_test_funcs.append((ln, current_func, current_class))
 
         stripped = text.strip()
@@ -927,7 +906,7 @@ def text_prescan(
         lambda ln, target: line_context.__setitem__(ln, (target[0], target[1], target[2], 0)),
     )
 
-    return line_context, all_test_funcs, first_def_line
+    return line_context, all_test_funcs
 
 
 class _DartLineScanner:
@@ -1039,24 +1018,23 @@ def dart_prescan(
 ) -> tuple[
     dict[int, tuple[str | None, str | None, int, int]],
     list[tuple[int, str | None, str | None]],
-    int,
 ]:
     """Pre-scan Dart source: anchor each line to the test() that encloses it.
 
     Regex-detects test()/testWidgets() call sites and brace-matches each to its
     end line. func_name/class_name stay None (Dart test ids are line-based, not
     identifier-based); only func_line (the call-site line) and func_end_line are
-    populated. A comment line above a test() that is not itself inside another
-    test binds forward to it via the forward-look pass below.
+    populated. The forward-look pass below binds a comment line above a test()
+    to that test, if the comment is not inside another test. It binds a
+    comment above a group() that holds a test to the extent of that group.
 
     Args:
         lines: List of (line_number, content) tuples.
 
     Returns:
-        Tuple of (line_context, all_test_funcs, first_def_line):
+        Tuple of (line_context, all_test_funcs):
         - line_context: Maps line_number -> (None, None, func_line, func_end_line)
         - all_test_funcs: List of (test_line, None, None) for each test()/testWidgets()
-        - first_def_line: Line of first detected test()/group() call (0 if none)
     """
     arr = lines
     # 0) collect ALL detected start lines (test + group) -- used to bound any
@@ -1067,7 +1045,6 @@ def dart_prescan(
 
     # 1) find each test() start and its brace-matched end (bounded)
     spans: list[tuple[int, int]] = []  # (start_line, end_line)
-    first_def_line = start_lines[0] if start_lines else 0
     inaccurate = False
     for i, (ln, text) in enumerate(arr):
         if not _DART_TEST.match(text):
@@ -1097,15 +1074,23 @@ def dart_prescan(
                 best, owner_start, owner_end = s, s, e
         line_context[ln] = (None, None, owner_start, owner_end)
 
-    # 3) an unowned comment binds to the declaration below it.  Group starts are
-    #    binding targets as well as test starts: a citation describing a whole
-    #    group otherwise attaches to nothing however close it is written.
+    # Implements: REQ-d00254-S+T
+    # 3) This pass binds each unowned comment (a comment no test encloses) to
+    #    the declaration below it.  A group start is a target, like a test
+    #    start, only if the group holds a test.  The runner reports results for
+    #    the tests inside a group.  It never reports results for the group.
+    #    Consequently, a group that holds no test has no verdict for a
+    #    citation.  _match_brace_end finds the extent of a group at its own
+    #    closing bracket.  The extent does not stop at the next start, because
+    #    the tests of the group start inside it.  If the brackets of a group
+    #    never balance, then its extent is unknown.  Consequently, the group
+    #    binds nothing and claims no test below it.
     bindable: dict[int, tuple[int, int]] = {s: (s, e) for s, e in spans}
     for i, (ln, text) in enumerate(arr):
         if _DART_GROUP.match(text) and ln not in bindable:
-            nxt = next((s for s in start_lines if s > ln), None)
-            end, _accurate = _match_brace_end(arr, i, stop_line=nxt)
-            bindable[ln] = (ln, end)
+            end, accurate = _match_brace_end(arr, i)
+            if accurate and any(ln < s <= end for s, _e in spans):
+                bindable[ln] = (ln, end)
 
     bind_unowned_comments(
         lines,
@@ -1115,39 +1100,44 @@ def dart_prescan(
     )
 
     all_test_funcs = [(s, None, None) for s, _e in spans]
-    return line_context, all_test_funcs, first_def_line
+    return line_context, all_test_funcs
 
 
-# Implements: REQ-d00254-K
+# Implements: REQ-d00254-K, REQ-d00254-V
 def external_prescan(
     file_entries: list[dict],
     lines: list[tuple[int, str]],
 ) -> tuple[
     dict[int, tuple[str | None, str | None, int, int]],
     list[tuple[int, str, str | None]],
-    int,
 ]:
     """Build prescan data from externally-provided test structure.
 
+    The extent of a test (its span of lines) ends at the end line its record
+    reports.  If the record reports none, then the extent ends at the last
+    line before the next test that is neither blank nor a comment.
+    Consequently, the comment block above the next test binds to that test.
+    This function does not read that block as the body of this test.
+
     Args:
-        file_entries: List of dicts with keys: function, class, line.
+        file_entries: List of dicts with keys: function, class, line, and
+            optionally end_line.
         lines: List of (line_number, content) tuples.
 
     Returns:
         Same tuple format as ast_prescan.
     """
     all_test_funcs: list[tuple[int, str, str | None]] = []
-    # Build ranges: each function spans from its line to the next function's line - 1
-    # (or end of file).  If an explicit end_line is provided, use it.
     sorted_entries = sorted(file_entries, key=lambda e: e["line"])
-    # (start, end, fname, cname, explicit_end_line)
-    func_ranges: list[tuple[int, int, str, str | None, int]] = []
+    text_at = dict(lines)
+    last_line = lines[-1][0] if lines else 0
+    # (start, end, fname, cname)
+    func_ranges: list[tuple[int, int, str, str | None]] = []
 
     for i, entry in enumerate(sorted_entries):
         start = entry["line"]
         fname = entry["function"]
         cname = entry.get("class")
-        explicit_end = entry.get("end_line", 0)
         # Implements: REQ-d00254-K+M
         # A record names one test, so a record IS a test. Reading a naming
         # convention here asked every framework to spell its tests the way
@@ -1155,41 +1145,27 @@ def external_prescan(
         # which then stripped the citation above it of its relationship and
         # reported the author for writing one.
         all_test_funcs.append((start, fname, cname))
-        # End is either next function's line - 1, or last source line
-        if i + 1 < len(sorted_entries):
-            heuristic_end = sorted_entries[i + 1]["line"] - 1
-        else:
-            heuristic_end = lines[-1][0] if lines else start
-        # Use explicit end_line for func_end_line; heuristic for range matching
-        end = heuristic_end
-        func_end_line = explicit_end if explicit_end else heuristic_end
-        func_ranges.append((start, end, fname, cname, func_end_line))
-
-    first_def_line = sorted_entries[0]["line"] if sorted_entries else 0
+        end = entry.get("end_line") or 0
+        if not end:
+            end = sorted_entries[i + 1]["line"] - 1 if i + 1 < len(sorted_entries) else last_line
+            while end > start and (
+                not text_at.get(end, "").strip() or is_comment_line(text_at.get(end, ""))
+            ):
+                end -= 1
+        func_ranges.append((start, max(end, start), fname, cname))
 
     line_context: dict[int, tuple[str | None, str | None, int, int]] = {}
     for ln, _text in lines:
-        func_name = None
-        class_name = None
-        func_line = 0
-        func_end = 0
-        for start, end, fname, cname, fend in func_ranges:
+        line_context[ln] = (None, None, 0, 0)
+        for start, end, fname, cname in func_ranges:
             if start <= ln <= end:
-                func_name = fname
-                class_name = cname
-                func_line = start
-                func_end = fend
+                line_context[ln] = (fname, cname, start, end)
                 break
-        line_context[ln] = (func_name, class_name, func_line, func_end)
 
-    # Implements: REQ-d00254-D+N
-    # A citation written above a test belongs to that test, which is the
-    # reading every built-in route already takes. Without it this route
-    # bound a citation to its own line and so attributed worse than the
-    # attribution it takes precedence over.
-    by_start = {
-        start: (fname, cname, start, fend) for start, _end, fname, cname, fend in func_ranges
-    }
+    # Implements: REQ-d00254-D+N+S
+    # A citation above a test belongs to that test.  Every built-in pre-scan
+    # route reads a citation the same way.
+    by_start = {start: (fname, cname, start, end) for start, end, fname, cname in func_ranges}
     bind_unowned_comments(
         lines,
         lambda ln: bool(line_context[ln][2]),
@@ -1197,4 +1173,4 @@ def external_prescan(
         lambda ln, target: line_context.__setitem__(ln, target),
     )
 
-    return line_context, all_test_funcs, first_def_line
+    return line_context, all_test_funcs

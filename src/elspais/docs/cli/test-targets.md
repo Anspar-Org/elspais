@@ -90,12 +90,15 @@ target need not name one.
 
 **`match = "source"` (default):** Per-test attribution.  elspais matches each
 result record to the specific `test()` by its source path AND line number
-(e.g., the `suite.path` + test line from `flutter-machine`).  When a line does
-not resolve to a known test node (shared-helper or generated tests), it falls
-back to file granularity: all passing results for that file credit the file's
-`Verifies:` assertions; any failure flags them.  Requires a reporter that emits
-real file paths and, for per-test resolution, the test's source line
-(`flutter-machine`); results without a line fall back to file granularity.
+(e.g., the `suite.path` + test line from `flutter-machine`).  A result also
+reaches a citation written above the `group()` that holds its test.
+Consequently, a citation on a group takes its verdict from the tests inside
+it.  If a line does not resolve to a known test node (shared-helper or
+generated tests), then elspais links the result to the file only.  The result
+names no test.  Consequently, it credits and flags nothing.  The assertions
+its file's tests cite stay awaiting a result.
+Requires a reporter that emits real file paths and, for per-test resolution,
+the test's source line (`flutter-machine`).
 
 The `junit` reporter also supports `match = "source"` when the JUnit XML
 carries a per-`<testcase>` `file` attribute naming the test's real source path
@@ -327,7 +330,9 @@ Three things must be true:
    `end_line`.  The name is the test's own -- a record names one test, so its
    spelling decides nothing -- and `line` is the line the test is declared
    on.  A citation written above that line belongs to the test below it, as
-   it does in every language elspais scans itself.
+   it does in every language elspais scans itself.  This rule also holds
+   where a record carries no `end_line`.  elspais never reads the comments
+   directly above a test as the body of the test before it.
 2. **elspais knows what the recorded name means.**  Playwright's JUnit reporter
    omits the per-`<testcase>` `file` attribute and writes the spec's basename
    into `classname`.  Left to itself elspais reads a `classname` as a Python

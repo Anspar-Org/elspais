@@ -193,7 +193,7 @@ def test_each_scanned_test_gets_its_own_line_extent(_path, src, prescan, _ref_to
     """The prescan behind each framework yields a per-test line extent: every
     line of a test resolves to that test's (start, end), and one test's extent
     never reaches into the next test."""
-    line_context, all_test_funcs, _first = prescan(_numbered(src))
+    line_context, all_test_funcs = prescan(_numbered(src))
 
     assert sorted(f[0] for f in all_test_funcs) == sorted(extents), (
         f"expected one scanned unit per test at {sorted(extents)}, "

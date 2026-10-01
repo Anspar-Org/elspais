@@ -237,37 +237,37 @@ class TestCitationsThatBindToNoTest:
 
         assert _verifiers(graph), "A citation that bound to a test still credits it"
 
-    # Verifies: REQ-d00274-G
-    def test_REQ_d00274_G_a_file_level_default_binds_to_every_test(self, tmp_path: Path) -> None:
-        """A citation above the file's first definition is not unbound.
+    # Verifies: REQ-d00254-T, REQ-d00274-G, REQ-d00274-H
+    def test_REQ_d00254_T_a_citation_above_the_first_test_binds_to_no_test(
+        self, tmp_path: Path
+    ) -> None:
+        """A citation at the top of a file is not a default for its tests.
 
-        It is the file-level default, which reaches every test the file
-        declares. Reporting it would name a mechanism the tool provides as a
-        defect.
+        Code stands between the citation and the first test.  Consequently,
+        the citation is above no test.  The health check reports it.  The
+        citation credits nothing through the test below.
         """
         config_file = _project(tmp_path)
         _write(
             tmp_path / "tests" / "test_thing.py",
             '"""Module docstring."""\n\n'
-            "# Verifies: REQ-p00001-A\n\n"
-            "def test_one():\n    assert True\n",
+            "# Verifies: REQ-p00001-A\n"
+            "import os\n\n"
+            "def test_one():\n    assert os\n",
         )
         graph = _build(tmp_path, config_file)
 
         check = check_unbound_citations(graph, _config_of(graph))
-        assert check.passed, f"A file-level default binds to the file's tests: {check.findings}"
+        assert not check.passed, "A citation above a file's first test reached no test"
+        assert (check.findings[0].file_path, check.findings[0].line) == ("tests/test_thing.py", 3)
 
-        assert _verifiers(graph), "The file-level default reached the file's tests"
+        assert _verifiers(graph) == [], "A citation reaching no test credits nothing"
 
     # Verifies: REQ-d00274-G
-    def test_REQ_d00274_G_a_default_in_a_file_with_no_tests_is_reported(
+    def test_REQ_d00274_G_a_citation_in_a_file_with_no_tests_is_reported(
         self, tmp_path: Path
     ) -> None:
-        """A file-level default reaching no test is a citation reaching nothing.
-
-        Sitting above the first definition proves the citation IS the file
-        default; it does not prove the default found anything to apply to.
-        """
+        """A citation in a file that declares no test reaches nothing."""
         config_file = _project(tmp_path)
         _write(
             tmp_path / "tests" / "test_helpers.py",
@@ -276,10 +276,10 @@ class TestCitationsThatBindToNoTest:
         graph = _build(tmp_path, config_file)
 
         check = check_unbound_citations(graph, _config_of(graph))
-        assert not check.passed, "A default in a file declaring no test reached no test"
+        assert not check.passed, "A citation in a file declaring no test reached no test"
         assert check.findings[0].file_path == "tests/test_helpers.py"
 
-        assert _verifiers(graph) == [], "A default reaching no test credits nothing"
+        assert _verifiers(graph) == [], "A citation reaching no test credits nothing"
 
     # Verifies: REQ-d00241-E
     def test_REQ_d00241_E_a_file_whose_marker_bound_nothing_is_not_called_markerless(

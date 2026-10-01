@@ -284,20 +284,6 @@ class TestTestRefParsing:
             f"a name declares no relationship; got {refs[0].parsed_data['verifies']}"
         )
 
-    def test_file_default_verifies(self, resolver, code_parser):
-        content = "def test_unlinked(): pass\n"
-        results = _parse_test(
-            content,
-            resolver,
-            code_parser,
-            file_default_verifies=["REQ-p00001"],
-            all_test_funcs=[(1, "test_unlinked", None)],
-        )
-        refs = [r for r in results if r.content_type == "test_ref"]
-        assert len(refs) >= 1
-        # Unlinked test function should inherit file defaults
-        assert refs[0].parsed_data["file_default_verifies"] == ["REQ-p00001"]
-
     # Verifies: REQ-d00269-L, REQ-d00272-O
     def test_a_block_header_binds_nothing_in_a_function_like_file(self, resolver):
         """The same truth, pinned behind a second language's comment marker.
@@ -328,73 +314,44 @@ class TestTestRefParsing:
         )
         assert not tx.faults, "nothing about those lines is malformed"
 
-    # Verifies: REQ-d00269-G
-    def test_a_partly_unmatched_file_default_binds_the_good_item(self, resolver):
-        """A second salvage site, distinct from ``_handle_unresolved_ref``:
-        ``FileDispatcher.dispatch_test`` reads a file-level ``Verifies:``
-        comment into ``file_default_verifies`` through its own loop. One
-        unmatched item in that list must not cost the item that did
-        resolve -- every unlinked test function still inherits the good
-        reference as its default.
-
-        Driven through the real ``FileDispatcher.dispatch_test`` pipeline
-        (prescan, tree parse, the file-level extraction loop, then the
-        transformer's third pass for unlinked test functions) rather than a
-        reimplementation of the loop, so this fails if the loop's salvage
-        behaviour is ever weakened back to all-or-nothing.
-
-        The file-level comment sits far enough above ``test_something`` that
-        the AST pre-scan's forward-looking comment/function binding does not
-        attach it as the function's own annotation -- keeping this test on
-        the file-default path (the third pass) rather than the
-        already-covered per-function path in ``_handle_unresolved_ref``.
-
-        Salvage is only honest because the item that did *not* resolve is
-        still reported somewhere: the same line also goes through the
-        transformer's ordinary ``single_ref`` handling (``_handle_unresolved_ref``),
-        which produces its own ``test_ref`` entry (unattached to any
-        function) carrying ``GARBAGE-999`` in both ``verifies`` and
-        ``reference_verdicts`` -- that is this test's other half.
+    # Verifies: REQ-d00254-T, REQ-d00269-G
+    def test_a_citation_above_the_first_test_reaches_no_test(self, resolver):
+        """A citation above a file's first test, with code between them, binds
+        to no test.  The test below inherits nothing from the citation.  The
+        dispatcher carries the citation forward as unbound, with every item it
+        names.  These items include the one that resolves and the one that
+        does not.  Consequently, the builder still reports each item.
         """
         content = (
             "# Verifies: REQ-p00001, GARBAGE-999\n"
-            "import time\n\n\n\n\n\n\n"
+            "import time\n\n"
             "def test_something():\n"
             "    assert True\n"
         )
         dispatcher = FileDispatcher(resolver)
         items = dispatcher.dispatch_test(content, file_path="tests/test_demo.py")
 
-        unlinked = [
+        test_entries = [
             r
             for r in items
             if r.content_type == "test_ref"
             and r.parsed_data.get("function_name") == "test_something"
         ]
-        assert len(unlinked) == 1, f"expected one entry for test_something; got {items}"
-        assert unlinked[0].parsed_data["file_default_verifies"] == ["REQ-p00001"], (
-            "the item that resolved must still populate the file-level "
-            f"default; got {unlinked[0].parsed_data}"
+        assert len(test_entries) == 1, f"expected one entry for test_something; got {items}"
+        assert test_entries[0].parsed_data["verifies"] == [], (
+            f"the test must inherit nothing from the citation; got {test_entries[0].parsed_data}"
         )
-        assert unlinked[0].parsed_data["verifies"] == ["REQ-p00001"]
 
-        # The faulted sibling is not simply dropped: the file-level line's
-        # own single_ref entry (function_name is None -- it belongs to no
-        # function) carries it forward for reporting.
-        file_level = [
+        citation = [
             r
             for r in items
             if r.content_type == "test_ref" and r.parsed_data.get("function_name") is None
         ]
-        assert len(file_level) == 1, f"expected one file-level entry; got {items}"
-        assert "GARBAGE-999" in file_level[0].parsed_data["verifies"], (
-            "the faulted item must still reach a reportable entry, not "
-            f"vanish once salvaged from the default; got {file_level[0].parsed_data}"
-        )
-        assert ("verifies", "GARBAGE-999") in file_level[0].parsed_data["reference_verdicts"], (
-            "its verdict must ride alongside so the builder can report it "
-            f"as a broken reference; got {file_level[0].parsed_data}"
-        )
+        assert len(citation) == 1, f"expected one unbound citation entry; got {items}"
+        data = citation[0].parsed_data
+        assert data["binds_to_test"] is False
+        assert data["verifies"] == ["REQ-p00001", "GARBAGE-999"]
+        assert ("verifies", "GARBAGE-999") in data["reference_verdicts"]
 
 
 # Verifies: REQ-d00269-E

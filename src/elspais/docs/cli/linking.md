@@ -169,6 +169,15 @@ def test_no_plaintext_storage(): ...
 A citation written where no declaration follows it -- at module level, above
 statements rather than a `def` -- speaks for the executable lines after it, and
 stops at the next citation or the next declaration, whichever comes first.
+In a test file, such a citation binds to no test. Nothing a runner reports can
+reach it. Consequently, it credits nothing, and `tests.unbound_citation` names
+it. This rule includes a citation at the top of a test file with an import or
+any other statement between it and the first test.
+
+A citation written directly above a Dart `group(...)` that holds tests binds
+to the group. The citation takes its verdict from the results of the tests
+inside the group. It reads as passing if they all pass. It reads as failing if
+any of them fails. A group that holds no test binds no citation.
 
 ## Multi-Assertion Syntax
 
