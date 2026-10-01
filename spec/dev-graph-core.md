@@ -1212,6 +1212,8 @@ W. Where a run names a test target or a group of another member of the federatio
 
 X. The system SHALL reject at configuration-validation time a test target name or a group keyword that contains the character `:`.
 
+W. If a run that does not execute test targets is given a selection of targets to execute or a request to stop at the first failing target, then the system SHALL refuse the run.
+
 ### Rationale
 
 The cost of a target is not something the tool can read off its configuration, and it is not the tool's judgement to make. What the tool can do is let the project say it once, in a place a reader of the configuration will find, and then honour it. A description is required with each declaration for that reason: a group called `slow` tells a newcomer nothing about whether their change should have run it, and the declaration is the only place that explanation has to live.
@@ -1230,9 +1232,11 @@ P is not a second selector of the kind E rules out. E concerns which targets a r
 
 R and S divide one fact, a target with no results, by the question the run asked. A target nobody executed or asked for has not run, which is information; a target the run executed or required that left nothing is a fault somebody must fix. Without the division the fault fires for every tier a run did not touch, so no project declaring tiers can treat it as a failure, and then it catches nothing. V applies the same division to coverage, and adds one case: a target whose results are present has run, so coverage it declares and did not leave is missing whatever the run expected. T keeps the division the same however a target delivers its results. U keeps a repository's run from failing on targets another repository declares for its own runs. W is how a run names one of those targets when it does require it: the member that declares a target is the only one that knows which targets a name of its stands for, so a group of that member expands by that member's declarations and never by the invoking repository's. X keeps such a name readable: `:` separates the parts of a node identifier and a namespace never holds one, so a run can write a member's namespace before the name it qualifies only while no target or group name can hold one either.
 
+W is H's discipline applied to a run that executes nothing. A selection of targets to execute and a request to stop at the first failing one are read only by a run that executes, so a run that does not execute would accept them and read nothing; refusing them is the only answer the reader cannot mistake for a selection that took effect. A run of that kind that needs to say which results it requires says so with P.
+
 G carries the cost of that aliasing, and it is the whole cost. One namespace means a name cannot be a target's and a group's at once, so a configuration holding both is refused when it is read rather than resolved by a precedence rule — a precedence rule being a thing every reader of that configuration would afterwards have to know. What makes the aliasing safe beyond that is that a run says which targets it executed, so what an invocation resolved to is answerable by looking at the run rather than by knowing any of this.
 
-*End* *Test Target Groups* | **Hash**: f2913a98
+*End* *Test Target Groups* | **Hash**: 85c0c3db
 
 ## REQ-d00284: How a Result Names Its Test
 

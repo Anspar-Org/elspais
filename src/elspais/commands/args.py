@@ -183,7 +183,8 @@ class ChecksArgs:
     name of a group they claim (space-separated, repeatable). A group is an
     alias for the targets in it, so both are named here. Default: the targets of
     the `default` group. With --run-tests, executes only this subset; on
-    summary/trace, marks the rest as carried baselines. A selection standing
+    summary/trace, marks the rest as carried baselines; checks refuses it
+    without --run-tests. A selection standing
     for no target is refused; `none` is refused here too: it selects nothing to
     run. A run naming nothing selects `default`, refused where that group holds
     no target."""

@@ -1014,9 +1014,10 @@ source of truth for flag names and descriptions.
 
 `elspais checks --run-tests` executes each configured
 `[[scanning.test.targets]]` entry before evaluating checks. `--targets NAME
-...` restricts `--run-tests` to a named subset. An unknown name is exit code
-2. A selection standing for no target is also exit code 2. The flag only
-affects execution here. `--targets none` selects nothing to run.
+...` restricts `--run-tests` to a named subset; without `--run-tests` it is
+refused (exit 2), as `--fail-fast` is. An unknown name is exit code 2. A
+selection standing for no target is also exit code 2. The flag only affects
+execution here. `--targets none` selects nothing to run.
 Consequently, `--run-tests` refuses it. A bare `--run-tests` selects the
 `default` group. If that group holds no target, then the command refuses the
 run (exit 2). Name targets or groups instead. Per-PR selectivity rendering

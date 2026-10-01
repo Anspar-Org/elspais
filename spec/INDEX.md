@@ -174,7 +174,7 @@
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | b49bd5ee |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 3b102d6f |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | 8360f2f4 |
-| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 192b9bb4 |
+| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 04c09b44 |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 1ea68210 |
@@ -202,7 +202,7 @@
 | REQ-d00280 | Named Report Declarations                                     | dev-cli.md              | 321c6f4f |
 | REQ-d00281 | Level Vocabulary of a Reported Graph                          | dev-graph-core.md       | 4bde246d |
 | REQ-d00282 | Report Value Selection                                        | dev-cli.md              | bf98248c |
-| REQ-d00283 | Test Target Groups                                            | dev-graph-core.md       | f2913a98 |
+| REQ-d00283 | Test Target Groups                                            | dev-graph-core.md       | 85c0c3db |
 | REQ-d00284 | How a Result Names Its Test                                   | dev-graph-core.md       | 7baae0b0 |
 | REQ-d00285 | The Shape of a Finding                                        | dev-cli.md              | bedec247 |
 | REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | 7cd5b049 |
