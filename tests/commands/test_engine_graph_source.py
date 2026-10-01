@@ -117,3 +117,64 @@ def test_the_reports_source_line_counts_the_files_the_graph_predates(predates, s
     line = _format_graph_source({"type": "daemon", "port": 35121, "graph_predates": predates})
 
     assert ("graph predates 2 changed file(s)" in line) is shown
+
+
+_PROJECT_CONFIG = """\
+version = 5
+cli_ttl = 0
+
+[project]
+name = "{name}"
+namespace = "REQ"
+
+[scanning.spec]
+directories = ["spec"]
+"""
+
+_PROJECT_SPEC = """\
+# {req_id}: {title}
+
+**Level**: PRD | **Status**: Active
+
+The body of the requirement.
+
+## Assertions
+
+A. The system SHALL do something.
+
+*End* *{title}* | **Hash**: abcd1234
+"""
+
+
+def _make_project(root, name, req_id, title):
+    root.mkdir()
+    (root / ".elspais.toml").write_text(_PROJECT_CONFIG.format(name=name))
+    (root / "spec").mkdir()
+    (root / "spec" / "requirements.md").write_text(_PROJECT_SPEC.format(req_id=req_id, title=title))
+    return root
+
+
+# Verifies: REQ-o00075-C
+def test_the_local_graph_is_kept_only_for_the_directory_it_was_built_from(tmp_path, monkeypatch):
+    """A process asking from a second project is answered from that project's
+    graph, never from the graph cached for the first."""
+    from elspais.commands import _engine
+
+    project_a = _make_project(tmp_path / "a", "project-a", "REQ-p00001", "Project A")
+    project_b = _make_project(tmp_path / "b", "project-b", "REQ-p00002", "Project B")
+    monkeypatch.setattr(_engine, "_local_graph", None)
+    monkeypatch.setattr(_engine, "_local_config", None)
+    monkeypatch.setattr(_engine, "_local_dir", None)
+
+    monkeypatch.chdir(project_a)
+    graph_a, _ = _engine._ensure_local_graph()
+    assert graph_a.find_by_id("REQ-p00001") is not None
+
+    monkeypatch.chdir(project_b)
+    graph_b, _ = _engine._ensure_local_graph()
+
+    assert graph_b.find_by_id("REQ-p00002") is not None
+    assert graph_b.find_by_id("REQ-p00001") is None
+
+    again, _ = _engine._ensure_local_graph()
+    assert again is graph_b

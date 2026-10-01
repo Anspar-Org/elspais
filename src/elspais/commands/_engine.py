@@ -18,9 +18,11 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
 
-# Lazy-cached local graph for the lifetime of the process.
+# Lazy-cached local graph, kept for the directory it was built from. A process
+# that asks from another directory is asking about another project.
 _local_graph: FederatedGraph | None = None
 _local_config: dict[str, Any] | None = None
+_local_dir: Any = None
 
 
 def call(
@@ -224,13 +226,23 @@ def get_graph() -> Any:
     return graph
 
 
+# Implements: REQ-o00075-C
 def _ensure_local_graph(
     config_path: str | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """Build or return the cached local graph and config."""
-    global _local_graph, _local_config
-    # Use cache only when no explicit overrides are given
-    if _local_graph is not None and _local_config is not None and config_path is None:
+    global _local_graph, _local_config, _local_dir
+    from pathlib import Path
+
+    here = Path.cwd().resolve()
+    # Use cache only when no explicit overrides are given, and only for the
+    # project it was built from.
+    if (
+        _local_graph is not None
+        and _local_config is not None
+        and config_path is None
+        and _local_dir == here
+    ):
         return _local_graph, _local_config
 
     from elspais.config import get_config
@@ -240,4 +252,5 @@ def _ensure_local_graph(
     graph = build_graph(config=config)
     _local_graph = graph
     _local_config = config
+    _local_dir = here
     return graph, config

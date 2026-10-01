@@ -62,6 +62,8 @@ All notable changes to elspais will be documented in this file.
 
 - **A same-repository `Integrates:` target and an off-separator assertion reference are documented as what they are** -- the first is a refused relationship reported under `references.forbidden`, and the second is a malformed reference; the documentation called both unresolved.
 
+- **A command run in-process answers about the project it is asked from** -- a process that built a graph locally kept it for its whole life, so a second command run in the same process from another project answered from the first project's graph. The cached graph is now kept only for the directory it was built from.
+
 - **A citation above a test prescanned by an external command was credited to the test before it (REQ-d00254-S+V)** -- on that route, a test's extent ran from its declaration to the line before the next one. Consequently, the comment block written above a test read as the body of the test before it. A test now ends at the end line its record reports. If its record reports none, then the test ends at its last line before the next test that is neither blank nor a comment. A single reference, a list, a list continued with its separator and several keyword lines all bind to the test below them.
 
 - **A citation at the top of a test file no longer credits every test in the file (REQ-d00254-T)** -- elspais read a citation above a file's first test as a default for every test the file declares, where an import or any other statement stood between them. That citation credited each test without a citation of its own. Such a citation now binds to no test and credits nothing. `tests.unbound_citation` reports it. Write the citation above each test it describes.
