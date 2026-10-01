@@ -662,7 +662,7 @@ H. If a term occurrence functions as system syntax — a heading, a status value
 
 I. When scanning for unmarked usage, the tool SHALL recognize inflected forms of a term, including singular and plural variants, as occurrences of that term.
 
-J. When the tool brings term occurrences into canonical form, the tool SHALL leave unchanged each occurrence in a heading.
+J. When the tool brings term occurrences into canonical form, the tool SHALL add no markup to an occurrence in a heading.
 
 ### Rationale
 
@@ -670,6 +670,7 @@ Term declarations historically carried one bundled flag (`Indexed: false`) that 
 
 ### Changelog
 
+- 2026-10-01 | 7a77c805 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-01 | 9763bc33 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | aac4da7f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-5: orthogonal term-declaration behaviors (G) and context-aware unmarked-usage scanning (H, I); decouple C from the bundled indexed flag
@@ -677,7 +678,7 @@ Term declarations historically carried one bundled flag (`Indexed: false`) that 
 - 2026-05-11 | 0d96cc34 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 0d96cc34 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Term Health Checks* | **Hash**: 9763bc33
+*End* *Term Health Checks* | **Hash**: 7a77c805
 
 ## REQ-d00224: Glossary and Term Index Generators
 

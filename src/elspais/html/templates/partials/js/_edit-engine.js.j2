@@ -1588,6 +1588,7 @@ async function doSave() {
         refreshFileViewer();
         loadTreeData();
     } else if (result && result.success === false && result.error) {
+        {# Implements: REQ-p00015-B #}
         // A refused save leaves the edits pending; saying nothing would
         // read as a save that worked.
         showErrorModal('Save failed', result.error);

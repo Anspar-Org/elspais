@@ -143,7 +143,7 @@
 | REQ-d00220 | TermDictionary Data Model                                     | prd-core.md             | 986251c3 |
 | REQ-d00221 | Grammar Extension for Definition Blocks                       | prd-core.md             | 5a3c278b |
 | REQ-d00222 | TraceGraph Terms and GraphBuilder Integration                 | prd-core.md             | 6f017c6d |
-| REQ-d00223 | Term Health Checks                                            | prd-core.md             | 9763bc33 |
+| REQ-d00223 | Term Health Checks                                            | prd-core.md             | 7a77c805 |
 | REQ-d00224 | Glossary and Term Index Generators                            | prd-core.md             | c8ce4253 |
 | REQ-d00225 | CLI Registration for Glossary and Term Index                  | prd-core.md             | 2b8a5235 |
 | REQ-d00226 | Comment Data Models                                           | prd-features.md         | 6d420b96 |

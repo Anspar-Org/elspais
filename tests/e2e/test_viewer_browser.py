@@ -4830,6 +4830,77 @@ class TestBrowserSaveDisclosesTextNoEditChanged:
         page.wait_for_selector("#save-disclosure-overlay", state="detached")
 
 
+@pytest.fixture(scope="module")
+def refused_save_viewer(tmp_path_factory):
+    """A viewer over a project whose Active requirement a page save cannot write.
+
+    The page's save sends no changelog reason, which a change to an Active
+    requirement needs. Private because the test edits the graph. Yields the
+    viewer's URL and the project directory.
+    """
+    dest = tmp_path_factory.mktemp("viewer-refused-save")
+    _write_edit_controls_project(dest)
+    with _served_viewer(dest) as base_url:
+        yield base_url, dest
+
+
+@pytest.fixture()
+def page_refused_save(refused_save_viewer):
+    """Launch headless Chromium against the refused-save viewer."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        pg = browser.new_context().new_page()
+        pg.set_default_timeout(10_000)
+        yield pg
+        browser.close()
+
+
+class TestBrowserSaveReportsRefusal:
+    """Validates REQ-p00015-B."""
+
+    # Verifies: REQ-p00015-B
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_p00015_B_refused_save_names_its_cause_and_keeps_the_edit(
+        self, page_refused_save, refused_save_viewer
+    ):
+        page = page_refused_save
+        base_url, project = refused_save_viewer
+        spec_file = project / "spec" / "dev.md"
+        before = spec_file.read_text(encoding="utf-8")
+        js_errors: list[str] = []
+        page.on("pageerror", lambda err: js_errors.append(str(err)))
+        page.goto(base_url, wait_until="networkidle")
+        _enter_edit_mode(page)
+
+        edited = page.evaluate(
+            f"""async () => await mutate('/api/mutate/title',
+                {{node_id: '{_EDIT_CONTROLS_CITING}', new_title: 'Citing Renamed'}})"""
+        )
+        assert edited and edited.get("success"), edited
+        page.wait_for_selector("#btn-save:not([disabled])", timeout=10_000)
+        saves: list = []
+        page.on("response", lambda r: saves.append(r) if r.url.endswith("/api/save") else None)
+        page.click("#btn-save")
+
+        try:
+            overlay = page.wait_for_selector("#error-modal-overlay", timeout=10_000)
+        except PlaywrightTimeoutError:
+            bodies = [(r.status, r.text()) for r in saves]
+            pytest.fail(f"no error shown for a refused save; /api/save answered {bodies}")
+        assert overlay.is_visible()
+        assert [r.status for r in saves] == [400]
+        shown = page.locator("#error-modal-overlay").inner_text()
+        assert "Save failed" in shown, shown
+        assert "changelog" in shown.lower(), shown
+        assert _EDIT_CONTROLS_CITING in shown, shown
+
+        dirty = page.request.get(f"{base_url}/api/dirty").json()
+        assert dirty.get("mutation_count", 0) > 0, dirty
+        assert spec_file.read_text(encoding="utf-8") == before
+        assert not js_errors, f"JS errors on save: {js_errors}"
+
+
 # ---------------------------------------------------------------------------
 # A static page with embedded content opens a card and its source (REQ-d00321)
 # ---------------------------------------------------------------------------
