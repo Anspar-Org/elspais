@@ -181,7 +181,10 @@ class ChecksArgs:
     name of a group they claim (space-separated, repeatable). A group is an
     alias for the targets in it, so both are named here. Default: the targets of
     the `default` group. With --run-tests, executes only this subset; on
-    summary/trace, marks the rest as carried baselines."""
+    summary/trace, marks the rest as carried baselines. A selection standing
+    for no target is refused; `none` is refused here too: it selects nothing to
+    run. A run naming nothing selects `default`, refused where that group holds
+    no target."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -425,7 +428,9 @@ class TraceArgs(ScopeOptions):
     )
     """Mark only these [[scanning.test.targets]] as freshly-run, by target name
     or by the name of a group they claim; render the rest as carried
-    baselines."""
+    baselines. `none` marks no target fresh, rendering every result as a
+    carried baseline. A run naming nothing selects `default`, and is refused
+    where that group holds no target."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -566,7 +571,9 @@ class SummaryArgs(ScopeOptions):
     )
     """Mark only these [[scanning.test.targets]] as freshly-run, by target name
     or by the name of a group they claim; render the rest as carried
-    baselines."""
+    baselines. `none` marks no target fresh, rendering every result as a
+    carried baseline. A run naming nothing selects `default`, and is refused
+    where that group holds no target."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""

@@ -2185,6 +2185,74 @@ class TestRunTestsFlag:
         assert out.returncode == 2
         assert "unknown --targets: nope" in (out.stderr or "")
 
+    # Verifies: REQ-d00283-J, REQ-d00254-I
+    def test_summary_naming_none_reports_every_result_as_carried(self, tmp_path, project):
+        scratch = tmp_path / "targets_none"
+        shutil.copytree(project, scratch)
+        result_dir = scratch / ".elspais" / "results"
+        result_dir.mkdir(parents=True, exist_ok=True)
+        (result_dir / "test-results.json").write_text(
+            json.dumps(
+                {
+                    "created_at": "fixture",
+                    "summary": {"passed": 1, "failed": 0, "total": 1},
+                    "tests": [
+                        {"nodeid": "test_stub::test_ok", "outcome": "passed", "duration": 0.001}
+                    ],
+                }
+            )
+        )
+        out = run_elspais("summary", "--targets", "none", cwd=scratch)
+        assert out.returncode == 0, (
+            f"summary --targets none failed: stdout={out.stdout!r} stderr={out.stderr!r}"
+        )
+        assert "* 1/1 test results from previous runs" in out.stdout
+
+    @staticmethod
+    def _grouped_scratch(tmp_path, project, name, stub_claims=None):
+        """Copy the project to a scratch directory and declare two groups.
+        No target claims `device`. The `stub` target claims *stub_claims*."""
+        scratch = tmp_path / name
+        shutil.copytree(project, scratch)
+        before, _, targets = (
+            (scratch / ".elspais.toml").read_text().partition("\n[[scanning.test.targets]]")
+        )
+        groups_toml = (
+            "\n[scanning.test.groups]\n"
+            'device = "needs the device farm"\n'
+            'slow = "runs for over a minute"\n'
+        )
+        if stub_claims:
+            targets = targets.replace(
+                'name = "stub"\n', f'name = "stub"\ngroups = ["{stub_claims}"]\n', 1
+            )
+        (scratch / ".elspais.toml").write_text(
+            before + groups_toml + "\n[[scanning.test.targets]]" + targets
+        )
+        return scratch
+
+    # Verifies: REQ-d00283-K+L+M+N
+    @pytest.mark.parametrize(
+        "command,expected",
+        [
+            (("summary",), "--targets none"),
+            (("checks", "--run-tests"), "names no test target to run"),
+        ],
+    )
+    def test_targets_standing_for_no_target_exits_2(self, tmp_path, project, command, expected):
+        scratch = self._grouped_scratch(tmp_path, project, "targets_empty")
+        out = run_elspais(*command, "--targets", "device", cwd=scratch)
+        assert out.returncode == 2, f"stdout={out.stdout!r} stderr={out.stderr!r}"
+        assert expected in (out.stderr or "")
+
+    # Verifies: REQ-d00283-D+K+M+O
+    @pytest.mark.parametrize("command", [("summary",), ("checks", "--run-tests")])
+    def test_bare_run_with_an_empty_default_group_exits_2(self, tmp_path, project, command):
+        scratch = self._grouped_scratch(tmp_path, project, "default_empty", stub_claims="slow")
+        out = run_elspais(*command, cwd=scratch)
+        assert out.returncode == 2, f"stdout={out.stdout!r} stderr={out.stderr!r}"
+        assert "`default` group holds no test target" in (out.stderr or "")
+
 
 class TestRunTestsFailFast:
     """Verifies: REQ-d00249-C, REQ-d00249-G"""

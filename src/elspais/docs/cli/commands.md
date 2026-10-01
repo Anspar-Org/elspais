@@ -96,7 +96,9 @@ To see unresolved references, use: `elspais unresolved`
   `--fail-fast`    Stop at the first target failure and skip the checks pass.
                    Requires `--run-tests`.
   `--targets T...` Run and ingest only these test targets rather than the
-                   `default` group
+                   `default` group. The command refuses a selection
+                   standing for no target, `none` included (exit 2). It also
+                   refuses a bare run if `default` holds no target.
   `-o, --output PATH`  Write output to file instead of stdout
 
 `-v, --verbose` is a global option (see Global Options above) and reports each

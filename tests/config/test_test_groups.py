@@ -25,10 +25,16 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from elspais.config import selected_targets, target_groups, targets_in_groups
+from elspais.config import (
+    empty_selection_refusal,
+    selected_targets,
+    target_groups,
+    targets_in_groups,
+)
 from elspais.config.schema import (
     GROUP_ALL,
     GROUP_DEFAULT,
+    GROUP_NONE,
     RESERVED_GROUPS,
     ElspaisConfig,
     ScanningConfig,
@@ -172,11 +178,23 @@ def test_target_may_claim_any_declared_group():
 
 
 # Verifies: REQ-d00283-F
-@pytest.mark.parametrize("reserved", sorted(RESERVED_GROUPS))
+@pytest.mark.parametrize("reserved", sorted(RESERVED_GROUPS - {GROUP_NONE}))
 def test_target_may_claim_a_reserved_name(reserved):
     """A reservation defines a name just as a declaration does."""
     cfg = TestScanningConfig(targets=[TestTargetConfig(name="a", groups=[reserved])])
     assert cfg.targets[0].groups == [reserved]
+
+
+# Verifies: REQ-d00283-J
+@pytest.mark.parametrize("claimed", [GROUP_NONE, "NONE", " None "])
+def test_a_target_claiming_the_none_group_is_refused(claimed):
+    """`none` stands for no target. If a target belongs to `none`, then the
+    group no longer means what its name states."""
+    with pytest.raises(ValidationError) as excinfo:
+        TestScanningConfig(targets=[TestTargetConfig(name="integration", groups=[claimed])])
+    message = str(excinfo.value)
+    assert "integration" in message, "the refusal must name the offending target"
+    assert claimed in message, "the refusal must name the group as the target spelled it"
 
 
 # Verifies: REQ-d00283-F
@@ -208,7 +226,7 @@ def test_any_number_of_groups_may_be_declared():
         assert targets_in_groups(cfg, [f"tier{n}"]) == {f"t{n}"}
 
 
-# Verifies: REQ-d00283-G
+# Verifies: REQ-d00283-G+J
 @pytest.mark.parametrize(
     "declared,culprit",
     [
@@ -218,6 +236,9 @@ def test_any_number_of_groups_may_be_declared():
         ({"default": "the usual"}, "default"),
         ({"All": "everything"}, "All"),
         ({"DEFAULT": "the usual"}, "DEFAULT"),
+        # REQ-d00283-J reserves `none` and fixes its meaning as no target.
+        ({"none": "nothing at all"}, "none"),
+        ({" None ": "nothing at all"}, "None"),
         # Two names a selection could not tell apart.
         ({"uat": "live backend", "UAT": "also live backend"}, "UAT"),
         ({"uat": "live backend", " uat ": "also live backend"}, "uat"),
@@ -235,7 +256,7 @@ def test_bad_group_declarations_are_refused(declared, culprit):
     assert culprit in str(excinfo.value)
 
 
-# Verifies: REQ-d00283-G
+# Verifies: REQ-d00283-G+J
 @pytest.mark.parametrize(
     "declared,target_name,kind",
     [
@@ -250,6 +271,8 @@ def test_bad_group_declarations_are_refused(declared, culprit):
         ({}, "all", "reserved"),
         ({}, "default", "reserved"),
         ({}, "ALL", "reserved"),
+        ({}, "none", "reserved"),
+        ({}, "NONE", "reserved"),
     ],
 )
 def test_a_target_named_like_a_group_is_refused(declared, target_name, kind):
@@ -390,11 +413,151 @@ def test_known_group_names_are_the_declared_ones_and_the_reserved_ones():
     cfg = _cfg(_ALIAS_DECLARED, _ALIAS_CLAIMS)
 
     assert known_group_names(cfg) == {"fast", "slow"} | set(RESERVED_GROUPS)
-    # A project declaring nothing still admits the two reservations, which is
-    # what lets a bare project say `--targets all`.
+    # A project that declares no group still admits the reserved names.
+    # Consequently, a bare project can name `--targets all` or `--targets none`.
     assert known_group_names(_cfg(None, {"a": []})) == set(RESERVED_GROUPS)
     # Published in the one spelling a selection is matched in: a declaration
     # differing only in case is the same name, which is why G refuses two of
     # them and why a run may write either.
     declared_loudly = _cfg({" Slow ": "runs for over a minute"}, {"a": []})
     assert known_group_names(declared_loudly) == {"slow"} | set(RESERVED_GROUPS)
+
+
+# ---------------------------------------------------------------------------
+# J, K -- a selection that stands for no target
+# ---------------------------------------------------------------------------
+
+
+# Verifies: REQ-d00283-J
+@pytest.mark.parametrize("named", [[GROUP_NONE], ["NONE"], [" none "]])
+def test_the_none_group_covers_no_target(named):
+    """The run is selective over no target. It is not a full run. Every
+    result that it reports comes from an earlier run."""
+    selection = selected_targets(_cfg(_DECLARED, _CLAIMS), named)
+
+    assert selection == set()
+    assert selection is not None, "naming `none` must not read as a full run"
+
+
+# The `_DECLARED` config, plus a group that no target claims.
+_WITH_UNCLAIMED = dict(_DECLARED, device="the device farm")
+# Every target claims a group other than `default`. Consequently, `default`
+# holds no target.
+_NO_DEFAULT = {"b": ["uat"], "c": ["slow"]}
+
+# Each row is (declared, claims, named, configured targets, nameable groups).
+# Each row describes a named selection that reaches no target.
+_NAMED_EMPTY = [
+    # A declared group that no target claims.
+    (_WITH_UNCLAIMED, _CLAIMS, ["device"], "a, b, c, d", "all, default, device, slow, uat"),
+    (_WITH_UNCLAIMED, _CLAIMS, ["DEVICE"], "a, b, c, d", "all, default, device, slow, uat"),
+    # The run names `default` directly. Every target claims another group.
+    (_DECLARED, _NO_DEFAULT, [GROUP_DEFAULT], "b, c", "all, default, slow, uat"),
+]
+
+
+# Verifies: REQ-d00283-K+L
+@pytest.mark.parametrize("declared,claims,named,_targets,_groups", _NAMED_EMPTY)
+def test_a_reading_run_naming_no_target_is_refused(declared, claims, named, _targets, _groups):
+    refusal = empty_selection_refusal(_cfg(declared, claims), named, executes=False)
+
+    assert refusal is not None, f"{named} stands for no target and must be refused"
+    assert f"--targets {GROUP_NONE}" in refusal, "the refusal must name the group `none`"
+
+
+# Verifies: REQ-d00283-M+N
+@pytest.mark.parametrize("declared,claims,named,targets,groups", _NAMED_EMPTY)
+def test_an_executing_run_naming_no_target_is_refused(declared, claims, named, targets, groups):
+    """An executing run has nothing to run, whatever it named. The refusal
+    lists the names that the run can use instead. The list omits `none`."""
+    refusal = empty_selection_refusal(_cfg(declared, claims), named, executes=True)
+
+    assert refusal is not None, f"{named} runs no target and must be refused"
+    assert "names no test target to run" in refusal
+    assert f"Configured targets: {targets}." in refusal
+    assert f"Groups: {groups}." in refusal
+    assert f"--targets {GROUP_NONE}" not in refusal, "running nothing is not an option to offer"
+
+
+# Verifies: REQ-d00283-M+N
+@pytest.mark.parametrize("named", [[GROUP_NONE], ["NONE"], ["device", GROUP_NONE]])
+def test_an_executing_run_naming_none_is_refused(named):
+    """`none` is a statement for a reading run. If a run executes targets and
+    names `none`, then the run has nothing to execute."""
+    refusal = empty_selection_refusal(_cfg(_WITH_UNCLAIMED, _CLAIMS), named, executes=True)
+
+    assert refusal is not None
+    assert "nothing to run" in refusal
+    assert "Configured targets: a, b, c, d." in refusal
+    assert "Groups: all, default, device, slow, uat." in refusal
+
+
+# Verifies: REQ-d00283-D+K+L+O
+@pytest.mark.parametrize("named", [None, [], ["  "]])
+def test_a_bare_reading_run_with_an_empty_default_is_refused(named):
+    """A run that names nothing selects `default`. If that group is empty,
+    then the refusal states this. It also tells the reader how to select no
+    target on purpose."""
+    refusal = empty_selection_refusal(_cfg(_DECLARED, _NO_DEFAULT), named, executes=False)
+
+    assert refusal is not None
+    assert f"`{GROUP_DEFAULT}` group holds no test target" in refusal
+    assert f"--targets {GROUP_NONE}" in refusal
+
+
+# Verifies: REQ-d00283-D+M+N+O
+@pytest.mark.parametrize("named", [None, [], ["  "]])
+def test_a_bare_executing_run_with_an_empty_default_is_refused(named):
+    refusal = empty_selection_refusal(_cfg(_DECLARED, _NO_DEFAULT), named, executes=True)
+
+    assert refusal is not None
+    assert f"`{GROUP_DEFAULT}` group holds no test target" in refusal
+    assert "Configured targets: b, c." in refusal
+    assert "Groups: all, default, slow, uat." in refusal
+    assert f"`{GROUP_NONE}`" not in refusal, "running nothing is not an option to offer"
+    assert f"--targets {GROUP_NONE}" not in refusal
+
+
+# Verifies: REQ-d00283-K+M
+@pytest.mark.parametrize("executes", [False, True])
+@pytest.mark.parametrize(
+    "declared,claims,named",
+    [
+        # The project configures no target. REQ-d00283-K applies only if
+        # the project configures a target. An executing command reports the
+        # missing targets itself.
+        (None, None, [GROUP_ALL]),
+        (None, None, [GROUP_DEFAULT]),
+        (None, None, None),
+        # A selection reaching at least one target.
+        (_WITH_UNCLAIMED, _CLAIMS, ["a"]),
+        (_WITH_UNCLAIMED, _CLAIMS, ["uat"]),
+        # A target name beside an unclaimed group reaches that target.
+        (_WITH_UNCLAIMED, _CLAIMS, ["a", "device"]),
+        # `none` beside a name that reaches a target.
+        (_WITH_UNCLAIMED, _CLAIMS, [GROUP_NONE, "a"]),
+        # A run that names nothing selects `default`. Here `default` holds `a`.
+        (_WITH_UNCLAIMED, _CLAIMS, None),
+        (_WITH_UNCLAIMED, _CLAIMS, []),
+        (_WITH_UNCLAIMED, _CLAIMS, ["  "]),
+    ],
+)
+def test_a_selection_reaching_a_target_is_admitted(declared, claims, named, executes):
+    assert empty_selection_refusal(_cfg(declared, claims), named, executes=executes) is None
+
+
+# Verifies: REQ-d00283-J
+@pytest.mark.parametrize(
+    "claims,named",
+    [
+        (_CLAIMS, [GROUP_NONE]),
+        (_CLAIMS, ["None"]),
+        # `none` keeps its meaning beside other names.
+        (_CLAIMS, ["device", GROUP_NONE]),
+        # `none` is the valid selection if `default` is empty.
+        (_NO_DEFAULT, [GROUP_NONE]),
+    ],
+)
+def test_a_reading_run_naming_none_is_admitted(claims, named):
+    """A reading run names `none` to state that it selects no target."""
+    assert empty_selection_refusal(_cfg(_WITH_UNCLAIMED, claims), named, executes=False) is None
