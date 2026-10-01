@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from elspais.cli import _lift_global_options, _sections_first, main
-from elspais.commands.report import FORMAT_SUPPORT
+from elspais.commands.report import FORMAT_SUPPORT, QUIET_FORMATS
 
 _CONFIG = """\
 version = 5
@@ -196,28 +196,24 @@ class TestFlagPlacement:
 # Quiet: one summary line per section
 # ---------------------------------------------------------------------------
 
-_QUIET_SECTIONS = (
-    "checks",
-    "summary",
-    "trace",
-    "gaps",
-    "uncovered",
-    "changed",
-    "unresolved",
-    "malformed",
-)
-
 
 def _quiet_cases():
-    for section in _QUIET_SECTIONS:
-        for fmt in ("text", "markdown"):
+    for section in sorted(FORMAT_SUPPORT):
+        for fmt in sorted(QUIET_FORMATS):
             if fmt not in FORMAT_SUPPORT[section]:
                 continue
             yield pytest.param(section, fmt, id=f"{section}-{fmt}")
 
 
+def _machine_format_cases():
+    for section in sorted(FORMAT_SUPPORT):
+        for fmt in sorted(FORMAT_SUPPORT[section] - QUIET_FORMATS):
+            yield pytest.param(section, fmt, id=f"{section}-{fmt}")
+
+
 class TestQuiet:
-    """-q renders each section as one summary line (REQ-d00085-F)."""
+    """-q renders each section as one summary line in a format a person reads,
+    and leaves a machine format whole (REQ-d00085-F)."""
 
     # Verifies: REQ-d00085-F
     @pytest.mark.parametrize(("section", "fmt"), list(_quiet_cases()))
@@ -240,13 +236,16 @@ class TestQuiet:
         assert len(alone) == len(sections)
 
     # Verifies: REQ-d00085-F
-    @pytest.mark.parametrize("section", ["checks", "summary", "trace"])
-    def test_quiet_leaves_a_structured_format_whole(self, invoke, section):
-        """JSON is read by a program, so -q does not collapse it."""
-        _rc, quiet, _err = invoke([section, "-q", "--format", "json"])
-        _rc, loud, _err = invoke([section, "--format", "json"])
+    @pytest.mark.parametrize(("section", "fmt"), list(_machine_format_cases()))
+    def test_quiet_leaves_a_machine_format_whole(self, invoke, section, fmt):
+        """A machine format is read by a program that relies on its shape, so
+        -q leaves the document exactly as it is without the flag."""
+        rc_quiet, quiet, err = invoke([section, "-q", "--format", fmt])
+        _assert_accepted(rc_quiet, err)
+        rc_loud, loud, _err = invoke([section, "--format", fmt])
         assert quiet == loud
-        assert len(_lines(quiet)) > 1
+        assert rc_quiet == rc_loud
+        assert len(_lines(quiet)) > 1, f"`{section} --format {fmt}` printed a single line"
 
 
 # ---------------------------------------------------------------------------

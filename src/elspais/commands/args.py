@@ -1506,7 +1506,7 @@ def generate_help(version: str) -> str:
     lines.append("")
     lines.append("Global options:")
     lines.append(f"  {'--verbose, -v':<{opt_col}}Show the detail each report section withholds")
-    lines.append(f"  {'--quiet, -q':<{opt_col}}Render each report section as one line")
+    lines.append(f"  {'--quiet, -q':<{opt_col}}Render each section as one line (text, markdown)")
     lines.append(f"  {'--directory, -C DIR':<{opt_col}}Run as if started in this directory")
     lines.append(f"  {'--config PATH':<{opt_col}}Path to configuration file")
     lines.append(f"  {'--spec-dir PATH':<{opt_col}}Override spec directory")

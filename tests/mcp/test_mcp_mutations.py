@@ -1652,7 +1652,17 @@ class TestGetOrphanedNodes:
 
 
 class TestGetPresetReferences:
-    """Tests for the get_unresolved_references() and get_malformed_references() tools."""
+    """Tests for get_unresolved_references() and for the malformed population,
+    which an agent reaches by naming its check through get_check_findings()."""
+
+    _CONFIG = {"project": {"name": "test", "namespace": NAMESPACE}}
+
+    @classmethod
+    def _malformed_findings(cls, federated):
+        from elspais.mcp.server import _get_check_findings
+
+        (check,) = _get_check_findings(federated, cls._CONFIG, "references.malformed")["checks"]
+        return check
 
     @staticmethod
     def _federated_with(mutation_graph, fault_class, target_id):
@@ -1668,7 +1678,7 @@ class TestGetPresetReferences:
         )
         return FederatedGraph.from_single(
             mutation_graph,
-            config={"project": {"name": "test", "namespace": NAMESPACE}},
+            config=TestGetPresetReferences._CONFIG,
             repo_root=Path("/test/repo"),
         )
 
@@ -1704,27 +1714,25 @@ class TestGetPresetReferences:
             "references.unknown_requirement",
             "references.unknown_assertion",
         }
-        assert _get_preset_references(federated, "malformed")["count"] == 0
+        assert self._malformed_findings(federated)["findings"] == []
 
-    # Verifies: REQ-d00272-P
-    def test_a_malformed_reference_is_listed_as_malformed_not_unresolved(self, mutation_graph):
+    # Verifies: REQ-d00272-P, REQ-o00060-H
+    def test_a_malformed_reference_is_reported_as_malformed_not_unresolved(self, mutation_graph):
         pytest.importorskip("mcp")
         from elspais.graph.reference_faults import FaultClass
         from elspais.mcp.server import _get_preset_references
 
         federated = self._federated_with(mutation_graph, FaultClass.MALFORMED, "not a reference")
 
-        result = _get_preset_references(federated, "malformed")
+        check = self._malformed_findings(federated)
 
-        assert result["count"] == 1
-        entry = result["malformed_references"][0]
-        assert entry["check"] == "references.malformed"
-        assert entry["remedy"] == "elspais malformed"
-        assert {c["name"] for c in result["checks"]} == {"references.malformed"}
+        (entry,) = check["findings"]
+        assert entry["node_id"] == "REQ-o00001"
+        assert check["remedy"] == "elspais malformed"
         assert _get_preset_references(federated, "unresolved")["count"] == 0
 
     # Verifies: REQ-d00272-P
-    def test_a_forbidden_reference_is_listed_by_neither_tool(self, mutation_graph):
+    def test_a_forbidden_reference_is_counted_as_neither_population(self, mutation_graph):
         pytest.importorskip("mcp")
         from elspais.graph.reference_faults import FaultClass
         from elspais.mcp.server import _get_preset_references, _reference_fault_counts
@@ -1732,7 +1740,7 @@ class TestGetPresetReferences:
         federated = self._federated_with(mutation_graph, FaultClass.FORBIDDEN, "REQ-p00001")
 
         assert _get_preset_references(federated, "unresolved")["count"] == 0
-        assert _get_preset_references(federated, "malformed")["count"] == 0
+        assert self._malformed_findings(federated)["findings"] == []
         assert _reference_fault_counts(federated) == {
             "has_unresolved_references": False,
             "unresolved_reference_count": 0,

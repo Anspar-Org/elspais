@@ -60,7 +60,8 @@ stand in the invocation: `elspais -q checks`, `elspais checks -q` and
 
   `-v, --verbose`    Render each report section with the detail it withholds
                      by default
-  `-q, --quiet`      Render each report section as one summary line
+  `-q, --quiet`      Render each report section as one summary line in text
+                     and markdown
   `--config PATH`    Path to configuration file
   `--spec-dir PATH`  Override spec directory
   `-C PATH`          Run as if started in PATH
@@ -145,7 +146,8 @@ To see malformed references, use: `elspais malformed`
 
 `-v, --verbose` and `-q, --quiet` are global options (see Global Options
 above): `-v` reports each check individually rather than only the summary,
-and `-q` prints the one verdict line.
+and `-q` prints the one verdict line in text and markdown; `json`, `junit`
+and `sarif` stay whole.
 
 ## fingerprint
 

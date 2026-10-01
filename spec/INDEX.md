@@ -52,7 +52,7 @@
 | ---------- | ------------------------------------------------- | ------------------- | -------- |
 | REQ-o00050 | Graph Builder as Single Entry Point               | ops-architecture.md | 33e0f3ec |
 | REQ-o00051 | Composable Annotation Design                      | ops-architecture.md | 2fabd3d4 |
-| REQ-o00060 | MCP Core Query Tools                              | ops-mcp.md          | 3a9ae713 |
+| REQ-o00060 | MCP Core Query Tools                              | ops-mcp.md          | d1c0a437 |
 | REQ-o00061 | MCP Workspace Context Tools                       | ops-mcp.md          | 3306c687 |
 | REQ-o00062 | MCP Graph Mutation Tools                          | ops-mcp.md          | 31e8183f |
 | REQ-o00063 | MCP File Mutation Tools                           | ops-mcp.md          | 05c1e9c4 |
@@ -107,7 +107,7 @@
 | REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | 6d66ba55 |
 | REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | edbd5d9a |
 | REQ-d00084 | Trace Command                                                 | dev-cli.md              | 5728e809 |
-| REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | c4ef729a |
+| REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | fa6d7cdf |
 | REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 515f0165 |
 | REQ-d00124 | Graph Analysis Engine                                         | dev-cli.md              | b153d5f6 |
 | REQ-d00125 | Analysis CLI Command                                          | dev-cli.md              | 474fa8af |

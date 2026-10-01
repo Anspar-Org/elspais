@@ -177,7 +177,7 @@ D. When a single section is specified, it SHALL behave identically to a standalo
 
 E. The `--format` flag SHALL support `text`, `markdown`, `json`, and `csv` output modes. Not all formats are valid for all sections; invalid combinations SHALL produce a clear error.
 
-F. The `-q`/`--quiet` flag SHALL suppress all output except a single summary line per section.
+F. In each format a person reads, the quiet flag SHALL reduce each section to a single summary line.
 
 G. The `--lenient` flag SHALL allow warnings to pass without affecting the exit code.
 
@@ -205,6 +205,8 @@ Q. An option SHALL be accepted only where the invocation it is given to reads it
 
 Each report-producing command (`checks`, `summary`, `trace`, `changed` and the listings narrowed from them) is also a section. A combined report, such as checks and summary for a CI pull-request comment, is one invocation rather than several concatenated by hand: the graph is built once, each section is rendered, and the output is unified. The `--lenient` flag provides an escape hatch for workflows that want to observe warnings without gating on them.
 
+F binds quietness to the formats a person reads, which are text and markdown. A machine format is a document whose shape a consumer relies on, so the quiet flag leaves JSON, CSV, JUnit and SARIF whole: a summary line in their place would break every consumer that parses them.
+
 Quietness and verbosity are separate obligations (F, K), as are leniency and the default it departs from (G, L). Each pair was carried under one label until evidence for one half was found standing in for both: coverage is reported per assertion, so a label holding two obligations cannot distinguish an implementation from half of one.
 
 A check is where a report groups what it found, so I attaches each finding to the check that raised it; that grouping is what a report counts against a check, renders beneath it, and suppresses or expands under M. What an individual finding carries, and its agreement across the formats a report is rendered in, is REQ-d00285's subject rather than this requirement's.
@@ -217,6 +219,8 @@ A failing check's findings are what the reader came for; a passing check's are n
 
 ### Changelog
 
+- 2026-10-01 | fa6d7cdf | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-01 | - | - | Michael Lewis (<michael@anspar.org>) | Scope quiet (F) to the formats a person reads; a machine format keeps its shape
 - 2026-10-01 | c4ef729a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-10-01 | - | - | Michael Lewis (<michael@anspar.org>) | State the composable sections by property in A and drop the unread mode flag from B; bind verbosity to the detail a section withholds (K); add placement independence (O), target selection in a composed report (P), and accepted-means-read (Q)
 - 2026-10-01 | c4ef729a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -230,7 +234,7 @@ A failing check's findings are what the reader came for; a passing check's are n
 - 2026-05-11 | 82d76f1a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 82d76f1a | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Report Composition* | **Hash**: c4ef729a
+*End* *Unified Report Composition* | **Hash**: fa6d7cdf
 ---
 
 ## REQ-d00271: Diagnostic Code Vocabulary

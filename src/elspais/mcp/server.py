@@ -4314,6 +4314,41 @@ def _reference_fault_counts(graph: FederatedGraph | None) -> dict[str, Any]:
     }
 
 
+# Implements: REQ-o00060-H, REQ-d00282-F, REQ-d00285-C+H+I
+def _get_check_findings(
+    graph: FederatedGraph, config: dict[str, Any] | None, check: str
+) -> dict[str, Any]:
+    """The findings of one health check, as `elspais checks --check` reports them.
+
+    The run is the one `elspais checks` makes, and the narrowing is the one
+    its `--check` flag applies, so this answer and the JSON report agree on
+    every finding, the verdict and the filter block. A name the tool runs no
+    check under is refused with the names it does run.
+    """
+    from elspais.commands._requests import ChecksRequest
+    from elspais.commands.health import (
+        FindingFilter,
+        _report_from_dict,
+        apply_finding_filter,
+        compute_checks,
+        narrowed_report_payload,
+    )
+    from elspais.utilities.findings import REGISTRY
+
+    filt = FindingFilter(names=(check,))
+    problems = filt.unadmitted() if check else ["--check: no check named."]
+    if problems:
+        return {
+            "success": False,
+            "error": " ".join(problems) + " known_checks lists every check name.",
+            "known_checks": sorted(REGISTRY),
+        }
+
+    report = _report_from_dict(compute_checks(graph, config or {}, ChecksRequest()))
+    outcome = apply_finding_filter(report, filt)
+    return narrowed_report_payload(outcome, report)
+
+
 # Implements: REQ-d00285-C+F, REQ-d00275-A, REQ-d00272-P
 def _get_preset_references(
     graph: FederatedGraph, preset: str, config: dict[str, Any] | None = None
@@ -6401,7 +6436,7 @@ tip: current_tip from get_mutation_log() ("" = nothing pending).
 - `get_versions(node_ids)` - Refresh version tokens in bulk (unknown IDs omitted)
 - `get_orphaned_nodes()` - List orphaned nodes
 - `get_unresolved_references()` - List references that read as identifiers and name nothing held
-- `get_malformed_references()` - List references that do not read as identifiers
+- `get_check_findings(check)` - List the findings of any health check by its name
 
 ### Test Coverage Analysis
 - `get_test_coverage(req_id)` - Get TEST nodes and coverage stats for a requirement
@@ -8041,8 +8076,8 @@ def create_server(
         that raised it (unknown namespace, requirement or assertion), its
         severity, its diagnostic codes, its location and its remedy. `checks`
         says what each class found, including a class this project turned
-        off. A reference that did not read as an identifier is listed by
-        get_malformed_references().
+        off. The findings of any other check, such as references.malformed
+        or references.forbidden, are listed by get_check_findings(check).
 
         Use when: checking for unresolved links after renaming or deleting
         requirements.
@@ -8050,18 +8085,23 @@ def create_server(
         return _get_preset_references(_state["graph"], "unresolved", _state["config"])
 
     @mcp.tool()
-    def get_malformed_references() -> dict[str, Any]:
-        """List every reference that did not read as an identifier.
+    def get_check_findings(check: str) -> dict[str, Any]:
+        """List the findings of one health check, named as `elspais checks` names it.
 
-        The same findings `elspais malformed` prints, under the key
-        `malformed_references`: each carries its check, severity, diagnostic
-        codes, location and remedy. `checks` says what the class found,
-        including whether this project turned it off.
+        The same report `elspais checks --check <check> --format json` prints:
+        `checks` holds the named check with its severity, remedy and findings,
+        each finding carrying its location and diagnostic codes. `healthy` and
+        `summary` are the whole run's verdict, and `filter` says what the
+        narrowing withheld. A name the tool runs no check under is refused,
+        and the refusal lists every check name in `known_checks`.
 
-        Use when: a citation or metadata reference is misspelled and you need
-        to find where.
+        Use when: you need the findings of a check no other tool lists, such
+        as references.malformed, references.forbidden or a coverage check.
+
+        Args:
+            check: A check name, e.g. "references.malformed".
         """
-        return _get_preset_references(_state["graph"], "malformed", _state["config"])
+        return _get_check_findings(_state["graph"], _state["config"], check)
 
     # ─────────────────────────────────────────────────────────────────────
     # Keyword Search Tools (Phase 4)

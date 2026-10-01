@@ -1,11 +1,12 @@
 # Verifies: REQ-d00285-B, REQ-d00285-C, REQ-d00285-F, REQ-d00285-G, REQ-d00285-H, REQ-d00285-I
-# Verifies: REQ-d00272-P
+# Verifies: REQ-d00272-P, REQ-o00060-H, REQ-d00282-F
 """The preset listings are the findings report narrowed, not a second report.
 
 `elspais unresolved`, `elspais malformed`, `elspais errors` and `elspais
 uncited` each answer one question over the one findings stream. The tests here pin the property that
 makes the arrangement worth having: a listing cannot say less about a finding
-than the report it is a view of, because it IS that report.
+than the report it is a view of, because it IS that report. The MCP surface
+answers about any one check, a listing's or not, from that same report.
 """
 
 from __future__ import annotations
@@ -356,23 +357,55 @@ def test_each_reference_listing_names_only_its_own_population(whole_run, preset,
     assert _FAULT_LINES["references.forbidden"] not in set().union(*listed.values())
 
 
-# Verifies: REQ-d00285-C, REQ-d00272-P
+def _mcp_reference_findings(graph, config, preset):
+    """What the MCP surface answers about one reference population.
+
+    The unresolved population has a listing tool of its own; the malformed
+    one is reached by naming its check, as any check without a listing is.
+    """
+    from elspais.mcp.server import _get_check_findings, _get_preset_references
+
+    if preset == "unresolved":
+        result = _get_preset_references(graph, preset, config)
+        return [
+            (
+                f["check"],
+                f["severity"],
+                f["remedy"],
+                f["message"],
+                f["file_path"],
+                tuple(f["codes"]),
+            )
+            for f in result["unresolved_references"]
+        ]
+    findings = []
+    for name in sorted(_REFERENCE_PRESETS[preset]):
+        for check in _get_check_findings(graph, config, name)["checks"]:
+            findings.extend(
+                (
+                    check["name"],
+                    check["severity"],
+                    check["remedy"],
+                    f["message"],
+                    f["file_path"],
+                    tuple(f.get("codes", ())),
+                )
+                for f in check["findings"]
+            )
+    return findings
+
+
+# Verifies: REQ-d00285-C, REQ-d00272-P, REQ-o00060-H
 @pytest.mark.parametrize("preset", sorted(_REFERENCE_PRESETS))
-def test_the_mcp_tool_reports_the_same_findings_as_the_listing(
+def test_the_mcp_surface_reports_the_same_findings_as_the_listing(
     faulted_graph, config, whole_run, preset
 ):
     """The MCP surface answers about each reference population from the same
     stream, so an agent and a person are never told different things about
     one reference."""
-    from elspais.mcp.server import _get_preset_references
-
-    result = _get_preset_references(faulted_graph, preset, config)
     selected = set(preset_checks(preset))
 
-    from_mcp = sorted(
-        (f["check"], f["severity"], f["remedy"], f["message"], f["file_path"], tuple(f["codes"]))
-        for f in result[f"{preset}_references"]
-    )
+    from_mcp = sorted(_mcp_reference_findings(faulted_graph, config, preset))
     from_report = sorted(
         (c.name, c.severity, c.remedy, f.message, f.file_path, tuple(f.codes))
         for c in whole_run.checks
@@ -381,8 +414,17 @@ def test_the_mcp_tool_reports_the_same_findings_as_the_listing(
     )
     assert from_mcp == from_report
     assert from_mcp, "fixture must produce findings for this to mean anything"
-    assert result["count"] == len(from_report)
-    assert {c["name"] for c in result["checks"]} == _REFERENCE_PRESETS[preset]
+
+
+# Verifies: REQ-d00285-C, REQ-d00272-P
+def test_the_unresolved_tool_accounts_for_every_class_it_names(faulted_graph, config):
+    """Every class the unresolved listing names is accounted for, and its
+    count is the findings it lists."""
+    from elspais.mcp.server import _get_preset_references
+
+    result = _get_preset_references(faulted_graph, "unresolved", config)
+    assert result["count"] == len(result["unresolved_references"]) == 2
+    assert {c["name"] for c in result["checks"]} == _UNRESOLVED_CHECKS
 
 
 # Verifies: REQ-d00272-P
@@ -391,13 +433,13 @@ def test_the_mcp_counts_agree_with_the_listings_and_omit_forbidden(
 ):
     """The health counts an agent reads, the MCP listings and the CLI listings
     count the same references; the forbidden reference is counted by none."""
-    from elspais.mcp.server import _get_preset_references, _reference_fault_counts
+    from elspais.mcp.server import _reference_fault_counts
 
     counts = _reference_fault_counts(faulted_graph)
     for preset in _REFERENCE_PRESETS:
         narrowed = apply_finding_filter(whole_run, FindingFilter.for_preset(preset)).report
         from_cli = sum(len(c.findings) for c in narrowed.checks)
-        from_mcp = _get_preset_references(faulted_graph, preset, config)["count"]
+        from_mcp = len(_mcp_reference_findings(faulted_graph, config, preset))
         assert from_cli == from_mcp == counts[f"{preset}_reference_count"], preset
         assert counts[f"has_{preset}_references"] is True
 
@@ -422,23 +464,129 @@ def test_graph_status_flags_each_population_on_its_own(faulted_graph):
 
 
 # Verifies: REQ-d00285-G
-@pytest.mark.parametrize(
-    ("preset", "check"),
-    [("unresolved", "unknown_requirement"), ("malformed", "malformed")],
-)
-def test_the_mcp_tool_names_a_class_the_project_turned_off(faulted_graph, config, preset, check):
+def test_the_unresolved_tool_names_a_class_the_project_turned_off(faulted_graph, config):
     """A class set to `off` produced no findings, and the surface says which
     -- otherwise "none" and "not reported" read alike."""
     from elspais.mcp.server import _get_preset_references
 
-    config["rules"]["references"][check] = "off"
-    result = _get_preset_references(faulted_graph, preset, config)
+    config["rules"]["references"]["unknown_requirement"] = "off"
+    result = _get_preset_references(faulted_graph, "unresolved", config)
 
-    name = f"references.{check}"
+    name = "references.unknown_requirement"
     entry = next(c for c in result["checks"] if c["name"] == name)
     assert entry["skipped"] is True
     assert entry["count"] == 0
-    assert not any(f["check"] == name for f in result[f"{preset}_references"])
+    assert not any(f["check"] == name for f in result["unresolved_references"])
+
+
+# Verifies: REQ-d00285-G
+def test_a_check_turned_off_is_named_as_withheld_by_the_mcp_surface(faulted_graph, config):
+    """Named by its check, a class set to `off` reports no findings and says
+    it withheld them, rather than reading as a clean result."""
+    from elspais.mcp.server import _get_check_findings
+
+    config["rules"]["references"]["malformed"] = "off"
+    result = _get_check_findings(faulted_graph, config, "references.malformed")
+
+    (entry,) = result["checks"]
+    assert entry["name"] == "references.malformed"
+    assert entry["details"].get("skipped") is True
+    assert entry["findings"] == []
+
+
+# ---------------------------------------------------------------------------
+# Any check, by the name the checks report gives it
+# ---------------------------------------------------------------------------
+
+
+def _checks_json(graph, config, name: str) -> dict:
+    """`elspais checks --check NAME --format json`, as the command renders it."""
+    import json
+
+    from elspais.commands._requests import ChecksRequest
+    from elspais.commands.health import _report_from_dict, compute_checks
+
+    report = _report_from_dict(compute_checks(graph, config, ChecksRequest()))
+    return json.loads(_format_report(report, argparse.Namespace(format="json", check=[[name]])))
+
+
+# Each named check, with whether the faulted project gives it findings: two
+# reference classes no listing tool names, one that a listing does, a failing
+# check outside the references and a passing one.
+_NAMED_CHECKS = {
+    "references.malformed": True,
+    "references.forbidden": True,
+    "references.unknown_requirement": True,
+    "spec.format_rules": True,
+    "config.exists": False,
+}
+
+
+# Verifies: REQ-o00060-H, REQ-d00285-C
+@pytest.mark.parametrize("name", sorted(_NAMED_CHECKS))
+def test_the_mcp_surface_returns_a_named_check_as_the_checks_report_states_it(
+    faulted_graph, config, name
+):
+    """The answer is the JSON report `--check` narrows to, finding for
+    finding, with the verdict and the narrowing it discloses."""
+    from elspais.mcp.server import _get_check_findings
+
+    from_mcp = _get_check_findings(faulted_graph, config, name)
+    from_cli = _checks_json(faulted_graph, config, name)
+    from_cli.pop("meta")
+
+    assert from_mcp == from_cli
+    assert [c["name"] for c in from_mcp["checks"]] == [name]
+    assert bool(from_mcp["checks"][0]["findings"]) is _NAMED_CHECKS[name], (
+        f"fixture must give {name} the findings this case expects"
+    )
+
+
+# Verifies: REQ-o00060-H, REQ-d00272-P
+def test_a_forbidden_reference_is_reachable_by_its_check(faulted_graph, config):
+    """No listing names a forbidden reference, so naming its check is how an
+    agent is told about one."""
+    from elspais.mcp.server import _get_check_findings
+
+    (check,) = _get_check_findings(faulted_graph, config, "references.forbidden")["checks"]
+    lines = {(f["file_path"], f["line"]) for f in check["findings"]}
+    assert lines == {("src/m.py", _FAULT_LINES["references.forbidden"])}
+    assert check["passed"] is False
+
+
+# Verifies: REQ-d00282-F
+@pytest.mark.parametrize("name", ["references.nonesuch", "", "malformed"])
+def test_the_mcp_surface_refuses_a_name_it_runs_no_check_under(faulted_graph, config, name):
+    """A name selecting nothing would answer like a check with nothing to
+    say, so it is refused, and the refusal lists the names that do select."""
+    from elspais.mcp.server import _get_check_findings
+
+    result = _get_check_findings(faulted_graph, config, name)
+
+    assert result["success"] is False
+    assert "checks" not in result
+    assert result["known_checks"] == sorted(REGISTRY)
+    assert "references.malformed" in result["known_checks"]
+    if name:
+        assert name in result["error"]
+
+
+# Verifies: REQ-o00060-H
+def test_the_check_findings_tool_is_registered_and_the_malformed_tool_is_not(faulted_graph):
+    """The malformed population is reached through the check that raises it;
+    no tool of its own stands beside that one."""
+    pytest.importorskip("mcp")
+    from elspais.mcp.server import create_server
+
+    server = create_server(faulted_graph)
+    tools = server._tool_manager._tools
+
+    assert "get_check_findings" in tools
+    assert "get_unresolved_references" in tools
+    assert [name for name in tools if "malformed" in name] == []
+    refusal = tools["get_check_findings"].fn("references.nonesuch")
+    assert refusal["success"] is False
+    assert refusal["known_checks"] == sorted(REGISTRY)
 
 
 # ---------------------------------------------------------------------------

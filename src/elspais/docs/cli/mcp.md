@@ -126,6 +126,32 @@ A configuration that cannot be parsed publishes nothing: `success` is false,
 `message` begins `CONFIG ERROR:`, and the graph already being served stays
 live.
 
+**get_unresolved_references()**
+
+List every reference that read as an identifier and names nothing held: the
+findings `elspais unresolved` prints, under `unresolved_references`.
+
+**get_check_findings(check)**
+
+List the findings of any health check, named as `elspais checks` names it.
+The answer is the report `elspais checks --check <check> --format json`
+prints, without its `meta` block.
+
+  Parameters:
+    check (str)   A check name, e.g. "references.malformed"
+
+  Returns:
+    checks        The named check: its severity, remedy and findings, each
+                  finding carrying its location and diagnostic codes
+    healthy       The whole run's verdict, as `elspais checks` reaches it
+    summary       The whole run's counts
+    filter        What the narrowing withheld
+
+A name the tool runs no check under is refused: `success` is false, `error`
+names the problem, and `known_checks` lists every check name. A check that
+did not run in this report appears in no entry of `checks`, and `filter`
+reports `checks_shown` as 0.
+
 ### Requirement Search & Navigation
 
 **search(query, field, regex, limit)**
@@ -488,6 +514,7 @@ Add to Cursor's MCP settings:
 ### Project Health Check
 
 1. `get_graph_status()` - Check for orphans/unresolved refs
+   - `get_check_findings("references.malformed")` - List one check's findings
 2. `get_project_summary()` - Review coverage stats
 3. Address requirements with `coverage: none`
 

@@ -6021,6 +6021,25 @@ def apply_finding_filter(report: HealthReport, filt: FindingFilter) -> _FilterOu
     )
 
 
+# Implements: REQ-d00285-C+H+I
+def narrowed_report_payload(
+    outcome: _FilterOutcome, whole_run: HealthReport, lenient: bool = False
+) -> dict[str, Any]:
+    """The structured report a narrowing leaves: the JSON format and the MCP surface.
+
+    The checks listed are the narrowed ones. The verdict and its counts are
+    those of *whole_run*, and the filter block says how much the narrowing
+    withheld.
+    """
+    d = outcome.report.to_dict(lenient=lenient)
+    if outcome.filter.active:
+        verdict = whole_run.to_dict(lenient=lenient)
+        d["healthy"] = verdict["healthy"]
+        d["summary"] = verdict["summary"]
+        d["filter"] = outcome.to_dict()
+    return d
+
+
 # Implements: REQ-d00285-I
 # Implements: REQ-d00085-E+F, REQ-d00085-N, REQ-d00285-C+H
 def _format_report(
@@ -6093,15 +6112,8 @@ def _format_report(
     meta = report_metadata()
 
     if fmt == "json":
-        d = report.to_dict(lenient=lenient)
+        d = narrowed_report_payload(outcome, whole_run, lenient=lenient)
         d["meta"] = meta
-        if outcome.filter.active:
-            # The verdict and its counts are the whole run's; only the checks
-            # listed are narrowed, and the filter block says by how much.
-            verdict = whole_run.to_dict(lenient=lenient)
-            d["healthy"] = verdict["healthy"]
-            d["summary"] = verdict["summary"]
-            d["filter"] = outcome.to_dict()
         return json.dumps(d, indent=2)
     elif fmt == "markdown" and not quiet:
         data = _build_report_data(

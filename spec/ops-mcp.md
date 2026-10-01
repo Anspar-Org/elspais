@@ -22,20 +22,26 @@ F. All query tools SHALL read directly from TraceGraph nodes using the iterator-
 
 G. Read surfaces that return a node SHALL report the version a subsequent mutation of that node will require, and a requirement's payload SHALL also report the version of the file containing it, so that a caller never has to fetch a node twice to be allowed to change it. A means of retrieving versions for several nodes without their content SHALL exist, so a caller can refresh what it holds cheaply.
 
+H. For any health check named as the checks report names it, the MCP server SHALL return the findings that check raised, as the checks report states them.
+
 ### Rationale
 
 Core query tools enable AI agents to discover and explore requirements without modifying the graph. These are safe, read-only operations.
+
+H puts every condition the tool detects within an agent's reach, under the name a person reads in the checks report. A tool per population covers only the populations someone wrote a tool for, so a check added later, or one left out of every listing, is reported to a person and hidden from an agent. Taking the findings from the report itself, rather than computing them again, keeps the two surfaces from disagreeing about one finding (REQ-d00285-C).
 
 Mutations require the caller to supply the version of the state it intends to change, so every read that could precede a write has to hand that version back. Omitting it would force a second round-trip purely to obtain a token the caller had already earned, and would make the mandatory precondition feel like an obstacle rather than a guarantee.
 
 ### Changelog
 
+- 2026-10-01 | d1c0a437 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-01 | - | - | Michael Lewis (<michael@anspar.org>) | Add H: the findings of any health check are reachable by its name
 - 2026-08-02 | 3a9ae713 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-26 | 25b3d4f7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 73c31134 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 73c31134 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *MCP Core Query Tools* | **Hash**: 3a9ae713
+*End* *MCP Core Query Tools* | **Hash**: d1c0a437
 ---
 
 ## REQ-o00061: MCP Workspace Context Tools
