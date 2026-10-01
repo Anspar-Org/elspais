@@ -31,6 +31,13 @@ from elspais.utilities.patterns import validate_namespace as _validate_namespace
 _RESERVED = "".join(RESERVED_IDENTIFIER_CHARACTERS)
 _NO_COLON = rf"^[^{re.escape(_RESERVED)}]*$"
 _NO_COLON_MESSAGE = "must not contain ':', which separates the parts of a node identifier"
+# A run names a test target or group of another federation member by writing
+# that member's namespace, a `:`, and the name. A namespace holds no `:`, so a
+# target or group name holding none either is what keeps the two parts apart.
+_NO_COLON_IN_SELECTOR_MESSAGE = (
+    "must not contain ':', which separates a federation member's namespace from "
+    "a target or group name that member declares"
+)
 
 
 # The statuses a project starts with, and what each one means. Read from here
@@ -701,6 +708,14 @@ class TestTargetConfig(_StrictModel):
     # If inputs is empty, then every file in the repository is an input.
     inputs: ScanningKindConfig = Field(default_factory=ScanningKindConfig)
 
+    # Implements: REQ-d00283-X
+    @field_validator("name")
+    @classmethod
+    def _check_name(cls, v: str) -> str:
+        if any(ch in v for ch in RESERVED_IDENTIFIER_CHARACTERS):
+            raise ValueError(f'test target name "{v}" {_NO_COLON_IN_SELECTOR_MESSAGE}')
+        return v
+
     @field_validator("line_base")
     @classmethod
     def _check_line_base(cls, v: int | None) -> int | None:
@@ -799,6 +814,9 @@ class TestScanningConfig(ScanningKindConfig):
             key = name.strip().lower()
             if not key:
                 raise ValueError("a declared test group must have a keyword")
+            # Implements: REQ-d00283-X
+            if any(ch in key for ch in RESERVED_IDENTIFIER_CHARACTERS):
+                raise ValueError(f'test group "{name}" {_NO_COLON_IN_SELECTOR_MESSAGE}')
             if key in RESERVED_GROUPS:
                 raise ValueError(
                     f'test group "{name}" is reserved and cannot be declared; '

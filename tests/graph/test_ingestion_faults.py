@@ -536,7 +536,7 @@ def test_a_build_that_read_everything_reports_a_passing_check(tmp_path):
 
 # Verifies: REQ-d00285-B, REQ-d00285-D, REQ-d00285-E
 def test_the_severity_is_the_one_the_project_configures(tmp_path):
-    """The default is `warning`; the project decides otherwise through the
+    """The default is `error`; the project decides otherwise through the
     ONE path the registry declares, and `off` stops the reporting."""
     from elspais.utilities.findings import NO_KNOWN_REMEDY, REGISTRY, remedy_for
 
@@ -544,11 +544,13 @@ def test_the_severity_is_the_one_the_project_configures(tmp_path):
         tmp_path, _UNPARSEABLE_TARGET, {".results/unit/TEST-a.xml": _TRUNCATED_JUNIT}
     )
 
-    assert REGISTRY["tests.ingestion_fault"].default == "warning"
-    assert _fault_check(project).severity == "warning"
+    assert REGISTRY["tests.ingestion_fault"].default == "error"
+    assert _fault_check(project).severity == "error"
+    assert _fault_check(project, {}).severity == "error"
 
-    raised = _fault_check(project, {"rules": {"severity": {"tests.ingestion_fault": "error"}}})
-    assert raised.severity == "error"
+    lowered = _fault_check(project, {"rules": {"severity": {"tests.ingestion_fault": "warning"}}})
+    assert lowered.severity == "warning"
+    assert lowered.findings
 
     silenced = _fault_check(project, {"rules": {"severity": {"tests.ingestion_fault": "off"}}})
     assert silenced.details.get("skipped") is True
@@ -580,7 +582,7 @@ coverage = "lcov.info"
     )
 
     graph = _build(project)
-    check = _fault_check(project, expected_targets=("cover", "unit"))
+    check = _fault_check(project, expected_targets=("REQ:cover", "REQ:unit"))
     assert len(check.findings) == len(graph.unread_artifacts()) == 2
     assert {f.file_path for f in check.findings} == {
         ".results/unit/TEST-*.xml",

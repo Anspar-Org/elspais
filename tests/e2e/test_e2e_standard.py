@@ -2154,17 +2154,30 @@ class TestRunTestsFlag:
         shutil.copytree(project, scratch)
         marker_a = scratch / "a.txt"
         marker_b = scratch / "b.txt"
+        # Each target touches its marker and leaves real results, so a target
+        # the run executes is judged by what it left rather than faulted for
+        # leaving nothing (REQ-d00283-Q+R).
+        emitter = scratch / "emit_junit.py"
+        emitter.write_text(
+            "import os, pathlib, sys\n"
+            "pathlib.Path(sys.argv[1]).touch()\n"
+            "out = pathlib.Path(os.environ['ELSPAIS_TARGET_OUTPUT'])\n"
+            "(out / 'junit.xml').write_text(\n"
+            '    \'<?xml version="1.0" encoding="utf-8"?>\'\n'
+            '    \'<testsuites><testsuite name="t" tests="1">\'\n'
+            '    \'<testcase classname="tests.test_t" name="test_ok" time="0.01"/>\'\n'
+            "    '</testsuite></testsuites>'\n"
+            ")\n"
+        )
         raw = (scratch / ".elspais.toml").read_text()
         before_targets = raw.split("\n[[scanning.test.targets]]")[0]
-        targets_toml = (
+        targets_toml = "".join(
             "\n[[scanning.test.targets]]\n"
-            'name = "a"\n'
-            f'command = "touch {marker_a}"\n'
+            f'name = "{name}"\n'
+            f"command = 'python {emitter} {marker}'\n"
             'reporter = "junit"\n'
-            "\n[[scanning.test.targets]]\n"
-            'name = "b"\n'
-            f'command = "touch {marker_b}"\n'
-            'reporter = "junit"\n'
+            'results = "*.xml"\n'
+            for name, marker in (("a", marker_a), ("b", marker_b))
         )
         (scratch / ".elspais.toml").write_text(before_targets + targets_toml)
         out = run_elspais(

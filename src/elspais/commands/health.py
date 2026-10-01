@@ -4662,14 +4662,15 @@ class _TargetOutcomes:
 def _target_outcomes(graph: FederatedGraph, expected_targets: tuple[str, ...]) -> _TargetOutcomes:
     """Divide the artifacts the build did not read by what the run executed and expected.
 
-    The expectation is resolved against the invoking repository's targets, so
-    a target another member declares is never expected (REQ-d00283-U).
+    Each expectation names its member's namespace with the target, so a target
+    another member declares is expected only where the run named it
+    (REQ-d00283-U+W). A member is its namespace; two members may share a
+    display name.
     """
+    from elspais.commands._targets import qualified_target
     from elspais.graph.parsers.results.registry import get_reporter
 
     expected = set(expected_targets)
-    # A member is its namespace; two members may share a display name.
-    root = graph.root_repo_namespace
     missing: list[tuple[str, Any, str]] = []
     not_run: list[tuple[str, str, str]] = []
     running: dict[tuple[str, str], str] = {}
@@ -4690,7 +4691,7 @@ def _target_outcomes(graph: FederatedGraph, expected_targets: tuple[str, ...]) -
             except KeyError:
                 continue
         for item in absent:
-            is_expected = entry.namespace == root and item.target in expected
+            is_expected = qualified_target(entry.namespace, item.target) in expected
             if item.artifact == "results":
                 if is_expected:
                     missing.append((entry.name, item, _absent_results_cause(item)))
@@ -5079,8 +5080,9 @@ def run_test_checks(
 ) -> list[HealthCheck]:
     """Run all test file health checks.
 
-    *expected_targets* names the targets of the invoking repository whose
-    results the run executed or expected (REQ-d00283-P+Q).
+    *expected_targets* names the targets whose results the run executed or
+    expected, each qualified by the namespace of the member declaring it
+    (REQ-d00283-P+Q+W).
     """
     from elspais.graph import NodeKind
 
@@ -5352,7 +5354,9 @@ def run(args: argparse.Namespace) -> int:
 
         try:
             expected = resolve_expected_targets(
-                get_config(getattr(args, "config", None), start_path=Path.cwd()), expect_named
+                get_config(getattr(args, "config", None), start_path=Path.cwd()),
+                expect_named,
+                find_git_root() or Path.cwd(),
             )
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
@@ -5414,7 +5418,9 @@ def run(args: argparse.Namespace) -> int:
         )
         runner_failed = any(r.returncode != 0 for r in results)
         # Implements: REQ-d00283-Q
-        expected |= {t.name for t in commandful}
+        from elspais.commands._targets import qualified_target
+
+        expected |= {qualified_target(cfg.project.namespace, t.name) for t in commandful}
         args._captured_results = captured_map
         # Implements: REQ-d00254-I
         args._fresh_targets = only

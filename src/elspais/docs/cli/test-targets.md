@@ -126,9 +126,11 @@ report states the start time and leaves that judgement to the reader.
 ### Results written while a daemon is serving
 
 A daemon or viewer serving the graph watches every file the graph was built
-from, in every member of the federation: configuration, the spec, code and test
-directories, and each target's folder -- its fingerprint, its results and its
-coverage. Results written after the daemon started, by
+from, in every member of the federation: configuration, the files the spec,
+code and test scans select, and each target's folder -- its fingerprint, its
+results and its coverage. A file the scans skip or decline, such as a
+`__pycache__` file, is not watched, so writing one does not rebuild the graph;
+a new file the scans select is. Results written after the daemon started, by
 `elspais checks --run-tests` or by a recorder bracketing its run with
 `elspais fingerprint`, are read by the next command the daemon answers. While a
 run is in progress only its fingerprint is watched, so the coverage file a
@@ -798,16 +800,22 @@ disk for a later run to read; that later run names them with
 | neither | `tests.not_run` (info) | `tests.ingestion_fault` |
 
 The rule is the same for a target that reads a results file and for one that
-reads its runner's output. A target another federation member declares is never
-expected by a run in this repository, so an associate's targets with no results
-read as not run. Because a target nobody ran is never a fault, a project that
-requires every expected tier to leave results can raise `tests.ingestion_fault`
-to `error` under `[rules.severity]`.
+reads its runner's output. A target another federation member declares is
+expected only where the run names it, as `NAMESPACE:NAME`; the name is resolved
+by that member's own configuration, so a group of that member stands for that
+member's targets. An associate's targets the run does not name, with no
+results, read as not run. Because a target nobody ran is never a fault,
+`tests.ingestion_fault` is reported at `error`: what reaches it is evidence
+the run said would be there. A target or group name cannot contain `:`, which
+is what keeps the namespace apart from the name.
 
 ```bash
 # The e2e job left .results/e2e behind; the merge run executes the unit tier
 # and requires both.
 elspais checks --run-tests --targets unit --expect e2e
+
+# The associate `lib` left its unit results too; require them.
+elspais checks --run-tests --targets unit --expect e2e lib:unit
 ```
 
 See also: `elspais docs checks`

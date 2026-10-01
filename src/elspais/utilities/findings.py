@@ -616,17 +616,15 @@ def _registry() -> dict[str, CheckRule]:
         # ill-placed comment does. What it credits is not a severity question
         # at all -- REQ-d00274-H withdraws the coverage whatever this says.
         _general("tests.unbound_citation", "tests", Severity.WARNING),
-        # An artifact ingestion could not read, or could not read in full, is
-        # reported at `warning`, which is "needs attention" -- the true claim,
-        # and the whole of what the tool knows. Severity is not what cures the
-        # harm here. What makes an unreadable report indistinguishable from a
-        # suite that never ran is that nobody was told WHICH artifact went
-        # unread; the findings name each one with its path, its line and its
-        # target, and that is the repair. Missing results count here only for
-        # a target the run executed or expected, so a target nobody ran never
-        # reaches this check, and a project that requires every expected tier
-        # to leave its results raises it to `error` under `[rules.severity]`.
-        _general("tests.ingestion_fault", "tests", Severity.WARNING),
+        # An artifact ingestion could not read is reported at `error`. Every
+        # case it covers is one a run owed: a report that will not parse, a
+        # reporter nothing provides, or results and coverage missing for a
+        # target the run executed or expected. A target nobody ran never
+        # reaches this check -- it is `tests.not_run` -- so what remains is a
+        # figure computed without evidence the run said would be there, and
+        # absence reads as a zero. The findings name each artifact with its
+        # path, its line and its target, which is the repair.
+        _general("tests.ingestion_fault", "tests", Severity.ERROR),
         # A target the run neither executed nor expected, with no results, has
         # not run. That is a fact about the run, so it is stated at `info`.
         _general("tests.not_run", "tests", Severity.INFO),

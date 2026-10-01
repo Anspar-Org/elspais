@@ -302,7 +302,9 @@ output_root = ".results"
 # selectivity section). Which targets' results a run requires is the same
 # kind of decision: `elspais checks --expect NAME ...` names them, and a target
 # a run neither executes nor expects reads as not run rather than as missing
-# results (`elspais docs test-targets`, Expected results).
+# results (`elspais docs test-targets`, Expected results). NAMESPACE:NAME
+# names a target or group another federation member declares, resolved by
+# that member's own configuration.
 
 # Test groups - which targets a run is about. Declared as a keyword and a
 # description; a target then claims the groups it belongs to via `groups`.
@@ -319,6 +321,8 @@ output_root = ".results"
 # `default`, so declaring nothing here leaves every run as it was.
 # A group is an alias for its targets: name it with `--targets NAME ...`.
 # A group may not share a name with a test target.
+# No target name or group keyword may contain `:`, which separates a
+# federation member's namespace from a name that member declares.
 # [scanning.test.groups]
 # uat = "End-to-end journeys needing a live stack"
 

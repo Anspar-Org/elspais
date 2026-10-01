@@ -1762,9 +1762,10 @@ class TestFederationContributionInvariance:
 class TestAssociateTargetsAreNotTheRootsRun:
     """A run from the core expects none of an associate's targets, so an
     associate target with no results reads as not run rather than as
-    missing results.
+    missing results. Named by its namespace, it is expected, and its absent
+    results are missing.
 
-    Verifies: REQ-d00283-S, REQ-d00283-U
+    Verifies: REQ-d00283-H, REQ-d00283-R, REQ-d00283-S, REQ-d00283-U, REQ-d00283-W
     """
 
     def _build(self, tmp_path):
@@ -1832,3 +1833,43 @@ class TestAssociateTargetsAreNotTheRootsRun:
         ), not_run
         faults = checks["tests.ingestion_fault"]
         assert faults["passed"] is True, faults
+
+    # Verifies: REQ-d00283-R+U+W
+    def test_an_associate_target_named_by_its_namespace_is_missing_results(self, tmp_path):
+        core = self._build(tmp_path)
+
+        out = run_elspais(
+            "checks",
+            "--tests",
+            "--format",
+            "json",
+            "--lenient",
+            "--expect",
+            "LIB:libunit",
+            cwd=core,
+        )
+
+        # The missing results are an `error`, which --lenient does not excuse.
+        assert out.returncode == 1, f"stdout={out.stdout!r} stderr={out.stderr!r}"
+        checks = {c["name"]: c for c in json.loads(out.stdout).get("checks", [])}
+        faults = checks["tests.ingestion_fault"]
+        assert faults["passed"] is False, faults
+        assert faults["severity"] == "error", faults
+        assert any(
+            "libunit" in f["message"] and f.get("repo") == "lib"
+            for f in faults.get("findings") or []
+        ), faults
+        assert not any(
+            "libunit" in f["message"] for f in checks["tests.not_run"].get("findings") or []
+        ), checks["tests.not_run"]
+
+    # Verifies: REQ-d00283-H+W
+    def test_an_unknown_expected_namespace_is_refused(self, tmp_path):
+        core = self._build(tmp_path)
+
+        out = run_elspais("checks", "--tests", "--lenient", "--expect", "ZZZ:libunit", cwd=core)
+
+        assert out.returncode == 2, f"stdout={out.stdout!r} stderr={out.stderr!r}"
+        assert "--expect" in out.stderr
+        assert "ZZZ" in out.stderr
+        assert "LIB" in out.stderr

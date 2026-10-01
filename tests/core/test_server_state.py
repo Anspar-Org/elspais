@@ -4,6 +4,8 @@
 import time
 from pathlib import Path
 
+import pytest
+
 _MINIMAL_CONFIG = """\
 version = 5
 
@@ -1191,3 +1193,161 @@ class TestServedGraphCurrency:
         _bump(spec)
 
         assert "graph_predates" not in status()
+
+    # A project whose scan selects some of what its directories hold: spec
+    # reads `*.md`, code skips `src/vendor`, and `[scanning] skip` names any
+    # `generated` directory for every kind.
+    _SELECTIVE_CONFIG = (
+        _MINIMAL_CONFIG
+        + """
+[scanning]
+skip = ["**/generated"]
+
+[scanning.spec]
+directories = ["spec"]
+file_patterns = ["*.md"]
+
+[scanning.code]
+directories = ["src"]
+skip_dirs = ["src/vendor"]
+
+[scanning.test]
+enabled = true
+directories = ["tests"]
+"""
+    )
+
+    @classmethod
+    def _selective(cls, tmp_path: Path) -> Path:
+        root = cls._repo(tmp_path / "project", cls._SELECTIVE_CONFIG)
+        (root / "spec" / "core.md").write_text("# notes\n")
+        for rel in ("src/app.py", "src/vendor/lib.py", "src/generated/out.py"):
+            (root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (root / rel).write_text("x = 1\n")
+        (root / "tests").mkdir()
+        (root / "tests" / "test_app.py").write_text("def test_a():\n    pass\n")
+        return root
+
+    # Verifies: REQ-d00313-A
+    @pytest.mark.parametrize("scanned", ["src", "tests"])
+    def test_compiled_bytecode_in_a_scanned_directory_is_not_a_change(self, tmp_path, scanned):
+        """A `.pyc` is what running the code leaves behind. The scan's
+        patterns decline it, so the graph was not built from it."""
+        root = self._selective(tmp_path)
+        state = self._state(root)
+
+        cache = root / scanned / "__pycache__"
+        cache.mkdir()
+        (cache / "app.cpython-312.pyc").write_bytes(b"\x00\x01")
+
+        assert state.changed_files() == []
+        assert not state.is_stale()
+
+    # Verifies: REQ-d00313-A, REQ-p00015-H
+    @pytest.mark.parametrize(
+        "rel",
+        [
+            "src/vendor/new.py",  # [scanning.code] skip_dirs
+            "src/generated/new.py",  # [scanning] skip
+            "spec/generated/new.md",  # [scanning] skip, another kind
+        ],
+    )
+    def test_a_file_in_a_skipped_directory_is_not_a_change(self, tmp_path, rel):
+        root = self._selective(tmp_path)
+        state = self._state(root)
+
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text("x = 2\n")
+        _bump(root / "src" / "vendor" / "lib.py")
+        _bump(root / "src" / "generated" / "out.py")
+
+        assert state.changed_files() == []
+
+    # Verifies: REQ-d00313-A
+    def test_a_file_the_patterns_decline_is_not_a_change(self, tmp_path):
+        root = self._selective(tmp_path)
+        state = self._state(root)
+
+        (root / "spec" / "notes.txt").write_text("scratch\n")
+        (root / "tests" / "helpers.txt").write_text("scratch\n")
+
+        assert state.changed_files() == []
+
+    # Verifies: REQ-d00313-A
+    @pytest.mark.parametrize("rel", ["spec/new.md", "src/new.py", "src/pkg/deep.py"])
+    def test_a_new_file_the_selection_admits_is_a_change(self, tmp_path, rel):
+        root = self._selective(tmp_path)
+        state = self._state(root)
+
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text("x = 3\n")
+
+        assert [p.resolve() for p in state.changed_files()] == [(root / rel).resolve()]
+        assert state.is_stale()
+
+    # Verifies: REQ-d00313-A
+    @pytest.mark.parametrize("rel", ["spec/core.md", "src/app.py", "tests/test_app.py"])
+    def test_a_changed_file_the_selection_admits_is_a_change(self, tmp_path, rel):
+        root = self._selective(tmp_path)
+        state = self._state(root)
+
+        _bump(root / rel)
+
+        assert [p.resolve() for p in state.changed_files()] == [(root / rel).resolve()]
+
+    # Verifies: REQ-d00313-A
+    def test_the_watched_selection_is_what_the_build_read(self, tmp_path):
+        """Every spec, code and test file the built graph holds is a file the
+        plan's selection gives, and the selection holds nothing else of those
+        kinds that the build passed over."""
+        from elspais.config import load_config
+        from elspais.graph.factory import build_graph, scan_plan
+        from elspais.graph.file_selection import select_files
+        from elspais.graph.GraphNode import FileType, NodeKind
+
+        root = self._selective(tmp_path)
+        (root / "spec" / "notes.txt").write_text("scratch\n")
+        (root / "src" / "__pycache__").mkdir()
+        (root / "src" / "__pycache__" / "app.pyc").write_bytes(b"\x00")
+        config = load_config(root / ".elspais.toml")
+
+        selected: dict[str, set[Path]] = {}
+        for kind in scan_plan(config, root):
+            for directory in kind.directories:
+                rel = directory.resolve().relative_to(root.resolve()).as_posix()
+                selection = select_files(
+                    root, [rel], list(kind.skip_dirs), list(kind.skip_files), list(kind.patterns)
+                )
+                selected.setdefault(kind.kind, set()).update(selection.selected)
+
+        graph = build_graph(config_path=root / ".elspais.toml", repo_root=root)
+        held: dict[str, set[Path]] = {}
+        by_type = {FileType.SPEC: "spec", FileType.CODE: "code", FileType.TEST: "test"}
+        for node in graph.iter_by_kind(NodeKind.FILE):
+            kind = by_type.get(node.get_field("file_type"))
+            if kind is not None:
+                held.setdefault(kind, set()).add(Path(node.get_field("absolute_path")).resolve())
+
+        for kind, files in held.items():
+            assert files <= {p.resolve() for p in selected.get(kind, set())}, kind
+        assert held["spec"] == {(root / "spec" / "core.md").resolve()}
+        assert held["code"] == {(root / "src" / "app.py").resolve()}
+        assert held["test"] == {(root / "tests" / "test_app.py").resolve()}
+
+    # Verifies: REQ-d00313-A
+    @pytest.mark.parametrize("scanned,rel", [("src", "src/app.py"), ("tests", "tests/test_app.py")])
+    def test_a_scanned_directory_created_after_the_build_is_watched(self, tmp_path, scanned, rel):
+        """The configuration names the directory before it exists. Once it
+        exists, a file the selection admits in it is one the graph predates."""
+        import shutil
+
+        root = self._selective(tmp_path)
+        shutil.rmtree(root / scanned)
+        state = self._state(root)
+        assert not state.is_stale()
+
+        (root / scanned).mkdir()
+        (root / rel).write_text("def test_a():\n    pass\n")
+
+        assert [p.resolve() for p in state.changed_files()] == [(root / rel).resolve()]
+        assert state.is_stale()

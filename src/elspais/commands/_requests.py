@@ -43,7 +43,8 @@ def treat_active_from_params(params: Mapping[str, str]) -> tuple[str, ...]:
 
 
 # The key that carries the targets a checks run expects results from. The
-# names are final target names, divided by a comma.
+# names are final target names, each qualified by its member's namespace,
+# divided by a comma.
 EXPECTED_TARGETS_PARAM = "expected_targets"
 EXPECTED_TARGETS_SEPARATOR = ","
 
@@ -171,10 +172,11 @@ class ChecksRequest:
     terms_only: bool = False
     lenient: bool = False
     treat_active: tuple[str, ...] = ()
-    # Implements: REQ-d00283-P+Q+U
-    # The targets of the invoking repository whose results this run expects:
-    # every target it executed, and every target it named as expected. Final
-    # target names, a group already expanded at the edge.
+    # Implements: REQ-d00283-P+Q+U+W
+    # The targets whose results this run expects: every target it executed,
+    # and every target it named as expected. Each is a final target name
+    # qualified by the namespace of the member declaring it, a group already
+    # expanded at the edge by that member's declarations.
     expected_targets: tuple[str, ...] = ()
 
     @property

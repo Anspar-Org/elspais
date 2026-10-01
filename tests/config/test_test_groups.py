@@ -289,6 +289,40 @@ def test_a_target_named_like_a_group_is_refused(declared, target_name, kind):
     assert kind in message, f"the refusal must say the colliding group is {kind}"
 
 
+# Verifies: REQ-d00283-X
+@pytest.mark.parametrize("name", ["lib:unit", ":unit", "unit:"])
+def test_a_target_name_holding_the_member_separator_is_refused(name):
+    """`NS:NAME` names another member's target, so a target name holding `:`
+    could not be told apart from that spelling."""
+    with pytest.raises(ValidationError) as excinfo:
+        TestScanningConfig(targets=[TestTargetConfig(name=name)])
+    message = str(excinfo.value)
+    assert name in message
+    assert "must not contain ':'" in message
+
+
+# Verifies: REQ-d00283-X
+@pytest.mark.parametrize("keyword", ["lib:uat", ":uat", "uat:"])
+def test_a_group_keyword_holding_the_member_separator_is_refused(keyword):
+    with pytest.raises(ValidationError) as excinfo:
+        TestScanningConfig(groups={keyword: "needs a live backend"})
+    message = str(excinfo.value)
+    assert keyword in message
+    assert "must not contain ':'" in message
+
+
+# Verifies: REQ-d00283-X
+def test_a_configuration_file_holding_a_colon_target_name_is_refused():
+    """The refusal is at configuration validation, the path every loaded
+    configuration takes."""
+    from elspais.config import validate_config
+
+    raw = {"scanning": {"test": {"targets": [{"name": "lib:unit", "reporter": "junit"}]}}}
+    with pytest.raises(ValidationError) as excinfo:
+        validate_config(raw)
+    assert "must not contain ':'" in str(excinfo.value)
+
+
 # Verifies: REQ-d00283-G
 def test_a_target_may_share_a_name_with_nothing_declared():
     """The refusal is about a collision, not about the spelling of a name:

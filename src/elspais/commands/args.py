@@ -197,7 +197,10 @@ class ChecksArgs:
     of an expected target are a fault; a target neither executed nor expected
     is reported as not run. Separate from --targets, which selects what
     --run-tests executes; a target --run-tests executes is always expected.
-    `none` expects nothing beyond what runs."""
+    `none` expects nothing beyond what runs. A bare name is a target or group
+    of this repository; NAMESPACE:NAME names a target or group another member
+    of the federation declares, resolved by that member's own configuration.
+    No other member's target is expected unless it is named."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""

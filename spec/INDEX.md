@@ -202,7 +202,7 @@
 | REQ-d00280 | Named Report Declarations                                     | dev-cli.md              | 321c6f4f |
 | REQ-d00281 | Level Vocabulary of a Reported Graph                          | dev-graph-core.md       | 4bde246d |
 | REQ-d00282 | Report Value Selection                                        | dev-cli.md              | bf98248c |
-| REQ-d00283 | Test Target Groups                                            | dev-graph-core.md       | 524538cc |
+| REQ-d00283 | Test Target Groups                                            | dev-graph-core.md       | f2913a98 |
 | REQ-d00284 | How a Result Names Its Test                                   | dev-graph-core.md       | 7baae0b0 |
 | REQ-d00285 | The Shape of a Finding                                        | dev-cli.md              | bedec247 |
 | REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | d246f21a |

@@ -108,7 +108,9 @@ To see unresolved references, use: `elspais unresolved`
                    `tests.ingestion_fault`; a target neither executed nor
                    expected with no results is `tests.not_run` (info).
                    Accepted with and without `--run-tests`; `none` expects
-                   nothing beyond what runs. Unknown names exit 2.
+                   nothing beyond what runs. NAMESPACE:NAME names a
+                   target or group another federation member declares.
+                   Unknown names and namespaces exit 2.
   `-o, --output PATH`  Write output to file instead of stdout
 
 `-v, --verbose` is a global option (see Global Options above) and reports each

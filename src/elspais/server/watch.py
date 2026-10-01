@@ -6,8 +6,12 @@ current against the files here and nowhere else, so the rebuild decision and
 the staleness it reports cannot disagree about what was watched.
 
 The set covers every member of the federation. For each member it holds the
-configuration documents, the spec, code and test directories, and the output
-area of each test target: the record of its run, its results and its coverage.
+configuration documents, the files the spec, code and test kinds select, and
+the output area of each test target: the record of its run, its results and
+its coverage. The selection is the build's own (``scan_plan`` and
+``select_files``), asked again at each snapshot, so a new file the selection
+admits counts, a scanned directory created after the build included, and a
+file it skips or declines never does.
 """
 
 from __future__ import annotations
@@ -38,13 +42,14 @@ class WatchSet:
     """What a served graph was built from.
 
     Attributes:
-        directories: Walked whole; every file under one counts, a new file
-            included.
+        members: Each member's root with its configuration. The scanning
+            kinds are planned from it at each snapshot, so a file a kind
+            selects counts, a new file included.
         files: Named files, counted whether or not they exist yet.
         areas: The output area of every test target of every member.
     """
 
-    directories: tuple[Path, ...]
+    members: tuple[tuple[Path, dict[str, Any]], ...]
     files: tuple[Path, ...]
     areas: tuple[OutputArea, ...]
 
@@ -54,22 +59,19 @@ def watch_set(members: Iterable[tuple[Path, dict[str, Any]]]) -> WatchSet:
     from elspais.config import config_document_candidates, validate_config
     from elspais.utilities.fingerprint import target_folder
 
-    directories: list[Path] = []
+    planned: list[tuple[Path, dict[str, Any]]] = []
     files: list[Path] = []
     areas: list[OutputArea] = []
     for repo_root, config in members:
         root = Path(repo_root)
-        scanning = (config or {}).get("scanning", {})
-        for kind, default in (("spec", ["spec"]), ("code", []), ("test", [])):
-            for d in scanning.get(kind, {}).get("directories", default):
-                directories.append(root / d)
+        planned.append((root, config or {}))
         files.extend(config_document_candidates(root / ".elspais.toml"))
         typed = validate_config(config or {})
         for target in typed.scanning.test.targets:
             folder = target_folder(root, typed, target.name)
             patterns = tuple(str(folder / p) for p in (target.results, target.coverage) if p)
             areas.append(OutputArea(folder=folder, patterns=patterns))
-    return WatchSet(directories=tuple(directories), files=tuple(files), areas=tuple(areas))
+    return WatchSet(members=tuple(planned), files=tuple(files), areas=tuple(areas))
 
 
 def _inside(path: Path, folder: Path) -> bool:
@@ -89,18 +91,32 @@ def _mtime(path: Path) -> float | None:
 
 def snapshot(watch: WatchSet) -> dict[str, float]:
     """Return the modification time of every file in *watch* that exists now."""
+    from elspais.graph.factory import scan_plan
+    from elspais.graph.file_selection import select_files
     from elspais.utilities.fingerprint import RECORD_NAME
 
-    folders = [area.folder for area in watch.areas]
+    folders = [area.folder.resolve() for area in watch.areas]
     found: dict[str, float] = {}
-    for d in watch.directories:
-        if not d.is_dir():
-            continue
-        for f in d.rglob("*"):
+    scans = [(root, kind) for root, config in watch.members for kind in scan_plan(config, root)]
+    for root, kind in scans:
+        selected: set[Path] = set()
+        for directory in kind.directories:
+            # Framed as the build frames a scanned directory: from the
+            # repository root where the directory is inside it, and from the
+            # directory itself where it is not.
+            try:
+                frame, relative = root, directory.resolve().relative_to(root.resolve()).as_posix()
+            except ValueError:
+                frame, relative = directory, "."
+            selection = select_files(
+                frame, [relative], list(kind.skip_dirs), list(kind.skip_files), list(kind.patterns)
+            )
+            selected |= selection.selected
+        for f in selected:
             # An output area inside a scanned directory is watched as an area.
             if any(_inside(f, folder) for folder in folders):
                 continue
-            if f.is_file() and (when := _mtime(f)) is not None:
+            if (when := _mtime(f)) is not None:
                 found[str(f)] = when
     for f in watch.files:
         if f.is_file() and (when := _mtime(f)) is not None:
@@ -124,14 +140,16 @@ def changed_files(watch: WatchSet, recorded: dict[str, float]) -> list[Path]:
     """
     from elspais.utilities.fingerprint import RECORD_NAME, run_in_progress
 
-    running = [area.folder for area in watch.areas if run_in_progress(area.folder) is not None]
+    running = [
+        area.folder.resolve() for area in watch.areas if run_in_progress(area.folder) is not None
+    ]
     current = snapshot(watch)
     changed: list[Path] = []
     for key in sorted(set(recorded) | set(current)):
         if recorded.get(key) == current.get(key):
             continue
         path = Path(key)
-        if any(_inside(path, folder) and path.name != RECORD_NAME for folder in running):
+        if any(_inside(path.resolve(), folder) and path.name != RECORD_NAME for folder in running):
             continue
         changed.append(path)
     return changed

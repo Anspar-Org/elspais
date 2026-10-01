@@ -1186,6 +1186,10 @@ U. A run SHALL expect no test target of another member of the federation unless 
 
 V. If a test target declares coverage and has none, and the run executes or expects that target or its results are present, then the system SHALL report the coverage of that target as missing.
 
+W. Where a run names a test target or a group of another member of the federation, the system SHALL resolve that name by the test targets and groups that member declares.
+
+X. The system SHALL reject at configuration-validation time a test target name or a group keyword that contains the character `:`.
+
 ### Rationale
 
 The cost of a target is not something the tool can read off its configuration, and it is not the tool's judgement to make. What the tool can do is let the project say it once, in a place a reader of the configuration will find, and then honour it. A description is required with each declaration for that reason: a group called `slow` tells a newcomer nothing about whether their change should have run it, and the declaration is the only place that explanation has to live.
@@ -1202,11 +1206,11 @@ E and I are one idea stated from both ends, and the idea is that a group is an A
 
 P is not a second selector of the kind E rules out. E concerns which targets a run executes; P concerns which results a run requires to be there, and the two are separate questions. A tier can produce its results in an earlier job and leave them for a later run to read, and that later run has to be able to say it requires them without executing them again. A name in P stands for targets exactly as a name in E does, and a name that stands for nothing is refused as H refuses it. Q is the link between the two: a run that executes a target requires what that execution produces.
 
-R and S divide one fact, a target with no results, by the question the run asked. A target nobody executed or asked for has not run, which is information; a target the run executed or required that left nothing is a fault somebody must fix. Without the division the fault fires for every tier a run did not touch, so no project declaring tiers can treat it as a failure, and then it catches nothing. V applies the same division to coverage, and adds one case: a target whose results are present has run, so coverage it declares and did not leave is missing whatever the run expected. T keeps the division the same however a target delivers its results. U keeps a repository's run from failing on targets another repository declares for its own runs.
+R and S divide one fact, a target with no results, by the question the run asked. A target nobody executed or asked for has not run, which is information; a target the run executed or required that left nothing is a fault somebody must fix. Without the division the fault fires for every tier a run did not touch, so no project declaring tiers can treat it as a failure, and then it catches nothing. V applies the same division to coverage, and adds one case: a target whose results are present has run, so coverage it declares and did not leave is missing whatever the run expected. T keeps the division the same however a target delivers its results. U keeps a repository's run from failing on targets another repository declares for its own runs. W is how a run names one of those targets when it does require it: the member that declares a target is the only one that knows which targets a name of its stands for, so a group of that member expands by that member's declarations and never by the invoking repository's. X keeps such a name readable: `:` separates the parts of a node identifier and a namespace never holds one, so a run can write a member's namespace before the name it qualifies only while no target or group name can hold one either.
 
 G carries the cost of that aliasing, and it is the whole cost. One namespace means a name cannot be a target's and a group's at once, so a configuration holding both is refused when it is read rather than resolved by a precedence rule — a precedence rule being a thing every reader of that configuration would afterwards have to know. What makes the aliasing safe beyond that is that a run says which targets it executed, so what an invocation resolved to is answerable by looking at the run rather than by knowing any of this.
 
-*End* *Test Target Groups* | **Hash**: 524538cc
+*End* *Test Target Groups* | **Hash**: f2913a98
 
 ## REQ-d00284: How a Result Names Its Test
 

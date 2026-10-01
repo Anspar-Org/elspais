@@ -1,4 +1,4 @@
-# Verifies: REQ-d00283-P+Q+R+S+T+U+V, REQ-d00311-N+O
+# Verifies: REQ-d00283-H+P+Q+R+S+T+U+V+W, REQ-d00311-N+O
 """A target with no results is judged by what the run executed and expected.
 
 The build records each artifact it did not read as a fact. These tests hold
@@ -99,11 +99,11 @@ def test_a_target_neither_executed_nor_expected_is_not_run(target, artifact):
 def test_a_target_the_run_expected_with_no_results_is_missing_results(target, artifact):
     graph = _single(target, artifact)
 
-    faults = check_ingestion_faults(graph, {}, ("unit",))
-    not_run = check_targets_not_run(graph, {}, ("unit",))
+    faults = check_ingestion_faults(graph, {}, ("REQ:unit",))
+    not_run = check_targets_not_run(graph, {}, ("REQ:unit",))
 
     assert faults.passed is False
-    assert faults.severity == "warning"
+    assert faults.severity == "error"
     (finding,) = faults.findings
     assert "unit" in finding.message
     assert "executed or expected" in finding.message
@@ -119,8 +119,8 @@ def test_expecting_one_target_leaves_the_others_not_run():
         ("solo", _member("solo", "REQ", [_FILE_TARGET, other]), [_absent("unit"), _absent("e2e")])
     )
 
-    (missing,) = check_ingestion_faults(graph, {}, ("unit",)).findings
-    (not_run,) = check_targets_not_run(graph, {}, ("unit",)).findings
+    (missing,) = check_ingestion_faults(graph, {}, ("REQ:unit",)).findings
+    (not_run,) = check_targets_not_run(graph, {}, ("REQ:unit",)).findings
 
     assert "unit" in missing.message
     assert "target e2e" in not_run.message
@@ -152,7 +152,7 @@ def test_coverage_only_target_absent_and_unexpected_is_not_run():
     (finding,) = check_targets_not_run(graph, {}).findings
     assert "target cover" in finding.message
 
-    (expected,) = check_ingestion_faults(graph, {}, ("cover",)).findings
+    (expected,) = check_ingestion_faults(graph, {}, ("REQ:cover",)).findings
     assert expected.file_path == ".results/cover/lcov.info"
 
 
@@ -165,27 +165,28 @@ def test_a_target_leaving_neither_results_nor_coverage_is_reported_once_per_ques
     assert len(check_targets_not_run(graph, {}).findings) == 1
     assert check_ingestion_faults(graph, {}).passed is True
 
-    expected = check_ingestion_faults(graph, {}, ("unit",))
+    expected = check_ingestion_faults(graph, {}, ("REQ:unit",))
     assert {f.file_path for f in expected.findings} == {
         ".results/unit/junit.xml",
         ".results/unit/coverage.json",
     }
-    assert check_targets_not_run(graph, {}, ("unit",)).passed is True
+    assert check_targets_not_run(graph, {}, ("REQ:unit",)).passed is True
 
 
 # Verifies: REQ-d00283-U
 def test_an_associate_target_sharing_an_expected_root_targets_name_is_not_run():
     """The run expects the root's `unit`. The associate's `unit` is another
-    repository's target, which this run never named."""
+    repository's target, which this run never named. Both leave no results:
+    the root's is missing, the associate's has not run."""
     graph = _federation(
-        ("core", _member("core", "REQ", [_FILE_TARGET]), []),
+        ("core", _member("core", "REQ", [_FILE_TARGET]), [_absent("unit")]),
         ("lib", _member("lib", "LIB", [_FILE_TARGET]), [_absent("unit")]),
     )
 
-    faults = check_ingestion_faults(graph, {}, ("unit",))
-    (finding,) = check_targets_not_run(graph, {}, ("unit",)).findings
+    (missing,) = check_ingestion_faults(graph, {}, ("REQ:unit",)).findings
+    (finding,) = check_targets_not_run(graph, {}, ("REQ:unit",)).findings
 
-    assert faults.passed is True
+    assert missing.repo == "core"
     assert finding.repo == "lib"
 
 
@@ -195,12 +196,15 @@ def test_an_associate_whose_name_is_the_roots_display_name_is_still_not_expected
     associate declared under the key `app`, in a federation whose root
     project is also called `app`, is still another repository."""
     graph = _federation(
-        ("app", _member("app", "REQ", [_FILE_TARGET]), []),
+        ("app", _member("app", "REQ", [_FILE_TARGET]), [_absent("unit")]),
         ("app", _member("app-lib", "LIB", [_FILE_TARGET]), [_absent("unit")]),
     )
 
-    assert check_ingestion_faults(graph, {}, ("unit",)).passed is True
-    assert len(check_targets_not_run(graph, {}, ("unit",)).findings) == 1
+    (missing,) = check_ingestion_faults(graph, {}, ("REQ:unit",)).findings
+    (not_run,) = check_targets_not_run(graph, {}, ("REQ:unit",)).findings
+
+    assert missing.file_path == ".results/unit/junit.xml"
+    assert "target unit" in not_run.message
 
 
 # Verifies: REQ-d00285-E+G
@@ -238,7 +242,7 @@ def test_the_test_checks_hand_the_expectation_to_the_checks_that_judge_it():
         return {c.name: c for c in run_test_checks(graph, config={}, expected_targets=expected)}
 
     unexpected = by_name(())
-    expected = by_name(("unit",))
+    expected = by_name(("REQ:unit",))
 
     assert unexpected["tests.ingestion_fault"].passed is True
     assert unexpected["tests.not_run"].passed is False
@@ -338,7 +342,7 @@ def test_a_group_named_as_expected_expects_each_of_its_targets(tmp_path):
     graph = _build(root)
     findings = check_ingestion_faults(graph, {}, expected).findings
 
-    assert expected == ("journeys",)
+    assert expected == ("REQ:journeys",)
     assert {f.file_path for f in findings} == {
         ".results/journeys/junit.xml",
         ".results/journeys/coverage.json",
@@ -351,8 +355,8 @@ def test_an_expected_target_whose_results_are_present_reports_nothing(tmp_path):
     _write(root, ".results/unit/junit.xml", _JUNIT)
 
     graph = _build(root)
-    faults = check_ingestion_faults(graph, {}, ("unit",))
-    not_run = check_targets_not_run(graph, {}, ("unit",))
+    faults = check_ingestion_faults(graph, {}, ("REQ:unit",))
+    not_run = check_targets_not_run(graph, {}, ("REQ:unit",))
 
     assert faults.passed is True
     assert [f.message.split(":")[0] for f in not_run.findings] == ["target journeys"]
@@ -381,8 +385,8 @@ def test_a_run_in_progress_is_reported_with_its_start_and_judged_no_other_way(tm
     graph = _build(root)
     running = check_runs_in_progress(graph, {})
     stale = check_test_results_stale(graph, config)
-    faults = check_ingestion_faults(graph, {}, ("unit",))
-    not_run = check_targets_not_run(graph, {}, ("unit",))
+    faults = check_ingestion_faults(graph, {}, ("REQ:unit",))
+    not_run = check_targets_not_run(graph, {}, ("REQ:unit",))
 
     assert running.passed is False
     assert running.severity == "info"
@@ -415,11 +419,11 @@ def test_no_run_in_progress_reports_nothing(tmp_path):
 @pytest.mark.parametrize(
     "named,expected",
     [
-        (["unit"], {"unit"}),
-        (["uat"], {"journeys"}),
-        (["unit", "uat"], {"unit", "journeys"}),
-        (["all"], {"unit", "journeys"}),
-        (["default"], {"unit"}),
+        (["unit"], {"REQ:unit"}),
+        (["uat"], {"REQ:journeys"}),
+        (["unit", "uat"], {"REQ:unit", "REQ:journeys"}),
+        (["all"], {"REQ:unit", "REQ:journeys"}),
+        (["default"], {"REQ:unit"}),
         (["none"], set()),
         ([], set()),
     ],
@@ -525,13 +529,13 @@ def test_expected_names_reach_the_request_resolved(tmp_path, monkeypatch):
     assert health.run(_args(expect=[["uat"], ["unit"]])) == 0
 
     (request,) = requests
-    assert request.expected_targets == ("journeys", "unit")
+    assert request.expected_targets == ("REQ:journeys", "REQ:unit")
 
 
 # Verifies: REQ-d00283-Q
 @pytest.mark.parametrize(
     "expect,expected",
-    [(None, ("a",)), ([["b"]], ("a", "b"))],
+    [(None, ("REQ:a",)), ([["b"]], ("REQ:a", "REQ:b"))],
     ids=["executed-only", "executed-and-expected"],
 )
 def test_a_run_expects_every_target_it_executes(tmp_path, monkeypatch, expect, expected):
@@ -562,3 +566,227 @@ def test_a_run_expects_every_target_it_executes(tmp_path, monkeypatch, expect, e
 
     (request,) = requests
     assert request.expected_targets == expected
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Another member's targets: named by its namespace, resolved by its own table
+# ─────────────────────────────────────────────────────────────────────────────
+
+_LIB_SPEC = """\
+### LIB-p00001: Library Req
+
+**Level**: PRD | **Status**: Active
+
+The library SHALL do something testable.
+
+*End* *Library Req* | **Hash**: ________
+"""
+
+# The library declares a group `uat` of its own, with members the root's `uat`
+# does not have, so a name resolved by the wrong member's table is visible.
+_LIB_CONFIG = """\
+version = 5
+
+[project]
+name = "{name}"
+namespace = "{namespace}"
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.test]
+enabled = true
+
+[scanning.test.groups]
+uat = "needs the library's staging service"
+
+[[scanning.test.targets]]
+name = "libunit"
+reporter = "junit"
+results = "junit.xml"
+
+[[scanning.test.targets]]
+name = "libjourneys"
+reporter = "junit"
+results = "junit.xml"
+groups = ["uat"]
+{associates}"""
+
+
+def _associate_table(name: str, namespace: str) -> str:
+    return f'\n[associates.{name}]\npath = "../{name}"\nnamespace = "{namespace}"\n'
+
+
+def _library(tmp_path: Path, name: str, namespace: str, associates: str = "") -> Path:
+    root = tmp_path / name
+    (root / "spec").mkdir(parents=True)
+    (root / "spec" / "reqs.md").write_text(
+        _LIB_SPEC.replace("LIB-", f"{namespace}-"), encoding="utf-8"
+    )
+    (root / ".elspais.toml").write_text(
+        _LIB_CONFIG.format(name=name, namespace=namespace, associates=associates),
+        encoding="utf-8",
+    )
+    return root
+
+
+def _federated_project(tmp_path: Path) -> Path:
+    """The root project of `_project`, declaring the library `lib` (namespace LIB)."""
+    root = _project(tmp_path)
+    with (root / ".elspais.toml").open("a", encoding="utf-8") as fh:
+        fh.write(_associate_table("lib", "LIB"))
+    _library(tmp_path, "lib", "LIB")
+    return root
+
+
+def _resolve(root: Path, named: list[str]) -> set[str]:
+    from elspais.commands._targets import resolve_expected_targets
+
+    return resolve_expected_targets(_config(root), named, repo_root=root)
+
+
+# Verifies: REQ-d00283-R+S+U+W
+def test_an_associate_target_named_as_expected_is_missing_and_its_sibling_not_run(tmp_path):
+    root = _federated_project(tmp_path)
+    expected = tuple(sorted(_resolve(root, ["LIB:libunit"])))
+
+    graph = _build(root)
+    faults = check_ingestion_faults(graph, {}, expected)
+    not_run = check_targets_not_run(graph, {}, expected)
+
+    assert expected == ("LIB:libunit",)
+    (missing,) = faults.findings
+    assert missing.repo == "lib"
+    assert "libunit" in missing.message
+    assert "executed or expected" in missing.message
+    lib_not_run = {f.message.split(":")[0] for f in not_run.findings if f.repo == "lib"}
+    assert lib_not_run == {"target libjourneys"}
+
+
+# Verifies: REQ-d00283-E+W
+@pytest.mark.parametrize(
+    "named,expected",
+    [
+        (["LIB:uat"], {"LIB:libjourneys"}),
+        (["uat"], {"REQ:journeys"}),
+        (["uat", "LIB:uat"], {"REQ:journeys", "LIB:libjourneys"}),
+        (["LIB:all"], {"LIB:libunit", "LIB:libjourneys"}),
+        (["LIB:default"], {"LIB:libunit"}),
+    ],
+)
+def test_a_members_group_expands_by_that_members_declarations(tmp_path, named, expected):
+    """Root and library each declare `uat` with different members; each name
+    expands by the table of the member it names."""
+    assert _resolve(_federated_project(tmp_path), named) == expected
+
+
+# Verifies: REQ-d00283-E+W
+def test_a_members_group_the_root_does_not_declare_is_resolved(tmp_path):
+    """`staging` is the library's group alone. The root would refuse it bare."""
+    root = _federated_project(tmp_path)
+    lib_toml = tmp_path / "lib" / ".elspais.toml"
+    lib_toml.write_text(
+        lib_toml.read_text(encoding="utf-8")
+        .replace('uat = "needs', 'staging = "needs the staging slot"\nuat = "needs')
+        .replace('name = "libunit"\n', 'name = "libunit"\ngroups = ["staging"]\n'),
+        encoding="utf-8",
+    )
+
+    assert _resolve(root, ["LIB:staging"]) == {"LIB:libunit"}
+    with pytest.raises(ValueError, match=r"^unknown --expect: staging\."):
+        _resolve(root, ["staging"])
+
+
+# Verifies: REQ-d00283-H+W
+def test_an_expected_name_under_an_unknown_namespace_is_refused_listing_the_members(tmp_path):
+    with pytest.raises(ValueError) as caught:
+        _resolve(_federated_project(tmp_path), ["unit", "ZZZ:unit"])
+
+    message = str(caught.value)
+    assert message.startswith("unknown --expect namespace: ZZZ")
+    assert "ZZZ:unit" in message
+    assert "Members of this federation: LIB, REQ." in message
+
+
+# Verifies: REQ-d00283-H+W
+def test_a_name_the_named_member_does_not_declare_is_refused_by_its_vocabulary(tmp_path):
+    """`unit` is the root's target, not the library's: written under LIB it
+    is refused, and the refusal lists the library's names, not the root's."""
+    with pytest.raises(ValueError) as caught:
+        _resolve(_federated_project(tmp_path), ["LIB:unit"])
+
+    message = str(caught.value)
+    assert message.startswith("unknown --expect (member LIB): unit.")
+    assert "Configured targets: libjourneys, libunit." in message
+
+
+# Verifies: REQ-d00283-H+W
+@pytest.mark.parametrize("written", ["LIB:", "REQ:"])
+def test_a_namespace_with_no_name_after_it_is_refused(tmp_path, written):
+    """A namespace alone names no target, so it is refused rather than
+    resolved to nothing, for another member and for the root alike."""
+    with pytest.raises(ValueError) as caught:
+        _resolve(_federated_project(tmp_path), [written])
+
+    message = str(caught.value)
+    assert message.startswith(f"--expect {written} names no target or group")
+
+
+# Verifies: REQ-d00283-P+W
+def test_the_roots_own_namespace_resolves_as_a_bare_name_does(tmp_path, monkeypatch):
+    """Writing the root's namespace names the root's target, and needs no
+    other member: the federation is not planned for it."""
+    import elspais.graph.federation_plan as federation_plan
+
+    root = _federated_project(tmp_path)
+    bare = _resolve(root, ["unit"])
+
+    def _refuse(*_a, **_k):
+        raise AssertionError("the federation was planned for the root's own name")
+
+    monkeypatch.setattr(federation_plan, "plan_federation", _refuse)
+
+    assert _resolve(root, ["REQ:unit"]) == bare == {"REQ:unit"}
+    assert _resolve(root, ["REQ:uat"]) == {"REQ:journeys"}
+
+
+# Verifies: REQ-d00283-W, REQ-d00202-D
+def test_a_member_reached_only_through_another_member_is_nameable(tmp_path):
+    """The root declares `mid`; only `mid` declares `leaf`."""
+    root = _project(tmp_path)
+    with (root / ".elspais.toml").open("a", encoding="utf-8") as fh:
+        fh.write(_associate_table("mid", "MID"))
+    _library(tmp_path, "mid", "MID", associates=_associate_table("leaf", "LEAF"))
+    _library(tmp_path, "leaf", "LEAF")
+
+    assert _resolve(root, ["LEAF:uat", "MID:libunit"]) == {
+        "LEAF:libjourneys",
+        "MID:libunit",
+    }
+
+
+# Verifies: REQ-d00283-P+W
+def test_a_members_expected_name_reaches_the_request_qualified(tmp_path, monkeypatch):
+    root = _federated_project(tmp_path)
+    monkeypatch.chdir(root)
+    monkeypatch.setattr("elspais.config.find_git_root", lambda *a, **k: root)
+    requests = _capture_requests(monkeypatch)
+
+    assert health.run(_args(expect=[["LIB:uat"], ["unit"]])) == 0
+
+    (request,) = requests
+    assert request.expected_targets == ("LIB:libjourneys", "REQ:unit")
+
+
+# Verifies: REQ-d00283-H+W
+def test_the_command_refuses_an_unknown_expected_namespace(tmp_path, monkeypatch, capsys):
+    from elspais.cli import main
+
+    root = _federated_project(tmp_path)
+    monkeypatch.chdir(root)
+    monkeypatch.setattr("elspais.config.find_git_root", lambda *a, **k: root)
+
+    assert main(["checks", "--expect", "ZZZ:unit"]) == 2
+    err = capsys.readouterr().err
+    assert "unknown --expect namespace: ZZZ" in err
+    assert "Members of this federation: LIB, REQ." in err
