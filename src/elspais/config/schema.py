@@ -662,13 +662,16 @@ class TestTargetConfig(_StrictModel):
     __test__ = False  # not a pytest class
 
     name: str
-    cwd: str = ""  # relative to repo root; empty = repo root
+    # Relative to repo root; empty = repo root. The command runs here, and a
+    # relative source path in the coverage report is read from here.
+    cwd: str = ""
     command: str = ""  # optional; omitted in CI (tests already ran)
     reporter: str = ""  # registry format name (e.g. "flutter-machine", "junit", "pytest-json")
-    results: str = (
-        ""  # glob (relative to cwd) for file-channel reporters; unused for stdout reporters
-    )
-    coverage: str = ""  # lcov/coverage file (relative to cwd); empty = no coverage
+    # Glob relative to the target's output folder, for file-channel reporters;
+    # unused for stdout reporters.
+    results: str = ""
+    # lcov/coverage file relative to the target's output folder; empty = no coverage.
+    coverage: str = ""
     match: str = "source"  # "source" | "aggregate"
     # Implements: REQ-d00283-A+C+F
     # The groups this target belongs to. Empty means the target claims none,

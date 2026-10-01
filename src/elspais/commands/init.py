@@ -256,7 +256,8 @@ _FIELD_COMMENTS: dict[str, str] = {
     "scanning.test.targets": ("Per-package/suite test-ingestion targets (array of tables)"),
     "scanning.test.targets.name": "Unique label for this target (required)",
     "scanning.test.targets.cwd": (
-        'Directory relative to repo root where the command runs (default ".")'
+        'Directory relative to repo root where the command runs (default "."); '
+        "relative source paths in its coverage report are read from it"
     ),
     "scanning.test.targets.command": (
         "Shell command executed by --run-tests; omit in CI (ingest pre-produced files)"

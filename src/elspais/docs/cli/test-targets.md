@@ -121,7 +121,7 @@ ran in this invocation.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `name` | string | (required) | Unique label for this target; appears in output |
-| `cwd` | string | `""` (repo root) | Directory relative to repo root where the command runs |
+| `cwd` | string | `""` (repo root) | Directory relative to repo root where the command runs, and the base for relative source paths in its coverage report |
 | `command` | string | (omit in CI) | Shell command to execute when `--run-tests` is passed |
 | `reporter` | string | (required) | Parser format -- one of the names in the reporters table below |
 | `results` | string | `""` | Glob pattern for result files (file-channel reporters), relative to the target's folder |
@@ -136,8 +136,16 @@ ran in this invocation.
 
 The target's folder is `<output_root>/<name>`, from the repository root.
 elspais reads `results` and `coverage` from that folder. Consequently, a
-target with `cwd = "app"` still writes `coverage = "lcov.info"`. `cwd` sets
-only where the command runs.
+target with `cwd = "app"` still writes `coverage = "lcov.info"`. `cwd` does
+not move the folder.
+
+`cwd` sets where the command runs. It is also the base for a relative source
+path inside the coverage report, because the measuring tool writes the path
+from there. Flutter writes `SF:lib/src/end_event.dart` for a package in `app/`,
+and elspais reads that line as `app/lib/src/end_event.dart`. A target without
+`cwd` runs in the repository root, and its relative paths are read from the
+root. An absolute path is read as it stands. A path that names no scanned file
+under that base credits nothing.
 
 ## Reporters and Matching
 
@@ -240,7 +248,9 @@ credit_coverage = "verified"
 ```
 
 `--coverage-path` writes the lcov report into the target's folder,
-`.results/app/`. `coverage` names the report relative to that folder.
+`.results/app/`. `coverage` names the report relative to that folder. The
+`SF:` paths inside the report are relative to the package, and elspais reads
+them from `cwd`.
 
 ### Two-package example (one with a shared DB)
 

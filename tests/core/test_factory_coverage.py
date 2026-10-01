@@ -532,3 +532,215 @@ coverage = ".coverage"
         file_node = graph.find_by_id(make_file_id("REQ", "src/main.py"))
         assert file_node is not None
         assert file_node.get_field("line_contexts") is not None
+
+
+def _write_cwd_project(
+    root: Path,
+    code_files: list[str],
+    *,
+    cwd: str | None,
+    coverage: str = "lcov.info",
+    code_dirs: list[str] | None = None,
+) -> Path:
+    """Write a project whose `unit` target may run in a working directory.
+
+    Returns the config path. Every entry of *code_files* is a repo-relative
+    path written as a scanned code file.
+    """
+    import json
+
+    dirs = code_dirs or sorted({Path(p).parent.as_posix() for p in code_files})
+    cwd_line = f'cwd = "{cwd}"\n' if cwd is not None else ""
+    config_file = root / ".elspais.toml"
+    config_file.write_text(
+        f"""\
+[project]
+name = "test-coverage-cwd"
+namespace = "REQ"
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = {json.dumps(dirs)}
+
+[[scanning.test.targets]]
+name = "unit"
+coverage = "{coverage}"
+{cwd_line}""",
+        encoding="utf-8",
+    )
+    _write_spec(root / "spec")
+    for rel in code_files:
+        _write_code_file(root / rel)
+    return config_file
+
+
+def _credited(graph, namespace: str = "REQ") -> dict[str, object]:
+    """Map each FILE node carrying line_coverage to that coverage, by repo path."""
+    prefix = f"file:{namespace}:"
+    return {
+        node.id[len(prefix) :]: node.get_field("line_coverage")
+        for node in graph.iter_by_kind(NodeKind.FILE)
+        if node.get_field("line_coverage") is not None and node.id.startswith(prefix)
+    }
+
+
+class TestCoveragePathsResolveAgainstTargetWorkingDirectory:
+    """A coverage artifact's relative source paths are read from the
+    directory its target ran in, not from where the artifact is stored."""
+
+    # Verifies: REQ-d00254-Y
+    @pytest.mark.parametrize(
+        "cwd,code_file,recorded",
+        [
+            # The target ran in app/: the tool recorded lib/x.py.
+            ("app", "app/lib/x.py", "lib/x.py"),
+            # No cwd: the target ran at the repository root.
+            (None, "lib/x.py", "lib/x.py"),
+        ],
+        ids=["cwd-target", "repo-root-target"],
+    )
+    def test_relative_lcov_path_credits_file_under_working_dir(
+        self, tmp_path: Path, cwd: str | None, code_file: str, recorded: str
+    ) -> None:
+        config_file = _write_cwd_project(tmp_path, [code_file], cwd=cwd)
+        _write_lcov(_unit_folder(tmp_path) / "lcov.info", recorded)
+
+        graph = build_graph(config_path=config_file, repo_root=tmp_path, scan_tests=False)
+
+        assert _credited(graph) == {code_file: {1: 1, 2: 1}}
+        node = graph.find_by_id(make_file_id("REQ", code_file))
+        assert node is not None
+        assert node.get_field("executable_lines") == 2
+
+    # Verifies: REQ-d00254-Y
+    def test_relative_coverage_json_path_credits_file_under_working_dir(
+        self, tmp_path: Path
+    ) -> None:
+        import json
+
+        config_file = _write_cwd_project(
+            tmp_path, ["app/lib/x.py"], cwd="app", coverage="coverage.json"
+        )
+        cov_data = {
+            "files": {
+                "lib/x.py": {
+                    "executed_lines": [1, 2],
+                    "missing_lines": [3],
+                    "summary": {"num_statements": 3, "covered_lines": 2},
+                }
+            }
+        }
+        _unit_folder(tmp_path).joinpath("coverage.json").write_text(
+            json.dumps(cov_data), encoding="utf-8"
+        )
+
+        graph = build_graph(config_path=config_file, repo_root=tmp_path, scan_tests=False)
+
+        assert _credited(graph) == {"app/lib/x.py": {1: 1, 2: 1, 3: 0}}
+
+    # Verifies: REQ-d00254-Y
+    def test_absolute_path_is_read_as_it_stands(self, tmp_path: Path) -> None:
+        config_file = _write_cwd_project(tmp_path, ["app/lib/x.py"], cwd="app")
+        _write_lcov(_unit_folder(tmp_path) / "lcov.info", str(tmp_path / "app" / "lib" / "x.py"))
+
+        graph = build_graph(config_path=config_file, repo_root=tmp_path, scan_tests=False)
+
+        assert _credited(graph) == {"app/lib/x.py": {1: 1, 2: 1}}
+
+    # Verifies: REQ-d00254-Y
+    @pytest.mark.parametrize(
+        "recorded",
+        [
+            "lib/missing.py",  # names no scanned file under app/
+            "../../outside.py",  # escapes the repository
+            "app/lib/x.py",  # repo-relative spelling: reads as app/app/lib/x.py
+        ],
+        ids=["missing", "escapes-repo", "repo-relative-spelling"],
+    )
+    def test_path_naming_no_file_under_working_dir_credits_nothing(
+        self, tmp_path: Path, recorded: str
+    ) -> None:
+        config_file = _write_cwd_project(tmp_path, ["app/lib/x.py"], cwd="app")
+        # A file the escaping path would reach if it were not confined.
+        (tmp_path.parent / "outside.py").write_text("x = 1\n", encoding="utf-8")
+        _write_lcov(_unit_folder(tmp_path) / "lcov.info", recorded)
+
+        graph = build_graph(config_path=config_file, repo_root=tmp_path, scan_tests=False)
+
+        assert _credited(graph) == {}
+
+    # Verifies: REQ-d00254-Y
+    def test_relative_path_is_not_also_read_from_repo_root(self, tmp_path: Path) -> None:
+        """With a scanned file at the same path from the root, the working
+        directory alone decides which file is credited."""
+        config_file = _write_cwd_project(
+            tmp_path,
+            ["app/lib/x.py", "lib/x.py"],
+            cwd="app",
+            code_dirs=["app/lib", "lib"],
+        )
+        _write_lcov(_unit_folder(tmp_path) / "lcov.info", "lib/x.py")
+
+        graph = build_graph(config_path=config_file, repo_root=tmp_path, scan_tests=False)
+
+        assert graph.find_by_id(make_file_id("REQ", "lib/x.py")) is not None
+        assert _credited(graph) == {"app/lib/x.py": {1: 1, 2: 1}}
+
+    # Verifies: REQ-d00254-Y
+    def test_federation_member_reads_from_its_own_target_working_dir(self, tmp_path: Path) -> None:
+        from tests.federation_repos import _git, make_repo
+
+        lib_toml = """version = 5
+
+[project]
+name = "lib"
+namespace = "LIB"
+
+[levels.prd]
+rank = 1
+implements = []
+
+[levels.dev]
+rank = 2
+implements = ["prd", "dev"]
+
+[scanning.code]
+directories = ["pkg/lib"]
+
+[[scanning.test.targets]]
+name = "unit"
+coverage = "lcov.info"
+cwd = "pkg"
+"""
+        root_toml = """version = 5
+
+[project]
+name = "root"
+namespace = "ROOT"
+
+[levels.prd]
+rank = 1
+implements = []
+
+[levels.dev]
+rank = 2
+implements = ["prd", "dev"]
+
+[associates.lib]
+path = "../lib"
+namespace = "LIB"
+"""
+        lib = make_repo(tmp_path, "lib", namespace="LIB", config_text=lib_toml)
+        _write_code_file(lib / "pkg" / "lib" / "x.py", req_id="LIB-d00001")
+        _write_lcov(lib / ".results" / "unit" / "lcov.info", "lib/x.py")
+        _git(lib, "add", "-A")
+        _git(lib, "commit", "-m", "code")
+        root = make_repo(tmp_path, "root", namespace="ROOT", config_text=root_toml)
+
+        graph = build_graph(repo_root=root)
+
+        node = graph.find_by_id(make_file_id("LIB", "pkg/lib/x.py"))
+        assert node is not None
+        assert node.get_field("line_coverage") == {1: 1, 2: 1}

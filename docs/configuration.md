@@ -328,7 +328,8 @@ command  = "flutter test --machine --coverage --coverage-path=$ELSPAIS_TARGET_OU
 reporter = "flutter-machine"        # stdout-channel reporter
 match    = "source"                 # "source" (default) | "aggregate"
 coverage = "lcov.info"  # optional; relative to the target's
-                        # folder .results/app, for every cwd
+                        # folder .results/app, for every cwd. A relative
+                        # source path inside the report is read from cwd.
 # inputs names the files whose change makes this target's results stale.
 # The default is every file in the repository. inputs has the same form as a
 # scanning kind's file selection. skip_dirs and skip_files win over

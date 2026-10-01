@@ -616,6 +616,8 @@ U. When a citation is bound to a group of tests, the system SHALL credit the cit
 
 V. The system SHALL end the extent of each test before the comment lines written directly above the next test.
 
+Y. When a coverage artifact of a test target records a relative source path, the system SHALL resolve that path against the working directory of that test target.
+
 ### Rationale
 
 A line number means nothing without its origin, and producers disagree: the `line` attribute pytest writes into JUnit XML counts from zero, while the tool numbers source lines from one. Read as though they agreed, every such result missed the test it named by exactly one line and bound at file granularity instead -- which the file-granular inference then papered over, so the disagreement never surfaced as an error. Declaring the origin with the reporter puts the knowledge where the format is known rather than in each project's config, and the per-target override is for a producer that departs from its format's convention. Normalising once, at ingestion, is what keeps the rest of the system able to treat a line as a line -- to match on it, and to point a reader at it.
@@ -638,8 +640,12 @@ Q is the half that bites. Evidence read in part yields a figure whose basis is n
 
 R, S and T give a citation in a test file one place to bind. A test's extent is where a runner's verdict lands, so a citation that reaches no test binds to none: it is not a default for every test in its file, and D's reading of the lines that follow a citation does not reach a test. U exists because a runner reports results for the tests in a group and never for the group itself, and V keeps a comment written above one test out of the extent derived for the test before it.
 
+Y anchors a relative path to the place the measuring tool ran, because that is the place the tool wrote it from: Flutter writes a path relative to its package, and coverage.py writes one relative to its working directory when it records relative files. Where an artifact is stored says nothing about where it was measured. A target that declares no working directory runs in the repository root, and a member of a federation resolves the working directory of its own targets against its own root. A path that names no scanned file under that directory credits nothing.
+
 ### Changelog
 
+- 2026-10-01 | a33f61f1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-48: a relative source path in a coverage artifact resolves against the working directory of its test target (Y)
 - 2026-09-30 | 824c778f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-80: a citation in a test file binds to the test it is written above or to no test, a citation on a group takes the verdicts of the tests it holds, and a test's extent stops before the comments above the next test (R-V)
 - 2026-09-12 | 2de47895 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -673,7 +679,7 @@ R, S and T give a citation in a test file one place to bind. A test's extent is 
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 824c778f
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: a33f61f1
 
 ---
 
