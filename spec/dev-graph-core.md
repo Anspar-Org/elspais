@@ -606,6 +606,16 @@ P. A file the tool cannot read in full SHALL still yield the results it could re
 
 Q. A result derived from a partial read SHALL be distinguishable from one derived from a complete read.
 
+R. When a citation in a test file is inside a test, the system SHALL bind the citation to that test.
+
+S. When a citation in a test file is written directly above a test or a group that holds a test, with only comment lines, blank lines and declaration header lines between them, the system SHALL bind the citation to that test or group.
+
+T. If a citation in a test file is neither inside a test nor written directly above a test or a group that holds a test, then the system SHALL bind the citation to no test.
+
+U. When a citation is bound to a group of tests, the system SHALL credit the citation with the results of the tests that the group holds.
+
+V. The system SHALL end the extent of each test before the comment lines written directly above the next test.
+
 ### Rationale
 
 A line number means nothing without its origin, and producers disagree: the `line` attribute pytest writes into JUnit XML counts from zero, while the tool numbers source lines from one. Read as though they agreed, every such result missed the test it named by exactly one line and bound at file granularity instead -- which the file-granular inference then papered over, so the disagreement never surfaced as an error. Declaring the origin with the reporter puts the knowledge where the format is known rather than in each project's config, and the per-target override is for a producer that departs from its format's convention. Normalising once, at ingestion, is what keeps the rest of the system able to treat a line as a line -- to match on it, and to point a reader at it.
@@ -618,7 +628,7 @@ K states the outcome the scanning side owes the crediting side: without per-test
 
 L, M and N cut the external route into a capability, a mechanism, and a precedence rule so each can change independently. L and M differ in kind: L survives a reimplementation that swaps the transport, while M memorializes the transport itself — file paths on standard input, attribution records on standard output. M is frozen not because it is an invariant but because it is a published integration point that third-party prescan scripts already implement, so breaking it breaks consumers outside this repository. Recording it as its own letter keeps that compatibility obligation targeted: a future transport change, or an added record field, edits M and leaves the capability and precedence untouched, and M can be retired without withdrawing either.
 
-M binds each record to a starting line only. Extent on the external route is derived from the surrounding records rather than reported, so the derivation stays an implementation choice while K's extent obligation still holds for tests attributed that way.
+M binds each record to a starting line. A record may also carry the test's end line, and that line then ends the test's extent; otherwise the extent is derived from the surrounding records, V bounds the derivation, and K's extent obligation holds for tests attributed either way.
 
 N resolves per file, not per configuration, because both routes are routinely live in a single run: a project may configure a command that returns records for one file type while every other scanned test file falls to built-in attribution.
 
@@ -626,8 +636,12 @@ P and Q are about what a partial read produces, not about how it is announced. A
 
 Q is the half that bites. Evidence read in part yields a figure whose basis is not the one a reader assumes: lines that never ran are absent from the denominator, so a file reads as fully covered on the strength of a failure. Stating the distinction against a COMPLETE read rather than against no read at all is deliberate -- nobody acts differently on "could not read" versus "read in part", but a reader comparing a partial figure with a whole one acts on it constantly.
 
+R, S and T give a citation in a test file one place to bind. A test's extent is where a runner's verdict lands, so a citation that reaches no test binds to none: it is not a default for every test in its file, and D's reading of the lines that follow a citation does not reach a test. U exists because a runner reports results for the tests in a group and never for the group itself, and V keeps a comment written above one test out of the extent derived for the test before it.
+
 ### Changelog
 
+- 2026-09-30 | 824c778f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-30 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-80: a citation in a test file binds to the test it is written above or to no test, a citation on a group takes the verdicts of the tests it holds, and a test's extent stops before the comments above the next test (R-V)
 - 2026-09-12 | 2de47895 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-11 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: a citation no function encloses stops at the next function declaration, its first decorator line where decorated (D)
 - 2026-09-06 | 4ec40251 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -659,7 +673,7 @@ Q is the half that bites. Evidence read in part yields a figure whose basis is n
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 2de47895
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 824c778f
 
 ---
 

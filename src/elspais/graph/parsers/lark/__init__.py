@@ -377,10 +377,7 @@ class FileDispatcher:
         prescan_data: dict[str, list[dict]] | None = None,
     ) -> list:
         """Parse a test file and return ParsedContent list."""
-        from elspais.graph.parsers.lark.transformers.reference import (
-            ReferenceTransformer,
-            read_reference_list,
-        )
+        from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
         from elspais.graph.parsers.prescan import (
             ast_prescan,
             dart_prescan,
@@ -399,103 +396,30 @@ class FileDispatcher:
 
         # Implements: REQ-d00254-N
         if prescan_data and file_path in prescan_data:
-            line_context, all_test_funcs, first_def_line = external_prescan(
-                prescan_data[file_path], lines
-            )
+            line_context, all_test_funcs = external_prescan(prescan_data[file_path], lines)
         elif is_python:
             source = "\n".join(text for _, text in lines)
             try:
-                line_context, all_test_funcs, first_def_line = ast_prescan(source, lines)
+                line_context, all_test_funcs = ast_prescan(source, lines)
             except SyntaxError:
-                line_context, all_test_funcs, first_def_line = text_prescan(lines)
+                line_context, all_test_funcs = text_prescan(lines)
         elif is_dart:
-            line_context, all_test_funcs, first_def_line = dart_prescan(lines)
+            line_context, all_test_funcs = dart_prescan(lines)
         else:
-            line_context, all_test_funcs, first_def_line = text_prescan(lines)
+            line_context, all_test_funcs = text_prescan(lines)
 
-        # Extract file-level default verifies from the parse tree
         parser = self._get_ref_parser(file_path)
         tree = parser.parse(content)
-        comment_markers = comment_markers_for_path(file_path)
-
-        from elspais.graph.parsers.patterns import KEYWORD_PATTERN
-
-        # Implements: REQ-d00269-E
-        # A file-level default is read from the same lines the transformer
-        # will later exclude -- a keyword written inside a quoted/fenced
-        # region must not become a default verifies any more than it may
-        # bind directly, or the exclusion below would be undone by this
-        # earlier pass reading the same line first.
-        quoted_lines = self._quoted_line_numbers(content, file_path)
-
-        # A file-level default list is read like any other reference list,
-        # continuation included (REQ-d00269-H): a bare instance built only
-        # to fold the tree once, before the real transformer -- which needs
-        # file_default_verifies to construct -- exists.
-        _fold_tx = ReferenceTransformer(
-            self._resolver,
-            "test_ref",
-            reader=self._reader,
-            quoted_lines=quoted_lines,
-            comment_markers=comment_markers,
-        )
-        _fold_tx._fold_continuations(tree.children)
-
-        file_default_verifies: list[str] = []
-
-        for child in tree.children:
-            if not hasattr(child, "data"):
-                continue
-            if child.data == "single_ref":
-                # A single_ref is always an opener, never a continuation
-                # candidate (only bare_ref/other_line can be folded), so
-                # this line is read for its own sake -- possibly extended
-                # by a joined continuation below it.  This loop only ever
-                # branches on "single_ref", so a node _fold_tx consumed
-                # (always bare_ref/other_line) is never separately visited
-                # here and needs no explicit skip -- unlike the real
-                # transformer's dispatch loop, which walks every node kind
-                # and does check `_consumed`.
-                token = child.children[0]
-                ln = token.line  # type: ignore[attr-defined]
-                if first_def_line and ln >= first_def_line:
-                    continue
-                if ln in quoted_lines:
-                    continue
-                text = _fold_tx._joined_text.get(id(child), str(token))
-                # File-level reference comments become default verifies for
-                # all test functions in the file.  Only 'Verifies' is valid
-                # in test files; 'Implements'/'Refines' are skipped.
-                kw_match = KEYWORD_PATTERN.search(text)
-                if kw_match:
-                    kw = kw_match.group(0).lower()
-                    if kw != "verifies":
-                        # Only Verifies is a valid file-level default; a
-                        # genuine cross-type keyword above the first def
-                        # (Implements/Refines, not valid in a test file) is
-                        # silently skipped rather than reported here -- the
-                        # grammar-level FORBIDDEN check owns that finding.
-                        continue
-                    # A file-level default is an annotation like any other:
-                    # each item is judged on its own, so one item the
-                    # grammar cannot account for does not cost the items
-                    # that did resolve (REQ-d00269-G).
-                    items = read_reference_list(self._reader, text)
-                    for ref in (i.resolved for i in items if i.resolved):
-                        if ref not in file_default_verifies:
-                            file_default_verifies.append(ref)
 
         transformer = ReferenceTransformer(
             self._resolver,
             "test_ref",
             line_context=line_context,
-            file_default_verifies=file_default_verifies,
             all_test_funcs=all_test_funcs,
-            first_def_line=first_def_line,
             source_id=file_path,
             reader=self._reader,
-            quoted_lines=quoted_lines,
-            comment_markers=comment_markers,
+            quoted_lines=self._quoted_line_numbers(content, file_path),
+            comment_markers=comment_markers_for_path(file_path),
         )
         results = transformer.transform(tree)
         results.extend(_fault_and_style_content(transformer))

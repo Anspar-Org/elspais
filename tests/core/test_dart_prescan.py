@@ -32,7 +32,7 @@ void main() {
 
 
 def test_comment_above_test_binds_to_that_test():
-    lc, _funcs, _first = dart_prescan(_lines(DART))
+    lc, _funcs = dart_prescan(_lines(DART))
     # The `// Verifies: A` on line 3 owns the test() starting line 4.
     fname, cname, fline, fend = lc[3]
     assert fname is None and cname is None
@@ -40,20 +40,20 @@ def test_comment_above_test_binds_to_that_test():
 
 
 def test_comment_inside_test_binds_to_enclosing_test():
-    lc, _funcs, _first = dart_prescan(_lines(DART))
+    lc, _funcs = dart_prescan(_lines(DART))
     # `// Verifies: B` on line 9 is inside the second test() (lines 8..11).
     _f, _c, fline, _e = lc[9]
     assert fline == 8
 
 
 def test_each_test_is_a_distinct_unit():
-    _lc, funcs, _first = dart_prescan(_lines(DART))
+    _lc, funcs = dart_prescan(_lines(DART))
     test_lines = sorted(f[0] for f in funcs)
     assert test_lines == [4, 8]
 
 
 def test_brace_matched_end_lines():
-    lc, _funcs, _first = dart_prescan(_lines(DART))
+    lc, _funcs = dart_prescan(_lines(DART))
     # First test spans 4..6 (closing }); line 5 is inside it.
     assert lc[5][2] == 4
     assert lc[5][3] == 6
@@ -71,7 +71,7 @@ void main() {
   });
 }
 """
-    lc, funcs, _first = dart_prescan(_lines(src))
+    lc, funcs = dart_prescan(_lines(src))
     starts = sorted(f[0] for f in funcs)
     assert starts == [2, 4]  # both tests detected
     assert lc[2][3] <= 3  # first span capped before line 4
@@ -127,7 +127,7 @@ void main() {
   });
 }
 """
-    lc, funcs, _first = dart_prescan(_lines(src))
+    lc, funcs = dart_prescan(_lines(src))
     starts = sorted(f[0] for f in funcs)
     assert starts == [2, 5]
     # first test span ends at its own `});` (line 4), NOT clamped to line 4-before-5
@@ -149,7 +149,7 @@ void main() {
   });
 }
 """
-    lc, funcs, _first = dart_prescan(_lines(src))
+    lc, funcs = dart_prescan(_lines(src))
     starts = sorted(f[0] for f in funcs)
     assert starts == [2, 6]
     assert lc[3][3] == 5  # first test closes at its own `});` (line 5), not clamped
@@ -180,7 +180,7 @@ void main() {
   });
 }
 """
-    lc, funcs, _first = dart_prescan(_lines(src))
+    lc, funcs = dart_prescan(_lines(src))
     starts = sorted(f[0] for f in funcs)
     assert starts == [2, 12]
     # line 5 is inside the heredoc, owned by the first test (2), not corrupted
@@ -211,7 +211,7 @@ void main() {
   });
 }
 """
-    lc, funcs, _first = dart_prescan(_lines(src))
+    lc, funcs = dart_prescan(_lines(src))
     starts = sorted(f[0] for f in funcs)
     assert starts == [2, 5]
     # first test closes at its own `});` (line 4), not clamped to the second
@@ -321,7 +321,7 @@ def test_comment_binds_to_first_declaration_below(source, comment_line, expected
     # citation written above a test is attributed to that test, however much
     # prose sits between them, and a citation above a group() is attributed to
     # the group rather than falling through to the first test inside it.
-    lc, _funcs, _first = dart_prescan(_lines(source))
+    lc, _funcs = dart_prescan(_lines(source))
     assert lc[comment_line][2] == expected_owner_start
 
 
@@ -338,5 +338,5 @@ def test_comment_does_not_bind_across_a_non_comment_line(source, comment_line):
     # the first declaration by an import describes the file, not that
     # declaration, and binding it there would attribute a citation to a test it
     # says nothing about.
-    lc, _funcs, _first = dart_prescan(_lines(source))
+    lc, _funcs = dart_prescan(_lines(source))
     assert lc[comment_line][2] == 0

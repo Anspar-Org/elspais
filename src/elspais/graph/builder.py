@@ -4399,6 +4399,14 @@ class GraphBuilder:
         self._pending_links: list[
             tuple[str, str, EdgeKind, dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]]]
         ] = []
+        # Implements: REQ-d00269-D
+        # self._unbound_refs holds the references of each citation that binds
+        # to no test. The build judges each one like any other reference.
+        # Consequently, a reference that names nothing is reported. The build
+        # creates no edge from any of them (REQ-d00274-H).
+        self._unbound_refs: list[
+            tuple[str, str, EdgeKind, dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]]]
+        ] = []
         # Implements: REQ-d00254-G
         # Source RESULT->TEST links for test_id-less reporters (e.g. flutter-
         # machine), matched by real source-file path + test() source line rather
@@ -5242,6 +5250,13 @@ class GraphBuilder:
             # Implements: REQ-d00131-G
             # Store raw comment text for render protocol
             node.set_field("raw_text", content.raw_text)
+            # Implements: REQ-d00254-U
+            # function_end_line records the last line of the declaration. A
+            # group of tests is one such declaration. If a result binds to a
+            # test inside the group, then the result also reaches the group.
+            extent_end = data.get("function_end_line") or 0
+            if extent_end > source_line:
+                node.set_field("function_end_line", extent_end)
             # Implements: REQ-d00274-G
             # The node is still built, because the comment is still a line of
             # the file and has to render back out where it was written. What
@@ -5260,6 +5275,8 @@ class GraphBuilder:
             # citation is recorded instead of counted -- unconditionally,
             # because what a citation credits is not a matter of how loudly
             # the project asked to hear about it.
+            for val_ref in refs:
+                self._unbound_refs.append((test_id, val_ref, EdgeKind.VERIFIES, verdicts))
             if refs:
                 self._unbound_citations.append(
                     UnboundCitation(
@@ -5276,10 +5293,10 @@ class GraphBuilder:
         # Implements: REQ-d00272-J
         # A keyword a test file may not use (anything but Verifies) is read,
         # not passed over: the relationship it would have declared is
-        # refused and reported.  No function context is attached here even
-        # when one is available -- doing so would mark the function's line
-        # "emitted" and suppress the third-pass unlinked-test fallback that
-        # gives the actual test function its file-default Verifies.
+        # refused and reported.  This code attaches no function context here,
+        # even where one is available. If it attached one, then the
+        # function's line would count as "emitted". Consequently, the third
+        # pass would not give the test function its own node.
         forbidden = data.get("forbidden") or []
         if forbidden:
             self._unresolved_references.extend(
@@ -5954,18 +5971,23 @@ class GraphBuilder:
         expanded_links: list[
             tuple[str, str, EdgeKind, dict[tuple[str, str], tuple[FaultClass, tuple[str, ...]]]]
         ] = []
-        for source_id, target_id, edge_kind, verdicts in self._pending_links:
-            if (edge_kind.value, target_id) in verdicts:
-                expanded_links.append((source_id, target_id, edge_kind, verdicts))
-                continue
-            for resolved_target in self._expand_multi_assertion(target_id):
-                expanded_links.append((source_id, resolved_target, edge_kind, verdicts))
+        # expanded_links places the references of each unbound citation after
+        # every other reference. This pass judges them and links none of them.
+        judge_only_from = 0
+        for pending in (self._pending_links, self._unbound_refs):
+            judge_only_from = len(expanded_links)
+            for source_id, target_id, edge_kind, verdicts in pending:
+                if (edge_kind.value, target_id) in verdicts:
+                    expanded_links.append((source_id, target_id, edge_kind, verdicts))
+                    continue
+                for resolved_target in self._expand_multi_assertion(target_id):
+                    expanded_links.append((source_id, resolved_target, edge_kind, verdicts))
 
         # Resolve pending links. Track which (source, target, kind) refs
         # actually became edges so the stored ref fields can be re-scoped to
         # unresolved leftovers afterwards (REQ-d00132-F, REQ-d00132-G).
         resolved_refs: set[tuple[str, str, str]] = set(preresolved)
-        for source_id, target_id, edge_kind, verdicts in expanded_links:
+        for index, (source_id, target_id, edge_kind, verdicts) in enumerate(expanded_links):
             if (source_id, target_id, edge_kind.value) in preresolved:
                 # A template-to-template REFINES edge already landed before
                 # instantiation; it is neither linked nor judged again.
@@ -5992,6 +6014,10 @@ class GraphBuilder:
             if target is not None and assertion_is_retired(target):
                 target = None
 
+            if source and target and index >= judge_only_from:
+                # This reference resolves, but its citation binds to no test.
+                # The reference is valid and credits nothing (REQ-d00274-H).
+                continue
             if source and target:
                 # Implements: REQ-p00014-G
                 # The validation matrix is applied BEFORE the edge is created,
@@ -6050,17 +6076,18 @@ class GraphBuilder:
         #   step-scope: the testcase name embeds a journey-step id
         #     (``<journey>/N``); bind to the TEST(s) that VERIFIES that STEP
         #     in the same source file, match_scope="step". Needs no line attr.
-        #   test-scope: the single TEST at (source_file, line),
-        #     match_scope="test" (per-test crediting).
-        #   file-scope: fall back to every TEST sharing the file,
-        #     match_scope="file" (the file-level all-pass/any-fail crediting
-        #     the annotator's source_file_index applies).
+        #   test-scope: the single TEST at (source_file, line), with
+        #     match_scope="test". Each test gets its own credit. Every TEST
+        #     whose declaration holds that test also links (a group of tests).
+        #   file-scope: every TEST in the same file, with match_scope="file".
+        #     This result names no test. Consequently, it credits nothing.
         # An unmatched file links nothing (no broken reference, unlike test_id
         # resolution). Done before orphan/root classification so RESULT nodes
         # count as YIELDS-parented, exactly like test_id-based YIELDS edges.
         if self._pending_source_result_links:
             tests_by_file: dict[str, list[GraphNode]] = {}
             tests_by_file_line: dict[tuple[str, int], GraphNode] = {}
+            extents_by_file: dict[str, list[GraphNode]] = {}
             for candidate in self._nodes.values():
                 if candidate.kind is not NodeKind.TEST:
                     continue
@@ -6072,6 +6099,8 @@ class GraphBuilder:
                 pl = candidate.get_field("parse_line")
                 if pl:
                     tests_by_file_line[(rel, pl)] = candidate
+                if candidate.get_field("function_end_line"):
+                    extents_by_file.setdefault(rel, []).append(candidate)
             for (
                 result_id,
                 source_file,
@@ -6099,6 +6128,18 @@ class GraphBuilder:
                 if target is not None:
                     target.link(result_node, EdgeKind.YIELDS)
                     result_node.set_field("match_scope", "test")
+                    # Implements: REQ-d00254-U
+                    # A runner reports the tests inside a group. It never
+                    # reports the group itself. Consequently, a citation on
+                    # the group takes its verdict from the results of its tests.
+                    test_line = target.get_field("parse_line")
+                    for holder in extents_by_file.get(source_file, ()):
+                        if holder is not target and (
+                            holder.get_field("parse_line")
+                            < test_line
+                            <= holder.get_field("function_end_line")
+                        ):
+                            holder.link(result_node, EdgeKind.YIELDS)
                 else:
                     for test_node in tests_by_file.get(source_file, ()):
                         test_node.link(result_node, EdgeKind.YIELDS)

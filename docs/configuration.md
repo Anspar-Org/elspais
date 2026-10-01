@@ -264,9 +264,11 @@ reference_keyword = "Verifies"
 #   [{"file": "path", "function": "name", "class": "Name|null", "line": N,
 #     "end_line": M}]
 # `line` is the line the test is declared on, counted from one. `end_line`
-# is optional; without it the test reaches to the next one. A record names
-# one test, so the name may be the test's own and need not be spelled any
-# particular way.
+# is optional. If a record has no `end_line`, then the test ends at its last
+# line before the next test that is neither blank nor a comment.
+# Consequently, the comments written directly above a test belong to that
+# test. A record names one test. Consequently, the name may be the test's
+# own and need not be spelled any particular way.
 # `file` may be repo-relative (as handed in) or absolute; either is matched
 # against the scanned file. Files the command reports on are attributed from
 # its records; every other scanned test file keeps built-in attribution, so a

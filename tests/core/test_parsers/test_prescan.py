@@ -140,11 +140,10 @@ class TestTextPrescan:
             (6, "def test_another():"),
             (7, "    assert True"),
         ]
-        line_context, all_test_funcs, first_def_line = text_prescan(lines)
+        line_context, all_test_funcs = text_prescan(lines)
         assert len(all_test_funcs) == 2
         assert all_test_funcs[0] == (3, "test_something", None)
         assert all_test_funcs[1] == (6, "test_another", None)
-        assert first_def_line == 3
 
     # Verifies: REQ-d00254-K
     def test_REQ_d00254_K_finds_test_class(self):
@@ -154,10 +153,9 @@ class TestTextPrescan:
             (2, "    def test_bar(self):"),
             (3, "        assert True"),
         ]
-        line_context, all_test_funcs, first_def_line = text_prescan(lines)
+        line_context, all_test_funcs = text_prescan(lines)
         assert len(all_test_funcs) == 1
         assert all_test_funcs[0] == (2, "test_bar", "TestFoo")
-        assert first_def_line == 1
 
     # Verifies: REQ-d00254-K
     def test_REQ_d00254_K_line_context_maps_correctly(self):
@@ -167,7 +165,7 @@ class TestTextPrescan:
             (2, "    x = 1"),
             (3, "    assert x == 1"),
         ]
-        line_context, _, _ = text_prescan(lines)
+        line_context, _ = text_prescan(lines)
         assert line_context[1][0] == "test_one"
         assert line_context[2][0] == "test_one"
         assert line_context[3][0] == "test_one"
@@ -181,7 +179,7 @@ class TestAstPrescan:
         """AST prescan finds module-level test functions."""
         source = "def test_foo():\n    assert True\n"
         lines = [(1, "def test_foo():"), (2, "    assert True")]
-        line_context, all_test_funcs, first_def_line = ast_prescan(source, lines)
+        line_context, all_test_funcs = ast_prescan(source, lines)
         assert len(all_test_funcs) == 1
         assert all_test_funcs[0][1] == "test_foo"
         assert all_test_funcs[0][2] is None  # no class
@@ -195,7 +193,7 @@ class TestAstPrescan:
             (2, "    def test_baz(self):"),
             (3, "        pass"),
         ]
-        line_context, all_test_funcs, first_def_line = ast_prescan(source, lines)
+        line_context, all_test_funcs = ast_prescan(source, lines)
         assert len(all_test_funcs) == 1
         assert all_test_funcs[0][1] == "test_baz"
         assert all_test_funcs[0][2] == "TestBar"
@@ -212,8 +210,7 @@ class TestExternalPrescan:
             {"function": "test_beta", "class": "TestSuite", "line": 15},
         ]
         lines = [(i, f"line {i}") for i in range(1, 21)]
-        line_context, all_test_funcs, first_def_line = external_prescan(entries, lines)
-        assert first_def_line == 5
+        line_context, all_test_funcs = external_prescan(entries, lines)
         assert len(all_test_funcs) == 2
         # Line 5 should be in test_alpha context
         assert line_context[5][0] == "test_alpha"
@@ -235,7 +232,7 @@ class TestExternalPrescan:
         ]
         lines = [(i, f"line {i}") for i in range(1, 21)]
 
-        _context, all_test_funcs, _first = external_prescan(entries, lines)
+        _context, all_test_funcs = external_prescan(entries, lines)
 
         assert [name for _line, name, _cls in all_test_funcs] == [
             "pays with a card",
@@ -260,7 +257,7 @@ class TestExternalPrescan:
             (5, "});"),
         ]
 
-        line_context, _funcs, _first = external_prescan(entries, lines)
+        line_context, _funcs = external_prescan(entries, lines)
 
         assert line_context[2][0] == "pays with a card", (
             "the citation above the test belongs to that test"
@@ -283,7 +280,7 @@ class TestExternalPrescan:
             (4, "});"),
         ]
 
-        line_context, _funcs, _first = external_prescan(entries, lines)
+        line_context, _funcs = external_prescan(entries, lines)
 
         assert line_context[2][2] == 2, "the record's own start is kept"
         assert line_context[1][0] == "pays", "prose above binds forward to it"
@@ -304,7 +301,7 @@ class TestPrescanFuncEndLine:
             (5, "    x = 1"),
             (6, "    assert x"),
         ]
-        line_context, _, _ = ast_prescan(source, lines)
+        line_context, _ = ast_prescan(source, lines)
         # Each value should be a 4-tuple
         for ln, val in line_context.items():
             assert len(val) == 4, f"line {ln}: expected 4-tuple, got {len(val)}-tuple"
@@ -324,7 +321,7 @@ class TestPrescanFuncEndLine:
             (2, "    def test_baz(self):"),
             (3, "        pass"),
         ]
-        line_context, _, _ = ast_prescan(source, lines)
+        line_context, _ = ast_prescan(source, lines)
         # Line 2 is inside test_baz, end line is 3
         assert line_context[2][3] == 3  # func_end_line
         assert line_context[2][:3] == ("test_baz", "TestBar", 2)
@@ -335,7 +332,7 @@ class TestPrescanFuncEndLine:
             (1, "def test_one():"),
             (2, "    assert True"),
         ]
-        line_context, _, _ = text_prescan(lines)
+        line_context, _ = text_prescan(lines)
         for ln, val in line_context.items():
             assert len(val) == 4, f"line {ln}: expected 4-tuple, got {len(val)}-tuple"
         # func_end_line is 0 (sentinel) since text_prescan can't determine it
@@ -350,7 +347,7 @@ class TestPrescanFuncEndLine:
             {"function": "test_beta", "class": "TestSuite", "line": 15},
         ]
         lines = [(i, f"line {i}") for i in range(1, 21)]
-        line_context, _, _ = external_prescan(entries, lines)
+        line_context, _ = external_prescan(entries, lines)
         for ln, val in line_context.items():
             assert len(val) == 4, f"line {ln}: expected 4-tuple, got {len(val)}-tuple"
         # test_alpha spans lines 5-14 (next func starts at 15)
@@ -366,7 +363,7 @@ class TestPrescanFuncEndLine:
             {"function": "test_beta", "class": "TestSuite", "line": 15, "end_line": 18},
         ]
         lines = [(i, f"line {i}") for i in range(1, 21)]
-        line_context, _, _ = external_prescan(entries, lines)
+        line_context, _ = external_prescan(entries, lines)
         # end_line from JSON should be used
         assert line_context[5][3] == 10
         assert line_context[15][3] == 18
@@ -380,7 +377,7 @@ class TestPrescanFuncEndLine:
             (2, "def test_foo():"),
             (3, "    assert True"),
         ]
-        line_context, _, _ = ast_prescan(source, lines)
+        line_context, _ = ast_prescan(source, lines)
         # Line 1 should get fixup from test_foo, and be a 4-tuple
         assert len(line_context[1]) == 4
         assert line_context[1][0] == "test_foo"
@@ -410,12 +407,12 @@ def _numbered(source: str) -> list[tuple[int, str]]:
 
 
 def _via_ast(source: str):
-    line_context, _funcs, _first = ast_prescan(source, _numbered(source))
+    line_context, _funcs = ast_prescan(source, _numbered(source))
     return line_context
 
 
 def _via_text(source: str):
-    line_context, _funcs, _first = text_prescan(_numbered(source))
+    line_context, _funcs = text_prescan(_numbered(source))
     return line_context
 
 

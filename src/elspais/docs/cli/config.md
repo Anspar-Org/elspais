@@ -258,9 +258,11 @@ prescan_command = ""             # External test discovery command
 #   [{"file": "path", "function": "name", "class": "Name|null", "line": N,
 #     "end_line": M}]
 # `line` is the line the test is declared on, counted from one. `end_line`
-# is optional; without it the test reaches to the next one. A record names
-# one test, so the name may be the test's own and need not be spelled any
-# particular way.
+# is optional. If a record has no `end_line`, then the test ends at its last
+# line before the next test that is neither blank nor a comment.
+# Consequently, the comments written directly above a test belong to that
+# test. A record names one test. Consequently, the name may be the test's
+# own and need not be spelled any particular way.
 #
 # A test is linked by a comment above it and by nothing else. A requirement
 # ID spelled into the function name references nothing, whatever separators
