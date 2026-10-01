@@ -21,7 +21,7 @@ elspais doctor [--format {text,json}] [--verbose]
 
 ### Environment
 
-- **Worktree detection**: Shows if you're working in a git worktree and where the main repository is
+- **Git root**: Shows the root of the working tree the run was invoked from
 - **Associate paths**: Verifies that every federated project's path exists — including projects reached through an associate's own declarations, not only those this repository names
 - **Associate configuration**: Checks that every federated project has a valid `.elspais.toml`, naming the path and the reason for each one that does not
 - **Local configuration**: Checks for `.elspais.local.toml` (developer-specific settings)

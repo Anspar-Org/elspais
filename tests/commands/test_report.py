@@ -524,10 +524,9 @@ class TestCLIDispatch:
         """cli.main() with multiple composable names dispatches to report.run."""
         with patch("elspais.commands.report.run", return_value=0) as mock_run:
             with patch("elspais.config.find_git_root", return_value=None):
-                with patch("elspais.config.find_canonical_root", return_value=None):
-                    from elspais.cli import main
+                from elspais.cli import main
 
-                    exit_code = main(["checks", "summary", "--format", "text"])
+                exit_code = main(["checks", "summary", "--format", "text"])
 
         assert exit_code == 0
         mock_run.assert_called_once()

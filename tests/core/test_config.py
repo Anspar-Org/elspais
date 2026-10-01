@@ -193,10 +193,10 @@ class TestFindConfigFile:
 
 
 class TestFindGitRoot:
-    """Tests for find_git_root function."""
+    """Tests for find_git_root: the working-tree root relative paths resolve against."""
 
-    # Verifies: REQ-p00005-F
-    def test_finds_git_root_in_current_dir(self):
+    # Verifies: REQ-d00202-O
+    def test_REQ_d00202_O_finds_git_root_in_current_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             git_dir = Path(tmpdir) / ".git"
             git_dir.mkdir()
@@ -205,8 +205,8 @@ class TestFindGitRoot:
 
             assert root.resolve() == Path(tmpdir).resolve()
 
-    # Verifies: REQ-p00005-F
-    def test_finds_git_root_from_subdirectory(self):
+    # Verifies: REQ-d00202-O
+    def test_REQ_d00202_O_finds_git_root_from_subdirectory(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             git_dir = Path(tmpdir) / ".git"
             git_dir.mkdir()
@@ -218,8 +218,8 @@ class TestFindGitRoot:
 
             assert root.resolve() == Path(tmpdir).resolve()
 
-    # Verifies: REQ-p00005-F
-    def test_returns_none_when_not_in_repo(self):
+    # Verifies: REQ-d00202-O
+    def test_REQ_d00202_O_returns_none_when_not_in_repo(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             # No .git directory
 
@@ -227,8 +227,8 @@ class TestFindGitRoot:
 
             assert root is None
 
-    # Verifies: REQ-p00005-F
-    def test_handles_git_worktree_file(self):
+    # Verifies: REQ-d00202-O
+    def test_REQ_d00202_O_worktree_root_is_the_worktree_itself(self):
         """Git worktrees use a .git file pointing to the actual gitdir."""
         with tempfile.TemporaryDirectory() as tmpdir:
             git_file = Path(tmpdir) / ".git"
@@ -237,11 +237,11 @@ class TestFindGitRoot:
 
             root = find_git_root(Path(tmpdir))
 
-            # Should still recognize this as a git root
+            # The worktree is its own working-tree root, not the main checkout
             assert root.resolve() == Path(tmpdir).resolve()
 
-    # Verifies: REQ-p00005-F
-    def test_defaults_to_cwd(self):
+    # Verifies: REQ-d00202-O
+    def test_REQ_d00202_O_defaults_to_cwd(self):
         # Should not raise when called without arguments
         # (will find actual git root of test repo)
         root = find_git_root()

@@ -379,6 +379,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Config override: {local_file}", file=sys.stderr)
         else:
             print("Config: using defaults (no .elspais.toml found)", file=sys.stderr)
+        _print_associate_resolution(config_path, effective_root)
 
     # Store roots on args for commands to use
     args.git_root = git_root
@@ -494,6 +495,40 @@ def main(argv: list[str] | None = None) -> int:
             output_file.close()
             if not getattr(args, "quiet", False):
                 print(f"Generated: {output_path}", file=sys.stderr)
+
+
+# Implements: REQ-d00202-O+P
+def _print_associate_resolution(config_path: str | None, root: Path) -> None:
+    """Print, for each associate declaration, where its path resolved.
+
+    Each line names the path as declared, the working-tree root it was
+    resolved against, and the directory reached, so a relative path read
+    against an unexpected root is visible rather than inferred.
+    """
+    from elspais.config import get_config
+    from elspais.graph.federation_plan import declared_associates, plan_federation_or_error
+
+    try:
+        config = get_config(Path(config_path) if config_path else None, root, quiet=True)
+    except (OSError, ValueError):
+        # The command run next reads the same configuration and reports this
+        # fault in full; the verbose line only says why nothing follows.
+        print("Associates: not resolved (the configuration could not be read)", file=sys.stderr)
+        return
+    if not declared_associates(config, root):
+        return
+    plan, error = plan_federation_or_error(config, root)
+    if error is not None:
+        print(f"Associates: not resolved ({error})", file=sys.stderr)
+        return
+    for member in plan[1:]:
+        line = (
+            f"Associate {member.name}: '{member.declared_path}' resolved against "
+            f"{member.resolved_from} -> {member.repo_root}"
+        )
+        if member.error:
+            line += f" ({member.error})"
+        print(line, file=sys.stderr)
 
 
 def _print_help() -> None:

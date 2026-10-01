@@ -297,15 +297,8 @@ def run(args: argparse.Namespace) -> int:
     from elspais.commands._requests import GlossaryRequest
 
     def _compute(graph, config, request):  # type: ignore
-        td = graph.terms if hasattr(graph, "terms") else None
-        if not td:
-            # Try root repo graph
-            for entry in graph._repos.values():
-                if entry.graph and hasattr(entry.graph, "terms"):
-                    td = entry.graph.terms
-                    break
-        if td is None:
-            return {"error": "No terms found in graph"}
+        # Implements: REQ-d00200-I
+        td = graph.terms
 
         fmt = request.format
 

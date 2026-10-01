@@ -229,14 +229,14 @@ def test_journey_validates_across_separator_combinations(
     assert covered_labels(rollup.uat_coverage, "immediate_direct") == set(expected_labels)
 
 
-# Verifies: REQ-d00082-E, REQ-p00014-R, REQ-d00272-A, REQ-d00272-O, REQ-d00252-G, REQ-d00252-K
+# Verifies: REQ-d00082-E, REQ-p00014-R, REQ-d00272-A+C+O, REQ-d00252-K
 def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     """A journey `Validates:` ref that still uses "-" when the project is
     configured with a "/" separator must remain a hard broken reference
-    naming the journey as source, and not presumed foreign -- no associates
-    are configured, and there is nothing else in the federation the target
-    could belong to. A journey's `Validates:` is now read through the same
-    reader as a code or test annotation (REQ-d00272-K), so the item never
+    naming the journey as source, attributed to this repository because it
+    opens with this repository's namespace (REQ-d00272-C). A journey's
+    `Validates:` is now read through the same reader as a code or test
+    annotation (REQ-d00272-K), so the item never
     parsing under this repository's own grammar is a grammar-level verdict
     -- MALFORMED, carrying SYNTAX_ERROR -- rather than a later-stage
     UNKNOWN_REQUIREMENT (REQ-d00272-A forbids reporting a later stage than
@@ -275,8 +275,7 @@ def test_journey_dash_style_ref_under_slash_config_is_hard_broken(tmp_path):
     assert br.target_id == dash_style_ref
     assert br.edge_kind == "validates"
     assert br.presumed_foreign is False, (
-        "No associates are configured, so there is no other repository this "
-        "reference could belong to."
+        "The reference opens with this repository's own namespace, so it is attributed here."
     )
     assert br.fault_class is FaultClass.MALFORMED
     assert FaultCode.SYNTAX_ERROR in br.codes

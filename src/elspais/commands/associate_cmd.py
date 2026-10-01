@@ -382,6 +382,11 @@ def cmd_list(args: argparse.Namespace) -> int:
     own_root = _get_config_dir(args)
     if own_root is not None and uses_local_overlay(own_root):
         print("This repository's configuration is locally overridden (.elspais.local.toml).")
+    # Implements: REQ-d00202-O+P
+    # Every row is this repository's own declaration, so one root resolves
+    # every relative path below; naming it makes a wrong frame visible.
+    if git_root:
+        print(f"Relative paths resolve against: {git_root}")
     print(f"{'Name':<20} {'Prefix':<10} {'Status':<12} {'Local':<7} Path")
     print("-" * 80)
 

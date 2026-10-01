@@ -384,9 +384,13 @@ exists:
 
 `CAL-d99999-A` is spelled the way the `CAL` repository spells its
 identifiers, so that repository is the one that would own it — it simply has
-not authored it. That is `references.unknown_requirement`, and its severity
-is fixed at error: the repository that would answer for the target is in the
-federation and does not have it.
+not authored it. That is `references.unknown_requirement` (or
+`references.unknown_assertion` where the requirement exists and the label
+does not), reported at `error` unless the project sets
+`[rules.references].unknown_requirement`: the repository that would answer
+for the target is in the federation and does not have it. The class depends
+on the target alone -- an `Implements:`, `Refines:`, `Satisfies:` or
+`Integrates:` naming the same missing identifier is reported the same way.
 
 `ZZZ-d00001-A` is spelled the way no member spells anything, so no member
 would own it. That is `references.unknown_namespace`, reported at the
@@ -404,5 +408,5 @@ every report.
 
 - Links are stored in `.elspais.local.toml` (gitignored)
 - Use `elspais doctor` to check if your associate paths are valid
-- Duplicate detection resolves relative paths from the canonical repo root, so `--all` won't create duplicates when run from a worktree
-- `--list` resolves relative paths from the canonical root for worktree compatibility
+- `--all` scans the directories beside this working tree's root, so from a worktree it scans the worktree's siblings, not the clone's
+- `--list` resolves relative paths against this working tree's root and names that root above the table; `elspais -v` names, for every declaration, the root a path resolved against and the directory it reached

@@ -23,7 +23,14 @@ from elspais.commands.health import (
 from elspais.config import _merge_configs, config_defaults, get_config
 from elspais.graph.builder import TraceGraph
 from elspais.graph.factory import build_graph
+from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
+
+
+def _fed(graph: TraceGraph, tmp_path: Path) -> FederatedGraph:
+    """Hold a hand-built graph in the one federation the checks read through."""
+    config = {"project": {"name": "test", "namespace": "REQ"}}
+    return FederatedGraph.from_single(graph, config, tmp_path)
 
 
 def _load_config(config_path: Path) -> dict:
@@ -92,7 +99,7 @@ class TestCheckSpecNoDuplicatesFindings:
             "REQ-p00001": ["spec/file_a.md", "spec/file_b.md"],
         }
 
-        check = check_spec_no_duplicates(graph)
+        check = check_spec_no_duplicates(_fed(graph, tmp_path))
 
         assert not check.passed, "Expected check to fail with duplicate IDs"
         assert len(check.findings) > 0, "Expected findings for duplicates"
@@ -121,7 +128,7 @@ class TestCheckSpecImplementsResolveFindings:
         node.set_field("implements", ["REQ-p99999"])
         graph._index["REQ-d00001"] = node
 
-        check = check_spec_implements_resolve(graph)
+        check = check_spec_implements_resolve(_fed(graph, tmp_path))
 
         assert not check.passed, "Expected check to fail with unresolved implements"
         assert len(check.findings) > 0, "Expected findings for unresolved implements"
@@ -150,7 +157,7 @@ class TestCheckSpecRefinesResolveFindings:
         node.set_field("refines", ["REQ-p88888"])
         graph._index["REQ-d00002"] = node
 
-        check = check_spec_refines_resolve(graph)
+        check = check_spec_refines_resolve(_fed(graph, tmp_path))
 
         assert not check.passed, "Expected check to fail with unresolved refines"
         assert len(check.findings) > 0, "Expected findings for unresolved refines"
@@ -541,7 +548,7 @@ class TestCheckSpecNoDuplicateRefinesFindings:
         node.set_field("status", "Active")
         graph._index["REQ-p00001"] = node
 
-        check = check_spec_needs_rewrite(graph)
+        check = check_spec_needs_rewrite(_fed(graph, tmp_path))
 
         assert not check.passed, "Expected check to fail with parse_dirty=True"
         assert len(check.findings) > 0, "Expected findings for parse_dirty requirement"
@@ -568,7 +575,7 @@ class TestCheckSpecNoDuplicateRefinesFindings:
         node.set_field("status", "Active")
         graph._index["REQ-p00002"] = node
 
-        check = check_spec_needs_rewrite(graph)
+        check = check_spec_needs_rewrite(_fed(graph, tmp_path))
 
         assert check.passed, "Expected check to pass when parse_dirty is not set"
         assert len(check.findings) == 0, "Expected no findings when parse_dirty is absent"
@@ -590,7 +597,7 @@ class TestCheckSpecNoDuplicateRefinesFindings:
         node.set_field("status", "Active")
         graph._index["REQ-p00003"] = node
 
-        check = check_spec_needs_rewrite(graph)
+        check = check_spec_needs_rewrite(_fed(graph, tmp_path))
 
         assert check.passed, "Expected check to pass when parse_dirty is not set"
         assert len(check.findings) == 0, "Expected no findings when parse_dirty is absent"
@@ -617,7 +624,7 @@ class TestCheckSpecNoDuplicateRefinesFindings:
         # parse_dirty deliberately not set
         graph._index["REQ-p00004"] = node
 
-        check = check_spec_needs_rewrite(graph)
+        check = check_spec_needs_rewrite(_fed(graph, tmp_path))
 
         assert check.passed, (
             "Expected check to pass when multiple distinct Refines lines exist "

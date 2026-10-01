@@ -9,13 +9,22 @@ spec.refines_resolve).
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from elspais.commands.health import (
     HealthFinding,
     check_spec_refines_resolve,
     check_spec_satisfies_resolve,
 )
 from elspais.graph.builder import TraceGraph
+from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
+
+
+def _fed(graph: TraceGraph) -> FederatedGraph:
+    """Hold a hand-built graph in the one federation the checks read through."""
+    config = {"project": {"name": "test", "namespace": "REQ"}}
+    return FederatedGraph.from_single(graph, config, Path("/test/repo"))
 
 
 def _make_requirement(graph: TraceGraph, req_id: str, label: str = "Req") -> GraphNode:
@@ -45,7 +54,7 @@ class TestSatisfiesResolve:
         node_b = _make_requirement(graph, "REQ-p00002", label="Concrete")
         node_b.set_field("satisfies", ["REQ-p00001"])
 
-        check = check_spec_satisfies_resolve(graph)
+        check = check_spec_satisfies_resolve(_fed(graph))
 
         assert check.passed, f"Expected pass, got: {check.message}"
         assert check.name == "spec.satisfies_resolve"
@@ -67,7 +76,7 @@ class TestSatisfiesResolve:
         node_b = _make_requirement(graph, "REQ-p00002", label="Concrete")
         node_b.set_field("satisfies", ["REQ-p00001-A"])
 
-        check = check_spec_satisfies_resolve(graph)
+        check = check_spec_satisfies_resolve(_fed(graph))
 
         assert check.passed, f"Expected pass for assertion target, got: {check.message}"
         assert check.name == "spec.satisfies_resolve"
@@ -79,7 +88,7 @@ class TestSatisfiesResolve:
         node_b = _make_requirement(graph, "REQ-p00002", label="Concrete")
         node_b.set_field("satisfies", ["REQ-NONEXISTENT"])
 
-        check = check_spec_satisfies_resolve(graph)
+        check = check_spec_satisfies_resolve(_fed(graph))
 
         assert not check.passed, "Expected fail for unresolved Satisfies target"
         assert check.name == "spec.satisfies_resolve"
@@ -110,7 +119,7 @@ class TestSatisfiesResolve:
             ["REQ-p00001", "REQ-NONEXISTENT", "REQ-p00001-A"],
         )
 
-        check = check_spec_satisfies_resolve(graph)
+        check = check_spec_satisfies_resolve(_fed(graph))
 
         assert not check.passed, "Expected fail when at least one target is unresolved"
         assert check.severity == "warning"
@@ -142,7 +151,7 @@ class TestSatisfiesResolve:
         _make_requirement(graph, "REQ-p00002", label="B")
         # No satisfies field set on either node.
 
-        check = check_spec_satisfies_resolve(graph)
+        check = check_spec_satisfies_resolve(_fed(graph))
 
         assert check.passed, f"Expected pass when no Satisfies refs exist, got: {check.message}"
         assert check.name == "spec.satisfies_resolve"
@@ -162,13 +171,13 @@ class TestSatisfiesResolve:
         refines_graph = TraceGraph()
         rnode = _make_requirement(refines_graph, "REQ-p00010", label="Refines case")
         rnode.set_field("refines", ["REQ-MISSING"])
-        refines_check = check_spec_refines_resolve(refines_graph)
+        refines_check = check_spec_refines_resolve(_fed(refines_graph))
 
         # Satisfies-shaped failure
         satisfies_graph = TraceGraph()
         snode = _make_requirement(satisfies_graph, "REQ-p00010", label="Satisfies case")
         snode.set_field("satisfies", ["REQ-MISSING"])
-        satisfies_check = check_spec_satisfies_resolve(satisfies_graph)
+        satisfies_check = check_spec_satisfies_resolve(_fed(satisfies_graph))
 
         assert not refines_check.passed
         assert not satisfies_check.passed

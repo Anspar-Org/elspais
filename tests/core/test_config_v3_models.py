@@ -455,15 +455,45 @@ class TestReferenceSeverityConfigRetiredKeys:
 
 
 class TestValidationConfigRetiredKeys:
-    """``allow_unresolved_cross_repo`` is retired: silencing expected
-    cross-repository references is now ``unknown_namespace = "ok"`` on
-    ``[rules.references]``, which answers per fault class rather than
-    taking every reference into an unconfigured repository down with it."""
+    """``allow_unresolved_cross_repo`` is retired: how serious a reference
+    into an unconfigured repository is now set per fault class under
+    ``[rules.references]`` (``unknown_namespace = "info"``, say), rather
+    than one switch silencing every cross-repository reference."""
 
     # Verifies: REQ-d00269-F
     def test_REQ_d00269_F_allow_unresolved_cross_repo_rejected(self):
         with pytest.raises(ValidationError, match="extra"):
             ValidationConfig(allow_unresolved_cross_repo=False)
+
+    # Verifies: REQ-d00212-X, REQ-d00269-F
+    def test_REQ_d00212_X_allow_unresolved_cross_repo_in_a_file_is_refused(self, tmp_path):
+        """A file carrying the retired setting is refused when read, and the
+        message names the table that now answers its question."""
+        from elspais.config import load_config
+
+        path = tmp_path / ".elspais.toml"
+        path.write_text(
+            'version = 5\n[project]\nname = "t"\nnamespace = "REQ"\n'
+            "[validation]\nallow_unresolved_cross_repo = true\n"
+        )
+        with pytest.raises(ValueError) as excinfo:
+            load_config(path)
+        message = str(excinfo.value)
+        assert "[validation] allow_unresolved_cross_repo" in message
+        assert "[rules.references]" in message
+        assert "unknown_namespace" in message
+
+    # Verifies: REQ-d00212-X
+    def test_REQ_d00212_X_file_without_the_retired_setting_loads(self, tmp_path):
+        """Negative control: the same file without the setting is accepted."""
+        from elspais.config import load_config
+
+        path = tmp_path / ".elspais.toml"
+        path.write_text(
+            'version = 5\n[project]\nname = "t"\nnamespace = "REQ"\n'
+            '[validation]\nhash_mode = "full-text"\n'
+        )
+        assert load_config(path)["validation"]["hash_mode"] == "full-text"
 
     # Verifies: REQ-d00269-F
     def test_REQ_d00269_F_validation_config_still_accepts_its_real_fields(self):

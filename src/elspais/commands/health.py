@@ -329,6 +329,7 @@ def check_spec_implements_resolve(
     graph: FederatedGraph,
     resolver: IdResolver | None = None,
     config: dict[str, Any] | None = None,
+    namespace: str | None = None,
 ) -> HealthCheck:
     """Check that all Implements references resolve to valid requirements."""
     severity = severity_for("spec.implements_resolve", config)
@@ -339,7 +340,7 @@ def check_spec_implements_resolve(
 
     unresolved = []
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT, namespace=namespace):
         # Get implements field
         implements = node.get_field("implements", [])
         for ref in implements:
@@ -388,6 +389,7 @@ def check_spec_refines_resolve(
     graph: FederatedGraph,
     resolver: IdResolver | None = None,
     config: dict[str, Any] | None = None,
+    namespace: str | None = None,
 ) -> HealthCheck:
     """Check that all Refines references resolve to valid requirements."""
     severity = severity_for("spec.refines_resolve", config)
@@ -398,7 +400,7 @@ def check_spec_refines_resolve(
 
     unresolved = []
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT, namespace=namespace):
         refines = node.get_field("refines", [])
         for ref in refines:
             target = graph.find_by_id(ref)
@@ -446,6 +448,7 @@ def check_spec_satisfies_resolve(
     graph: FederatedGraph,
     resolver: IdResolver | None = None,
     config: dict[str, Any] | None = None,
+    namespace: str | None = None,
 ) -> HealthCheck:
     """Check that all Satisfies references resolve to valid requirements or assertions."""
     severity = severity_for("spec.satisfies_resolve", config)
@@ -456,7 +459,7 @@ def check_spec_satisfies_resolve(
 
     unresolved = []
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT, namespace=namespace):
         satisfies = node.get_field("satisfies", [])
         for ref in satisfies:
             target = graph.find_by_id(ref)
@@ -501,7 +504,7 @@ def check_spec_satisfies_resolve(
 
 # Implements: REQ-d00085-I
 def check_spec_needs_rewrite(
-    graph: FederatedGraph, config: dict[str, Any] | None = None
+    graph: FederatedGraph, config: dict[str, Any] | None = None, namespace: str | None = None
 ) -> HealthCheck:
     """Check for requirements that would change the file on next save.
 
@@ -518,7 +521,7 @@ def check_spec_needs_rewrite(
 
     findings: list[HealthFinding] = []
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT, namespace=namespace):
         if node.get_field("parse_dirty"):
             fn = node.file_node()
             file_path = fn.get_field("relative_path") if fn is not None else None
@@ -553,7 +556,7 @@ def check_spec_needs_rewrite(
 
 # Implements: REQ-d00250-F
 def check_unfixable_issues(
-    graph: FederatedGraph, config: dict[str, Any] | None = None
+    graph: FederatedGraph, config: dict[str, Any] | None = None, namespace: str | None = None
 ) -> HealthCheck:
     """Check for requirements with issues that ``--fix`` cannot resolve.
 
@@ -569,7 +572,7 @@ def check_unfixable_issues(
     from elspais.graph import NodeKind
 
     findings: list[HealthFinding] = []
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT, namespace=namespace):
         reasons = node.get_field("parse_unfixable_reasons") or []
         if not reasons:
             continue
@@ -630,7 +633,9 @@ def _parse_hierarchy_rules(hierarchy: dict[str, Any]) -> dict[str, list[str]]:
 
 
 # Implements: REQ-d00281-D
-def check_spec_undefined_levels(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
+def check_spec_undefined_levels(
+    graph: FederatedGraph, config: dict[str, Any], namespace: str | None = None
+) -> HealthCheck:
     """Report requirements carrying a level this configuration does not define.
 
     Such a requirement is counted and grouped like any other (REQ-d00281-A+C) --
@@ -652,7 +657,7 @@ def check_spec_undefined_levels(graph: FederatedGraph, config: dict[str, Any]) -
     defined = {k.lower() for k in typed_config.levels}
 
     findings: list[HealthFinding] = []
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT, namespace=namespace):
         level = (node.level or "").strip()
         if level and level.lower() not in defined:
             findings.append(
@@ -686,7 +691,9 @@ def check_spec_undefined_levels(graph: FederatedGraph, config: dict[str, Any]) -
 
 
 # Implements: REQ-p00002-B
-def check_spec_hierarchy_levels(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
+def check_spec_hierarchy_levels(
+    graph: FederatedGraph, config: dict[str, Any], namespace: str | None = None
+) -> HealthCheck:
     """Check that hierarchy levels follow configured rules."""
     severity = severity_for("spec.hierarchy_levels", config)
     if severity == Severity.OFF:
@@ -708,7 +715,7 @@ def check_spec_hierarchy_levels(graph: FederatedGraph, config: dict[str, Any]) -
 
     violations = []
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT, namespace=namespace):
         node_level = node.level.lower() if node.level else None
         if not node_level:
             continue
@@ -790,6 +797,7 @@ def check_structural_orphans(
     graph: FederatedGraph,
     allow_structural_orphans: bool = False,
     config: dict[str, Any] | None = None,
+    namespace: str | None = None,
 ) -> HealthCheck:
     """Check for nodes without a FILE ancestor (build pipeline bugs)."""
     severity = severity_for("spec.structural_orphans", config)
@@ -805,7 +813,7 @@ def check_structural_orphans(
         )
 
     orphans_by_kind: dict[str, list[dict]] = {}
-    for node in graph.iter_structural_orphans():
+    for node in graph.iter_structural_orphans(namespace=namespace):
         kind_name = node.kind.value
         if kind_name not in orphans_by_kind:
             orphans_by_kind[kind_name] = []
@@ -1143,7 +1151,10 @@ def check_reference_undeclared(graph: FederatedGraph, config: dict[str, Any] | N
 
 # Implements: REQ-p00002-A
 def check_spec_format_rules(
-    graph: FederatedGraph, config: dict[str, Any], resolver: IdResolver | None = None
+    graph: FederatedGraph,
+    config: dict[str, Any],
+    resolver: IdResolver | None = None,
+    namespace: str | None = None,
 ) -> HealthCheck:
     """Check that requirements comply with configured format rules."""
     severity = severity_for("spec.format_rules", config)
@@ -1182,7 +1193,7 @@ def check_spec_format_rules(
     node_map: dict[str, GraphNode] = {}
     req_count = 0
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT, namespace=namespace):
         req_count += 1
         node_map[node.id] = node
         violations = validate_requirement_format(node, rules, resolver=resolver)
@@ -1255,7 +1266,9 @@ def check_spec_format_rules(
 
 
 # Implements: REQ-d00204
-def check_spec_no_assertions(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
+def check_spec_no_assertions(
+    graph: FederatedGraph, config: dict[str, Any], namespace: str | None = None
+) -> HealthCheck:
     """Flag requirements that have zero assertions (not testable)."""
     from elspais.graph import NodeKind
     from elspais.graph.relations import EdgeKind
@@ -1265,7 +1278,7 @@ def check_spec_no_assertions(graph: FederatedGraph, config: dict[str, Any]) -> H
         return skipped_check("spec.no_assertions", "Requirements with no assertions")
 
     findings: list[HealthFinding] = []
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT, namespace=namespace):
         has_assertion = any(
             child.kind == NodeKind.ASSERTION
             for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
@@ -1300,7 +1313,9 @@ def check_spec_no_assertions(graph: FederatedGraph, config: dict[str, Any]) -> H
 
 
 # Implements: REQ-p00002-F
-def check_spec_unknown_directive(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
+def check_spec_unknown_directive(
+    graph: FederatedGraph, config: dict[str, Any], namespace: str | None = None
+) -> HealthCheck:
     """Report *Assertions* opening with a directive the tool does not recognize.
 
     A directive is an instruction to the parser, not prose. Absorbing an
@@ -1317,7 +1332,7 @@ def check_spec_unknown_directive(graph: FederatedGraph, config: dict[str, Any]) 
         return skipped_check("spec.unknown_directive", "Unrecognized assertion directives")
 
     findings: list[HealthFinding] = []
-    for node in graph.nodes_by_kind(NodeKind.ASSERTION):
+    for node in graph.nodes_by_kind(NodeKind.ASSERTION, namespace=namespace):
         directive = read_directive(node.get_label())
         if directive is None or directive.recognized:
             continue
@@ -1471,7 +1486,9 @@ def check_spec_hash_integrity(
     )
 
 
-def check_spec_changelog_present(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
+def check_spec_changelog_present(
+    graph: FederatedGraph, config: dict[str, Any], namespace: str | None = None
+) -> HealthCheck:
     """Check that all Active requirements have at least one changelog entry.
 
     Active whenever `changelog.present` is set OR `changelog.hash_current` is set.
@@ -1496,7 +1513,7 @@ def check_spec_changelog_present(graph: FederatedGraph, config: dict[str, Any]) 
         )
 
     missing = []
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT, namespace=namespace):
         if (node.status or "").lower() != "active":
             continue
         changelog = node.get_field("changelog", [])
@@ -1533,7 +1550,9 @@ def check_spec_changelog_present(graph: FederatedGraph, config: dict[str, Any]) 
     )
 
 
-def check_spec_changelog_current(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
+def check_spec_changelog_current(
+    graph: FederatedGraph, config: dict[str, Any], namespace: str | None = None
+) -> HealthCheck:
     """Check that Active requirements' changelog hashes match stored hashes."""
     severity = severity_for("spec.changelog_current", config)
     if severity == Severity.OFF:
@@ -1556,7 +1575,7 @@ def check_spec_changelog_current(graph: FederatedGraph, config: dict[str, Any]) 
 
     mismatches = []
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT, namespace=namespace):
         if (node.status or "").lower() != "active":
             continue
         changelog = node.get_field("changelog", [])
@@ -1596,7 +1615,9 @@ def check_spec_changelog_current(graph: FederatedGraph, config: dict[str, Any]) 
     )
 
 
-def check_spec_changelog_format(graph: FederatedGraph, config: dict[str, Any]) -> HealthCheck:
+def check_spec_changelog_format(
+    graph: FederatedGraph, config: dict[str, Any], namespace: str | None = None
+) -> HealthCheck:
     """Validate changelog entry fields per config requirements."""
     severity = severity_for("spec.changelog_format", config)
     if severity == Severity.OFF:
@@ -1622,7 +1643,7 @@ def check_spec_changelog_format(graph: FederatedGraph, config: dict[str, Any]) -
 
     violations = []
 
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT, namespace=namespace):
         if (node.status or "").lower() != "active":
             continue
         changelog = node.get_field("changelog", [])
@@ -2623,7 +2644,7 @@ def check_governed_rule_divergence(
     )
 
 
-# Implements: REQ-d00204-A, REQ-d00204-B, REQ-d00204-F
+# Implements: REQ-d00204-A, REQ-d00204-B, REQ-d00204-F, REQ-d00204-K
 def run_spec_checks(
     graph: FederatedGraph,
     config: dict[str, Any],
@@ -2633,7 +2654,8 @@ def run_spec_checks(
 
     Non-config-sensitive checks run once on the full FederatedGraph.
     Config-sensitive checks run per-repo using each repo's own config,
-    with results annotated by repo name.
+    reading that repo's nodes through the federation, with results
+    annotated by repo name.
 
     Findings for retired requirements (Deprecated, Superseded, Rejected)
     are preserved in the detailed report but do not count as errors
@@ -2641,7 +2663,6 @@ def run_spec_checks(
     """
     from elspais.config import get_status_roles
     from elspais.graph import NodeKind as NK
-    from elspais.graph.federated import FederatedGraph as FG
 
     # Build the set of retired requirement IDs for post-processing
     roles = get_status_roles(config)
@@ -2678,56 +2699,62 @@ def run_spec_checks(
     ]
 
     # --- Config-sensitive checks: run per-repo ---
+    # Implements: REQ-d00204-F
+    # Each member's nodes are judged by that member's configuration, and
+    # read through the federation, so a reference into another member
+    # resolves where its target lives and the run builds nothing.
     for entry in graph.iter_repos():
         from elspais.utilities.patterns import build_resolver
 
         repo_config = entry.config
-        repo_graph = FG.from_single(entry.graph, repo_config, entry.repo_root)
+        member = entry.namespace
         repo_resolver = build_resolver(repo_config)
 
         checks.append(
             _annotate_findings(
                 check_spec_implements_resolve(
-                    repo_graph, resolver=repo_resolver, config=repo_config
+                    graph, namespace=member, resolver=repo_resolver, config=repo_config
                 ),
                 entry.name,
             )
         )
         checks.append(
             _annotate_findings(
-                check_spec_refines_resolve(repo_graph, resolver=repo_resolver, config=repo_config),
+                check_spec_refines_resolve(
+                    graph, namespace=member, resolver=repo_resolver, config=repo_config
+                ),
                 entry.name,
             )
         )
         checks.append(
             _annotate_findings(
                 check_spec_satisfies_resolve(
-                    repo_graph, resolver=repo_resolver, config=repo_config
+                    graph, namespace=member, resolver=repo_resolver, config=repo_config
                 ),
                 entry.name,
             )
         )
         checks.append(
             _annotate_findings(
-                check_spec_needs_rewrite(repo_graph, repo_config),
+                check_spec_needs_rewrite(graph, repo_config, namespace=member),
                 entry.name,
             )
         )
         checks.append(
             _annotate_findings(
-                check_unfixable_issues(repo_graph, repo_config),
+                check_unfixable_issues(graph, repo_config, namespace=member),
                 entry.name,
             )
         )
         checks.append(
             _annotate_findings(
-                check_spec_hierarchy_levels(repo_graph, repo_config),
+                check_spec_hierarchy_levels(graph, repo_config, namespace=member),
                 entry.name,
             )
         )
         checks.append(
             _annotate_findings(
-                check_spec_undefined_levels(repo_graph, repo_config),
+                check_spec_undefined_levels(graph, repo_config, namespace=member),
                 entry.name,
             )
         )
@@ -2736,7 +2763,8 @@ def run_spec_checks(
         checks.append(
             _annotate_findings(
                 check_structural_orphans(
-                    repo_graph,
+                    graph,
+                    namespace=member,
                     allow_structural_orphans=_allow_so,
                     config=repo_config,
                 ),
@@ -2745,37 +2773,39 @@ def run_spec_checks(
         )
         checks.append(
             _annotate_findings(
-                check_spec_format_rules(repo_graph, repo_config, resolver=repo_resolver),
+                check_spec_format_rules(
+                    graph, repo_config, namespace=member, resolver=repo_resolver
+                ),
                 entry.name,
             )
         )
         checks.append(
             _annotate_findings(
-                check_spec_no_assertions(repo_graph, repo_config),
+                check_spec_no_assertions(graph, repo_config, namespace=member),
                 entry.name,
             )
         )
         checks.append(
             _annotate_findings(
-                check_spec_unknown_directive(repo_graph, repo_config),
+                check_spec_unknown_directive(graph, repo_config, namespace=member),
                 entry.name,
             )
         )
         checks.append(
             _annotate_findings(
-                check_spec_changelog_present(repo_graph, repo_config),
+                check_spec_changelog_present(graph, repo_config, namespace=member),
                 entry.name,
             )
         )
         checks.append(
             _annotate_findings(
-                check_spec_changelog_current(repo_graph, repo_config),
+                check_spec_changelog_current(graph, repo_config, namespace=member),
                 entry.name,
             )
         )
         checks.append(
             _annotate_findings(
-                check_spec_changelog_format(repo_graph, repo_config),
+                check_spec_changelog_format(graph, repo_config, namespace=member),
                 entry.name,
             )
         )
@@ -4613,7 +4643,9 @@ def check_unbound_citations(
             repo=entry.name,
         )
         for entry in graph.iter_repos()
-        for c in sorted(entry.graph.unbound_citations(), key=lambda c: (c.path, c.line))
+        for c in sorted(
+            graph.unbound_citations(namespace=entry.namespace), key=lambda c: (c.path, c.line)
+        )
     ]
     if not findings:
         return HealthCheck(
@@ -4675,7 +4707,7 @@ def _target_outcomes(graph: FederatedGraph, expected_targets: tuple[str, ...]) -
     not_run: list[tuple[str, str, str]] = []
     running: dict[tuple[str, str], str] = {}
     for entry in graph.iter_repos():
-        unread = entry.graph.unread_artifacts()
+        unread = graph.unread_artifacts(namespace=entry.namespace)
         for item in unread:
             if item.reason == "running":
                 running.setdefault((entry.name, item.target), item.started_at)
@@ -4766,7 +4798,7 @@ def check_ingestion_faults(
 
     rows: list[tuple[str, str, str, str, int | None, str]] = []
     for entry in graph.iter_repos():
-        for fault in entry.graph.ingestion_faults():
+        for fault in graph.ingestion_faults(namespace=entry.namespace):
             if fault.partial:
                 continue
             rows.append(
@@ -4934,7 +4966,7 @@ def check_partial_reads(graph: FederatedGraph, config: dict[str, Any] | None = N
     total_files = 0
     for entry in graph.iter_repos():
         by_stage: dict[str, list] = {}
-        for fault in entry.graph.ingestion_faults():
+        for fault in graph.ingestion_faults(namespace=entry.namespace):
             if fault.partial:
                 by_stage.setdefault(fault.stage, []).append(fault)
         for stage, faults in sorted(by_stage.items()):
@@ -5034,7 +5066,7 @@ def check_unrunnable_test_files(
         reach = _target_reach(entry.config)
         if reach is None:
             continue
-        for file_node in entry.graph.iter_roots(NodeKind.FILE):
+        for file_node in graph.iter_roots(NodeKind.FILE, namespace=entry.namespace):
             if file_node.get_field("file_type") != FileType.TEST:
                 continue
             relative_path = file_node.get_field("relative_path") or ""

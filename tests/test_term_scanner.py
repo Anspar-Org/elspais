@@ -1004,19 +1004,19 @@ def _repo_with_term(
     return graph
 
 
-# Verifies: REQ-d00222-C
-def test_REQ_d00222_C_rewrapping_a_live_graph_does_not_inflate_references():
-    """Wrapping a live graph again leaves the first federation's counts alone.
+# Verifies: REQ-d00222-C, REQ-d00200-K
+def test_REQ_d00200_K_refederating_a_held_graph_is_refused_and_counts_stay():
+    """A second federation over a held graph is refused; the first keeps its counts.
 
-    ``elspais checks`` wraps each live member graph in a further
-    ``FederatedGraph`` to obtain a per-repo config view. Each wrap runs its
-    own term scan, so a federated entry sharing the repo's own ``TermEntry``
-    would collect a fresh copy of every reference on each pass, and a
-    retained graph's term counts would climb with every invocation.
+    The federated dictionary is the federation's own, so its reference
+    counts must not move however often something tries to wrap the member
+    again.
     """
     from pathlib import Path
 
-    from elspais.graph.federated import FederatedGraph
+    import pytest
+
+    from elspais.graph.federated import FederatedGraph, FederationError
 
     graph = _repo_with_term(
         node_id="REQ-A01",
@@ -1032,23 +1032,15 @@ def test_REQ_d00222_C_rewrapping_a_live_graph_does_not_inflate_references():
     federated = FederatedGraph.from_single(graph, config, Path("/tmp/repo-a"))
     assert len(federated._terms.lookup("widget").references) == 1
 
-    # The per-repo config view `checks` takes, three invocations' worth.
     for _ in range(3):
-        FederatedGraph.from_single(graph, config, Path("/tmp/repo-a"))
+        with pytest.raises(FederationError, match="REPOA.*already held by a federation"):
+            FederatedGraph.from_single(graph, config, Path("/tmp/repo-a"))
 
     assert len(federated._terms.lookup("widget").references) == 1
 
 
-# Verifies: REQ-d00239-A
-def test_REQ_d00239_A_rewrapping_keeps_the_cross_repo_reference():
-    """Re-wrapping each member leaves the whole cross-repo reference set intact.
-
-    A term defined in one repo collects the references made to it in
-    another, and that set is only whole once every repo has been walked. A
-    later single-repo wrap walks one repo, so it must establish its own
-    entries rather than rewrite the ones the federation holds -- otherwise
-    the reference made from the other repo disappears.
-    """
+def _two_repo_term_federation():
+    """Repo A defines "widget"; both repos reference it. Returns (fed, entries)."""
     from pathlib import Path
 
     from elspais.graph.federated import FederatedGraph, RepoEntry
@@ -1065,37 +1057,70 @@ def test_REQ_d00239_A_rewrapping_keeps_the_cross_repo_reference():
         relative_path="spec/controllers.md",
         defines=False,
     )
-    entry_a = RepoEntry(
-        name="repo-a",
-        graph=graph_a,
-        config={
-            "project": {"name": "repo-a", "namespace": "REPOA"},
-            "terms": {"markup_styles": ["*"]},
-        },
-        repo_root=Path("/tmp/repo-a"),
+    entries = (
+        RepoEntry(
+            name="repo-a",
+            graph=graph_a,
+            config={
+                "project": {"name": "repo-a", "namespace": "REPOA"},
+                "terms": {"markup_styles": ["*"]},
+            },
+            repo_root=Path("/tmp/repo-a"),
+        ),
+        RepoEntry(
+            name="repo-b",
+            graph=graph_b,
+            config={
+                "project": {"name": "repo-b", "namespace": "REPOB"},
+                "terms": {"markup_styles": ["*"]},
+            },
+            repo_root=Path("/tmp/repo-b"),
+        ),
     )
-    entry_b = RepoEntry(
-        name="repo-b",
-        graph=graph_b,
-        config={
-            "project": {"name": "repo-b", "namespace": "REPOB"},
-            "terms": {"markup_styles": ["*"]},
-        },
-        repo_root=Path("/tmp/repo-b"),
-    )
+    return FederatedGraph(repos=list(entries)), entries
 
-    federated = FederatedGraph(repos=[entry_a, entry_b])
+
+# Verifies: REQ-d00239-A+D, REQ-d00200-K
+def test_REQ_d00239_D_refused_refederation_keeps_the_cross_repo_reference():
+    """A refused further federation over a live member leaves the set whole.
+
+    A term defined in one repo collects the references made to it in
+    another. Trying to federate a live member again is refused, and the
+    reference set the original federation holds neither loses the
+    reference from the other repo nor gains a copy of any.
+    """
+    import pytest
+
+    from elspais.graph.federated import FederatedGraph, FederationError
+
+    federated, entries = _two_repo_term_federation()
     found = {(r.namespace, r.node_id) for r in federated._terms.lookup("widget").references}
     assert found == {("REPOA", "REQ-A01"), ("REPOB", "REQ-B01")}
 
-    # The per-repo config view `checks` takes, one wrap per live member.
-    for entry in (entry_a, entry_b):
-        FederatedGraph.from_single(entry.graph, entry.config, entry.repo_root)
+    for entry in entries:
+        with pytest.raises(FederationError, match="already held by a federation"):
+            FederatedGraph.from_single(entry.graph, entry.config, entry.repo_root)
+    with pytest.raises(FederationError, match="already held by a federation"):
+        FederatedGraph(repos=list(entries))
 
     references = federated._terms.lookup("widget").references
     # The set says nothing was dropped; the count says nothing was added.
     assert {(r.namespace, r.node_id) for r in references} == found
     assert len(references) == 2
+
+
+# Verifies: REQ-d00239-C
+def test_REQ_d00239_C_rescanning_establishes_the_reference_set_anew():
+    """Running the federation's term scan again does not add to its set."""
+    federated, _entries = _two_repo_term_federation()
+    before = sorted((r.namespace, r.node_id) for r in federated._terms.lookup("widget").references)
+    assert len(before) == 2
+
+    federated._scan_terms()
+    federated._scan_terms()
+
+    after = sorted((r.namespace, r.node_id) for r in federated._terms.lookup("widget").references)
+    assert after == before
 
 
 # -- REQ-d00237-D: auto-marker skips terms inside outer emphasis spans -------

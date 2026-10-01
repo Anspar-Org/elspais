@@ -808,17 +808,26 @@ D. Files matching any `exclude_files` glob pattern SHALL be skipped during scann
 
 ### Assertions
 
-A. After `FederatedGraph._merge_terms()`, the scanner SHALL run across all repos using the merged `TermDictionary` so that cross-repo term references resolve correctly.
+A. The term scan SHALL run over every member of a federation against the one set of terms the federation holds, so that a reference made in one member to a term another member defines is recorded.
 
-B. Each repo's scan SHALL use its own config for `markup_styles` and `exclude_files`.
+B. Each member's text SHALL be scanned under that member's own term configuration.
+
+C. When a federation scans, the scan SHALL establish each term's reference set anew rather than add to a set an earlier scan left.
+
+D. A term's reference set SHALL belong to the federation that scanned, so that a scan another federation performs over the same member leaves it unchanged.
+
+### Rationale
+
+Where a term is used is a finding about a whole federation: a term defined in one repository may be referenced in another, and the defining repository cannot see that reference alone. The set is therefore the scanning federation's, never a member's, and C and D keep it a property of the tree rather than of how many scans have run or which federation ran them.
 
 ### Changelog
 
+- 2026-10-01 | acd14bba | - | Michael Lewis (<michael@anspar.org>) | A and B restated by property; C and D added: a scan establishes the reference set, which belongs to the federation that scanned
 - 2026-07-31 | e27abfeb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 7d9a30c4 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 7d9a30c4 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Federated Graph Term Scanner Pass* | **Hash**: e27abfeb
+*End* *Federated Graph Term Scanner Pass* | **Hash**: acd14bba
 
 ## REQ-d00240: New Term Health Checks
 

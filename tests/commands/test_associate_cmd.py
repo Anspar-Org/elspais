@@ -378,20 +378,25 @@ class TestAssociateAll:
         output = capsys.readouterr().out
         assert "0" in output or "no" in output.lower() or "none" in output.lower()
 
-    # Verifies: REQ-p00005-F
-    def test_REQ_p00005_F_all_deduplicates_relative_and_absolute(
+    # Verifies: REQ-d00202-O
+    def test_REQ_d00202_O_all_deduplicates_relative_and_absolute(
         self, tmp_path, monkeypatch, capsys
     ):
-        """--all does not add absolute duplicate when relative path exists in worktree."""
+        """--all does not add an absolute duplicate of a declared relative path.
+
+        The relative path is resolved against the declaring repository's
+        root, not the process's working directory, so it is recognised as
+        the repository --all discovers.
+        """
         from elspais.commands.associate_cmd import run
 
-        # Simulate worktree layout: canonical_root != cwd
+        # The process runs from a directory other than the declaring root.
         workspace = tmp_path / "workspace"
         workspace.mkdir()
         core = _make_core_repo(workspace / "core")
         _make_associate_repo(workspace, "callisto", "CAL")
 
-        # Simulate a worktree cwd that differs from canonical_root
+        # A working directory unrelated to the declaring repository
         worktree_cwd = tmp_path / "worktrees" / "my-branch"
         worktree_cwd.mkdir(parents=True)
 
@@ -399,7 +404,7 @@ class TestAssociateAll:
         local_config = core / ".elspais.local.toml"
         local_config.write_text('[associates.callisto]\npath = "../callisto"\nnamespace = "CAL"\n')
 
-        # cwd is the worktree, NOT the canonical root
+        # cwd is NOT the declaring repository's root
         monkeypatch.chdir(worktree_cwd)
         args = argparse.Namespace(
             associate_path=None,
@@ -413,7 +418,7 @@ class TestAssociateAll:
         rc = run(args)
         assert rc == 0
 
-        # Should not have duplicated — ../callisto resolves from canonical_root
+        # Not duplicated: ../callisto resolves against the declaring root (core)
         doc = tomlkit.parse(local_config.read_text())
         assoc_entries = {k for k in doc["associates"] if isinstance(doc["associates"][k], dict)}
         assert len(assoc_entries) == 1
@@ -710,8 +715,8 @@ class TestAssociateUnlink:
         assert "europa" in doc["associates"]
         assert doc["associates"]["europa"]["path"] == str(assoc2)
 
-    # Verifies: REQ-p00005-F
-    def test_REQ_p00005_F_unlink_by_path_component_substring(self, tmp_path, monkeypatch, capsys):
+    # Verifies: REQ-p00005-C
+    def test_REQ_p00005_C_unlink_by_path_component_substring(self, tmp_path, monkeypatch, capsys):
         """Unlink matches when name is a substring of a path component."""
         from elspais.commands.associate_cmd import run
 
@@ -772,8 +777,8 @@ class TestAssociateUnlink:
         doc = tomlkit.parse(local_config.read_text())
         assert "callisto" not in doc.get("associates", {})
 
-    # Verifies: REQ-p00005-F
-    def test_REQ_p00005_F_unlink_by_project_name_worktree_path(self, tmp_path, monkeypatch, capsys):
+    # Verifies: REQ-p00005-C
+    def test_REQ_p00005_C_unlink_by_project_name_worktree_path(self, tmp_path, monkeypatch, capsys):
         """Unlink works when stored path is a worktree (basename != project name)."""
         from elspais.commands.associate_cmd import run
 

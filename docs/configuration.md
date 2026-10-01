@@ -11,10 +11,11 @@ elspais looks for configuration in this order:
 3. `.elspais.toml` in any parent directory, up to and including the git root
 4. Built-in defaults
 
-For **git worktrees**, elspais detects the canonical (main) repository
-root and uses it when resolving relative associate paths. This means
-paths like `"../sibling-repo"` in an `[associates.<name>]` declaration
-resolve from the main repo, not the worktree location.
+A relative path in an `[associates.<name>]` declaration resolves against
+the root of the working tree that declares it -- in a git worktree, the
+worktree's own root. A worktree at a different depth from its clone needs
+a path valid from where it sits; declare that one in `.elspais.local.toml`.
+`elspais -v` names the root each path resolved against.
 
 ## Complete Configuration Reference
 
@@ -486,7 +487,7 @@ values = ["id", "title", "status", "implemented", "tested", "verified"]
 #──────────────────────────────────────────────────────────────────────────────
 # ASSOCIATES - Cross-Repository Federation
 # Each associate is a named entry with `path` and `namespace`.
-# Relative paths resolve from the canonical repo root (worktree-safe).
+# Relative paths resolve from the declaring working tree's root.
 #
 # Declaring an associate also enables cross-repo template instantiation:
 # a downstream `Satisfies: <UPSTREAM>` clones the upstream **Template**

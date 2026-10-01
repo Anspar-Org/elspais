@@ -237,6 +237,51 @@ class TestCrossRepoImplements:
 
 
 # ---------------------------------------------------------------------------
+# Test: repeated checks against one warm daemon (REQ-d00204-K)
+# ---------------------------------------------------------------------------
+
+
+def _daemon_pid(root) -> int | None:
+    """The pid the serving daemon recorded for ``root``, or None."""
+    record = root / ".elspais" / "daemon.json"
+    if not record.is_file():
+        return None
+    return json.loads(record.read_text())["pid"]
+
+
+def _checks_json(root) -> tuple[int, dict]:
+    result = run_elspais("checks", "--format", "json", cwd=root)
+    return result.returncode, json.loads(result.stdout)
+
+
+def _reference_findings(report: dict) -> dict[str, list[str]]:
+    """Each references.* check's finding messages, sorted."""
+    return {
+        c["name"]: sorted(f["message"] for f in c["findings"])
+        for c in report["checks"]
+        if c["name"].startswith("references.")
+    }
+
+
+class TestRepeatedChecksAgainstOneDaemon:
+    """Validates REQ-d00204-K over the CLI: one daemon, the same answer every time."""
+
+    # Verifies: REQ-d00204-K+F, REQ-d00200-J
+    def test_REQ_d00204_K_three_checks_runs_report_the_same_references(self, project):
+        first_code, first = _checks_json(project)
+        pid = _daemon_pid(project)
+        assert pid is not None, "checks should be served by the fixture's daemon"
+        assert first_code == 0, first
+
+        for _ in range(2):
+            code, report = _checks_json(project)
+            assert code == first_code
+            assert _reference_findings(report) == _reference_findings(first)
+            assert report["summary"] == first["summary"]
+        assert _daemon_pid(project) == pid, "the same warm daemon served every run"
+
+
+# ---------------------------------------------------------------------------
 # Test: Dynamic namespace surfacing in HTML (Verifies: REQ-d00211)
 # ---------------------------------------------------------------------------
 
@@ -346,7 +391,7 @@ class TestMCPWithAssociates:
 class TestAssociateFDAStyle:
     """Core with standard IDs, associate with FDA-style (namespaced) IDs."""
 
-    def _build(self, tmp_path):
+    def _build(self, tmp_path, core_refines: str | None = None):
         core_root = tmp_path / "core"
         assoc_root = tmp_path / "fda-assoc"
 
@@ -361,6 +406,7 @@ class TestAssociateFDAStyle:
             "REQ-p00001",
             "Core Standard",
             "PRD",
+            refines=core_refines,
             assertions=[("A", "The system SHALL use standard IDs.")],
         )
         build_project(
@@ -391,6 +437,47 @@ class TestAssociateFDAStyle:
         core = self._build(tmp_path)
         result = run_elspais("checks", "--lenient", cwd=core)
         assert result.returncode == 0, f"health failed: {result.stderr}\n{result.stdout}"
+
+    # Verifies: REQ-d00272-A+S, REQ-d00204-F
+    def test_REQ_d00204_F_resolved_cross_repo_refines_reports_nothing(self, tmp_path):
+        """Control: a Refines into the associate that resolves is no finding."""
+        core = self._build(tmp_path, core_refines="FDA-p00001")
+        code, report = _checks_json(core)
+        named = [
+            msg
+            for msgs in _reference_findings(report).values()
+            for msg in msgs
+            if "FDA-p00001" in msg
+        ]
+        assert named == []
+        unknown = next(c for c in report["checks"] if c["name"] == "references.unknown_requirement")
+        assert unknown["passed"] is True
+
+    # Verifies: REQ-d00272-A+S, REQ-d00252-E, REQ-d00204-K
+    def test_REQ_d00272_S_refines_the_associate_lacks_is_unknown_requirement(self, tmp_path):
+        """The FDA associate's grammar claims FDA-p00099 but holds no such
+        requirement, so checks fail listing it under unknown_requirement --
+        the same finding on every run."""
+        core = self._build(tmp_path, core_refines="FDA-p00099")
+
+        runs = [_checks_json(core) for _ in range(3)]
+
+        for code, report in runs:
+            assert code != 0, report
+            unknown = next(
+                c for c in report["checks"] if c["name"] == "references.unknown_requirement"
+            )
+            assert unknown["passed"] is False
+            assert any("FDA-p00099" in f["message"] for f in unknown["findings"]), unknown
+            namespace = next(
+                c for c in report["checks"] if c["name"] == "references.unknown_namespace"
+            )
+            assert not any("FDA-p00099" in f["message"] for f in namespace["findings"])
+        assert (
+            _reference_findings(runs[0][1])
+            == _reference_findings(runs[1][1])
+            == _reference_findings(runs[2][1])
+        )
 
 
 # ---------------------------------------------------------------------------

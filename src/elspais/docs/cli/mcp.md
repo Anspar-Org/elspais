@@ -235,8 +235,8 @@ context relevant to the task at hand.
       - project_type     'core' or 'associated'
       - local_config     Whether .elspais.local.toml exists
 
-  The MCP server automatically detects git worktrees and resolves
-  associate paths from the canonical repository root.
+  A relative associate path resolves against the root of the working
+  tree the server was started in, a worktree's own root included.
 
 **get_project_summary()**
 

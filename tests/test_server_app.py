@@ -1560,7 +1560,7 @@ def self_spec_graph():
 
     The self-spec is a clean source of a genuine REFINES relationship:
     REQ-p00005 declares ``Refines: REQ-p00001``. Built without code/test
-    scanning or associates (spec-level REFINES edges are unaffected) for speed.
+    scanning (spec-level REFINES edges are unaffected) for speed.
     """
     from elspais.graph.factory import build_graph
 
@@ -1569,7 +1569,6 @@ def self_spec_graph():
         repo_root=repo_root,
         scan_code=False,
         scan_tests=False,
-        _build_associates=False,
     )
 
 

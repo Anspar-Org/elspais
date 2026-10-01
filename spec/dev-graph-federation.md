@@ -24,14 +24,23 @@ G. FederatedGraph SHALL provide a way to get the repositry and config based on a
 
 H. FederatedGraph SHALL provide a way to iterate over every member it holds.
 
+I. A surface outside the graph layer SHALL reach a member's content only through the federation that holds the member.
+
+J. A member graph SHALL belong to exactly one federation, so that the cross-repository resolution a federation applies to its members happens once for each member.
+
+K. When a federation is asked to hold a member graph that another federation already holds, the federation SHALL refuse it and name the reads through the holding federation as the way to reach that member.
+
 ### Rationale
 
 FederatedGraph provides config isolation for multi-repo builds while presenting a unified API to consumers. The federation-of-one pattern ensures all code paths go through FederatedGraph, preventing accidental direct TraceGraph usage.
+
+A federation does not only read its members: resolving a reference across repositories wires edges into the member that declared it, settles the faults that member recorded, and computes findings no member could reach alone. That work is the federation's, done once, so a member held by a second federation would have it done again over state the first already settled, and every surface reading either would see the other's results. J and K keep the work in one place, and I is what makes K reachable only by mistake: a surface holding the federation never needs a member's graph to answer a question about that member.
 
 Every member is identified by the namespace it declares (REQ-d00202-G), so B fixes no particular name: a federation of one identifies its single member exactly as a federation of many does, and the two cases cannot drift apart. A declaration whose repository cannot be read names no namespace and so joins nothing -- the build refuses it rather than carrying it as a member that answers nothing. F is retired for the same reason: with no way to enter a federation unread, there is no member for an aggregate to skip, and a rule guarding an unreachable state reads as though the state were supported.
 
 ### Changelog
 
+- 2026-10-01 | 67a9ca83 | - | Michael Lewis (<michael@anspar.org>) | I, J and K added: callers reach a member only through the federation holding it, and a member graph belongs to one federation
 - 2026-09-12 | a634ab59 | - | Michael Lewis (<michael@anspar.org>) | F retired: every member is read, so none can lack a graph
 - 2026-08-25 | ed077a7c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-25 | b351e9ad | - | Michael Lewis (<michael@anspar.org>) | Made assertions less fragile
@@ -39,7 +48,7 @@ Every member is identified by the namespace it declares (REQ-d00202-G), so B fix
 - 2026-05-11 | 72471144 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 72471144 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *FederatedGraph Read-Only Delegation* | **Hash**: a634ab59
+*End* *FederatedGraph Read-Only Delegation* | **Hash**: 67a9ca83
 ---
 
 ## REQ-d00201: FederatedGraph Mutation Delegation
@@ -114,9 +123,15 @@ M. When a declaration's repository cannot be read -- no directory at the declare
 
 N. Where a surface continues with the members it could read, a declaration that could not be read SHALL be reported as a failed check.
 
+O. A relative associate path SHALL be resolved against the root of the working tree of the repository that declares it.
+
+P. When verbose output is requested, the tool SHALL report for each declaration the path it declares, the root that path was resolved against, and the directory it resolved to.
+
 ### Rationale
 
 Associates are declared in `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path, a namespace, and an optional git remote URL. The remote is optional because it identifies nothing: the path and the namespace do that, so a declaration without one is complete. It is carried so that the refusal a repository that cannot be read produces can say where to obtain it, the declaration being the one place that knows. Transitive resolution (assertion D) is what lets the tool work from any repository in a dependency chain rather than from the root alone, and it is what allows an org-policy repository reachable only through a chain to be federated at all. Directed cycles are a genuine error because dependency direction drives resolution order; diamonds are convergence, not cycles, and the identity rule (assertion G) is what makes the two distinguishable: one namespace reached twice at one directory is convergence, and reached at two directories is the collision K reports. Disjoint ID spaces (assertion H) are a precondition of federation rather than a preference: a reference resolves to a repository by asking which one claims the identifier, so two claimants make the answer arbitrary.
+
+O fixes one frame of reference for a relative path: the working tree that holds the declaration. A path therefore means the same thing from every checkout that keeps the same relative layout, and a worktree that sits elsewhere needs a path valid from where it sits, which the machine-local configuration is for. P makes the frame visible, because a relative path resolved against an unexpected root is otherwise only inferred from a missing associate.
 
 A repository declares everything it directly needs in order to resolve on its own, without regard to what its associates happen to declare. Redundancy between those declarations is therefore expected rather than exceptional, and assertion F is what makes it harmless: a repository reached both directly and through a chain resolves to one entry, so declaring it twice is idempotent. Pruning a declaration because some other repository already reaches it would couple the two configurations and break the pruned repository's own invocations.
 
@@ -126,6 +141,7 @@ A member's declared name is a label the declaring repository chose for its own c
 
 ### Changelog
 
+- 2026-10-01 | 46b7046a | - | Michael Lewis (<michael@anspar.org>) | O and P added: a relative path resolves against the declaring working tree, and verbose output names that root
 - 2026-09-12 | faadf2aa | - | Michael Lewis (<michael@anspar.org>) | J retired: a member is its namespace, not its declared name
 - 2026-09-11 | e7e61b6a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 0522f86c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -140,7 +156,7 @@ A member's declared name is a label the declaring repository chose for its own c
 - 2026-05-11 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Associates Config Loading* | **Hash**: faadf2aa
+*End* *Associates Config Loading* | **Hash**: 46b7046a
 ---
 
 ## REQ-d00203: Multi-Repo Build Pipeline
@@ -197,7 +213,7 @@ D. `HealthFinding` SHALL support an optional `repo` field (str | None) for per-r
 
 E. <RETIRED> had this requirement report a declared repository that could not be read. The fault that is reported, and the path and declaration chain that name it, is REQ-d00202-M; that a surface continuing with the members it could read reports the unreadable one as a failed check is REQ-d00202-N.
 
-F. `run_spec_checks` SHALL accept a `FederatedGraph` and iterate `iter_repos()` for config-sensitive checks, using `FederatedGraph.from_single()` to create per-repo sub-federations.
+F. A config-sensitive check SHALL judge the nodes a member holds by that member's configuration, resolving each reference those nodes make against the whole federation.
 
 G. A non-config-sensitive check SHALL detect requirement cycles (a requirement reachable as its own descendant through *Traceability* edges) and report each detected cycle as a failing finding naming the requirements that form the cycle, so that a cyclic graph surfaces as a clear diagnostic rather than crashing downstream traversals.
 
@@ -207,14 +223,19 @@ I. The health-check exit status SHALL be computed exclusively from findings attr
 
 J. Findings attributed to repositories outside the invocation's write scope SHALL be available for display at the caller's option, marked with their owning repository.
 
+K. When the health checks run again over a graph that has not changed, they SHALL report the same findings as the run before.
+
 ### Rationale
 
 Without per-repo delegation, all nodes are validated against the root repo's config. When repos have different hierarchy rules, format rules, or changelog policies, this produces false positives (root config rejects valid associate nodes) or false negatives (root config allows invalid associate nodes). Per-repo delegation ensures each repo is validated by its own rules.
+
+F keeps configuration per member without narrowing what a reference can reach: a member's reference into an associate is judged by the member's rules and resolved where the target lives, so a per-member pass never reports a cross-repository target as missing. K is what lets a caller act on a count. A finding set that moved with the number of times a serving process had been asked would gate a change on the history of a session rather than on the state of the tree.
 
 Assertions H–J realize REQ-p00082's verdict-scoping invariants for the checks surface: a unresolved reference from the caller's repository *into* an org repository is the caller's bug and must gate the caller's change, while a malformed requirement *inside* a repository the caller cannot write to must never turn the command into noise by failing runs the caller cannot fix.
 
 ### Changelog
 
+- 2026-10-01 | 890fa7f1 | - | Michael Lewis (<michael@anspar.org>) | F restated by property: a member's nodes judged by its configuration, references resolved across the federation; K added: repeated runs report the same findings
 - 2026-09-12 | f3afb6e4 | - | Michael Lewis (<michael@anspar.org>) | E retired: an unreadable declaration is reported under REQ-d00202-M and N
 - 2026-09-12 | 62e03a0c | - | Michael Lewis (<michael@anspar.org>) | E now reports an unreadable repository, citing the declaration reaching it
 - 2026-08-16 | 15c6ff55 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -226,7 +247,7 @@ Assertions H–J realize REQ-p00082's verdict-scoping invariants for the checks 
 - 2026-05-11 | 2313140d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 2313140d | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Per-Repo Health Check Delegation* | **Hash**: f3afb6e4
+*End* *Per-Repo Health Check Delegation* | **Hash**: 890fa7f1
 ---
 
 ## REQ-d00252: External Library Integration via Integrates Keyword
@@ -245,11 +266,11 @@ C. When the resolved target of an `Integrates:` reference belongs to the same re
 
 D. When the associate owning an `Integrates:` target participates in the federated build, the build SHALL wire an INTEGRATES edge from the declaring requirement to the target library node such that the declaring requirement counts as implemented and inherits the library node's implemented and passing coverage, while the library's own source files SHALL remain unmodified.
 
-E. When an `Integrates:` target cannot be resolved, the build SHALL report a unresolved reference if a configured associate claims the target's ID format but lacks the ID, and SHALL record a presumed-foreign reference that does not fail the build if no configured associate claims the ID format.
+E. When an `Integrates:` target cannot be resolved, the build SHALL report it under the class every *Traceability* reference reaches: an unknown requirement or *Assertion* where a configured member's identifier grammar claims the target, and an unknown namespace where no member's grammar claims it.
 
 F. Coverage inherited through `Integrates:` edges SHALL count toward the declaring requirement's implemented status in coverage reports (so an integrating requirement is not reported as an uncovered gap), and coverage reports SHALL summarize integrated requirements' implemented and passing coverage grouped by the owning associate, with a federation total.
 
-G. The generic presumed-foreign determination applied after cross-repo wiring to any unresolved *Traceability* reference that does not already carry a diagnostic (independent of the `Integrates:`-specific determination in assertion E) SHALL NOT mark a reference foreign when the federation has no configured associates, since there is no other repository the reference could belong to. It also SHALL NOT mark a reference foreign when the target's leading token matches the declaring repo's own configured namespace and no configured associate declares that same namespace; such a reference is a malformed same-repo reference, not a cross-repo one, and SHALL remain a hard unresolved reference whose cause is named.
+G. <RETIRED> described a second determination applied to unresolved references after cross-repository wiring. Every unresolved reference is classed by the stage of reading it reached (REQ-d00272-A) and attributed by the namespace it opens with (REQ-d00272-C), whichever keyword cited it (REQ-d00272-S).
 
 K. A cause is named by recording the code that identifies it together with the file and the line the reference was written on, where that code's meaning is documented for a reader. Prose accompanying a code SHALL NOT name a cause the code does not.
 
@@ -257,10 +278,13 @@ K. A cause is named by recording the code that identifies it together with the f
 
 K settles what naming a cause requires, because the obligation was being met by a sentence and a sentence cannot be relied on to stay true. A fixed string that reads "check the assertion separator" is correct for the defect it was written for and wrong for every other defect that reaches the same code path — and it went wrong exactly when the tool became able to say something more precise, which is the worst moment for a report to start misdescribing what it found. What is durable is the code: it is decided where the defect is decided, it carries no claim beyond its own definition, and a reader who does not know it can look it up. Recording where the reference was written is what makes it actionable, and documenting the code is what makes it legible; a code without either is an opaque string, and prose that contradicts one is worse than no prose at all.
 
+E classes an unresolved `Integrates:` target by the rule every reference meets, so the keyword that cited a target never decides how serious its absence is. How serious each class is remains the project's choice of severity, which is what lets a repository report the references into an associate it is still bringing up to standard without failing on them.
+
 The bottom-up reference model (`Implements:` authored on the implementer) would force a reusable library to name each consumer's requirement IDs, coupling the library to its consumers and breaking isolated builds. `Integrates:` is the top-down inverse: authored and stored on the consumer, it points into the library and is wired as a distinct INTEGRATES edge during federation. A dedicated edge kind keeps the library's `Implements:` derivation clean (no consumer IDs leak into library files on render), while contributing to coverage like IMPLEMENTS. Passing status (REQ-d00258-N) propagates by a live-query overlay that reads the library node's own metrics, consistent with the existing cross-repo inheritance mechanism.
 
 ### Changelog
 
+- 2026-10-01 | 3b102d6f | - | Michael Lewis (<michael@anspar.org>) | E classes an unresolved Integrates target by the rule every reference meets; G retired
 - 2026-08-24 | 1de716cb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | 42cdc868 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-16 | be93221f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -271,7 +295,7 @@ The bottom-up reference model (`Implements:` authored on the implementer) would 
 - 2026-05-31 | d1f691f0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-31 | b576d134 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash, add missing changelog section
 
-*End* *External Library Integration via Integrates Keyword* | **Hash**: 1de716cb
+*End* *External Library Integration via Integrates Keyword* | **Hash**: 3b102d6f
 ---
 
 ## REQ-d00253: Federation Write/Generation Scope

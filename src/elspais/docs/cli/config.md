@@ -16,18 +16,23 @@ as commented-out lines that you can uncomment and customize.
 
 ## Git Worktree Support
 
-elspais automatically detects git worktrees and resolves cross-repo
-paths from the **canonical** (main) repository root. This means
-`[associates.<name>].path` like `"../sibling-repo"` resolves correctly
-even when working from a worktree in a different directory.
+A relative `[associates.<name>].path` resolves against the root of the
+working tree that declares it -- a worktree's own root when the tool runs
+in a worktree, the clone's root when it runs in the clone. A path like
+`"../sibling-repo"` therefore means the same thing from every checkout
+that keeps the same relative layout.
 
-Use `-v` to see which roots were detected:
+A worktree that sits at a different depth from its clone needs a path
+valid from where it sits. Declare that one in the machine-local
+`.elspais.local.toml` (or with `elspais associate`), as an absolute path
+where the layout differs between machines.
+
+Use `-v` to see, for each declaration, the root a path resolved against
+and the directory it reached:
 
   $ elspais -v checks
   Working from repository root: /home/dev/worktrees/feature-x
-  Canonical root (main repo): /home/dev/my-project
-
-No configuration is needed -- worktree detection is automatic.
+  Associate sibling: '../sibling-repo' resolved against /home/dev/worktrees/feature-x -> /home/dev/worktrees/sibling-repo
 
 ## Local Overrides (.elspais.local.toml)
 
@@ -370,7 +375,7 @@ Each entry has a name, path, and namespace.
 
 ```toml
 [associates.callisto]
-path = "../callisto"     # Relative to canonical repo root
+path = "../callisto"     # Relative to this working tree's root
 namespace = "CAL"        # Namespace this repo declares for itself
 # git = "git@github.com:acme/callisto.git"
                          # Optional: where to obtain the repo when it is
@@ -383,8 +388,8 @@ path = "../phoenix"
 namespace = "PHX"
 ```
 
-Relative paths resolve from the **canonical** repository root,
-so they work correctly from git worktrees. Each path must contain
+Relative paths resolve from the root of the working tree that declares
+them (see Git Worktree Support above). Each path must contain
 a `.elspais.toml` with its own configuration.
 
 Both keys are required, and the namespace must be the one the repository

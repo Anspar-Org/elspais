@@ -72,7 +72,7 @@ class TestCheckStructuralOrphans:
         graph = build_graph(
             make_requirement("REQ-p00001", title="Parent", level="PRD"),
         )
-        check = check_structural_orphans(graph)
+        check = check_structural_orphans(_wrap(graph))
         assert check.passed
         assert check.name == "spec.structural_orphans"
 
@@ -88,7 +88,7 @@ class TestCheckStructuralOrphans:
         orphan.set_field("status", "Active")
         graph._index["REQ-o99999"] = orphan
 
-        check = check_structural_orphans(graph)
+        check = check_structural_orphans(_wrap(graph))
         assert not check.passed
         assert check.severity == "error"
         assert check.name == "spec.structural_orphans"
@@ -105,7 +105,7 @@ class TestCheckStructuralOrphans:
         orphan = GraphNode(id="REQ-o99999", kind=NodeKind.REQUIREMENT, label="Orphan")
         graph._index["REQ-o99999"] = orphan
 
-        check = check_structural_orphans(graph, allow_structural_orphans=True)
+        check = check_structural_orphans(_wrap(graph), allow_structural_orphans=True)
         assert check.passed
         assert "skipped" in check.message.lower() or "allow" in check.message.lower()
 
@@ -400,13 +400,14 @@ class TestRunCodeChecksNoTraceabilityWiring:
         # pass vacuously regardless of the wiring fix.
         assert list(graph.iter_unlinked(NodeKind.TEST))
 
-        checks = run_code_checks(_wrap(graph))
+        fed = _wrap(graph)
+        checks = run_code_checks(fed)
         check = next(c for c in checks if c.name == "code.no_traceability")
         assert check.passed
         assert not any("test_unmarked.py" in f.message for f in check.findings)
 
         # The file MUST be owned by tests.uncited_file instead (REQ-d00241-D).
-        tests_check = check_uncited_tests(_wrap(graph))
+        tests_check = check_uncited_tests(fed)
         assert not tests_check.passed
         assert any(f.file_path == "tests/test_unmarked.py" for f in tests_check.findings)
 
