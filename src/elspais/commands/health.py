@@ -25,7 +25,7 @@ from elspais.config.schema import ElspaisConfig
 from elspais.config.status_roles import StatusRole
 from elspais.graph.aggregation import EvidenceResult
 from elspais.graph.parsers.directives import counted_assertion_labels
-from elspais.graph.reference_faults import FaultClass, FaultCode
+from elspais.graph.reference_faults import FaultClass, FaultCode, ReferenceFault
 from elspais.utilities.findings import (
     NO_KNOWN_REMEDY,
     REGISTRY,
@@ -880,21 +880,21 @@ def _fault_location(
 
 # Implements: REQ-d00269-F, REQ-p00019-J, REQ-p00019-K
 _REFERENCE_CHECKS: tuple[tuple[FaultClass, str, str], ...] = (
-    (FaultClass.MALFORMED, "references.malformed", "does not read as a reference"),
+    (FaultClass.MALFORMED, "references.malformed", "do not read as a reference"),
     (
         FaultClass.UNKNOWN_NAMESPACE,
         "references.unknown_namespace",
-        "no configured repository claims this identifier",
+        "name an identifier no configured repository claims",
     ),
     (
         FaultClass.UNKNOWN_REQUIREMENT,
         "references.unknown_requirement",
-        "claimed, but no such requirement exists",
+        "name a requirement its repository does not hold",
     ),
     (
         FaultClass.UNKNOWN_ASSERTION,
         "references.unknown_assertion",
-        "the requirement exists, but not that label",
+        "name an assertion label their requirement lacks",
     ),
     # The class covers every reference that read and resolved and whose
     # relationship is nonetheless refused -- a keyword the file kind may not
@@ -907,6 +907,27 @@ _REFERENCE_CHECKS: tuple[tuple[FaultClass, str, str], ...] = (
         "resolve, but the relationship they declare is refused",
     ),
 )
+
+
+# Implements: REQ-d00272-P, REQ-d00285-C
+def preset_reference_checks(preset: str) -> tuple[tuple[FaultClass, str, str], ...]:
+    """The reference fault classes one preset listing names.
+
+    The preset decides which classes belong to a listing (`PRESETS` in
+    `utilities.findings`), so a surface that counts or lists a preset's
+    references reads the same population the CLI listing does.
+
+    Raises:
+        KeyError: If no preset carries that name.
+    """
+    names = set(preset_checks(preset))
+    return tuple(entry for entry in _REFERENCE_CHECKS if entry[1] in names)
+
+
+def preset_reference_faults(graph: FederatedGraph, preset: str) -> list[ReferenceFault]:
+    """The reference faults of the classes one preset listing names."""
+    classes = {fault_class for fault_class, _name, _desc in preset_reference_checks(preset)}
+    return [f for f in graph.unresolved_references() if f.fault_class in classes]
 
 
 # Implements: REQ-d00275-A
@@ -5428,6 +5449,27 @@ def run(args: argparse.Namespace) -> int:
     run_tests = getattr(args, "run_tests", False)
     fail_fast = getattr(args, "fail_fast", False)
 
+    # Implements: REQ-d00254-W, REQ-d00085-Q
+    # Without --run-tests no target runs, so a selection of targets and a
+    # request to stop at the first failing one would be read by nothing.
+    if not run_tests:
+        from elspais.commands._scope import flag_values
+
+        inert = []
+        if flag_values(args, "targets"):
+            inert.append("--targets")
+        if fail_fast:
+            inert.append("--fail-fast")
+        if inert:
+            named = " and ".join(inert)
+            verb = "choose" if len(inert) > 1 else "chooses"
+            print(
+                f"error: {named} {verb} what --run-tests executes, and this run does "
+                f"not ask for --run-tests. Add --run-tests, or drop {named}.",
+                file=sys.stderr,
+            )
+            return 2
+
     runner_failed = False
     skip_due_to_fail_fast = False
 
@@ -5582,7 +5624,7 @@ def render_checks(data: dict[str, Any], fmt: str, request: ChecksRequest) -> str
 
 # Implements: REQ-d00285-C+F+H+I
 def run_preset(args: argparse.Namespace, preset: str) -> int:
-    """Run one of the preset listings -- `unresolved`, `errors`, `uncited`.
+    """Run one of the preset listings -- `unresolved`, `malformed`, `errors`, `uncited`.
 
     A preset listing is this report narrowed to the checks that answer one
     question. It is deliberately NOT a second renderer over the same facts:
@@ -5755,8 +5797,8 @@ class FindingFilter:
     root a run works from.
 
     `names` is what a preset listing is made of: `elspais unresolved` is this
-    report narrowed to the five reference checks, and nothing else
-    (`PRESETS` in `utilities.findings`).
+    report narrowed to the three checks for a reference that read and named
+    nothing, and nothing else (`PRESETS` in `utilities.findings`).
     """
 
     severities: tuple[str, ...] = ()
@@ -5765,7 +5807,7 @@ class FindingFilter:
     codes: tuple[str, ...] = ()
     paths: tuple[str, ...] = ()
     # The preset this narrowing IS, where it came from one. A reader who typed
-    # `elspais unresolved` did not type five check names, and echoing five back
+    # `elspais unresolved` did not type three check names, and echoing them back
     # at them describes the mechanism rather than what they asked for. The
     # flags are still published beside it, so the listing stays reproducible.
     label: str = ""
@@ -6007,7 +6049,9 @@ def _format_report(
     """
     fmt = getattr(args, "format", "text") or "text"
     lenient = getattr(args, "lenient", False)
-    quiet = getattr(args, "quiet", False)
+    from elspais.commands.report import renders_quietly
+
+    quiet = renders_quietly(args)
     verbose = getattr(args, "verbose", False)
     include_passing = getattr(args, "include_passing_details", False)
 
@@ -6059,7 +6103,7 @@ def _format_report(
             d["summary"] = verdict["summary"]
             d["filter"] = outcome.to_dict()
         return json.dumps(d, indent=2)
-    elif fmt == "markdown":
+    elif fmt == "markdown" and not quiet:
         data = _build_report_data(
             report,
             verbose=show_findings,

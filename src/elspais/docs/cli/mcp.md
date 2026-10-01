@@ -94,7 +94,8 @@ Get current graph health and statistics.
     node_counts       Count by node kind (requirement, assertion, code, test)
     total_nodes       Total nodes in graph
     has_orphans       Whether orphaned nodes exist
-    has_unresolved_references  Whether unresolved references exist
+    has_unresolved_references  Whether a reference read as an identifier and names nothing held
+    has_malformed_references   Whether a reference does not read as an identifier
 
   Example response:
     {
@@ -102,7 +103,8 @@ Get current graph health and statistics.
       "node_counts": {"requirement": 45, "assertion": 120, "code": 30},
       "total_nodes": 195,
       "has_orphans": false,
-      "has_unresolved_references": false
+      "has_unresolved_references": false,
+      "has_malformed_references": false
     }
 
 **refresh_graph(path, force, if_tip_mutation_id)**
@@ -271,7 +273,8 @@ Get summary statistics for the project.
       - branch_changed    Changed vs main branch
     total_nodes            Total nodes in graph
     orphan_count           Requirements without parents
-    unresolved_reference_count References to non-existent requirements
+    unresolved_reference_count References that read and name nothing held
+    malformed_reference_count  References that do not read as an identifier
     file_bound_results     Present only where some ingested result names
                              only the file holding its tests, not its test.
                              Such a result credits no assertion. `count` is

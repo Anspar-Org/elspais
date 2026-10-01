@@ -274,6 +274,13 @@ _LABELS = {
 }
 
 
+# Implements: REQ-d00085-F
+def render_gap_line(gap_types: list[str], data: GapData) -> str:
+    """The one line a quiet gap listing prints: how many each section holds."""
+    counts = ", ".join(f"{_LABELS[gt]}: {len(getattr(data, gt))}" for gt in gap_types)
+    return f"Gaps: {counts}"
+
+
 def render_gap_text(gap_type: str, data: GapData) -> str:
     """Render a single gap section as plain text."""
     label = _LABELS[gap_type]
@@ -472,6 +479,11 @@ def render_section(
     scope_lines = scope_disclosure(scope_result) + active_overlay_disclosure(inputs.treat_active)
 
     fmt = getattr(args, "format", "text")
+
+    from elspais.commands.report import renders_quietly
+
+    if renders_quietly(args):
+        return render_gap_line(gap_types, data), 0
 
     show_integrated = "uncovered" in gap_types
 
@@ -693,7 +705,12 @@ def run(args: argparse.Namespace) -> int:
     # payload was computed locally or by a serving process.
     gap_types: list[str] | None = gap_sections(inputs.values, command)
 
-    output = render_gaps(data, fmt, gap_types)
+    from elspais.commands.report import renders_quietly
+
+    if renders_quietly(args):
+        output = render_gap_line(gap_types or _ALL_GAP_TYPES, _gap_data_from_dict(data))
+    else:
+        output = render_gaps(data, fmt, gap_types)
 
     output_file = getattr(args, "output", None)
     if output_file:

@@ -1271,7 +1271,7 @@ reference_keyword = "Verifies"
         assert "associates" in result
         assert result["detail"] == "coverage"
 
-    # Verifies: REQ-o00061-A
+    # Verifies: REQ-o00061-A, REQ-d00272-P
     def test_REQ_o00061_A_manager_profile_includes_sections(self, sample_graph, tmp_path):
         """REQ-o00061-A: Manager profile has coverage_stats, health, change_metrics."""
         pytest.importorskip("mcp")
@@ -1292,6 +1292,9 @@ reference_keyword = "Verifies"
         assert "has_unresolved_references" in health
         assert "orphan_count" in health
         assert "unresolved_reference_count" in health
+        # Malformed references are a population of their own (REQ-d00272-P).
+        assert "has_malformed_references" in health
+        assert "malformed_reference_count" in health
 
     # Verifies: REQ-o00061-A
     def test_REQ_o00061_A_retrofit_profile_includes_all_config(self, tmp_path):
@@ -1467,6 +1470,12 @@ reference_keyword = "Verifies"
         assert "testing" in result
         assert "coverage_stats" in result
         assert "health" in result
+        assert {
+            "has_unresolved_references",
+            "unresolved_reference_count",
+            "has_malformed_references",
+            "malformed_reference_count",
+        } <= set(result["health"])
         assert "change_metrics" in result
         assert "associates" in result
         assert result["detail"] == "all"
@@ -1576,7 +1585,7 @@ class TestGetProjectSummary:
         assert result["coverage"]["no_coverage"] == expected_coverage["no_coverage"]
         assert result["changes"] == expected_git
 
-    # Verifies: REQ-o00060-A
+    # Verifies: REQ-o00060-A, REQ-d00272-P
     def test_returns_orphan_and_broken_counts(self, sample_graph):
         """Returns orphan and broken reference counts."""
         pytest.importorskip("mcp")
@@ -1586,6 +1595,7 @@ class TestGetProjectSummary:
 
         assert "orphan_count" in result
         assert "unresolved_reference_count" in result
+        assert "malformed_reference_count" in result
         assert "total_nodes" in result
 
     # Verifies: REQ-o00061-B

@@ -372,7 +372,8 @@ requirement in a configured associate (external library) repository.
 
 Authored only on the consumer side (spec files) -- the library is never
 modified and contains no reference back. The target must resolve to an
-associate repo; a same-repo target is an unresolved reference (external-only).
+associate repo; a same-repo target is a refused relationship (external-only),
+reported under `references.forbidden`.
 
 ```markdown
 ## REQ-d00010: Event Sourcing Adapter

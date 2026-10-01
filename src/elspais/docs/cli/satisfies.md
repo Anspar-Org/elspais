@@ -178,7 +178,9 @@ The matrix applies to a target owned by an associated repository exactly as
 to one in the declaring repository: a reference the matrix forbids is
 reported and never wired, whichever repository owns its target.
 
-All diagnostics surface in `elspais checks` and `elspais unresolved`.
+All diagnostics surface in `elspais checks`. A refused relationship is
+listed by `elspais checks --check references.forbidden`, and an unresolved
+target by `elspais unresolved`.
 
 ## See also
 

@@ -167,9 +167,9 @@ The CLI SHALL support composable report output by accepting multiple section nam
 
 ### Assertions
 
-A. The CLI SHALL accept multiple section names (`health`, `coverage`, `trace`, `changed`) as positional arguments, rendering each in order and concatenating the output.
+A. The CLI SHALL accept multiple report section names as positional arguments, rendering each in order and concatenating the output.
 
-B. Shared flags (`--format`, `-o`, `-q`/`--quiet`, `-v`/`--verbose`, `--lenient`, `--mode`) SHALL apply globally across all sections in a composed report.
+B. Shared flags (`--format`, `-o`, `-q`/`--quiet`, `-v`/`--verbose`, `--lenient`) SHALL apply globally across all sections in a composed report.
 
 C. The exit code of a composed report SHALL be the worst-of-all-sections: non-zero if any section reports errors, or warnings without `--lenient`.
 
@@ -187,7 +187,7 @@ I. Each check SHALL carry the findings it raised.
 
 J. The `--format sarif` option SHALL render health findings as SARIF v2.1.0 JSON, with one `reportingDescriptor` per unique check name, one `result` per `HealthFinding` with physical locations, passing checks omitted, and coverage stats in `run.properties`.
 
-K. The `-v`/`--verbose` flag SHALL expand all available detail.
+K. The `-v`/`--verbose` flag SHALL render each section with the detail that section withholds by default.
 
 L. Without `--lenient`, any warning-level finding SHALL cause a non-zero exit code.
 
@@ -195,18 +195,31 @@ M. Detail for a passing check SHALL be suppressed by default and included on req
 
 N. A format that always carries complete findings, or that omits passing checks entirely, SHALL render identically whether or not passing-check detail is requested.
 
+O. A shared flag SHALL have the same effect wherever it stands in an invocation.
+
+P. A test-target selection SHALL mark the same targets fresh whether the section reading it is asked for alone or composed with others.
+
+Q. An option SHALL be accepted only where the invocation it is given to reads it.
+
 ### Rationale
 
-Report-producing commands (`health`, `trace`, `coverage`, `changed`) currently exist as independent subcommands with inconsistent format support. Composing a combined report (e.g. health + coverage for a CI PR comment) requires multiple invocations and manual concatenation. A composable system builds the graph once, renders each section, and produces unified output. The `--lenient` flag provides an escape hatch for workflows that want to observe warnings without gating on them.
+Each report-producing command (`checks`, `summary`, `trace`, `changed` and the listings narrowed from them) is also a section. A combined report, such as checks and summary for a CI pull-request comment, is one invocation rather than several concatenated by hand: the graph is built once, each section is rendered, and the output is unified. The `--lenient` flag provides an escape hatch for workflows that want to observe warnings without gating on them.
 
 Quietness and verbosity are separate obligations (F, K), as are leniency and the default it departs from (G, L). Each pair was carried under one label until evidence for one half was found standing in for both: coverage is reported per assertion, so a label holding two obligations cannot distinguish an implementation from half of one.
 
 A check is where a report groups what it found, so I attaches each finding to the check that raised it; that grouping is what a report counts against a check, renders beneath it, and suppresses or expands under M. What an individual finding carries, and its agreement across the formats a report is rendered in, is REQ-d00285's subject rather than this requirement's.
 
+K binds verbosity to what a section holds back. A section whose default rendering already states everything it knows has nothing to expand, and verbosity leaves it as it is; a section with a lighter default, such as a trace rendered without bodies, assertions and tests, renders at its fullest. Where a section's own detail control and verbosity would decide the same thing differently, the pair is refused rather than one silently winning.
+
+O, P and Q are what make a flag mean one thing. A flag that works before the section name and fails after it is a flag whose meaning depends on an accident of spelling. A target selection that narrows a summary alone and is lost when the summary is composed costs the reader the provenance they asked for, which is the composed-report seam REQ-d00279-C names for scope. An option that is accepted and then read by nothing tells the reader they asked for something they did not get, which is worse than a refusal.
+
 A failing check's findings are what the reader came for; a passing check's are noise until asked for, which is why M suppresses them by default and makes the request explicit rather than the reverse. The request is about passing checks only and is orthogonal to overall verbosity — a format carries a passing check's detail because it was asked for, not because the report as a whole is verbose. N is separate from M because a format can be wrong about invariance while the request itself works: complete findings and omitted passing checks are properties of those formats, not outcomes of the request.
 
 ### Changelog
 
+- 2026-10-01 | c4ef729a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-10-01 | - | - | Michael Lewis (<michael@anspar.org>) | State the composable sections by property in A and drop the unread mode flag from B; bind verbosity to the detail a section withholds (K); add placement independence (O), target selection in a composed report (P), and accepted-means-read (Q)
+- 2026-10-01 | c4ef729a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | ee68f8ee | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: restate I as the attachment of a finding to the check that raised it; what a finding carries and its agreement across formats is REQ-d00285's
 - 2026-08-11 | 587285b0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -217,7 +230,7 @@ A failing check's findings are what the reader came for; a passing check's are n
 - 2026-05-11 | 82d76f1a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 82d76f1a | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Report Composition* | **Hash**: ee68f8ee
+*End* *Unified Report Composition* | **Hash**: c4ef729a
 ---
 
 ## REQ-d00271: Diagnostic Code Vocabulary
@@ -325,6 +338,8 @@ E. A set the program defines and the documentation presents SHALL be presented f
 
 F. The tool SHALL render a topic without display formatting on request.
 
+G. Every surface presenting the documentation SHALL serve exactly the declared set of topics.
+
 ### Rationale
 
 Documentation that is copied is documentation that diverges, and the copy a reader happens to open is the one that misleads them. A and B put the whole estate behind one source so there is no second copy to fall behind, and D carries that source into the installed program so a user who never cloned anything gets the same answer as a developer reading the file.
@@ -335,11 +350,14 @@ C is what makes a subject discoverable at all. A command or a setting a user can
 
 F exists because documentation is read by programs as well as people, and display formatting that cannot be turned off makes the text unusable to anything that is not a terminal.
 
+G closes the gap between listing a topic and serving it. A topic one surface lists and another refuses is advertised and unusable, and a name outside the set that still reaches a file serves text nobody declared as documentation.
+
 ### Changelog
 
+- 2026-10-01 | - | - | Michael Lewis (<michael@anspar.org>) | Add G: every surface serves exactly the declared set of topics
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: Initial authoring — one source for the tool's documentation, carried into the installed program, with any set the program defines presented from that definition
 
-*End* *Built-In User Documentation* | **Hash**: d246f21a
+*End* *Built-In User Documentation* | **Hash**: 7cd5b049
 
 ---
 

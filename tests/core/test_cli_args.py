@@ -41,6 +41,7 @@ from elspais.commands.args import (
     InstallLocalArgs,
     LinkArgs,
     LinkSuggestArgs,
+    MalformedArgs,
     McpArgs,
     McpInstallArgs,
     McpServeArgs,
@@ -114,6 +115,7 @@ class TestCliArgsDataclasses:
             FailingArgs,
             ErrorsArgs,
             UnresolvedArgs,
+            MalformedArgs,
             UncitedArgs,
             SearchArgs,
             GlossaryArgs,
@@ -122,7 +124,7 @@ class TestCliArgsDataclasses:
             FingerprintArgs,
         }
         assert base_types == expected
-        assert len(args) == 37
+        assert len(args) == 38
 
     # Verifies: REQ-p00001-A
     def test_REQ_p00001_A_health_args_defaults(self) -> None:

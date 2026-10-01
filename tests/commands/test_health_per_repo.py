@@ -380,7 +380,7 @@ def _check_unknown_requirement(graph, config=None):
         config,
         FaultClass.UNKNOWN_REQUIREMENT,
         "references.unknown_requirement",
-        "claimed, but no such requirement exists",
+        "name a requirement its repository does not hold",
     )
 
 

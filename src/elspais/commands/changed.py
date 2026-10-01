@@ -111,47 +111,51 @@ def run(args: argparse.Namespace) -> int:
         print(json.dumps(result, indent=2))
         return 0
 
+    # Implements: REQ-d00085-F
+    if quiet:
+        print(
+            f"Changed spec files: {len(spec_modified) + len(spec_untracked)} uncommitted, "
+            f"{len(spec_branch)} vs {base_branch}, {len(moved)} moved requirements"
+        )
+        return 0
+
     # Human-readable output
     has_changes = False
 
     if spec_modified or spec_untracked:
         has_changes = True
-        if not quiet:
-            uncommitted_count = len(spec_modified) + len(spec_untracked)
-            print(f"Uncommitted spec changes: {uncommitted_count}")
+        uncommitted_count = len(spec_modified) + len(spec_untracked)
+        print(f"Uncommitted spec changes: {uncommitted_count}")
 
-            if spec_modified:
-                print(f"  Modified ({len(spec_modified)}):")
-                for f in sorted(spec_modified):
-                    print(f"    M {f}")
+        if spec_modified:
+            print(f"  Modified ({len(spec_modified)}):")
+            for f in sorted(spec_modified):
+                print(f"    M {f}")
 
-            if spec_untracked:
-                print(f"  New ({len(spec_untracked)}):")
-                for f in sorted(spec_untracked):
-                    print(f"    + {f}")
-            print()
+        if spec_untracked:
+            print(f"  New ({len(spec_untracked)}):")
+            for f in sorted(spec_untracked):
+                print(f"    + {f}")
+        print()
 
     if spec_branch:
         has_changes = True
-        if not quiet:
-            print(f"Changed vs {base_branch}: {len(spec_branch)}")
-            for f in sorted(spec_branch):
-                print(f"    {f}")
-            print()
+        print(f"Changed vs {base_branch}: {len(spec_branch)}")
+        for f in sorted(spec_branch):
+            print(f"    {f}")
+        print()
 
     if moved:
         has_changes = True
-        if not quiet:
-            print(f"Moved requirements: {len(moved)}")
-            for m in moved:
-                print(f"  REQ-{m.req_id}:")
-                print(f"    from: {m.old_path}")
-                print(f"    to:   {m.new_path}")
-            print()
+        print(f"Moved requirements: {len(moved)}")
+        for m in moved:
+            print(f"  REQ-{m.req_id}:")
+            print(f"    from: {m.old_path}")
+            print(f"    to:   {m.new_path}")
+        print()
 
     if not has_changes:
-        if not quiet:
-            print("No uncommitted changes to spec files")
+        print("No uncommitted changes to spec files")
         return 0
 
     return 0

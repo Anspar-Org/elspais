@@ -924,7 +924,7 @@ class FederatedGraph:
 
     # Implements: REQ-d00200-E
     def unresolved_references(self) -> list[ReferenceFault]:
-        """Every reference that resolved to nothing, across all repos.
+        """Every reference fault of every class, across all repos.
 
         # Strategy: aggregate
         """
@@ -935,7 +935,7 @@ class FederatedGraph:
 
     # Implements: REQ-d00200-E
     def has_unresolved_references(self) -> bool:
-        """Whether any repo holds a reference that resolved to nothing.
+        """Whether any repo holds a reference fault of any class.
 
         # Strategy: aggregate
         """

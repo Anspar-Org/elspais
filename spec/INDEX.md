@@ -107,7 +107,7 @@
 | REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | 6d66ba55 |
 | REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | edbd5d9a |
 | REQ-d00084 | Trace Command                                                 | dev-cli.md              | 5728e809 |
-| REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | ee68f8ee |
+| REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | c4ef729a |
 | REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 515f0165 |
 | REQ-d00124 | Graph Analysis Engine                                         | dev-cli.md              | b153d5f6 |
 | REQ-d00125 | Analysis CLI Command                                          | dev-cli.md              | 474fa8af |
@@ -205,7 +205,7 @@
 | REQ-d00283 | Test Target Groups                                            | dev-graph-core.md       | f2913a98 |
 | REQ-d00284 | How a Result Names Its Test                                   | dev-graph-core.md       | 7baae0b0 |
 | REQ-d00285 | The Shape of a Finding                                        | dev-cli.md              | bedec247 |
-| REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | d246f21a |
+| REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | 7cd5b049 |
 | REQ-d00287 | Reading a Reference                                           | dev-graph-core.md       | 02eb02ff |
 | REQ-d00288 | Journeys That Validate Nothing                                | dev-graph-core.md       | 184a67af |
 | REQ-d00289 | Associate Registration Outcome                                | dev-cli.md              | 008983e5 |

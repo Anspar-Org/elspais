@@ -2,9 +2,9 @@
 """
 elspais.commands.report - Composable multi-section report system.
 
-Accepts multiple section names (health, summary, trace, changed) and renders
-them in order, concatenating output. Shared flags apply globally. Exit code
-is worst-of-all-sections.
+Accepts multiple section names (`COMPOSABLE_SECTIONS`) and renders them in
+order, concatenating output. Shared flags apply globally. The exit code sets
+one bit per failing section.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ COMPOSABLE_SECTIONS = (
     "failing",
     "gaps",
     "unresolved",
+    "malformed",
     "uncited",
 )
 
@@ -41,6 +42,7 @@ FORMAT_SUPPORT = {
     "failing": {"text", "markdown", "json"},
     "gaps": {"text", "markdown", "json"},
     "unresolved": {"text", "markdown", "json"},
+    "malformed": {"text", "markdown", "json"},
     "uncited": {"text", "markdown", "json"},
 }
 
@@ -56,23 +58,45 @@ EXIT_BIT: dict[str, int] = {
     "gaps": 16,
     "unresolved": 32,
     "uncited": 64,
+    "malformed": 128,
 }
 
 
-# Implements: REQ-d00279-C
-def parse_shared_args(argv: list[str]) -> argparse.Namespace:
-    """Parse shared flags for composed reports."""
+# Implements: REQ-d00085-F
+# name: QUIET_FORMATS
+# use:  the renderings `-q`/`--quiet` collapses to one summary line.
+# def:  the formats a person reads. A structured format is read by a program,
+#       which needs the whole document whatever the terminal wanted.
+QUIET_FORMATS = frozenset({"text", "markdown"})
+
+
+def renders_quietly(args: argparse.Namespace, default_format: str = "text") -> bool:
+    """Whether this invocation asked a section for its one summary line."""
+    fmt = getattr(args, "format", None) or default_format
+    return bool(getattr(args, "quiet", False)) and fmt in QUIET_FORMATS
+
+
+# Implements: REQ-d00279-C, REQ-d00085-B+P
+def shared_parser() -> argparse.ArgumentParser:
+    """The parser for the flags a composed report reads.
+
+    The one declaration of those flags: `cli.main` reads it too, to tell a
+    flag's value from a section name when the flags precede the sections.
+    """
     parser = argparse.ArgumentParser(prog="elspais", add_help=False)
+    # Every format some section renders. A format a named section does not
+    # render is refused by `run`, naming the section.
     parser.add_argument(
         "--format",
-        choices=["text", "markdown", "json", "csv"],
+        choices=sorted(set().union(*FORMAT_SUPPORT.values())),
         default="text",
     )
     parser.add_argument("-o", "--output", type=Path)
-    parser.add_argument("-q", "--quiet", action="store_true")
-    parser.add_argument("-v", "--verbose", action="store_true")
+    # The same spellings the single-section parser accepts for these globals,
+    # including the negated ones, so a flag reads alike on both paths.
+    parser.add_argument("-q", "--quiet", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("-v", "--verbose", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--lenient", action="store_true")
-    parser.add_argument("--mode", choices=["core", "combined"], default="core")
     parser.add_argument("--config", type=Path)
     parser.add_argument("--spec-dir", type=Path, dest="spec_dir")
     # A composed report is assembled differently from the same section asked for
@@ -103,7 +127,79 @@ def parse_shared_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--body", action="store_true")
     parser.add_argument("--assertions", dest="show_assertions", action="store_true")
     parser.add_argument("--tests", dest="show_tests", action="store_true")
-    return parser.parse_args(argv)
+    # Implements: REQ-d00085-P
+    # The selection `summary` and `trace` read alone, read here with the same
+    # accumulation, and resolved by `run` through the same function.
+    parser.add_argument("--targets", nargs="*", action="extend", default=None)
+    return parser
+
+
+def parse_shared_args(argv: list[str]) -> argparse.Namespace:
+    """Parse shared flags for composed reports."""
+    return shared_parser().parse_args(argv)
+
+
+# Implements: REQ-d00085-P+Q
+# name: TARGET_SECTIONS
+# use:  the sections that read a test-target selection.
+# def:  the sections whose standalone command accepts `--targets` to mark
+#       provenance. `checks` reads it only to run targets, which a composed
+#       report never does.
+TARGET_SECTIONS = ("summary", "trace")
+
+# The flags every invocation reads, whichever sections it names.
+_GLOBAL_DESTS = frozenset({"format", "output", "quiet", "verbose", "config", "spec_dir"})
+
+
+def _section_options() -> dict[str, frozenset[str]]:
+    """The options each composable section accepts when asked for alone.
+
+    Read off the section's own argument class, so what a composition accepts
+    for a section is what that section accepts alone.
+    """
+    import dataclasses
+    import typing
+
+    from elspais.commands.args import Command
+
+    accepted: dict[str, frozenset[str]] = {}
+    for arg in typing.get_args(Command):
+        base, *meta = typing.get_args(arg)
+        names = [m.name for m in meta if hasattr(m, "name")]
+        if names and names[0] in COMPOSABLE_SECTIONS:
+            accepted[names[0]] = frozenset(f.name for f in dataclasses.fields(base))
+    return accepted
+
+
+# Implements: REQ-d00085-Q
+def _unread_option(sections: list[str], args: argparse.Namespace) -> str | None:
+    """The refusal for an option no section in this composition reads, or None.
+
+    A section reads an option it accepts alone. A test-target selection is
+    read only by the sections in `TARGET_SECTIONS`: `checks` accepts one alone
+    to choose what it runs, and a composed report runs nothing.
+    """
+    accepted = _section_options()
+    for action in shared_parser()._actions:
+        dest = action.dest
+        # A values selection has its own refusal, `_unhonourable_selection`.
+        if dest in _GLOBAL_DESTS or dest == "values" or not action.option_strings:
+            continue
+        value = getattr(args, dest, None)
+        if value in (None, False, [], action.default):
+            continue
+        if dest == "targets":
+            readers = list(TARGET_SECTIONS)
+        else:
+            readers = sorted(s for s, fields in accepted.items() if dest in fields)
+        if any(section in readers for section in sections):
+            continue
+        flag = max(action.option_strings, key=len)
+        return (
+            f"{flag} is read by {', '.join(readers)}, and this report names none of "
+            f"them. Add one, or drop {flag}."
+        )
+    return None
 
 
 # Implements: REQ-d00282-F
@@ -214,6 +310,11 @@ def run(
     args = parse_shared_args(argv_remaining)
     fmt = args.format
 
+    unread = _unread_option(sections, args)
+    if unread is not None:
+        print(f"error: {unread}", file=sys.stderr)
+        return 2
+
     # Validate format support for each section
     for section in sections:
         supported = FORMAT_SUPPORT.get(section, set())
@@ -243,6 +344,19 @@ def run(
         print(f"Error: {refusal}", file=sys.stderr)
         return 1
 
+    # Implements: REQ-d00085-P+Q, REQ-d00283-H+K
+    # Resolved the way `summary` and `trace` resolve it alone, so a composed
+    # report marks the same targets fresh and refuses the same selections.
+    from elspais.commands._targets import resolve_fresh_targets
+
+    fresh_targets = None
+    if any(section in TARGET_SECTIONS for section in sections):
+        try:
+            fresh_targets = resolve_fresh_targets(args, config)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+
     # Build graph once for sections that need it
     graph = None
     graph_sections = {
@@ -255,6 +369,7 @@ def run(
         "failing",
         "gaps",
         "unresolved",
+        "malformed",
         "uncited",
     }
     if set(sections) & graph_sections:
@@ -265,6 +380,7 @@ def run(
         graph = build_graph(
             spec_dirs=[spec_dir] if spec_dir else None,
             config_path=getattr(args, "config", None),
+            fresh_targets=fresh_targets,
         )
 
     outputs: list[str] = []
@@ -322,7 +438,7 @@ def _render_section(
             return gap_render(graph, config, args, command=name)
         except UnofferedValues as exc:
             return f"Error: {name}: {exc}", 1
-    elif name in ("unresolved", "uncited"):
+    elif name in ("unresolved", "malformed", "uncited"):
         # The same narrowing the standalone command applies (REQ-d00285-C):
         # a section composed with others says what the command alone says.
         from elspais.commands.health import render_section

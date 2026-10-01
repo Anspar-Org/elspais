@@ -567,6 +567,12 @@ class TestComposableSections:
             assert name in FORMAT_SUPPORT
             assert isinstance(FORMAT_SUPPORT[name], set)
 
+    # Verifies: REQ-d00085-A+E, REQ-d00272-P
+    @pytest.mark.parametrize("name", ["unresolved", "malformed", "uncited"])
+    def test_each_preset_listing_composes_in_the_formats_it_renders(self, name):
+        assert name in COMPOSABLE_SECTIONS
+        assert FORMAT_SUPPORT[name] == {"text", "markdown", "json"}
+
 
 # ===========================================================================
 # Integration with real spec dir

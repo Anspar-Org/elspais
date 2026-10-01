@@ -58,7 +58,7 @@ def _report() -> HealthReport:
             HealthCheck(
                 name="references.malformed",
                 passed=False,
-                message="1 reference(s): does not read as a reference",
+                message="1 reference(s): do not read as a reference",
                 category="references",
                 severity="warning",
                 findings=[LOCATED],
@@ -120,7 +120,7 @@ def test_the_default_report_stays_terse(fmt: str) -> None:
     """Without `-v` the report is one line per check, as it has always been."""
     out = _format_report(_report(), _args(format=fmt))
 
-    assert "1 reference(s): does not read as a reference" in out, "the check line stays"
+    assert "1 reference(s): do not read as a reference" in out, "the check line stays"
     assert "spec/dev-cli.md:247" not in out, "the findings do not"
 
 

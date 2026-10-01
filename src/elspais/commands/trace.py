@@ -1047,25 +1047,10 @@ def render_section(
 
     Returns (formatted_output, exit_code).
     """
-    dimension = getattr(args, "dimension", "")
-    if dimension == "uat":
-        preset = ReportPreset(
-            name="uat",
-            values=list(_UAT_VALUES),
-            dimension="uat",
-        )
-    else:
-        preset_name = getattr(args, "preset", None) or DEFAULT_PRESET
-        if preset_name not in REPORT_PRESETS:
-            available = ", ".join(REPORT_PRESETS.keys())
-            return f"Error: Unknown preset '{preset_name}'\nAvailable: {available}", 1
-        preset = ReportPreset(
-            name=preset_name,
-            values=list(REPORT_PRESETS[preset_name].values),
-            include_body=getattr(args, "body", False),
-            include_assertions=getattr(args, "show_assertions", False),
-            include_test_refs=getattr(args, "show_tests", False),
-        )
+    try:
+        preset = preset_from_args(args)
+    except ValueError as exc:
+        return f"Error: {exc}", 1
 
     fmt = getattr(args, "format", "markdown")
     if fmt not in TABLE_FORMATTERS:
@@ -1085,7 +1070,60 @@ def render_section(
     request = TraceRequest(
         scope=inputs.scope, values=inputs.values, treat_active=inputs.treat_active
     )
+    from elspais.commands.report import renders_quietly
+
+    if renders_quietly(args, "markdown"):
+        return render_trace_line(graph, config, request), 0
     return render_trace(graph, config, request, fmt, preset), 0
+
+
+# Implements: REQ-d00085-K, REQ-d00084-B+C
+def preset_from_args(args: argparse.Namespace) -> ReportPreset:
+    """The preset and detail flags this invocation asked the table for.
+
+    Verbose renders the table with everything the default withholds: the full
+    preset's values and every detail flag. A preset other than the full one
+    named beside it asks for less, so the pair is refused rather than one of
+    them silently winning.
+
+    Raises:
+        ValueError: If the preset is unknown, or a lighter preset is named
+            with verbose.
+    """
+    verbose = bool(getattr(args, "verbose", False))
+    if getattr(args, "dimension", "") == "uat":
+        # Implements: REQ-d00257-A+C, REQ-d00282-H
+        # `--dimension uat` is a named default value set and nothing else: it
+        # states the UAT dimensions and the journeys validating each row, and
+        # leaves the code dimensions out. Which requirements the report is
+        # about is the scope's to decide, so a requirement no journey validates
+        # is a row reading "no journeys" rather than a row a value switch
+        # removed.
+        return ReportPreset(
+            name="uat",
+            values=list(_UAT_VALUES),
+            dimension="uat",
+            include_body=verbose,
+            include_assertions=verbose,
+            include_test_refs=verbose,
+        )
+    named = getattr(args, "preset", None)
+    if verbose and named not in (None, "full"):
+        raise ValueError(
+            f"-v renders the trace at the full preset, and --preset {named} asks for "
+            f"less. Drop --preset {named} or -v."
+        )
+    preset_name = "full" if verbose else named or DEFAULT_PRESET
+    if preset_name not in REPORT_PRESETS:
+        available = ", ".join(REPORT_PRESETS.keys())
+        raise ValueError(f"Unknown preset '{preset_name}'. Available presets: {available}")
+    return ReportPreset(
+        name=preset_name,
+        values=list(REPORT_PRESETS[preset_name].values),
+        include_body=verbose or getattr(args, "body", False),
+        include_assertions=verbose or getattr(args, "show_assertions", False),
+        include_test_refs=verbose or getattr(args, "show_tests", False),
+    )
 
 
 # Implements: REQ-p00084-C+D
@@ -1138,6 +1176,17 @@ def render_trace(
     # rendered in -- a bare line ahead of a CSV or JSON section is neither.
     scope_lines = scope_disclosure(result)
     return "\n".join(formatter(graph, preset, scope_ids, values, config, scope_lines))
+
+
+# Implements: REQ-d00085-F
+def render_trace_line(graph: FederatedGraph, config: dict | None, request: TraceRequest) -> str:
+    """The one line a quiet trace prints: how many requirements the table holds."""
+    from elspais.graph.scope import scoped_requirements
+
+    result = scoped_requirements(graph, request.scope, config)
+    scope_ids = None if len(result.ids) == result.population else result.ids
+    count = sum(1 for _ in _scoped_requirements(graph, scope_ids))
+    return f"Trace: {count} requirements"
 
 
 # Implements: REQ-p00084-C+D
@@ -1222,35 +1271,11 @@ def run(args: argparse.Namespace) -> int:
         return 2
     skip_daemon = bool(spec_dir) or fresh_targets is not None
 
-    if dimension == "uat":
-        # Implements: REQ-d00257-A+C, REQ-d00282-H
-        # `--dimension uat` is a named default value set and nothing else: it
-        # states the UAT dimensions and the journeys validating each row, and
-        # leaves the code dimensions out. Which requirements the report is
-        # about is the scope's to decide, so a requirement no journey validates
-        # is a row reading "no journeys" rather than a row a value switch
-        # removed.
-        preset = ReportPreset(
-            name="uat",
-            values=list(_UAT_VALUES),
-            dimension="uat",
-        )
-    else:
-        # Implements: REQ-d00084-B+C
-        # Parse --preset and apply independent detail flags
-        preset_name = getattr(args, "preset", None) or DEFAULT_PRESET
-        if preset_name not in REPORT_PRESETS:
-            available = ", ".join(REPORT_PRESETS.keys())
-            print(f"Error: Unknown preset '{preset_name}'", file=sys.stderr)
-            print(f"Available presets: {available}", file=sys.stderr)
-            return 1
-        preset = ReportPreset(
-            name=preset_name,
-            values=list(REPORT_PRESETS[preset_name].values),
-            include_body=getattr(args, "body", False),
-            include_assertions=getattr(args, "show_assertions", False),
-            include_test_refs=getattr(args, "show_tests", False),
-        )
+    try:
+        preset = preset_from_args(args)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
 
     # Implements: REQ-d00282-A+E+F
     # Resolved before anything is built or asked of a serving process: a report
@@ -1302,7 +1327,12 @@ def run(args: argparse.Namespace) -> int:
     # The table is the one composition every surface renders through, so the
     # rows and the scope disclosure the command prints are the ones a composed
     # section and a viewer export state.
-    print(render_trace(graph, config, request, fmt, preset))
+    from elspais.commands.report import renders_quietly
+
+    if renders_quietly(args, "markdown"):
+        print(render_trace_line(graph, config, request))
+    else:
+        print(render_trace(graph, config, request, fmt, preset))
     return 0
 
 

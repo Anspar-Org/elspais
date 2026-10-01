@@ -40,7 +40,12 @@ from elspais.graph.parsers.patterns import (
     CommentPattern,
 )
 from elspais.graph.parsers.results.registry import REPORTER_REGISTRY
-from elspais.utilities.docs_loader import find_docs_dir
+from elspais.utilities.docs_loader import (
+    PSEUDO_TOPICS,
+    TOPIC_ORDER,
+    find_docs_dir,
+    topic_description,
+)
 from elspais.utilities.findings import NO_KNOWN_REMEDY, REGISTRY
 
 if TYPE_CHECKING:
@@ -228,6 +233,16 @@ def render_command_index() -> str:
     )
 
 
+# --- documentation topics ------------------------------------------------- #
+
+
+def render_topic_index() -> str:
+    """The documentation topics `elspais docs` serves, in reading order."""
+    rows = [[_code(topic), topic_description(topic)] for topic in TOPIC_ORDER]
+    rows.extend([_code(pseudo), topic_description(pseudo)] for pseudo in PSEUDO_TOPICS)
+    return _table(["Topic", "What it covers"], rows)
+
+
 # --- fragments and splicing ------------------------------------------------ #
 
 
@@ -237,6 +252,7 @@ def renderers() -> dict[str, Callable[[], str]]:
         "comment-patterns": render_comment_patterns,
         "reporters": render_reporters,
         "command-index": render_command_index,
+        "topic-index": render_topic_index,
     }
     for category in check_categories():
         table[f"check-catalog:{category}"] = _catalog_renderer(category)

@@ -658,11 +658,14 @@ class TraceGraph:
         return len(self._orphaned_ids)
 
     def unresolved_references(self) -> list[ReferenceFault]:
-        """Every reference that resolved to nothing, detected during build.
+        """Every reference fault detected during build, of every class.
 
-        A reference is unresolved when it named a target the graph does not
-        hold -- including one that never read as an identifier at all, which
-        `FaultClass.MALFORMED` distinguishes.
+        The list holds all five fault classes: a reference that did not read
+        as an identifier (`FaultClass.MALFORMED`), one that read and named
+        nothing the graph holds (the three `UNKNOWN_*` classes), and one that
+        resolved but declares a refused relationship (`FaultClass.FORBIDDEN`).
+        The report names only the `UNKNOWN_*` classes unresolved
+        (REQ-d00272-P); the class on each fault says which it is.
 
         Returns:
             List of ReferenceFault instances.
@@ -670,7 +673,7 @@ class TraceGraph:
         return list(self._unresolved_references)
 
     def has_unresolved_references(self) -> bool:
-        """Whether the graph holds a reference that resolved to nothing."""
+        """Whether the graph holds a reference fault of any class."""
         return len(self._unresolved_references) > 0
 
     # Implements: REQ-d00272-G

@@ -55,6 +55,7 @@ except ImportError:
     MCP_AVAILABLE = False
     FastMCP = None
 
+from elspais.commands.health import preset_reference_faults
 from elspais.config import find_config_file, get_config
 from elspais.config.schema import ElspaisConfig
 from elspais.graph import NodeKind
@@ -861,7 +862,8 @@ def _get_graph_status(
         "node_counts": node_counts,
         "total_nodes": graph.node_count(),
         "has_orphans": graph.has_orphans(),
-        "has_unresolved_references": graph.has_unresolved_references(),
+        "has_unresolved_references": bool(preset_reference_faults(graph, "unresolved")),
+        "has_malformed_references": bool(preset_reference_faults(graph, "malformed")),
         "terms_dirty": _has_dirty_terms(graph),
     }
     record = _automatic_save_record(working_dir)
@@ -1909,7 +1911,7 @@ def _build_assertion_format(config: dict[str, Any]) -> dict[str, Any]:
     # Read the assertion separators from id-patterns assertions. Both examples
     # are rendered with the configured characters: an agent handed a hardcoded
     # "-A" in a repo configured for "/A" writes references this repo does not
-    # accept, and an off-separator reference is an unresolved reference, not an
+    # accept, and an off-separator reference is a malformed reference, not an
     # alternate spelling.
     sep = assertions.separator
     ma_sep = assertions.multi_separator
@@ -2148,9 +2150,8 @@ def _workspace_profile_manager(
     result["coverage_stats"] = _build_coverage_stats(graph, config)
     result["health"] = {
         "has_orphans": graph.has_orphans() if graph else None,
-        "has_unresolved_references": graph.has_unresolved_references() if graph else None,
         "orphan_count": graph.orphan_count() if graph else None,
-        "unresolved_reference_count": (len(graph.unresolved_references()) if graph else None),
+        **_reference_fault_counts(graph),
     }
     result["change_metrics"] = _build_change_metrics(graph)
 
@@ -2214,9 +2215,8 @@ def _workspace_profile_all(
     result["coverage_stats"] = _build_coverage_stats(graph, config)
     result["health"] = {
         "has_orphans": graph.has_orphans() if graph else None,
-        "has_unresolved_references": graph.has_unresolved_references() if graph else None,
         "orphan_count": graph.orphan_count() if graph else None,
-        "unresolved_reference_count": (len(graph.unresolved_references()) if graph else None),
+        **_reference_fault_counts(graph),
     }
     result["change_metrics"] = _build_change_metrics(graph)
 
@@ -2357,7 +2357,8 @@ def _get_project_summary(
         "changes": change_metrics,
         "total_nodes": graph.node_count(),
         "orphan_count": graph.orphan_count(),
-        "unresolved_reference_count": len(graph.unresolved_references()),
+        "unresolved_reference_count": len(preset_reference_faults(graph, "unresolved")),
+        "malformed_reference_count": len(preset_reference_faults(graph, "malformed")),
     }
 
     # REQ-d00258-C: per-level coverage stats reuse the CLI summary's collector
@@ -2753,20 +2754,28 @@ def _get_faq(topic: str) -> dict[str, Any]:
     }
 
 
-# Implements: REQ-d00286-B
+# Implements: REQ-d00286-B+G
 def _get_docs(topic: str) -> dict[str, Any]:
     """Return documentation content for a topic, or search all help surfaces.
 
-    If topic matches an exact topic name, returns that topic's full content.
-    Otherwise, searches docs, CLI flag docstrings, MCP tool docstrings,
-    and FAQ entries for the query string, returning full matched sections
-    with source labels.
+    The topic names are the CLI's: `topics` (or nothing) lists them, `all`
+    returns every topic concatenated, and a declared topic returns its full
+    content. Any other string searches docs, CLI flag docstrings, MCP tool
+    docstrings and FAQ entries, returning full matched sections with source
+    labels.
     """
-    from elspais.utilities.docs_loader import get_available_topics, load_topic
+    from elspais.utilities.docs_loader import (
+        get_available_topics,
+        load_all_topics,
+        load_topic,
+    )
 
     available = get_available_topics()
 
-    if not topic:
+    if topic == "all":
+        return {"topic": "all", "content": load_all_topics()}
+
+    if not topic or topic == "topics":
         return {
             "topics": available,
             "count": len(available),
@@ -4281,25 +4290,49 @@ def _get_unlinked_nodes(graph: FederatedGraph, kind: str | None = None) -> dict[
     }
 
 
-# Implements: REQ-d00285-C+F, REQ-d00275-A
-def _get_unresolved_references(
-    graph: FederatedGraph, config: dict[str, Any] | None = None
-) -> dict[str, Any]:
-    """Every reference that names nothing the federation holds.
+# Implements: REQ-d00272-P
+def _reference_fault_counts(graph: FederatedGraph | None) -> dict[str, Any]:
+    """The unresolved and malformed reference counts a health summary carries.
 
-    This is the SAME stream `elspais unresolved` and `elspais checks` report:
-    the five reference checks, each finding carrying the check that raised it,
-    the severity that check resolved to, the diagnostic codes the fault
-    reached, its location and its remedy. Reading them here rather than
-    serializing `ReferenceFault` again is what keeps this surface from saying
-    less about a reference than the CLI does about the same one
+    Each count is the population of the preset listing of the same name, so
+    the summary and `elspais unresolved`/`elspais malformed` agree.
+    """
+    if graph is None:
+        return {
+            "has_unresolved_references": None,
+            "unresolved_reference_count": None,
+            "has_malformed_references": None,
+            "malformed_reference_count": None,
+        }
+    unresolved = len(preset_reference_faults(graph, "unresolved"))
+    malformed = len(preset_reference_faults(graph, "malformed"))
+    return {
+        "has_unresolved_references": unresolved > 0,
+        "unresolved_reference_count": unresolved,
+        "has_malformed_references": malformed > 0,
+        "malformed_reference_count": malformed,
+    }
+
+
+# Implements: REQ-d00285-C+F, REQ-d00275-A, REQ-d00272-P
+def _get_preset_references(
+    graph: FederatedGraph, preset: str, config: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """The references one preset listing names, as its findings.
+
+    This is the SAME stream the CLI listing of that name and `elspais checks`
+    report: the reference checks the preset names, each finding carrying the
+    check that raised it, the severity that check resolved to, the diagnostic
+    codes the fault reached, its location and its remedy. Reading them here
+    rather than serializing `ReferenceFault` again is what keeps this surface
+    from saying less about a reference than the CLI does about the same one
     (REQ-d00285-C).
     """
-    from elspais.commands.health import _REFERENCE_CHECKS, check_reference_class
+    from elspais.commands.health import check_reference_class, preset_reference_checks
 
     checks = [
         check_reference_class(graph, config, fault_class, name, description)
-        for fault_class, name, description in _REFERENCE_CHECKS
+        for fault_class, name, description in preset_reference_checks(preset)
     ]
 
     findings: list[dict[str, Any]] = []
@@ -4312,7 +4345,7 @@ def _get_unresolved_references(
             findings.append(entry)
 
     return {
-        "unresolved_references": findings,
+        f"{preset}_references": findings,
         "count": len(findings),
         # A class a project turned off produced no findings, and saying which
         # is the difference between "none" and "not reported" (REQ-d00285-G).
@@ -6367,7 +6400,8 @@ tip: current_tip from get_mutation_log() ("" = nothing pending).
 - `get_mutation_log(limit=50)` - Mutation history, newest first; includes current_tip
 - `get_versions(node_ids)` - Refresh version tokens in bulk (unknown IDs omitted)
 - `get_orphaned_nodes()` - List orphaned nodes
-- `get_unresolved_references()` - List references that resolve to nothing
+- `get_unresolved_references()` - List references that read as identifiers and name nothing held
+- `get_malformed_references()` - List references that do not read as identifiers
 
 ### Test Coverage Analysis
 - `get_test_coverage(req_id)` - Get TEST nodes and coverage stats for a requirement
@@ -7013,10 +7047,11 @@ def create_server(
         health checks, configuration, assertions, etc.
 
         Args:
-            topic: Exact topic name (e.g., "checks") returns full content.
+            topic: Exact topic name (e.g., "checks") returns full content,
+                   and "all" returns every topic concatenated.
                    Any other string searches all docs for matching lines
                    and returns excerpts with context.
-                   If empty, returns the list of available topics.
+                   If empty or "topics", returns the list of available topics.
         """
         return _get_docs(topic)
 
@@ -8000,17 +8035,33 @@ def create_server(
 
     @mcp.tool()
     def get_unresolved_references() -> dict[str, Any]:
-        """List every reference that names nothing the federation holds.
+        """List every reference that read as an identifier and names nothing held.
 
         The same findings `elspais unresolved` prints: each carries the check
-        that raised it (one of the five reference classes), its severity, its
-        diagnostic codes, its location and its remedy. `checks` says what each
-        class found, including a class this project turned off.
+        that raised it (unknown namespace, requirement or assertion), its
+        severity, its diagnostic codes, its location and its remedy. `checks`
+        says what each class found, including a class this project turned
+        off. A reference that did not read as an identifier is listed by
+        get_malformed_references().
 
         Use when: checking for unresolved links after renaming or deleting
         requirements.
         """
-        return _get_unresolved_references(_state["graph"], _state["config"])
+        return _get_preset_references(_state["graph"], "unresolved", _state["config"])
+
+    @mcp.tool()
+    def get_malformed_references() -> dict[str, Any]:
+        """List every reference that did not read as an identifier.
+
+        The same findings `elspais malformed` prints, under the key
+        `malformed_references`: each carries its check, severity, diagnostic
+        codes, location and remedy. `checks` says what the class found,
+        including whether this project turned it off.
+
+        Use when: a citation or metadata reference is misspelled and you need
+        to find where.
+        """
+        return _get_preset_references(_state["graph"], "malformed", _state["config"])
 
     # ─────────────────────────────────────────────────────────────────────
     # Keyword Search Tools (Phase 4)
