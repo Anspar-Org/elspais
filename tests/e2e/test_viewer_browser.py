@@ -1228,8 +1228,8 @@ class TestJunitStepBindingBrowser:
                 f"Result row {i} should have exactly one link: {rows.nth(i).inner_html()!r}"
             )
             link_text = link.inner_text().strip()
-            assert link_text.startswith("results.xml:"), (
-                f"Result row {i} link must be 'results.xml:<line>', got {link_text!r}"
+            assert link_text.startswith("results/junit/results.xml:"), (
+                f"Result row {i} link must be 'results/junit/results.xml:<line>', got {link_text!r}"
             )
 
         assert not js_errors, f"JS errors during step-results render: {js_errors}"

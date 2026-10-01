@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import posixpath
 import re
 from typing import Any, Literal
 
@@ -636,6 +637,11 @@ GROUP_DEFAULT = "default"
 GROUP_NONE = "none"
 RESERVED_GROUPS = frozenset({GROUP_ALL, GROUP_DEFAULT, GROUP_NONE})
 
+# Implements: REQ-d00312-A
+# The name of a target is also the name of its output area under the output root.
+# Consequently, the name must be one path segment. The name cannot be hidden or relative.
+_TARGET_FOLDER_NAME = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9._-]*")
+
 # Implements: REQ-d00284-A
 # The forms a target may declare for the name its results give the test that
 # produced them. "python-module" reads the name as a dotted module path;
@@ -685,6 +691,12 @@ class TestTargetConfig(_StrictModel):
     # departs from the format's convention. Unset means the reporter's own
     # declared origin.
     line_base: int | None = None
+    # Implements: REQ-d00311-J+K+L
+    # inputs selects the files that the results of this target depend on.
+    # inputs uses the same file-selection settings as a scan. Directories and
+    # file patterns include files. Skipped directories and files exclude files.
+    # If inputs is empty, then every file in the repository is an input.
+    inputs: ScanningKindConfig = Field(default_factory=ScanningKindConfig)
 
     @field_validator("line_base")
     @classmethod
@@ -754,6 +766,27 @@ class TestScanningConfig(ScanningKindConfig):
     # that explanation has to live.
     groups: dict[str, str] = Field(default_factory=dict)
     targets: list[TestTargetConfig] = Field(default_factory=list)
+    # Implements: REQ-d00312-B
+    # output_root names the directory that holds the output area of each target.
+    # The path is relative to the repository root.
+    output_root: str = ".results"
+
+    # Implements: REQ-d00312-B
+    @field_validator("output_root")
+    @classmethod
+    def _check_output_root(cls, v: str) -> str:
+        normalized = posixpath.normpath(v.strip().replace("\\", "/")) if v.strip() else ""
+        if (
+            not normalized
+            or normalized in (".", "..")
+            or normalized.startswith("../")
+            or posixpath.isabs(normalized)
+        ):
+            raise ValueError(
+                f"output_root {v!r} must name a directory inside the repository, "
+                f'relative to its root, such as ".results"'
+            )
+        return normalized
 
     # Implements: REQ-d00283-F+G
     @model_validator(mode="after")
@@ -807,6 +840,38 @@ class TestScanningConfig(ScanningKindConfig):
                     f"group; a run names targets and groups alike, so one name cannot "
                     f"mean both. Rename the target or the group."
                 )
+        return self
+
+    # Implements: REQ-d00312-A+C
+    @model_validator(mode="after")
+    def _check_target_folders(self) -> TestScanningConfig:
+        for target in self.targets:
+            if not _TARGET_FOLDER_NAME.fullmatch(target.name):
+                raise ValueError(
+                    f'test target "{target.name}" cannot name a folder: a target name '
+                    f"is written with letters, digits, '-', '_' and '.', and does not "
+                    f"start with '.'"
+                )
+            folder = posixpath.join(self.output_root, target.name)
+            for setting in ("results", "coverage"):
+                declared = getattr(target, setting)
+                if not declared:
+                    continue
+                written = declared.replace("\\", "/")
+                normalized = posixpath.normpath(written)
+                if (
+                    posixpath.isabs(written)
+                    or normalized == ".."
+                    or normalized.startswith("../")
+                    or normalized == "."
+                ):
+                    raise ValueError(
+                        f'test target "{target.name}" declares {setting} {declared!r}, '
+                        f'which is outside its folder "{folder}". A results or '
+                        f"coverage path names a file inside that folder, relative to "
+                        f'it, such as "junit.xml"; the target\'s command finds the '
+                        f"folder in the ELSPAIS_TARGET_OUTPUT environment variable."
+                    )
         return self
 
 

@@ -363,7 +363,7 @@ class TestTestFilesNoTargetCanExecute:
                 'name = "unit"\n'
                 'command = "pytest tests/"\n'
                 'reporter = "junit"\n'
-                'results = ".results/junit.xml"\n'
+                'results = "junit.xml"\n'
             ),
         )
         _write(
@@ -389,7 +389,7 @@ class TestTestFilesNoTargetCanExecute:
                 "\n[[scanning.test.targets]]\n"
                 'name = "ci-ingest"\n'
                 'reporter = "junit"\n'
-                'results = ".results/junit.xml"\n'
+                'results = "junit.xml"\n'
             ),
         )
         _write(

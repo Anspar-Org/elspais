@@ -61,7 +61,7 @@ enabled = true
 [[scanning.test.targets]]
 name = "pytest"
 reporter = "junit"
-results = "results/*.xml"
+results = "*.xml"
 match = "source"
 
 [associates.lib]
@@ -205,8 +205,8 @@ def federation(tmp_path_factory):
     (app / "src" / "impl.py").write_text(APP_CODE, encoding="utf-8")
     (app / "tests").mkdir()
     (app / "tests" / "test_lib.py").write_text(APP_TEST, encoding="utf-8")
-    (app / "results").mkdir()
-    (app / "results" / "junit.xml").write_text(JUNIT, encoding="utf-8")
+    (app / ".results" / "pytest").mkdir(parents=True)
+    (app / ".results" / "pytest" / "junit.xml").write_text(JUNIT, encoding="utf-8")
     _git(app, "add", "-A")
     _git(app, "commit", "-m", "code")
     return app, lib
@@ -401,7 +401,7 @@ enabled = true
 [[scanning.test.targets]]
 name = "pytest"
 reporter = "junit"
-results = "results/*.xml"
+results = "*.xml"
 match = "source"
 cwd = "tests"
 
@@ -485,8 +485,8 @@ def policy_federation(tmp_path_factory):
     (app / "spec" / "reqs.md").write_text(POLICY_APP_SPEC, encoding="utf-8")
     (app / "tests").mkdir()
     (app / "tests" / "test_shared.py").write_text(POLICY_APP_TEST, encoding="utf-8")
-    (app / "tests" / "results").mkdir()
-    (app / "tests" / "results" / "junit.xml").write_text(POLICY_JUNIT, encoding="utf-8")
+    (app / ".results" / "pytest").mkdir(parents=True)
+    (app / ".results" / "pytest" / "junit.xml").write_text(POLICY_JUNIT, encoding="utf-8")
     _git(app, "add", "-A")
     _git(app, "commit", "-m", "tests")
     return app, lib

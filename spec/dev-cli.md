@@ -589,7 +589,7 @@ C. The system SHALL stop at the first failing runner and skip the checks pass en
 
 D. When result file patterns are configured but no matching files exist on disk, the system SHALL return the `tests.results` health check with `passed = false` and severity `warning`, flipping the exit code unless `--lenient` is passed.
 
-E. When result files exist but the oldest result file mtime is earlier than the newest scanned spec, code, or test FILE-node mtime, the system SHALL return a separate `tests.results_stale` health check with `passed = false` and severity `warning`, flipping the exit code unless `--lenient` is passed.
+E. <RETIRED> judged the freshness of test results by file modification times. REQ-d00311 governs the freshness of test results.
 
 F. The system SHALL return exit code 2 and an error message pointing at `docs/cli/test-targets.md` when `elspais checks --run-tests` is invoked with no runners configured.
 
@@ -597,22 +597,21 @@ G. The system SHALL return a non-zero exit code if any runner failed OR any chec
 
 ### Rationale
 
-`elspais checks` previously reported verified coverage based on RESULT
-nodes parsed from JUnit XML or pytest JSON files. When those files were
-missing or stale, the report claimed zero or stale coverage without any
-indication that test results were not recent. This requirement closes
-both gaps: a single command can execute tests and re-evaluate checks,
-and the checks pass warns when results are out of date even without
-running tests.
+A single command executes a project's test targets and then evaluates
+the checks over the results they wrote. Where results are missing, the
+checks say so rather than reporting zero coverage; whether results that
+are present are still current is REQ-d00311.
 
 ### Changelog
 
+- 2026-09-30 | 5375d51e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-09-30 | 99a07dd5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-13 | 36cbd540 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: name the test-target config table the tool actually reads (A)
 - 2026-09-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: point the no-runners error at the document carrying target configuration examples (F)
 - 2026-09-12 | 784f8350 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Configured test runner execution* | **Hash**: 36cbd540
+*End* *Configured test runner execution* | **Hash**: 5375d51e
 
 ## REQ-d00259: Requirement Format Reference Command
 

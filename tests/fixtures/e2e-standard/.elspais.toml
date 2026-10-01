@@ -20,6 +20,11 @@ rank = 3
 letter = "d"
 implements = ["dev", "ops", "prd"]
 
+# This skip list removes the files that change during a test run from the
+# inputs of every test target.
+[scanning]
+skip = [".git", ".elspais"]
+
 [scanning.spec]
 directories = ["spec"]
 skip_files = ["INDEX.md", "NOTES.md"]
@@ -71,5 +76,5 @@ collection_empty = "warning"
 [[scanning.test.targets]]
 name = "stub"
 reporter = "pytest-json"
-results = ".elspais/results/*.json"
-command = "python -c \"import json,pathlib; p=pathlib.Path('.elspais/results'); p.mkdir(parents=True,exist_ok=True); (p/'test-results.json').write_text(json.dumps({'created_at':'fixture','summary':{'passed':1,'failed':0,'total':1},'tests':[{'nodeid':'test_stub::test_ok','outcome':'passed','duration':0.001}]}))\""
+results = "*.json"
+command = "python -c \"import json,os,pathlib; p=pathlib.Path(os.environ['ELSPAIS_TARGET_OUTPUT']); (p/'test-results.json').write_text(json.dumps({'created_at':'fixture','summary':{'passed':1,'failed':0,'total':1},'tests':[{'nodeid':'test_stub::test_ok','outcome':'passed','duration':0.001}]}))\""

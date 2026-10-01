@@ -1108,6 +1108,53 @@ class DaemonArgs:
 
 
 # ---------------------------------------------------------------------------
+# Fingerprint subcommands
+# ---------------------------------------------------------------------------
+# Implements: REQ-d00311-H
+@dataclasses.dataclass
+class FingerprintStartArgs:
+    """Begin a run of a test target that elspais does not execute.
+
+    Empties the target's folder and records a fingerprint of its inputs.
+    Prints the folder, which the run writes its results into.
+    """
+
+    target: tyro.conf.Positional[str]
+    """Name of the [[scanning.test.targets]] entry being run."""
+
+
+@dataclasses.dataclass
+class FingerprintFinishArgs:
+    """End a run of a test target that elspais does not execute.
+
+    Notes any input that changed while the run was in progress. A run that
+    no `start` began is refused: `start` is what empties the folder.
+    """
+
+    target: tyro.conf.Positional[str]
+    """Name of the [[scanning.test.targets]] entry that was run."""
+
+
+FingerprintAction = (
+    Annotated[FingerprintStartArgs, tyro.conf.subcommand("start")]
+    | Annotated[FingerprintFinishArgs, tyro.conf.subcommand("finish")]
+)
+
+
+@dataclasses.dataclass
+class FingerprintArgs:
+    """Record the fingerprint of a test run elspais did not execute.
+
+    A git hook or CI job that runs a target's tests itself calls `start`
+    before the run and `finish` after it, so the checks can tell whether the
+    results it left are fresh.
+    """
+
+    action: tyro.conf.OmitSubcommandPrefixes[tyro.conf.OmitArgPrefixes[FingerprintAction]]
+    """Fingerprint subcommand (start, finish)."""
+
+
+# ---------------------------------------------------------------------------
 # Link subcommands
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
@@ -1216,6 +1263,7 @@ Command = (
     | Annotated[UninstallArgs, tyro.conf.subcommand("uninstall")]
     | Annotated[McpArgs, tyro.conf.subcommand("mcp")]
     | Annotated[DaemonArgs, tyro.conf.subcommand("daemon")]
+    | Annotated[FingerprintArgs, tyro.conf.subcommand("fingerprint")]
     | Annotated[LinkArgs, tyro.conf.subcommand("link")]
     | Annotated[CompletionArgs, tyro.conf.subcommand("completion")]
     | Annotated[GlossaryArgs, tyro.conf.subcommand("glossary")]
@@ -1284,6 +1332,7 @@ COMMAND_GROUPS: dict[str, str] = {
     "doctor": "Install",
     "mcp": "Install",
     "daemon": "Install",
+    "fingerprint": "Reports",
     "install": "Install",
     "uninstall": "Install",
     "completion": "Install",

@@ -44,6 +44,13 @@ def _write_code_file(file_path: Path, req_id: str = "REQ-p00001") -> None:
     )
 
 
+def _unit_folder(root: Path) -> Path:
+    """Create and return the output area of the `unit` target."""
+    folder = root / ".results" / "unit"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
 def _write_lcov(lcov_path: Path, source_file: str) -> None:
     """Write a minimal lcov.info file covering the given source file."""
     lcov_path.parent.mkdir(parents=True, exist_ok=True)
@@ -81,14 +88,14 @@ directories = ["src"]
 
 [[scanning.test.targets]]
 name = "unit"
-coverage = "coverage/lcov.info"
+coverage = "lcov.info"
 """,
             encoding="utf-8",
         )
 
         _write_spec(tmp_path / "spec")
         _write_code_file(tmp_path / "src" / "main.py")
-        _write_lcov(tmp_path / "coverage" / "lcov.info", "src/main.py")
+        _write_lcov(tmp_path / ".results" / "unit" / "lcov.info", "src/main.py")
 
         graph = build_graph(
             config_path=config_file,
@@ -173,7 +180,7 @@ coverage = "lcov.info"
         _write_spec(tmp_path / "spec")
         _write_code_file(tmp_path / "src" / "main.py")
         # Coverage for a file NOT in the scanned dirs
-        _write_lcov(tmp_path / "lcov.info", "other/missing.py")
+        _write_lcov(tmp_path / ".results" / "unit" / "lcov.info", "other/missing.py")
 
         graph = build_graph(
             config_path=config_file,
@@ -230,7 +237,9 @@ coverage = "coverage.json"
                 }
             }
         }
-        (tmp_path / "coverage.json").write_text(json.dumps(cov_data), encoding="utf-8")
+        _unit_folder(tmp_path).joinpath("coverage.json").write_text(
+            json.dumps(cov_data), encoding="utf-8"
+        )
 
         graph = build_graph(
             config_path=config_file,
@@ -295,7 +304,9 @@ coverage = "coverage.json"
                 }
             }
         }
-        (tmp_path / "coverage.json").write_text(json.dumps(cov_data), encoding="utf-8")
+        _unit_folder(tmp_path).joinpath("coverage.json").write_text(
+            json.dumps(cov_data), encoding="utf-8"
+        )
 
         graph = build_graph(
             config_path=config_file,
@@ -353,7 +364,9 @@ coverage = "coverage.json"
                 }
             }
         }
-        (tmp_path / "coverage.json").write_text(json.dumps(cov_data), encoding="utf-8")
+        _unit_folder(tmp_path).joinpath("coverage.json").write_text(
+            json.dumps(cov_data), encoding="utf-8"
+        )
 
         graph = build_graph(
             config_path=config_file,
@@ -402,7 +415,7 @@ coverage = ".coverage"
         code_path = tmp_path / "src" / "main.py"
         _write_code_file(code_path)
 
-        cov_path = tmp_path / ".coverage"
+        cov_path = _unit_folder(tmp_path) / ".coverage"
         cov = coverage.Coverage(data_file=str(cov_path), source=[str(tmp_path / "src")])
         cov.start()
         try:
@@ -479,7 +492,7 @@ coverage = ".coverage"
         outside_path.parent.mkdir(parents=True, exist_ok=True)
         outside_path.write_text("def helper():\n    return 42\n", encoding="utf-8")
 
-        cov_path = tmp_path / ".coverage"
+        cov_path = _unit_folder(tmp_path) / ".coverage"
         cov = coverage.Coverage(data_file=str(cov_path), source=[str(tmp_path)])
         cov.start()
         try:

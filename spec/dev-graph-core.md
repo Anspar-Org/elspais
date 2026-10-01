@@ -1318,3 +1318,65 @@ D is REQ-p00015-A reached by a second route. Content excluded from an answer is 
 E settles an ordering that would otherwise be decided independently by each surface, and decided differently. The levels a project defines are ordered by the ranks it gave them; a level it did not define has no rank to be ordered by, and inventing one would put it somewhere a reader has no way to predict. Placing such groups after the ranked ones keeps the familiar shape of a report intact and gathers what the configuration does not account for in one place, where D's report is about the same requirements.
 
 *End* *Level Vocabulary of a Reported Graph* | **Hash**: 4bde246d
+
+## REQ-d00311: Test Result Freshness
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00015
+
+Test results describe the files a run saw. This requirement states when results are still current, and what a report says when they are not.
+
+### Assertions
+
+A. The system SHALL judge the freshness of test results for each test target separately.
+
+B. While no input of a test target has changed since the run that produced its results began, the system SHALL treat those results as fresh.
+
+C. If an input of a test target has changed since the run that produced its results began, then the system SHALL treat those results as stale.
+
+D. If the system has no record of the inputs from which test results were produced, then the system SHALL treat those results as stale.
+
+E. When the system reports test results as stale, the system SHALL state the reason.
+
+F. When the system reports test results as stale because an input changed, the system SHALL name a changed input.
+
+G. The system SHALL produce no freshness finding for fresh test results.
+
+H. The system SHALL let a runner outside the system record a run of a test target.
+
+I. The system SHALL reach the same freshness judgement for a run that a runner outside the system recorded as for a run that the system recorded.
+
+J. The system SHALL use every file in the repository as an input of a test target that declares no include set.
+
+K. Where a test target declares an include set, the system SHALL use as its inputs only the files that the include set selects.
+
+L. Where a test target declares an exclude set, the system SHALL exclude from its inputs every file that the exclude set selects.
+
+M. The system SHALL exclude from the inputs of every test target the test output location and every path that the global skip list of the project names.
+
+### Rationale
+
+The inputs of a test target are the files whose content can change what its run reports, so results stay current exactly as long as those files are unchanged, and reuse of results from an earlier run is legitimate. The default takes every file because a missed dependency makes old results look current, which is worse than a needless run. What a run writes, and what tools keep for themselves while it runs, changes during every run, so the project names those paths in its global skip list.
+
+*End* *Test Result Freshness* | **Hash**: 2b570228
+
+## REQ-d00312: Test Target Output Areas
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-p00015
+
+Each test target writes its results and its coverage into an area that belongs to it alone.
+
+### Assertions
+
+A. The system SHALL give each test target an output area of its own.
+
+B. The system SHALL put the output areas of all test targets in one location that the project configures.
+
+C. If a test target declares a location for its results or its coverage outside its own output area, then the system SHALL refuse the configuration with a message that names that output area.
+
+D. When a run of a test target starts, the system SHALL provide that target with an empty output area.
+
+### Rationale
+
+Targets that share an output location can overwrite each other, and results that an earlier run left behind can pass for the results of a later run. An area for each target, empty whenever a run of that target starts, prevents both, and one location for every area gives the freshness judgement one place to exclude from its inputs.
+
+*End* *Test Target Output Areas* | **Hash**: a0788b2a

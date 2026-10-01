@@ -1,0 +1,28 @@
+#!/bin/bash
+# with-fingerprint <target> <cmd> [args...]
+#
+# This script runs the tests of one [[scanning.test.targets]] entry.
+# The script follows the same steps as `elspais checks --run-tests`:
+#   1. `elspais fingerprint start` empties the output area of the target.
+#      It then writes the fingerprint of the target's inputs.
+#   2. The command runs. ELSPAIS_TARGET_OUTPUT holds the path of the output area.
+#   3. `elspais fingerprint finish` records each input that changed during the run.
+# If the results have no fingerprint, then `elspais checks` reports them as stale.
+#
+# The script exits with the exit code of the command.
+
+_target="$1"; shift
+
+if ! _folder=$(elspais fingerprint start "$_target"); then
+    echo "ERROR: could not start a fingerprinted run of target $_target" >&2
+    exit 99
+fi
+export ELSPAIS_TARGET_OUTPUT="$_folder"
+
+"$@"
+_rc=$?
+
+if ! elspais fingerprint finish "$_target"; then
+    echo "::warning::could not record the end of target $_target's run (tolerated: its results read as stale)" >&2
+fi
+exit "$_rc"

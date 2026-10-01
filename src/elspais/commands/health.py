@@ -3696,32 +3696,6 @@ def _read_run_meta(config: dict | None) -> dict:
     return {"deselected_count": 0, "runner": ""}
 
 
-# Implements: REQ-d00249-E
-def _collect_file_mtimes(
-    graph: FederatedGraph,
-    file_types: set,
-) -> list[float]:
-    """Collect on-disk mtimes for FILE nodes of the given types.
-
-    Files missing from disk are silently skipped.
-    """
-    from elspais.graph import NodeKind
-
-    mtimes: list[float] = []
-    for node in graph.nodes_by_kind(NodeKind.FILE):
-        ft = node.get_field("file_type", None)
-        if ft not in file_types:
-            continue
-        abs_path = node.get_field("absolute_path", None)
-        if not abs_path:
-            continue
-        try:
-            mtimes.append(Path(abs_path).stat().st_mtime)
-        except OSError:
-            continue
-    return mtimes
-
-
 # Implements: REQ-d00275-C
 def _configured_test_targets(graph: FederatedGraph, config: dict | None) -> list[tuple[str, Any]]:
     """``(repo name, target)`` for every federation member configuring one.
@@ -3887,63 +3861,82 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
 
 
 # Implements: REQ-d00285-F
-# Implements: REQ-d00249-E
+# Implements: REQ-d00311-A+B+C+D+E+F+G
 def check_test_results_stale(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:
-    """Emit ``tests.results_stale`` warning when result mtimes lag source mtimes.
+    """Report each test target whose results on disk are stale.
 
-    Returns:
-        ``tests.results_stale`` severity=info, passed=True -- results are
-        fresh or no result files exist (a missing-results report is the job
-        of :func:`check_test_results`).
-
-        ``tests.results_stale`` severity=warning, passed=False -- oldest
-        result file mtime is earlier than the newest scanned spec/code/test
-        file mtime. Flips exit code unless ``--lenient``.
+    The check judges each target of each federation member by the fingerprint
+    of its run (:mod:`elspais.utilities.fingerprint`). Fresh results get no
+    finding. This rule holds for the results of any run. A stale finding states
+    its reason: no fingerprint, or the name of a changed input. The check skips
+    a target with no results on disk. The missing-results check reports that
+    target.
     """
     severity = severity_for("tests.results_stale", config)
     if severity == Severity.OFF:
-        return skipped_check("tests.results_stale", "Test results older than the code they cover")
+        return skipped_check(
+            "tests.results_stale",
+            "Test results whose inputs changed since they ran, or that carry no fingerprint",
+        )
 
-    from datetime import datetime
+    from elspais.utilities.fingerprint import judge
 
-    from elspais.graph.GraphNode import FileType
+    findings: list[HealthFinding] = []
+    judged = 0
+    for entry in graph.iter_repos():
+        member = _validate_config(entry.config)
+        for target in member.scanning.test.targets:
+            verdict = judge(entry.repo_root, member, target.name)
+            if verdict.state == "absent":
+                continue
+            judged += 1
+            if verdict.state == "fresh":
+                continue
+            findings.append(
+                HealthFinding(
+                    message=_stale_message(verdict),
+                    repo=entry.name,
+                    related=list(verdict.changed),
+                )
+            )
 
-    result_mtimes = _collect_file_mtimes(graph, {FileType.RESULT})
-    source_mtimes = _collect_file_mtimes(graph, {FileType.SPEC, FileType.CODE, FileType.TEST})
-
-    if not result_mtimes or not source_mtimes:
+    if not findings:
         return HealthCheck(
             name="tests.results_stale",
             passed=True,
-            message="Result freshness not evaluated (no results or no scanned sources)",
+            message=(
+                "Test results are fresh"
+                if judged
+                else "Result freshness not evaluated (no results on disk)"
+            ),
             category="tests",
             severity="info",
         )
-
-    if min(result_mtimes) >= max(source_mtimes):
-        return HealthCheck(
-            name="tests.results_stale",
-            passed=True,
-            message="Test results are up to date",
-            category="tests",
-            severity="info",
-        )
-
-    oldest_result = datetime.fromtimestamp(min(result_mtimes)).isoformat(timespec="seconds")
-    newest_source = datetime.fromtimestamp(max(source_mtimes)).isoformat(timespec="seconds")
     return HealthCheck(
         name="tests.results_stale",
         passed=False,
-        message=(
-            f"Test results are stale -- oldest result mtime {oldest_result} "
-            f"is earlier than newest scanned source mtime {newest_source}. "
-            f"Re-run with `elspais checks --run-tests` to refresh."
-        ),
+        message=f"Test results are stale for {len(findings)} target(s)",
         category="tests",
         severity=severity,
+        findings=findings,
     )
+
+
+# Implements: REQ-d00311-E+F
+def _stale_message(verdict: Any) -> str:
+    """Return the reason that one target's results are stale, and the remedy."""
+    if verdict.reason == "no-fingerprint":
+        return (
+            f"target {verdict.target}: no fingerprint was recorded for its results; "
+            f"run it with `elspais checks --run-tests`, or record its run with "
+            f"`elspais fingerprint`"
+        )
+    shown = ", ".join(verdict.changed[:5])
+    more = f" and {len(verdict.changed) - 5} more" if len(verdict.changed) > 5 else ""
+    when = "while it ran" if verdict.reason == "changed-during-run" else "since it ran"
+    return f"target {verdict.target}: inputs changed {when}: {shown}{more}; run it again"
 
 
 def check_test_coverage(

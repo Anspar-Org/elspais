@@ -117,8 +117,8 @@ def test_target_results_carry_result_file_provenance(step_binding_graph):
     """
     step1 = _result_by_name(step_binding_graph, STEP1_NAME)
     step2 = _result_by_name(step_binding_graph, STEP2_NAME)
-    assert step1.get_field("result_file") == "results.xml"
-    assert step2.get_field("result_file") == "results.xml"
+    assert step1.get_field("result_file") == "results/junit/results.xml"
+    assert step2.get_field("result_file") == "results/junit/results.xml"
     # Testcases sit on lines 3 and 4 of the fixture's results.xml.
     assert step1.get_field("result_line") == 3
     assert step2.get_field("result_line") == 4

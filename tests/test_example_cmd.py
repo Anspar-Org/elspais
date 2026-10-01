@@ -94,7 +94,8 @@ class TestExampleCommand:
         assert "Assertion Format Rules" in output
         assert "SHALL" in output
         assert "Label Styles" in output
-        assert "Placeholders" in output
+        assert "Retired Assertions" in output
+        assert "<RETIRED>" in output
 
     # Verifies: REQ-d00259-E
     def test_example_ids_subcommand_no_config(self):

@@ -1287,6 +1287,8 @@ def build_graph(
             # Implements: REQ-d00128-A+H
             # RemainderParser is NOT registered for RESULT file types.
             # When targets is empty (the default) this loop is a no-op.
+            from elspais.utilities.fingerprint import target_folder
+
             _captured = captured_results or {}
             from elspais.graph.parsers.results.registry import get_reporter as _get_reporter
 
@@ -1355,7 +1357,12 @@ def build_graph(
                         scanned_tests=target_tests,
                     )
                 elif target.results:
-                    matched = glob(str(cwd_path / target.results), recursive=True)
+                    # Implements: REQ-d00312-A+C
+                    # target.results names files inside the output area of the
+                    # target. The working directory of the target does not
+                    # change this location.
+                    area = target_folder(repo_root, typed_config, target.name)
+                    matched = glob(str(area / target.results), recursive=True)
                     if matched:
                         for f in matched:
                             if Path(f).is_file():
@@ -1376,7 +1383,7 @@ def build_graph(
                                     # `results-path` can read back the part
                                     # of the path its wildcard stood for.
                                     results_pattern=target.results,
-                                    results_base=cwd_path,
+                                    results_base=area,
                                 )
                     else:
                         # Implements: REQ-d00285-G
@@ -1386,7 +1393,7 @@ def build_graph(
                         _log.debug("target %r: no files matched %r", target.name, target.results)
                         if target_spec.kind == "results":
                             builder.record_ingestion_fault(
-                                path=_repo_relative(cwd_path / target.results, repo_root),
+                                path=_repo_relative(area / target.results, repo_root),
                                 stage="results",
                                 cause=(
                                     "no file matched this target's results pattern, so "
@@ -1426,6 +1433,7 @@ def build_graph(
         from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
         from elspais.graph.parsers.results.coverage_sqlite import CoverageSqliteParser
         from elspais.graph.parsers.results.lcov import LcovParser
+        from elspais.utilities.fingerprint import target_folder
 
         lcov_parser = LcovParser()
         cov_json_parser = CoverageJsonParser()
@@ -1455,7 +1463,10 @@ def build_graph(
                     target=target.name,
                 )
                 continue
-            cov_path = (cwd_path / target.coverage).resolve()
+            # Implements: REQ-d00312-A+C
+            cov_path = (
+                target_folder(repo_root, typed_config, target.name) / target.coverage
+            ).resolve()
             if not cov_path.is_file():
                 # Implements: REQ-d00285-G
                 # No coverage file and coverage measuring nothing are the same

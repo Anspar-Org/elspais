@@ -170,8 +170,8 @@ def _tests_yielding(results) -> list:
 _DEVICE_GRID = {
     "target_body": 'results = "evidence/*/junit.xml"\nenvironment = "results-path"\n',
     "artifacts": {
-        "evidence/pixel-8/junit.xml": _pytest_junit(),
-        "evidence/iphone-15/junit.xml": _pytest_junit(),
+        ".results/e2e/evidence/pixel-8/junit.xml": _pytest_junit(),
+        ".results/e2e/evidence/iphone-15/junit.xml": _pytest_junit(),
     },
 }
 
@@ -184,7 +184,9 @@ _BROWSER_GRID = {
         'environment = "suite-hostname"\n'
     ),
     "artifacts": {
-        "test-results/junit.xml": _playwright_junit(("chromium", False), ("firefox", False)),
+        ".results/e2e/test-results/junit.xml": _playwright_junit(
+            ("chromium", False), ("firefox", False)
+        ),
     },
     "test_file": "tests/e2e/login.spec.ts",
     "test_source": _TS_TEST,
@@ -195,16 +197,16 @@ _GRIDS = {
     "devices": (
         _DEVICE_GRID,
         [
-            "result:REQ:evidence/iphone-15/junit.xml:1",
-            "result:REQ:evidence/pixel-8/junit.xml:1",
+            "result:REQ:.results/e2e/evidence/iphone-15/junit.xml:1",
+            "result:REQ:.results/e2e/evidence/pixel-8/junit.xml:1",
         ],
         ["iphone-15", "pixel-8"],
     ),
     "browsers": (
         _BROWSER_GRID,
         [
-            "result:REQ:test-results/junit.xml:1",
-            "result:REQ:test-results/junit.xml:2",
+            "result:REQ:.results/e2e/test-results/junit.xml:1",
+            "result:REQ:.results/e2e/test-results/junit.xml:2",
         ],
         ["chromium", "firefox"],
     ),
@@ -318,8 +320,8 @@ def test_one_failing_record_takes_the_assertion_out_of_passing(tmp_path):
     """
     grid = dict(_DEVICE_GRID)
     grid["artifacts"] = {
-        "evidence/pixel-8/junit.xml": _pytest_junit(),
-        "evidence/iphone-15/junit.xml": _pytest_junit(failure=True),
+        ".results/e2e/evidence/pixel-8/junit.xml": _pytest_junit(),
+        ".results/e2e/evidence/iphone-15/junit.xml": _pytest_junit(failure=True),
     }
     graph = _build(_project(tmp_path, **grid))
 
@@ -339,8 +341,8 @@ def test_the_failing_record_of_a_grid_is_the_one_reported(tmp_path):
     """
     grid = dict(_DEVICE_GRID)
     grid["artifacts"] = {
-        "evidence/pixel-8/junit.xml": _pytest_junit(),
-        "evidence/iphone-15/junit.xml": _pytest_junit(failure=True),
+        ".results/e2e/evidence/pixel-8/junit.xml": _pytest_junit(),
+        ".results/e2e/evidence/iphone-15/junit.xml": _pytest_junit(failure=True),
     }
     graph = _build(_project(tmp_path, **grid))
 
@@ -348,9 +350,11 @@ def test_the_failing_record_of_a_grid_is_the_one_reported(tmp_path):
 
     assert chk.passed is False
     assert chk.details["failed"] == 1
-    assert [f.node_id for f in chk.findings] == ["result:REQ:evidence/iphone-15/junit.xml:1"]
+    assert [f.node_id for f in chk.findings] == [
+        "result:REQ:.results/e2e/evidence/iphone-15/junit.xml:1"
+    ]
     assert "[iphone-15]" in chk.findings[0].message
-    assert chk.findings[0].file_path == "evidence/iphone-15/junit.xml"
+    assert chk.findings[0].file_path == ".results/e2e/evidence/iphone-15/junit.xml"
 
 
 def _keys_anywhere(value) -> set[str]:
@@ -377,12 +381,12 @@ def test_a_project_in_one_environment_reads_as_it_did(tmp_path):
     project = _project(
         tmp_path,
         target_body='results = "reports/junit.xml"\n',
-        artifacts={"reports/junit.xml": _pytest_junit()},
+        artifacts={".results/e2e/reports/junit.xml": _pytest_junit()},
     )
     graph = _build(project)
 
     results = _results(graph)
-    assert [node.id for node in results] == ["result:REQ:reports/junit.xml:1"]
+    assert [node.id for node in results] == ["result:REQ:.results/e2e/reports/junit.xml:1"]
     assert results[0].get_field("environment") is None
 
     test_node = _tests_yielding(results)[0]
@@ -460,7 +464,7 @@ def test_a_journey_step_holds_one_result_for_each_environment(tmp_path: Path):
         target_body=(
             'results = "reports/junit.xml"\nenvironment = "suite-hostname"\nmatch = "source"\n'
         ),
-        artifacts={"reports/junit.xml": _TWO_PROJECTS},
+        artifacts={".results/e2e/reports/junit.xml": _TWO_PROJECTS},
         test_source=_JOURNEY_TEST,
     )
     (project / "spec" / "journeys.md").write_text(_JOURNEY, encoding="utf-8")
@@ -497,7 +501,7 @@ def test_the_graph_export_carries_each_result_and_its_environment(tmp_path: Path
         target_body=(
             'results = "reports/junit.xml"\nenvironment = "suite-hostname"\nmatch = "source"\n'
         ),
-        artifacts={"reports/junit.xml": _TWO_PROJECTS},
+        artifacts={".results/e2e/reports/junit.xml": _TWO_PROJECTS},
     )
 
     exported = serialize_graph(_build(project))["nodes"]
@@ -507,4 +511,4 @@ def test_the_graph_export_carries_each_result_and_its_environment(tmp_path: Path
     }
     assert len(results) == 2, f"expected a result for each project, got {sorted(results)}"
     assert sorted(c["environment"] for c in results.values()) == ["chromium", "firefox"]
-    assert {c["result_file"] for c in results.values()} == {"reports/junit.xml"}
+    assert {c["result_file"] for c in results.values()} == {".results/e2e/reports/junit.xml"}

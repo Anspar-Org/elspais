@@ -227,6 +227,12 @@ skip = [
     "__pycache__",
     ".venv",
     "venv",
+    # Test tools write these caches during a test run. The inputs of a test
+    # target are every file that this list does not skip. If a file changes
+    # during every run, then no run produces fresh results.
+    "**/.pytest_cache",
+    ".coverage",
+    ".coverage.*",
 ]
 
 # Spec file scanning
@@ -274,6 +280,15 @@ reference_keyword = "Verifies"
 # its records; every other scanned test file keeps built-in attribution, so a
 # command may cover one file type and leave the rest alone.
 # prescan_command = "dart run tool/list_tests.dart"
+# output_root holds one folder per test target, <output_root>/<name>, from the
+# repository root. The test targets write into these folders. A target's
+# `results` and `coverage` are paths relative to its own folder.
+# elspais refuses an absolute path or a path that climbs out with `..`. The
+# refusal names that folder. A run of a target first empties its folder. The
+# run then records a fingerprint of the target's inputs there.
+# `tests.results_stale` reads that fingerprint (see
+# `elspais docs test-targets`, Target Folders and Fresh Results).
+output_root = ".results"
 
 # Configured test targets - result ingestion and coverage attribution.
 # See `elspais docs test-targets` for full documentation.
@@ -307,16 +322,24 @@ reference_keyword = "Verifies"
 [[scanning.test.targets]]
 name     = "app"
 cwd      = "app"                    # relative to repo root; empty = repo root
-command  = "flutter test --machine" # omit in CI (tests already ran)
+# Omit `command` in CI (tests already ran). The command reads its folder
+# from ELSPAIS_TARGET_OUTPUT.
+command  = "flutter test --machine --coverage --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"
 reporter = "flutter-machine"        # stdout-channel reporter
 match    = "source"                 # "source" (default) | "aggregate"
-coverage = "coverage/lcov.info"     # optional; lcov or coverage.py JSON
+coverage = "lcov.info"  # optional; relative to the target's
+                        # folder .results/app, for every cwd
+# inputs names the files whose change makes this target's results stale.
+# The default is every file in the repository. inputs has the same form as a
+# scanning kind's file selection. skip_dirs and skip_files win over
+# directories and file_patterns.
+# inputs = { directories = ["app"], skip_dirs = ["app/build"] }
 
 # File-channel reporter example (junit XML):
 # [[scanning.test.targets]]
 # name     = "pytest"
 # reporter = "junit"
-# results  = "results/*.xml"        # glob relative to cwd
+# results  = "*.xml"  # glob relative to the target's folder
 # match    = "source"
 # groups   = ["uat"]                # default: the `default` group
 # classname = "source-file"         # how the results name their test:
@@ -918,7 +941,7 @@ enabled = true
 [[scanning.test.targets]]
 name     = "playwright"
 reporter = "junit"
-results  = "test-results/junit.xml"   # glob relative to cwd; empty = repo root
+results  = "junit.xml"   # glob relative to the target's folder
 match    = "aggregate"                 # "aggregate" for a whole-suite pass/fail
 ```
 
@@ -950,6 +973,9 @@ coverage-only target that still gets per-test line attribution
 
 [[scanning.test.targets]]
 name     = "elspais-unit"
+command  = "COVERAGE_FILE=$ELSPAIS_TARGET_OUTPUT/.coverage pytest tests/ -q --junitxml=$ELSPAIS_TARGET_OUTPUT/junit.xml -o junit_family=xunit1"
+reporter = "junit"
+results  = "junit.xml"
 coverage = ".coverage"
 ```
 
@@ -958,17 +984,19 @@ Reading contexts from `.coverage` requires the `coverage` package (the
 if it isn't, ingestion degrades gracefully: no line is attributed to a test
 and `Code Tested` renders the honest `n/a`, with a single warning naming the
 extra to install. No other config is required; format detection sniffs the
-SQLite file header, so no `reporter` field is needed for this target. A
+SQLite file header, so no `reporter` field is needed for coverage alone. A
 stale `.coverage` misattributes contexts to old line numbers after source
-edits -- regenerate it (rerun the suite) after editing sources.
+edits. The target's fingerprint then reports its results stale until the
+suite runs again.
 
 The `.githooks/pre-commit` hook runs pytest with `--cov-context=test`
 (pytest-cov's per-test dynamic context, keyed by nodeid + `|run`/`|setup`/
 `|teardown`), which is what populates those contexts in the `.coverage` file
-that pytest-cov already writes to the repo root. No `reporter`/`results`
-fields are set because there's no `--json-report`/`--junit-xml` step --
-`Verifies:` wiring comes entirely from source-scanned `# Verifies:` comments
-in test files, independent of this target. See `elspais docs test-targets`
+pytest-cov writes into the target's folder (`COVERAGE_FILE`). The hook runs
+the tier through `.githooks/with-fingerprint`. That script brackets the tier
+with `elspais fingerprint start` and `finish`. Consequently, the results read
+as fresh until an input changes. `Verifies:` wiring comes from source-scanned
+`# Verifies:` comments in test files, independent of this target. See `elspais docs test-targets`
 (*Python/pytest Recipe*, *Coverage-only target with per-test direct
 attribution*) for the full recipe, including the JSON `show_contexts`
 alternative for suites too small to worry about the JSON-report size cost.

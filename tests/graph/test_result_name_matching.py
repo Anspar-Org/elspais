@@ -84,13 +84,13 @@ def _project(
     declared: str = "",
     junit: str | None = None,
     test_files: tuple[str, ...] = ("tests/e2e/login.spec.ts",),
-    results_dir: str = "results",
     cwd: str = "",
 ) -> Path:
     """An on-disk project: one requirement, scanned `.spec.ts` tests, one report.
 
     `declared` is the target's `classname` (empty leaves the reporter's own).
-    `cwd` scopes the target; the report is written under `<cwd>/<results_dir>`.
+    `cwd` sets the working directory of the target. The report goes into the
+    output area of the target, `.results/e2e`, for every value of `cwd`.
     """
     project = tmp_path / "project"
     (project / "spec").mkdir(parents=True)
@@ -101,7 +101,9 @@ def _project(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(_TEST_SOURCE, encoding="utf-8")
 
-    report_dir = project / cwd / results_dir if cwd else project / results_dir
+    if cwd:
+        (project / cwd).mkdir(parents=True, exist_ok=True)
+    report_dir = project / ".results" / "e2e"
     report_dir.mkdir(parents=True, exist_ok=True)
     (report_dir / "junit.xml").write_text(
         junit if junit is not None else _junit(classname="login.spec.ts"), encoding="utf-8"
@@ -109,7 +111,7 @@ def _project(
 
     (project / ".elspais.toml").write_text(
         _CONFIG.format(
-            results=f"{results_dir}/junit.xml",
+            results="junit.xml",
             cwd=f'cwd = "{cwd}"\n' if cwd else "",
             classname=f'classname = "{declared}"\n' if declared else "",
         ),

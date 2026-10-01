@@ -140,14 +140,14 @@ if [ -z "$ELSPAIS_E2E_FORCE" ] && [ -f "$E2E_CACHE" ]; then
 fi
 
 # The path and the junit family the `elspais-e2e` target declares in
-# .elspais.toml. The configuration is the authority on what this project's e2e
-# results ARE; this hook is one way of producing them, so it produces them
-# where they are declared to be. Written under any other name, the artifact is
-# one `elspais checks` never opens -- and the tier reports as not having run to
-# the one person who just ran it. `junit_family=xunit1` is not cosmetic either:
-# it is what keeps the per-testcase file/line attributes the source matcher
-# binds on, which is the line-level linking the pretty-print below exists for.
-E2E_RESULTS="$CACHE_DIR/junit-e2e.xml"
+# .elspais.toml. .elspais.toml sets the location of the e2e results. This hook
+# writes the results to that location, in the output area of the target. This
+# hook also records the fingerprint of the run. `elspais checks` opens no other
+# path. Consequently, if the results go to another path, then `elspais checks`
+# reports the tier as not run. `junit_family=xunit1` keeps the file and line
+# attributes of each test case. The source matcher binds results with these
+# attributes. The pretty-print below keeps those links.
+E2E_RESULTS="$CACHE_DIR/elspais-e2e/junit.xml"
 
 # The tier runs detached, so a push whose client times out — or a hook killed
 # for any other reason — loses the connection and not the run. The verdict,
@@ -180,6 +180,7 @@ mkdir -p "$E2E_RUN_DIR"
 
 E2E_RC=$(tier_execute "$E2E_RUN_DIR" "$CONTENT_HASH $E2E_ENV_SRC" "$REPO_ROOT" "e2e" \
     "$E2E_RUN_DIR/finish.sh" \
+    "$REPO_ROOT/.githooks/with-fingerprint" elspais-e2e \
     pytest tests/ -m "e2e" --tb=short -q \
     --junitxml="$E2E_RESULTS" -o junit_family=xunit1)
 

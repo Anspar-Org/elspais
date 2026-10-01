@@ -87,7 +87,14 @@ implements = ["dev", "ops", "prd"]
 # File scanning configuration
 [scanning]
 # Global skip patterns (applied to all scan kinds)
-skip = ["**/node_modules", "**/.git", "**/__pycache__", "*.pyc", "**/.venv", ".env"]
+skip = [
+    "**/node_modules", "**/.git", ".elspais", "**/__pycache__", "*.pyc", "**/.venv", ".env",
+    # Test tools write these caches during a test run. By default, the inputs
+    # of a test target are every file in the repository. If a file changes
+    # during every run, then no run produces fresh results.
+    "**/.pytest_cache", "**/.ruff_cache", "**/.mypy_cache", "htmlcov", "**/*.egg-info",
+    ".coverage", ".coverage.*", ".claude/worktrees",
+]
 
 # Spec file scanning
 [scanning.spec]
@@ -131,11 +138,18 @@ skip_dirs = ["**/fixtures"]
 prescan_command = ""
 # Additional regex patterns for reference detection
 reference_patterns = []
+# output_root holds the folder of each test target (REQ-d00313).
+output_root = ".results"
 # Test targets drive result + coverage ingestion ([[scanning.test.targets]]).
+# Each target writes into its own folder under `output_root`. The command of
+# the target reads the folder path from ELSPAIS_TARGET_OUTPUT. A run records a
+# fingerprint in that folder. `elspais checks` uses the fingerprint to judge
+# whether the results are fresh.
 # elspais's own suite (.githooks/pre-commit) runs pytest with
 # `--cov-context=test` (pytest-cov's per-test dynamic context), which writes
-# coverage.py's native `.coverage` SQLite data file to the repo root. Per-test
-# line attribution (code_tested.direct, CUR-1568) is read directly from that
+# coverage.py's native `.coverage` SQLite data file into the unit target's
+# folder (COVERAGE_FILE). Per-test line attribution (code_tested.direct,
+# CUR-1568) is read directly from that
 # database via coverage.py's public API (elspais[coverage] extra). Pass/fail
 # results come from the same run's JUnit XML (`junit_family=xunit1` keeps the
 # per-testcase file/line attributes the source matcher binds on); the hook
@@ -151,6 +165,7 @@ reference_patterns = []
 # group falls in `default`, so `elspais-unit` claims `default` EXPLICITLY
 # alongside `commit` — otherwise grouping it would empty the set a bare
 # `elspais checks --run-tests` executes.
+
 [scanning.test.groups]
 commit = "Fast enough to gate a commit (~6m). What .githooks/pre-commit runs."
 push = "Subprocess and browser tiers, for before a push (~15m). Needs the browser extra."
@@ -158,9 +173,9 @@ stress = "Concurrency battery racing live daemon surfaces. Run when mcp/, server
 
 [[scanning.test.targets]]
 name = "elspais-unit"
-command = "pytest tests/ -q --junitxml=.results/junit.xml -o junit_family=xunit1"
+command = "COVERAGE_FILE=$ELSPAIS_TARGET_OUTPUT/.coverage pytest tests/ -q --junitxml=$ELSPAIS_TARGET_OUTPUT/junit.xml -o junit_family=xunit1"
 reporter = "junit"
-results = ".results/junit.xml"
+results = "junit.xml"
 coverage = ".coverage"
 groups = ["commit", "default"]
 
@@ -170,16 +185,13 @@ groups = ["commit", "default"]
 # only by an e2e test reading as awaiting-a-result rather than passing.
 #
 # Each carries `--no-cov` deliberately. `addopts` in pyproject.toml turns on
-# `--cov=src/elspais`, so without it every one of these runs would rewrite the
-# `.coverage` database that `elspais-unit` reads its per-test line attribution
-# from, and the last tier to finish would decide what the whole repo's line
-# coverage looked like. Results only here; line attribution stays the unit
-# target's job.
+# `--cov=src/elspais`. The unit target alone measures line coverage. These
+# targets produce results only.
 [[scanning.test.targets]]
 name = "elspais-e2e"
-command = "pytest -m e2e -q --no-cov --junitxml=.results/junit-e2e.xml -o junit_family=xunit1"
+command = "pytest -m e2e -q --no-cov --junitxml=$ELSPAIS_TARGET_OUTPUT/junit.xml -o junit_family=xunit1"
 reporter = "junit"
-results = ".results/junit-e2e.xml"
+results = "junit.xml"
 groups = ["push"]
 
 # 34 of the browser tier's 41 tests also carry `e2e`, so this target and
@@ -188,16 +200,16 @@ groups = ["push"]
 # a figure at all.
 [[scanning.test.targets]]
 name = "elspais-browser"
-command = "pytest -m browser -q --no-cov --junitxml=.results/junit-browser.xml -o junit_family=xunit1"
+command = "pytest -m browser -q --no-cov --junitxml=$ELSPAIS_TARGET_OUTPUT/junit.xml -o junit_family=xunit1"
 reporter = "junit"
-results = ".results/junit-browser.xml"
+results = "junit.xml"
 groups = ["push"]
 
 [[scanning.test.targets]]
 name = "elspais-stress"
-command = "pytest tests/stress -m stress -q --no-cov --junitxml=.results/junit-stress.xml -o junit_family=xunit1"
+command = "pytest tests/stress -m stress -q --no-cov --junitxml=$ELSPAIS_TARGET_OUTPUT/junit.xml -o junit_family=xunit1"
 reporter = "junit"
-results = ".results/junit-stress.xml"
+results = "junit.xml"
 groups = ["stress"]
 
 # User journey file scanning

@@ -86,13 +86,13 @@ file_patterns = ["test_*.py"]
 [[scanning.test.targets]]
 name = "a"
 reporter = "junit"
-results = "results-a/results.xml"
+results = "results.xml"
 match = "source"
 
 [[scanning.test.targets]]
 name = "b"
 reporter = "junit"
-results = "results-b/results.xml"
+results = "results.xml"
 match = "source"
 
 [rules.hierarchy]
@@ -146,10 +146,10 @@ def _make_project(tmp_path: Path) -> Path:
         "# Verifies: REQ-d00003-A\ndef test_c():\n    pass\n", encoding="utf-8"
     )
 
-    (project / "results-a").mkdir(parents=True)
-    (project / "results-a" / "results.xml").write_text(_RESULTS_A, encoding="utf-8")
-    (project / "results-b").mkdir(parents=True)
-    (project / "results-b" / "results.xml").write_text(_RESULTS_B, encoding="utf-8")
+    (project / ".results" / "a").mkdir(parents=True)
+    (project / ".results" / "a" / "results.xml").write_text(_RESULTS_A, encoding="utf-8")
+    (project / ".results" / "b").mkdir(parents=True)
+    (project / ".results" / "b" / "results.xml").write_text(_RESULTS_B, encoding="utf-8")
 
     (project / ".elspais.toml").write_text(_CONFIG, encoding="utf-8")
     return project

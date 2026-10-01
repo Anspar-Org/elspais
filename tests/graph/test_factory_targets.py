@@ -42,12 +42,12 @@ def _make_two_target_project(tmp_path: Path) -> Path:
     (project / "spec").mkdir(parents=True)
     (project / "spec" / "reqs.md").write_text(_SPEC, encoding="utf-8")
 
-    (project / "results-a").mkdir(parents=True)
-    (project / "results-a" / "TEST-a.xml").write_text(
+    (project / ".results" / "a").mkdir(parents=True)
+    (project / ".results" / "a" / "TEST-a.xml").write_text(
         _JUNIT_TEMPLATE.format(name="a"), encoding="utf-8"
     )
-    (project / "results-b").mkdir(parents=True)
-    (project / "results-b" / "TEST-b.xml").write_text(
+    (project / ".results" / "b").mkdir(parents=True)
+    (project / ".results" / "b" / "TEST-b.xml").write_text(
         _JUNIT_TEMPLATE.format(name="b"), encoding="utf-8"
     )
 
@@ -68,13 +68,13 @@ enabled = true
 [[scanning.test.targets]]
 name = "a"
 reporter = "junit"
-results = "results-a/TEST-*.xml"
+results = "TEST-*.xml"
 match = "aggregate"
 
 [[scanning.test.targets]]
 name = "b"
 reporter = "junit"
-results = "results-b/TEST-*.xml"
+results = "TEST-*.xml"
 match = "aggregate"
 """,
         encoding="utf-8",

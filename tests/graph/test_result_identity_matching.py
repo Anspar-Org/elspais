@@ -76,7 +76,7 @@ directories = ["tests"]
 [[scanning.test.targets]]
 name = "unit"
 reporter = "junit"
-results = "results/TEST-*.xml"
+results = "TEST-*.xml"
 match = "source"
 """
 
@@ -89,8 +89,8 @@ def _project(tmp_path: Path) -> Path:
     (project / "spec" / "reqs.md").write_text(_SPEC, encoding="utf-8")
     (project / "tests").mkdir(parents=True)
     (project / "tests" / "test_thing.py").write_text(_TEST_FILE, encoding="utf-8")
-    (project / "results").mkdir(parents=True)
-    (project / "results" / "TEST-unit.xml").write_text(_JUNIT, encoding="utf-8")
+    (project / ".results" / "unit").mkdir(parents=True)
+    (project / ".results" / "unit" / "TEST-unit.xml").write_text(_JUNIT, encoding="utf-8")
     (project / ".elspais.toml").write_text(_CONFIG, encoding="utf-8")
     return project
 

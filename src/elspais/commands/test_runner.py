@@ -1,4 +1,4 @@
-# Implements: REQ-d00249-A+B+C
+# Implements: REQ-d00249-A+B+C, REQ-d00312-D, REQ-d00311-B+C
 """Configured test-target dispatcher for the checks run-tests feature.
 
 Each entry in ``[[scanning.test.targets]]`` that has a ``command`` is executed
@@ -9,10 +9,16 @@ parse (REQ-d00254-F) -- has that stdout piped, echoed line by line to stderr as
 it arrives, and accumulated for the parser. stderr is never piped, so it
 streams straight through in both cases. This module also records timing and
 exit codes.
+
+Before a target runs, this module empties the output area and writes the
+fingerprint. After the command exits, this module records each input that
+changed during the run. ``ELSPAIS_TARGET_OUTPUT`` gives the command the path of
+its output area.
 """
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import time
@@ -37,7 +43,9 @@ class RunnerResult:
 
 
 # Implements: REQ-d00249-B, REQ-d00254-F
-def _run_teeing_stdout(command: str, cwd: Path) -> subprocess.CompletedProcess[str]:
+def _run_teeing_stdout(
+    command: str, cwd: Path, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     """Run ``command``, echoing its stdout live while also accumulating it.
 
     A stdout-channel reporter's output IS the results artifact, so it has to be
@@ -54,6 +62,7 @@ def _run_teeing_stdout(command: str, cwd: Path) -> subprocess.CompletedProcess[s
         command,
         shell=True,
         cwd=cwd,
+        env=env,
         stdout=subprocess.PIPE,
         text=True,
         bufsize=1,
@@ -99,6 +108,7 @@ def run_configured_targets(
         reporters.
     """
     from elspais.graph.parsers.results.registry import get_reporter
+    from elspais.utilities.fingerprint import OUTPUT_ENV, finish_run, start_run
 
     results: list[RunnerResult] = []
     captured: dict[str, str] = {}
@@ -151,15 +161,18 @@ def run_configured_targets(
             file=sys.stderr,
         )
         start = time.monotonic()
+        folder = start_run(repo_root, config, target.name)
+        env = {**os.environ, OUTPUT_ENV: str(folder)}
         try:
             if is_stdout_channel:
-                completed = _run_teeing_stdout(target.command, cwd)
+                completed = _run_teeing_stdout(target.command, cwd, env)
                 captured[target.name] = completed.stdout
             else:
                 completed = subprocess.run(
                     target.command,
                     shell=True,
                     cwd=cwd,
+                    env=env,
                 )
             elapsed = time.monotonic() - start
             result = RunnerResult(
@@ -188,6 +201,7 @@ def run_configured_targets(
                 f"<<< {target.name}: FAILED (spawn error: {exc}) ({elapsed:.1f}s)",
                 file=sys.stderr,
             )
+        finish_run(repo_root, config, target.name)
         results.append(result)
         if fail_fast and result.returncode != 0:
             break

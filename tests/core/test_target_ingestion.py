@@ -241,7 +241,8 @@ def test_target_results_not_ingested_when_scan_tests_false(tmp_path: Path):
     from elspais.graph.factory import build_graph as _factory_build_graph
 
     # Write a minimal flutter-machine result file that would normally produce a RESULT node
-    results_file = tmp_path / "results.jsonl"
+    results_file = tmp_path / ".results" / "flutter" / "results.jsonl"
+    results_file.parent.mkdir(parents=True)
     results_file.write_text(
         '{"type":"suite","suite":{"id":0,"platform":"vm","path":"test/foo_test.dart"}}\n'
         '{"type":"testStart","test":{"id":1,"name":"passes","suiteID":0,'
@@ -282,7 +283,9 @@ def test_ingest_two_junit_files_distinct_source_paths(tmp_path: Path):
     from elspais.graph.factory import build_graph as _factory_build_graph
 
     # Write two minimal JUnit XML files
-    xml1 = tmp_path / "results1.xml"
+    folder = tmp_path / ".results" / "junit"
+    folder.mkdir(parents=True)
+    xml1 = folder / "results1.xml"
     xml1.write_text(
         '<?xml version="1.0"?>'
         '<testsuite name="suite1" tests="1">'
@@ -290,7 +293,7 @@ def test_ingest_two_junit_files_distinct_source_paths(tmp_path: Path):
         "</testsuite>\n",
         encoding="utf-8",
     )
-    xml2 = tmp_path / "results2.xml"
+    xml2 = folder / "results2.xml"
     xml2.write_text(
         '<?xml version="1.0"?>'
         '<testsuite name="suite2" tests="1">'

@@ -754,13 +754,13 @@ file_patterns = ["test_*.py"]
 [[scanning.test.targets]]
 name = "a"
 reporter = "junit"
-results = "results-a/results.xml"
+results = "results.xml"
 match = "source"
 
 [[scanning.test.targets]]
 name = "b"
 reporter = "junit"
-results = "results-b/results.xml"
+results = "results.xml"
 match = "source"
 
 [rules.hierarchy]
@@ -833,12 +833,12 @@ def two_target_project(tmp_path):
         "# Verifies: REQ-d00002-A\ndef test_b():\n    pass\n", encoding="utf-8"
     )
 
-    (project / "results-a").mkdir(parents=True)
-    (project / "results-a" / "results.xml").write_text(
+    (project / ".results" / "a").mkdir(parents=True)
+    (project / ".results" / "a" / "results.xml").write_text(
         _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a"), encoding="utf-8"
     )
-    (project / "results-b").mkdir(parents=True)
-    (project / "results-b" / "results.xml").write_text(
+    (project / ".results" / "b").mkdir(parents=True)
+    (project / ".results" / "b" / "results.xml").write_text(
         _JUNIT_ONE_PASSING.format(suite="suite-b", name="test_b"), encoding="utf-8"
     )
 
@@ -865,11 +865,12 @@ def no_result_target_project(tmp_path):
         "# Verifies: REQ-d00002-A\ndef test_b():\n    pass\n", encoding="utf-8"
     )
 
-    (project / "results-a").mkdir(parents=True)
-    (project / "results-a" / "results.xml").write_text(
+    (project / ".results" / "a").mkdir(parents=True)
+    (project / ".results" / "a" / "results.xml").write_text(
         _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a"), encoding="utf-8"
     )
-    # No results-b directory/file: target 'b' results glob matches nothing.
+    # The fixture creates no .results/b folder.
+    # Consequently, the results glob of target 'b' matches nothing.
 
     (project / ".elspais.toml").write_text(_TWO_TARGET_CONFIG, encoding="utf-8")
     return project
@@ -893,12 +894,12 @@ def skipped_result_target_project(tmp_path):
         "# Verifies: REQ-d00002-A\ndef test_b():\n    pass\n", encoding="utf-8"
     )
 
-    (project / "results-a").mkdir(parents=True)
-    (project / "results-a" / "results.xml").write_text(
+    (project / ".results" / "a").mkdir(parents=True)
+    (project / ".results" / "a" / "results.xml").write_text(
         _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a"), encoding="utf-8"
     )
-    (project / "results-b").mkdir(parents=True)
-    (project / "results-b" / "results.xml").write_text(
+    (project / ".results" / "b").mkdir(parents=True)
+    (project / ".results" / "b" / "results.xml").write_text(
         _JUNIT_ONE_SKIPPED.format(suite="suite-b", name="test_b"), encoding="utf-8"
     )
 
@@ -1019,7 +1020,7 @@ file_patterns = ["test_*.py"]
 [[scanning.test.targets]]
 name = "a"
 reporter = "junit"
-results = "results/results.xml"
+results = "results.xml"
 match = "source"
 
 [rules.hierarchy]
@@ -1071,8 +1072,8 @@ def marker_verified_project(tmp_path):
         "# Verifies: REQ-d00001\ndef test_a():\n    pass\n", encoding="utf-8"
     )
 
-    (project / "results").mkdir(parents=True)
-    (project / "results" / "results.xml").write_text(
+    (project / ".results" / "a").mkdir(parents=True)
+    (project / ".results" / "a" / "results.xml").write_text(
         _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a"), encoding="utf-8"
     )
 
@@ -1113,7 +1114,7 @@ file_patterns = ["test_*.py"]
 
 [[scanning.test.targets]]
 name = "a"
-coverage = "coverage/lcov.info"
+coverage = "lcov.info"
 credit_coverage = "verified"
 
 [rules.hierarchy]
@@ -1161,8 +1162,8 @@ def code_tested_no_attribution_project(tmp_path):
         "# Implements: REQ-d00001\nx = 1\ny = 2\nz = 3\n", encoding="utf-8"
     )
 
-    (project / "coverage").mkdir(parents=True)
-    (project / "coverage" / "lcov.info").write_text(
+    (project / ".results" / "a").mkdir(parents=True)
+    (project / ".results" / "a" / "lcov.info").write_text(
         "SF:src/main.py\nDA:1,1\nDA:2,1\nDA:3,1\nDA:4,1\nLF:4\nLH:4\nend_of_record\n",
         encoding="utf-8",
     )
@@ -1191,8 +1192,8 @@ def code_tested_context_carrying_project(tmp_path):
         "# Implements: REQ-d00001\nx = 1\ny = 2\nz = 3\n", encoding="utf-8"
     )
 
-    (project / "coverage").mkdir(parents=True)
-    (project / "coverage" / "coverage.json").write_text(
+    (project / ".results" / "a").mkdir(parents=True)
+    (project / ".results" / "a" / "coverage.json").write_text(
         json.dumps(
             {
                 "files": {
@@ -1214,7 +1215,7 @@ def code_tested_context_carrying_project(tmp_path):
     )
 
     (project / ".elspais.toml").write_text(
-        _CODE_TESTED_CONFIG.replace("coverage/lcov.info", "coverage/coverage.json"),
+        _CODE_TESTED_CONFIG.replace('"lcov.info"', '"coverage.json"'),
         encoding="utf-8",
     )
     return project
@@ -1244,12 +1245,12 @@ def marker_carried_project(tmp_path):
         "# Verifies: REQ-d00002\ndef test_b():\n    pass\n", encoding="utf-8"
     )
 
-    (project / "results-a").mkdir(parents=True)
-    (project / "results-a" / "results.xml").write_text(
+    (project / ".results" / "a").mkdir(parents=True)
+    (project / ".results" / "a" / "results.xml").write_text(
         _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a"), encoding="utf-8"
     )
-    (project / "results-b").mkdir(parents=True)
-    (project / "results-b" / "results.xml").write_text(
+    (project / ".results" / "b").mkdir(parents=True)
+    (project / ".results" / "b" / "results.xml").write_text(
         _JUNIT_ONE_PASSING.format(suite="suite-b", name="test_b"), encoding="utf-8"
     )
 
@@ -1445,7 +1446,7 @@ file_patterns = ["test_*.py"]
 [[scanning.test.targets]]
 name = "a"
 reporter = "junit"
-results = "results/results.xml"
+results = "results.xml"
 match = "source"
 
 [rules.hierarchy]
@@ -1534,8 +1535,8 @@ def tested_breakdown_project(tmp_path):
             encoding="utf-8",
         )
 
-    (project / "results").mkdir(parents=True)
-    (project / "results" / "results.xml").write_text(_BREAKDOWN_JUNIT, encoding="utf-8")
+    (project / ".results" / "a").mkdir(parents=True)
+    (project / ".results" / "a" / "results.xml").write_text(_BREAKDOWN_JUNIT, encoding="utf-8")
 
     (project / ".elspais.toml").write_text(_BREAKDOWN_CONFIG, encoding="utf-8")
     return project

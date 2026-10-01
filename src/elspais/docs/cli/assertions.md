@@ -22,11 +22,15 @@ C. The system SHALL NOT store passwords in plain text.
 
   **SHALL**         Absolute requirement (must be implemented)
   **SHALL NOT**     Absolute prohibition (must never happen)
-  **SHOULD**        Recommended but not required
-  **SHOULD NOT**    Not recommended but not prohibited
-  **MAY**           Optional behavior
 
-Most assertions use **SHALL** or **SHALL NOT**.
+Each assertion carries exactly one **SHALL**. An author writes the positive
+property first. An author uses **SHALL NOT** only if no positive statement can
+express the rule. A test checks a property more easily than an absence.
+
+A deterministic test must pass or fail each assertion. A recommended or
+optional behavior gives the test no outcome to decide. Consequently,
+**SHOULD**, **SHOULD NOT**, **MAY** and **MUST** do not appear in an
+assertion.
 
 ## Good vs Bad Assertions
 
