@@ -591,51 +591,19 @@ def count_with_code_refs(
     }
 
 
-# Implements: REQ-d00254-Q
-def count_code_coverage(graph: FederatedGraph) -> dict[str, int]:
-    """Compute project-wide code coverage statistics.
+# Implements: REQ-d00254-G, REQ-d00274-I
+def result_names_no_test(result: GraphNode) -> bool:
+    """Whether a RESULT names no test, and so credits nothing. ONE authority.
 
-    Returns dict with:
-    - total_executable_lines: sum of executable_lines across FILE nodes
-    - total_covered_lines: sum of lines where hit_count > 0 across FILE nodes
-    - total_attributed_lines: sum of code_tested.total_lines across all REQUIREMENT nodes
-      (lines shared across REQs may be counted multiple times)
-    - unmeasured_files: FILE nodes left out because their source could not be
-      re-analysed, so the figure states what it is over (REQ-d00254-Q)
+    A source-match result names its test only where the builder resolved it
+    at step or test scope. Otherwise it binds to every test in its file, or to
+    none, and the file does not say which test produced it.
     """
-    from elspais.graph import NodeKind
-
-    total_executable = 0
-    total_covered = 0
-    unmeasured_files = 0
-
-    for node in graph.iter_by_kind(NodeKind.FILE):
-        # A file whose source could not be re-analysed has no known total.
-        # Both sums are skipped, not just the denominator: counting its
-        # executed lines against everyone else's total would raise the
-        # figure by exactly the lines whose size is unknown.
-        if node.get_field("source_analysed") is False:
-            unmeasured_files += 1
-            continue
-        executable = node.get_field("executable_lines")
-        if executable:
-            total_executable += executable
-        line_coverage = node.get_field("line_coverage")
-        if line_coverage:
-            total_covered += sum(1 for hit in line_coverage.values() if hit > 0)
-
-    total_attributed = 0
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        rollup = node.get_metric("rollup_metrics")
-        if rollup is not None:
-            total_attributed += rollup.code_tested.total_lines
-
-    return {
-        "total_executable_lines": total_executable,
-        "total_covered_lines": total_covered,
-        "total_attributed_lines": total_attributed,
-        "unmeasured_files": unmeasured_files,
-    }
+    return (
+        (result.get_field("match") or "") == "source"
+        and not result.get_field("test_id")
+        and result.get_field("match_scope") not in ("test", "step")
+    )
 
 
 def count_by_git_status(graph: FederatedGraph) -> dict[str, int]:
@@ -729,77 +697,67 @@ def _compute_coverage_from_source(
     return contributions, source_nodes
 
 
+# Implements: REQ-d00254-D+W
+def implementation_lines(node: GraphNode, region_cache: dict) -> dict[str, set[int]]:
+    """The implementation lines a requirement's code citations speak for.
+
+    Keyed by FILE node id, which names the owning repository, so two members
+    holding one repository-relative path keep their lines apart. Each set is
+    what ``attributed_lines`` gives for the citations in that file. ONE
+    derivation, read by a requirement's line figure and by the estate figure.
+    """
+    from elspais.graph import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    lines_by_file: dict[str, set[int]] = {}
+    for edge in node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.IMPLEMENTS:
+            continue
+        target = edge.target
+        if target.kind != NodeKind.CODE:
+            continue
+        fn = target.file_node()
+        if fn is None or not fn.get_field("relative_path"):
+            continue
+        lines_by_file.setdefault(fn.id, set()).update(attributed_lines(target, fn, region_cache))
+    return {fid: lines for fid, lines in lines_by_file.items() if lines}
+
+
+def _implementation_files(node: GraphNode) -> dict[str, GraphNode]:
+    """The FILE nodes holding a requirement's implementing code, by id."""
+    from elspais.graph import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    files: dict[str, GraphNode] = {}
+    for edge in node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.IMPLEMENTS or edge.target.kind != NodeKind.CODE:
+            continue
+        fn = edge.target.file_node()
+        if fn is not None:
+            files.setdefault(fn.id, fn)
+    return files
+
+
 # Implements: REQ-d00258-W
 def _compute_code_tested(
     node: GraphNode, metrics: RollupMetrics, region_cache: dict | None = None
 ) -> None:
     """Compute the code_tested dimension from line coverage data.
 
-    Intersects implementation line ranges (from IMPLEMENTS edges to CODE nodes)
-    with file-level line_coverage data to determine how many implementation
-    lines are exercised by tests.
+    Intersects the requirement's implementation lines with file-level
+    line_coverage data to determine how many implementation lines are
+    exercised by tests.
 
     Args:
         node: The REQUIREMENT node.
         metrics: The RollupMetrics to update (modifies code_tested in place).
     """
-    from elspais.graph import NodeKind
     from elspais.graph.metrics import LineCoverage
-    from elspais.graph.relations import EdgeKind
 
-    # Collect implementation lines: set of (relative_path, line_number)
-    impl_lines: set[tuple[str, int]] = set()
-
-    for edge in node.iter_outgoing_edges():
-        if edge.kind != EdgeKind.IMPLEMENTS:
-            continue
-        target = edge.target
-        if target.kind != NodeKind.CODE:
-            continue
-
-        # Find FILE ancestor of CODE node
-        fn = target.file_node()
-        if fn is None:
-            continue
-        rel_path = fn.get_field("relative_path")
-        if not rel_path:
-            continue
-
-        for line_no in attributed_lines(
-            target, fn, region_cache if region_cache is not None else {}
-        ):
-            impl_lines.add((rel_path, line_no))
-
-    if not impl_lines:
+    lines_by_file = implementation_lines(node, region_cache if region_cache is not None else {})
+    if not lines_by_file:
         return
-
-    # Group lines by file for efficient coverage lookup
-    lines_by_file: dict[str, set[int]] = {}
-    for rel_path, line_no in impl_lines:
-        lines_by_file.setdefault(rel_path, set()).add(line_no)
-
-    # Indirect coverage: check file-level line_coverage
-    indirect_count = 0
-    has_any_coverage = False
-
-    for edge in node.iter_outgoing_edges():
-        if edge.kind != EdgeKind.IMPLEMENTS:
-            continue
-        target = edge.target
-        if target.kind != NodeKind.CODE:
-            continue
-        fn = target.file_node()
-        if fn is None:
-            continue
-        rel_path = fn.get_field("relative_path")
-        if not rel_path or rel_path not in lines_by_file:
-            continue
-
-        line_coverage = fn.get_field("line_coverage")
-        if line_coverage is None:
-            continue
-        has_any_coverage = True
-        break  # Just checking existence
+    files = _implementation_files(node)
 
     # Whether the ingested coverage carried per-test contexts is a fact about
     # the TOOLING, established at ingestion: the factory sets `line_contexts`
@@ -807,49 +765,25 @@ def _compute_code_tested(
     # formats return none. Read here so a surface can tell "the question was
     # never asked" from "the answer is zero" instead of inferring it from a
     # count that means both.
+    file_coverage: dict[str, dict[int, int]] = {}
     has_any_contexts = False
-    for edge in node.iter_outgoing_edges():
-        if edge.kind != EdgeKind.IMPLEMENTS:
-            continue
-        target = edge.target
-        if target.kind != NodeKind.CODE:
-            continue
-        fn = target.file_node()
-        if fn is None:
-            continue
-        rel_path = fn.get_field("relative_path")
-        if not rel_path or rel_path not in lines_by_file:
-            continue
+    for fid in lines_by_file:
+        fn = files[fid]
+        lc = fn.get_field("line_coverage")
+        if lc is not None:
+            file_coverage[fid] = lc
         if fn.get_field("line_contexts"):
             has_any_contexts = True
-            break
+    has_any_coverage = bool(file_coverage)
 
-    if has_any_coverage:
-        # Build file_node cache for coverage lookup
-        file_coverage: dict[str, dict[int, int]] = {}
-        for edge in node.iter_outgoing_edges():
-            if edge.kind != EdgeKind.IMPLEMENTS:
-                continue
-            target = edge.target
-            if target.kind != NodeKind.CODE:
-                continue
-            fn = target.file_node()
-            if fn is None:
-                continue
-            rel_path = fn.get_field("relative_path")
-            if not rel_path or rel_path in file_coverage:
-                continue
-            lc = fn.get_field("line_coverage")
-            if lc is not None:
-                file_coverage[rel_path] = lc
-
-        for rel_path, lines in lines_by_file.items():
-            lc = file_coverage.get(rel_path)
-            if lc is None:
-                continue
-            for line_no in lines:
-                if lc.get(line_no, 0) > 0:
-                    indirect_count += 1
+    indirect_count = 0
+    for fid, lines in lines_by_file.items():
+        lc = file_coverage.get(fid)
+        if lc is None:
+            continue
+        for line_no in lines:
+            if lc.get(line_no, 0) > 0:
+                indirect_count += 1
 
     # Implements: REQ-d00254-G
     # Per-test attribution (coverage.py dynamic contexts, CUR-1568): a line
@@ -863,7 +797,7 @@ def _compute_code_tested(
     direct_count = _direct_context_count(node, lines_by_file)
 
     metrics.code_tested = LineCoverage(
-        total_lines=len(impl_lines),
+        total_lines=sum(len(lines) for lines in lines_by_file.values()),
         attributed_lines=direct_count,
         covered_lines=indirect_count,
         has_measurement=has_any_coverage,
@@ -917,28 +851,17 @@ def _direct_context_count(node: GraphNode, lines_by_file: dict[str, set[int]]) -
     # Collect line_contexts per file from this requirement's IMPLEMENTS edges
     # (same traversal shape as the line_coverage lookup above).
     file_contexts: dict[str, dict[int, list[str]]] = {}
-    for edge in node.iter_outgoing_edges():
-        if edge.kind != EdgeKind.IMPLEMENTS:
-            continue
-        target = edge.target
-        if target.kind != NodeKind.CODE:
-            continue
-        fn = target.file_node()
-        if fn is None:
-            continue
-        rel_path = fn.get_field("relative_path")
-        if not rel_path or rel_path in file_contexts:
-            continue
+    for fid, fn in _implementation_files(node).items():
         ctxs = fn.get_field("line_contexts")
         if ctxs:
-            file_contexts[rel_path] = ctxs
+            file_contexts[fid] = ctxs
 
     if not file_contexts:
         return 0
 
     direct_count = 0
-    for rel_path, lines in lines_by_file.items():
-        ctxs = file_contexts.get(rel_path)
+    for fid, lines in lines_by_file.items():
+        ctxs = file_contexts.get(fid)
         if not ctxs:
             continue
         for line_no in lines:
@@ -1642,17 +1565,10 @@ def annotate_coverage(
                 if result.kind != NodeKind.RESULT:
                     continue
                 # Implements: REQ-d00254-G
-                # A source-match result that resolved to neither a step nor a
-                # test bound at file granularity only, so it names no test and
-                # credits nothing. Precisely-resolved source results
-                # (match_scope "test" or "step") credit inline like test_id
-                # results: their pass credits their assertions; their fail
-                # flags only their own test.
-                if (
-                    (result.get_field("match") or "") == "source"
-                    and not result.get_field("test_id")
-                    and result.get_field("match_scope") not in ("test", "step")
-                ):
+                # A result that names no test credits nothing. A result that
+                # names its test or its step credits inline: its pass credits
+                # its assertions, and its fail flags only its own test.
+                if result_names_no_test(result):
                     continue
                 status = (result.get_field("status", "") or "").lower()
                 if status in PASSING_STATUSES:
@@ -2273,11 +2189,12 @@ __all__ = [
     "count_by_level",
     "count_by_repo",
     "count_by_coverage",
-    "count_code_coverage",
     "count_with_code_refs",
     "count_by_git_status",
     "count_implementation_files",
     "collect_topics",
+    "implementation_lines",
+    "result_names_no_test",
     "annotate_coverage",
     "annotate_journey_verification",
     "JourneyVerification",

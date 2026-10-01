@@ -680,16 +680,17 @@ class TestPartialReads:
         (diagnostic,) = [d for d in parser.iter_diagnostics() if d.path == str(template)]
         assert diagnostic.partial is True
 
-    # Verifies: REQ-d00254-Q
+    # Verifies: REQ-d00254-Q+X
     def test_REQ_d00254_Q_an_unanalysed_file_leaves_the_line_coverage_figure(self):
-        """Both sums must skip it. Excluding the total but keeping the lines
+        """Every figure must skip it. Excluding the total but keeping the lines
         that ran would raise the figure by exactly the lines whose size is
         unknown -- worse than counting it whole.
         """
-        from elspais.graph.annotators import count_code_coverage
+        from elspais.graph.aggregation import aggregate_estate_lines
 
         class _Node:
-            def __init__(self, fields):
+            def __init__(self, node_id, fields):
+                self.id = node_id
                 self._fields = fields
 
             def get_field(self, name):
@@ -700,14 +701,16 @@ class TestPartialReads:
                 return iter(
                     [
                         _Node(
-                            {"executable_lines": 10, "line_coverage": dict.fromkeys(range(5), 1)}
+                            "file:REQ:measured.py",
+                            {"executable_lines": 10, "line_coverage": dict.fromkeys(range(5), 1)},
                         ),
                         _Node(
+                            "file:REQ:unanalysed.html.j2",
                             {
                                 "source_analysed": False,
                                 "executable_lines": 0,
                                 "line_coverage": dict.fromkeys(range(90), 1),
-                            }
+                            },
                         ),
                     ]
                 )
@@ -715,11 +718,12 @@ class TestPartialReads:
             def nodes_by_kind(self, kind):
                 return iter([])
 
-        result = count_code_coverage(_Graph())
+        result = aggregate_estate_lines(_Graph())
 
-        assert result["total_executable_lines"] == 10
-        assert result["total_covered_lines"] == 5
-        assert result["unmeasured_files"] == 1
+        assert result.executable_lines == 10
+        assert result.executed_lines == 5
+        assert result.requirement_executed_lines == 0
+        assert result.unmeasured_files == 1
 
 
 # ─────────────────────────────────────────────────────────────────────────────

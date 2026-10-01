@@ -272,6 +272,30 @@ Get summary statistics for the project.
     total_nodes            Total nodes in graph
     orphan_count           Requirements without parents
     unresolved_reference_count References to non-existent requirements
+    file_bound_results     Present only where some ingested result names
+                             only the file holding its tests, not its test.
+                             Such a result credits no assertion. `count` is
+                             the number of them and `artifacts` lists each
+                             artifact holding them (namespace, artifact,
+                             count). The same figure `elspais summary`
+                             states; the severity of the
+                             `tests.file_bound_results` check does not
+                             affect it.
+    code_coverage          Present where any line was measured or any file
+                             could not be analysed. Every figure counts
+                             distinct lines over the same files -- those
+                             whose source was analysed -- so the difference
+                             between two of them is a count of lines:
+      - executable_lines             Executable lines
+      - executed_lines               Lines a test run executed
+      - requirement_executed_lines   Executed lines a requirement counted in
+                                     coverage
+                                     implements, each counted once however
+                                     many requirements implement it
+      - executed_without_requirement Executed lines no requirement counted in
+                                     coverage implements
+      - unmeasured_files             Files left out of every figure because
+                                     their source could not be analysed
 
 **get_test_coverage(req_id)** / **get_uncovered_assertions(req_id?, source?)**
 

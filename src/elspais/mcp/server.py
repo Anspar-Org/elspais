@@ -75,7 +75,6 @@ from elspais.graph.annotators import (
     count_by_coverage,
     count_by_git_status,
     count_by_level,
-    count_code_coverage,
     count_with_code_refs,
 )
 from elspais.graph.factory import build_graph
@@ -2366,14 +2365,23 @@ def _get_project_summary(
     # truth for the dict shape, so MCP and CLI can never diverge.
     from elspais.graph.aggregation import collect_coverage
 
-    result["coverage_by_level"] = collect_coverage(graph, config)["levels"]
+    coverage = collect_coverage(graph, config)
+    result["coverage_by_level"] = coverage["levels"]
+    # Implements: REQ-d00274-K
+    # Present exactly where the shared payload carries it, so this surface and
+    # the CLI summary state the same number.
+    if "file_bound_results" in coverage:
+        result["file_bound_results"] = coverage["file_bound_results"]
 
-    code_cov = count_code_coverage(graph)
+    # Implements: REQ-d00254-W+X, REQ-o00061-C
     # Reported when anything was measured, and also when nothing was because
     # every file's source defeated analysis -- omitting it there would be the
     # same silence as reporting no coverage at all.
-    if code_cov["total_executable_lines"] > 0 or code_cov["unmeasured_files"]:
-        result["code_coverage"] = code_cov
+    from elspais.graph.aggregation import aggregate_estate_lines
+
+    estate_lines = aggregate_estate_lines(graph, config)
+    if estate_lines.executable_lines > 0 or estate_lines.unmeasured_files:
+        result["code_coverage"] = estate_lines.to_dict()
 
     return result
 

@@ -4602,6 +4602,62 @@ def check_unmatched_results(
     )
 
 
+# Implements: REQ-d00274-I+J, REQ-d00285-F
+def check_file_bound_results(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report results that name only the file holding their tests.
+
+    Such a result binds to every test in that file, so it says nothing about
+    which test produced it, and it credits nothing (REQ-d00254-G). Without
+    this check a suite whose results all bind that way reads as a suite with
+    no evidence. One finding names each artifact holding such results, with
+    the tests they could have bound to. A result that bound to no test at all
+    is the unmatched-results check's, so no result is reported under both.
+    """
+    severity = severity_for("tests.file_bound_results", config)
+    if severity == Severity.OFF:
+        return skipped_check("tests.file_bound_results", "Results naming no test")
+
+    from elspais.graph.aggregation import iter_file_bound_results
+
+    records = iter_file_bound_results(graph)
+    repo_names = {entry.namespace: entry.name for entry in graph.iter_repos()}
+    findings = [
+        HealthFinding(
+            message=(
+                f"{len(r.result_ids)} result(s) in {r.artifact} name only the file holding "
+                f"{len(r.tests)} test(s), not the test that produced them, so they credit no "
+                "assertion; record each test's source line in the results"
+            ),
+            node_id=r.result_ids[0],
+            file_path=r.result_file,
+            line=r.first_line,
+            related=list(r.tests),
+            repo=repo_names[r.namespace],
+        )
+        for r in records
+    ]
+    if not findings:
+        return HealthCheck(
+            name="tests.file_bound_results",
+            passed=True,
+            message="Every ingested result that bound to a test named its test",
+            category="tests",
+            severity=severity,
+        )
+    count = sum(len(r.result_ids) for r in records)
+    return HealthCheck(
+        name="tests.file_bound_results",
+        passed=False,
+        message=f"{count} ingested result(s) in {len(records)} artifact(s) name no test",
+        category="tests",
+        severity=severity,
+        details={"count": count, "artifacts": len(records)},
+        findings=findings,
+    )
+
+
 # Implements: REQ-d00285-F
 # Implements: REQ-d00274-G
 def check_unbound_citations(
@@ -5129,6 +5185,7 @@ def run_test_checks(
         check_test_results(graph, config=config),
         check_test_results_stale(graph, config),
         check_unmatched_results(graph, config),
+        check_file_bound_results(graph, config),
         check_ingestion_faults(graph, config, expected_targets),
         check_targets_not_run(graph, config, expected_targets),
         check_runs_in_progress(graph, config),

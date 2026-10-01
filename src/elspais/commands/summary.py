@@ -636,6 +636,24 @@ def _level_block(lv: dict, keys: tuple[str, ...], config: dict | None, carry: st
     return lines
 
 
+# Implements: REQ-d00274-K
+def _file_bound_sentence(data: dict) -> str | None:
+    """The sentence stating results that bind only through a file, or None.
+
+    Read from the payload alone. The severity of the matching finding is not
+    consulted, so turning the finding off does not remove the sentence.
+    """
+    tally = data.get("file_bound_results")
+    if not tally or not tally.get("count"):
+        return None
+    count = tally["count"]
+    artifacts = len(tally.get("artifacts") or [])
+    return (
+        f"{count} result(s) in {artifacts} artifact(s) name no test, only the file "
+        "holding their tests; they credit no assertion"
+    )
+
+
 # Implements: REQ-d00254-I
 def _render_text(data: dict, config: dict | None = None) -> str:
     carried = data.get("carried_result_targets", 0) or 0
@@ -675,6 +693,9 @@ def _render_text(data: dict, config: dict | None = None) -> str:
     if excluded:
         parts = [f"{v} {k}" for k, v in sorted(excluded.items())]
         lines.append(f"  ({', '.join(parts)} not included in coverage)")
+    file_bound = _file_bound_sentence(data)
+    if file_bound:
+        lines.append(f"  ({file_bound})")
 
     # REQ-d00252-F: External integrations grouped by owning associate.
     # "Passing" (REQ-d00258-K vocabulary, REQ-d00277-C):
@@ -781,6 +802,10 @@ def _render_markdown(data: dict, config: dict | None = None) -> str:
         parts = [f"{v} {k}" for k, v in sorted(excluded.items())]
         lines.append("")
         lines.append(f"*{', '.join(parts)} not included in coverage.*")
+    file_bound = _file_bound_sentence(data)
+    if file_bound:
+        lines.append("")
+        lines.append(f"*{file_bound}.*")
 
     # REQ-d00252-F: External integrations grouped by owning associate.
     # "Passing" (REQ-d00258-K vocabulary, REQ-d00277-C):
@@ -904,6 +929,19 @@ def _render_csv(data: dict, config: dict | None = None) -> str:
         # met three columns here and one in markdown could not use a
         # selection as a stated shape at all.
         writer.writerow([_cell(lv, key) for key in keys])
+
+    # Implements: REQ-d00274-K
+    tally = data.get("file_bound_results")
+    if tally and tally.get("count"):
+        writer.writerow([])
+        writer.writerow(
+            [
+                "Results Naming No Test",
+                tally["count"],
+                "Artifacts",
+                len(tally.get("artifacts") or []),
+            ]
+        )
 
     # Implements: REQ-d00254-I
     # Structured carried-results counts (no asterisk -- machine format).

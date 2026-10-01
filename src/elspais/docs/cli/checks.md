@@ -287,6 +287,7 @@ that changes to cross-cutting requirements are propagated to their consumers.
 | `tests.uncredited_evidence` | Evidence naming an assertion its dimension does not count -- a test on an assertion nothing implements -- so it reaches no coverage figure | error | `[rules.coverage] uncredited_evidence` | `elspais -v checks --tests` |
 | `tests.external` | A test that failed and reaches no requirement, so nobody will find the failure through the spec | warning | `[rules.coverage] external_test_failure` | `elspais failing` |
 | `tests.unbound_citation` | A citation in a scanned test file that found no test to attach to -- it names assertions but sits where no test was declared, so no result can ever reach it; it contributes no coverage and is reported here instead | warning | `[rules.severity]` | no command resolves this; resolve it by hand |
+| `tests.file_bound_results` | A result that names only the file holding its tests, not the test that produced it -- it binds to every test in that file, so it credits no assertion and is reported here instead | warning | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `tests.ingestion_fault` | An artifact ingestion could not read at all -- a results or coverage report that would not parse, one in a format no reporter reads, a reporter name that matches none, or a target whose working directory leaves the repository -- and results or coverage missing for a target the run executed or expected. What went unread is absent from every figure, and absence reads as a zero | error | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `tests.not_run` | A test target with no results that the run neither executed nor named as expected. The target has not run; that is information about the run, not a fault in the project | info | `[rules.severity]` | `elspais checks --run-tests` |
 | `tests.run_in_progress` | A test target whose run started and has not recorded its end. Nothing in its output area is read until the run ends, so its results and coverage are not judged | info | `[rules.severity]` | no command resolves this; resolve it by hand |
@@ -296,6 +297,25 @@ that changes to cross-cutting requirements are propagated to their consumers.
 | `tests.provisional_references` | Tests referencing requirements with provisional status (Draft, Proposed) | info | `[rules.references] provisional` | no command resolves this; resolve it by hand |
 | `tests.aspirational_references` | Tests referencing requirements with aspirational status (Roadmap, Future, Idea) | info | `[rules.references] aspirational` | no command resolves this; resolve it by hand |
 <!-- /generated: check-catalog:tests -->
+
+#### Results That Name No Test
+
+A result binds to a test in one of three ways. A result naming a journey step
+binds to the tests verifying that step. A result naming its test's source file
+and line binds to that test. A result whose file resolves and whose line
+matches no test binds to every test in the file, and so names none of them.
+
+That last kind credits no assertion, because the tool cannot say which test
+produced it. `tests.file_bound_results` reports it: one finding per artifact
+holding such results, with the tests they could have bound to. The default
+severity is `warning`, set under `[rules.severity]`.
+
+The severity governs the finding alone. `elspais summary`, in every format,
+and the MCP project summary state the number of these results apart from the
+coverage figures wherever any exist, whatever severity the check carries, and
+say nothing about them where none exist. A result that binds to no test at
+all is reported by `tests.unmatched_results` instead, so no result is
+reported under both names.
 
 #### Reference Status Checks — Retired, Provisional, Aspirational
 
