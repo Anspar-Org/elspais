@@ -8292,6 +8292,11 @@ def create_server(
         collapse to a single write per requirement).  After a successful save
         the graph is refreshed so the in-memory state matches disk.
 
+        A file the save writes is written whole, in canonical form. The
+        result's ``changed_beyond_edits`` names each requirement, journey or
+        section of file-level prose whose text changed although no pending
+        mutation reached it, and is empty where nothing did.
+
         Args:
             if_tip_mutation_id: The mutation-log tip as you last saw it, or ""
                 if you believe nothing is pending. Required — a save persists

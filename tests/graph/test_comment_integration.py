@@ -10,6 +10,7 @@ from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
 from elspais.graph.comments import CommentEvent, CommentIndex, CommentThread
 from elspais.graph.federated import FederatedGraph, RepoEntry
+from tests.core.graph_test_helpers import grammar_for
 
 
 def _project_config(name, namespace):
@@ -178,7 +179,7 @@ class TestRenameHooks:
         """rename_assertion calls update_anchors_on_rename for comment consistency."""
         from elspais.graph.relations import EdgeKind
 
-        graph = TraceGraph(repo_root=tmp_path)
+        graph = TraceGraph(repo_root=tmp_path, _resolver=grammar_for("REQ"))
         req = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT)
         assertion = GraphNode(id="REQ-p00001-A", kind=NodeKind.ASSERTION)
         assertion.set_field("label", "A")

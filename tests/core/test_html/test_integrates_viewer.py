@@ -6,20 +6,18 @@ the library requirement's implemented/verified coverage via the dedicated
 ``INTEGRATES`` edge. The viewer must surface, for the consumer card:
 
 1. The inherited coverage rollup (``integrates_rollup``), serialized into the
-   embedded ``node-index`` JSON island and rendered as an "Integrated
+   embedded node index and rendered as an "Integrated
    coverage:" row.
 2. The INTEGRATES relationship link to the library requirement.
 3. An edge badge in the legend catalog describing the relationship.
 
 The card UI is rendered client-side by JavaScript using the embedded
-``node-index`` JSON, so most assertions inspect that JSON. The display-literal
+node index, so most assertions inspect that JSON. The display-literal
 tests assert against the inlined card JS template / CSS hooks.
 """
 
 from __future__ import annotations
 
-import json
-import re
 import subprocess
 import textwrap
 from pathlib import Path
@@ -28,6 +26,7 @@ import pytest
 
 from elspais.graph.factory import build_graph
 from elspais.html.generator import HTMLGenerator
+from tests.embedded_page import embedded_data
 
 
 def _write(repo: Path, rel: str, body: str) -> None:
@@ -57,14 +56,8 @@ def _git_init(repo: Path) -> None:
 
 
 def _extract_node_index(html: str) -> dict:
-    """Parse the embedded ``node-index`` JSON island from the rendered HTML."""
-    m = re.search(
-        r'<script[^>]*id="node-index"[^>]*>(.*?)</script>',
-        html,
-        re.DOTALL,
-    )
-    assert m is not None, "expected an embedded node-index <script> in rendered HTML"
-    return json.loads(m.group(1))
+    """The node index restored from the rendered HTML's embedded content."""
+    return embedded_data(html)["nodes"]
 
 
 @pytest.fixture
@@ -169,7 +162,7 @@ def federation(tmp_path: Path):
 
 class TestIntegratesRollupSerialized:
     """Validates REQ-d00252-D: the consumer's integrates_rollup is serialized
-    into the embedded node-index JSON, and non-consumers carry no rollup."""
+    into the embedded node index, and non-consumers carry no rollup."""
 
     # Verifies: REQ-d00252-D
     def test_REQ_d00252_D_consumer_node_index_has_integrates_rollup(self, federation):
@@ -178,7 +171,7 @@ class TestIntegratesRollupSerialized:
         nodes = _extract_node_index(html)
 
         cid = "APP-p00001"
-        assert cid in nodes, f"expected consumer {cid} in node-index; got {sorted(nodes)[:10]}"
+        assert cid in nodes, f"expected consumer {cid} in the node index; got {sorted(nodes)[:10]}"
         props = nodes[cid].get("properties") or {}
         assert "integrates_rollup" in props, (
             f"expected integrates_rollup on consumer {cid}; properties keys: {sorted(props)}"
@@ -231,7 +224,7 @@ class TestIntegratesRollupSerialized:
         html = HTMLGenerator(federation).generate(embed_content=True)
         nodes = _extract_node_index(html)
 
-        assert "LIB-p00001" in nodes, "expected LIB-p00001 in node-index"
+        assert "LIB-p00001" in nodes, "expected LIB-p00001 in the node index"
         props = nodes["LIB-p00001"].get("properties") or {}
         assert "integrates_rollup" not in props, (
             f"library REQ has no outbound INTEGRATES, should not carry integrates_rollup; "

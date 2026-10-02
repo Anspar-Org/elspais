@@ -714,8 +714,13 @@ def record_automatic_save(
     mutation_count: int | None,
     files_written: int = 0,
     trigger: str = "",
+    changed_beyond_edits: list[dict] | None = None,
 ) -> None:
     """Record a save the daemon performed rather than a client requesting it.
+
+    ``changed_beyond_edits`` is the save's own account of the text it changed
+    that no mutation reached (REQ-d00132-J); no client was present to be told,
+    so the record carries it to the next one.
 
     The record carries facts only — who saved, when, how much, and what
     condition triggered it. It says nothing about whether the work is
@@ -735,6 +740,7 @@ def record_automatic_save(
         "mutation_count": mutation_count,
         "files_written": files_written,
         "trigger": trigger,
+        "changed_beyond_edits": list(changed_beyond_edits or []),
         "version": __version__,
     }
     path = _automatic_save_path(repo_root)

@@ -8,7 +8,7 @@ Journeys for developers writing requirements and QA engineers mapping test cover
 
 **Actor**: Sarah (Developer)
 **Goal**: Create a validated DEV requirement that implements an existing PRD requirement, with proper format and hash
-**Context**: Sarah is starting work on a new feature. The product team has already defined the PRD-level requirement, and Sarah needs to create the corresponding DEV specification before writing code.
+**Context**: Sarah is starting work on a new feature. The product team has already defined the PRD-level requirement, and Sarah needs to create the corresponding DEV *Specification* before writing code.
 Validates: REQ-p00001, REQ-p00002, REQ-p00004
 
 ## Steps

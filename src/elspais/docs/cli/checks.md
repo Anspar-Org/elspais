@@ -155,7 +155,7 @@ documentation says about it.
 | `spec.implements_resolve` | All Implements: references resolve | warning | `[rules.severity]` | `elspais unresolved` |
 | `spec.refines_resolve` | All Refines: references resolve | warning | `[rules.severity]` | `elspais unresolved` |
 | `spec.satisfies_resolve` | All Satisfies: references resolve | warning | `[rules.severity]` | `elspais unresolved` |
-| `spec.needs_rewrite` | Flags requirements that will be rewritten on next save (duplicate refs, stale hash) | warning | `[rules.severity]` | `elspais fix` |
+| `spec.needs_rewrite` | Flags requirements, journeys and file-level prose that will be rewritten on next save (duplicate refs, stale hash, spacing, term forms) | warning | `[rules.severity]` | `elspais fix` |
 | `spec.unfixable_issues` | Issues `elspais fix` cannot repair, so a person has to | error | `[rules.severity]` | `elspais errors` |
 | `spec.undefined_levels` | No requirement carries a level the configuration does not define (such a requirement is still counted and grouped, so this discloses it rather than dropping it) | info | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `spec.hierarchy_levels` | Requirements follow hierarchy rules | warning | `[rules.severity]` | `elspais -v checks --spec` |
@@ -241,10 +241,16 @@ current graph. Reports missing IDs, extra IDs, or both.
 
 #### `spec.needs_rewrite` — Pending Rewrites
 
-Flags requirements that have been parsed with differences from their on-disk
-format (duplicate references, stale hashes). These will be rewritten on the
-next `elspais fix`, or when pending in-memory changes are saved from
-the viewer or by an agent.
+Flags each part of a spec file that is not in canonical form on disk:
+requirements (duplicate references, stale hashes, spacing, section header
+depth, term forms), and journeys and sections of file-level prose (term
+forms). `elspais fix` writes them in canonical form. A save of pending
+changes from the viewer or by an agent also writes a flagged part in
+canonical form when it writes the file holding it, and names the part in its
+`changed_beyond_edits` result. The one exception is a change that would move
+a hash: a save marks a defined term in an assertion only in a requirement it
+edited, so every other requirement keeps its hash until `elspais fix` marks
+the term.
 
 #### `spec.hash_integrity` — Template Hash Review
 

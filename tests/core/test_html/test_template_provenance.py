@@ -11,7 +11,7 @@ shows up in the HTML viewer, the user must see:
    uncovered assertions).
 
 The card UI is rendered client-side by JavaScript using the embedded
-``node-index`` JSON. These tests therefore assert that the JSON
+node index. These tests therefore assert that the JSON
 embedded in the generated HTML includes the new fields. The JS render
 path (``buildCardHtml`` / ``buildAssertionHtml``) consumes them
 unconditionally, so once the data is present the badge appears.
@@ -20,7 +20,6 @@ unconditionally, so once the data is present the badge appears.
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 import textwrap
 from pathlib import Path
@@ -29,6 +28,7 @@ import pytest
 
 from elspais.graph.factory import build_graph
 from elspais.html.generator import HTMLGenerator
+from tests.embedded_page import embedded_data
 
 
 def _write(repo: Path, rel: str, body: str) -> None:
@@ -158,14 +158,8 @@ def federation(tmp_path: Path):
 
 
 def _extract_node_index(html: str) -> dict:
-    """Parse the embedded ``node-index`` JSON island from the rendered HTML."""
-    m = re.search(
-        r'<script[^>]*id="node-index"[^>]*>(.*?)</script>',
-        html,
-        re.DOTALL,
-    )
-    assert m is not None, "expected an embedded node-index <script> in rendered HTML"
-    return json.loads(m.group(1))
+    """The node index restored from the rendered HTML's embedded content."""
+    return embedded_data(html)["nodes"]
 
 
 class TestTemplateProvenanceInRenderedHTML:
@@ -177,7 +171,7 @@ class TestTemplateProvenanceInRenderedHTML:
         nodes = _extract_node_index(html)
 
         clone_id = "APP-p00001::LIB-p00001"
-        assert clone_id in nodes, f"expected clone {clone_id} in node-index; got {list(nodes)[:5]}"
+        assert clone_id in nodes, f"expected clone {clone_id} in node index; got {list(nodes)[:5]}"
         clone = nodes[clone_id]
 
         props = clone.get("properties") or {}
@@ -195,11 +189,12 @@ class TestTemplateProvenanceInRenderedHTML:
     def test_template_repo_and_id_present_in_raw_html(self, federation):
         """User-visible content: 'library' repo name and 'LIB-p00001' anchor in the HTML."""
         html = HTMLGenerator(federation).generate(embed_content=True)
+        content = json.dumps(embedded_data(html), ensure_ascii=False)
 
-        # The template repo name must appear somewhere (embedded JSON).
-        assert "library" in html, "expected template repo name 'library' in rendered HTML"
+        # The template repo name must appear somewhere in the embedded content.
+        assert "library" in content, "expected template repo name 'library' in embedded content"
         # The template original's ID must appear too, navigable via JS click.
-        assert "LIB-p00001" in html, "expected template ID 'LIB-p00001' in rendered HTML"
+        assert "LIB-p00001" in content, "expected template ID 'LIB-p00001' in embedded content"
 
     def test_concrete_requirement_has_no_template_provenance_fields(self, federation):
         """Non-INSTANCE REQs MUST NOT carry template_repo/template_id (no regression)."""
@@ -347,7 +342,7 @@ class TestPhase11SatisfierRollupSerialized:
         nodes = _extract_node_index(html)
 
         sat_id = "APP-p00001"
-        assert sat_id in nodes, f"expected satisfier REQ {sat_id} in node-index"
+        assert sat_id in nodes, f"expected satisfier REQ {sat_id} in the node index"
         props = nodes[sat_id].get("properties") or {}
 
         assert "satisfier_rollup" in props, (
@@ -395,7 +390,7 @@ class TestPhase11SatisfierRollupRendered:
 
     def test_satisfier_rollup_lands_in_html_node_index(self, federation):
         """End-to-end: build the library+app federation, generate HTML, parse
-        the embedded node-index JSON, find APP-p00001 (the satisfier REQ), and
+        the embedded node index, find APP-p00001 (the satisfier REQ), and
         assert its satisfier_rollup field has the expected numerics.
 
         This is a stronger sibling to ``test_combined_coverage_string_appears_in_rendered_html``:
@@ -406,7 +401,7 @@ class TestPhase11SatisfierRollupRendered:
             builder -> metrics.satisfier_rollup
                     -> mcp.server._serialize_node_generic
                     -> html.generator._build_node_index
-                    -> <script id="node-index"> in trace_unified.html.j2
+                    -> the embedded-content block in trace_unified.html.j2
 
         It combines positive (rollup present + correctly shaped + correct
         numerics) and negative (counter-check on the template) into a single
@@ -418,12 +413,12 @@ class TestPhase11SatisfierRollupRendered:
         # --- Positive: satisfier REQ carries a well-shaped rollup ---------
         sat_id = "APP-p00001"
         assert sat_id in node_index, (
-            f"{sat_id} missing from node-index; available (first 10): {sorted(node_index)[:10]}"
+            f"{sat_id} missing from the node index; available (first 10): {sorted(node_index)[:10]}"
         )
         props = node_index[sat_id].get("properties") or {}
         rollup = props.get("satisfier_rollup")
         assert rollup is not None, (
-            f"{sat_id} is a satisfier REQ but its node-index entry has no "
+            f"{sat_id} is a satisfier REQ but its node index entry has no "
             f"satisfier_rollup in properties; properties keys: {sorted(props)}"
         )
         assert isinstance(rollup, dict), (
@@ -461,7 +456,7 @@ class TestPhase11SatisfierRollupRendered:
         # LIB-p00001 is a Template; it has no outbound SATISFIES edges, so
         # the serializer must skip the rollup. If this fires it means
         # _serialize_node_generic is leaking the field onto wrong nodes.
-        assert "LIB-p00001" in node_index, "expected LIB-p00001 in node-index"
+        assert "LIB-p00001" in node_index, "expected LIB-p00001 in the node index"
         lib_props = node_index["LIB-p00001"].get("properties") or {}
         assert "satisfier_rollup" not in lib_props, (
             f"LIB-p00001 is a template (no Satisfies edges), should not have "

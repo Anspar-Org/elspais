@@ -109,7 +109,7 @@ class TestREQ_d00131_B_assertion_spacing_canonicalization:
             config_path=project / ".elspais.toml",
             repo_root=project,
         )
-        render_save(graph)
+        render_save(graph, tidy=True)
 
         # Re-read the file and check spacing
         content = (project / "spec" / "test.md").read_text(encoding="utf-8")

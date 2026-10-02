@@ -502,16 +502,22 @@ def check_spec_satisfies_resolve(
     )
 
 
-# Implements: REQ-d00085-I
+# Implements: REQ-d00132-K
 def check_spec_needs_rewrite(
     graph: FederatedGraph, config: dict[str, Any] | None = None, namespace: str | None = None
 ) -> HealthCheck:
-    """Check for requirements that would change the file on next save.
+    """Check for parts of a file whose text the build changed from what is on disk.
 
     A requirement is marked parse_dirty at build time when any condition is
     detected that means the in-memory state differs from the file on disk:
     - duplicate_refs: same REQ ID appears more than once in Implements/Refines
     - stale_hash: stored hash does not match the computed hash
+    - spacing, section depth and term forms brought into canonical form
+
+    A journey and a section of file-level prose record a term form brought
+    into canonical form of themselves, and are reported beside requirements.
+    Each is written in its canonical form by ``elspais fix``, and by any save
+    that writes its file.
     """
     severity = severity_for("spec.needs_rewrite", config)
     if severity == Severity.OFF:
@@ -535,11 +541,25 @@ def check_spec_needs_rewrite(
                 )
             )
 
+    from elspais.graph.render import iter_untidy_prose
+
+    for node in iter_untidy_prose(graph, namespace=namespace):
+        fn = node.file_node()
+        reasons = node.get_field("parse_dirty_reasons") or []
+        findings.append(
+            HealthFinding(
+                message=f"Will be rewritten on next save: {', '.join(reasons)}",
+                node_id=node.id,
+                file_path=fn.get_field("relative_path") if fn is not None else None,
+                line=node.get_field("parse_line"),
+            )
+        )
+
     if findings:
         return HealthCheck(
             name="spec.needs_rewrite",
             passed=False,
-            message=f"{len(findings)} requirement(s) will be rewritten on next save",
+            message=f"{len(findings)} part(s) of spec files will be rewritten on next save",
             category="spec",
             severity=severity,
             details={"count": len(findings)},
@@ -549,7 +569,7 @@ def check_spec_needs_rewrite(
     return HealthCheck(
         name="spec.needs_rewrite",
         passed=True,
-        message="No requirements need rewriting",
+        message="No part of a spec file needs rewriting",
         category="spec",
     )
 

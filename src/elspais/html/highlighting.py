@@ -25,7 +25,9 @@ def highlight_file_content(file_path: str, raw_content: str) -> dict:
         Dictionary with keys:
         - ``lines``: list of HTML strings (one per line, Pygments-highlighted)
         - ``language``: detected language name (lowercase)
-        - ``raw``: the original raw content
+
+        The plain text of each line is the highlighted line with its markup
+        removed, so the text is carried once.
     """
     raw_lines = raw_content.split("\n")
 
@@ -36,11 +38,13 @@ def highlight_file_content(file_path: str, raw_content: str) -> dict:
 
         formatter = HtmlFormatter(nowrap=True)
 
+        # A lexer strips leading and trailing blank lines unless told not to,
+        # and a stripped leading line moves every line number after it.
         try:
-            lexer = get_lexer_for_filename(file_path)
+            lexer = get_lexer_for_filename(file_path, stripnl=False)
             language = lexer.name.lower()
         except Exception:
-            lexer = TextLexer()
+            lexer = TextLexer(stripnl=False)
             language = "text"
 
         # Highlight the full content, then split by line.
@@ -64,7 +68,6 @@ def highlight_file_content(file_path: str, raw_content: str) -> dict:
     return {
         "lines": highlighted_lines,
         "language": language,
-        "raw": raw_content,
     }
 
 

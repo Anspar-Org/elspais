@@ -446,6 +446,27 @@ returning HTTP 409 with the identical rejection body, and its history
 routes `/api/save`, `/api/revert`, and `/api/reload` require
 `if_tip_mutation_id` in the JSON body.
 
+A save writes the files its pending changes reach and no other: the file
+holding each changed node, and, for a rename, each file whose citations name
+the renamed identifier. A file that only needs its formatting tidied stays as
+it is on disk until `elspais fix` tidies it.
+
+A file a save does write is written whole, in canonical form, so text in it
+that no change reached can change form too. The result's
+`changed_beyond_edits` names each such part -- a requirement, a journey or a
+section of file-level prose -- as `{file, node_id, kind, label, line}`, and is
+empty where the save changed nothing beyond its edits. `save_mutations`, the
+viewer's `/api/save` and the record of a save the daemon made itself all
+carry the same list. `spec.needs_rewrite` reports the same parts before any
+save, so `elspais fix` can tidy them as a change of their own.
+
+Canonical form never moves the hash of a requirement no change reached. A
+requirement's hash covers its assertion text, emphasis included, so marking a
+defined term in an assertion is a material change rather than tidying. A save
+marks terms in the requirements its changes reach and leaves every other
+requirement's hashed text as it is on disk; `spec.needs_rewrite` and
+`terms.unmarked` keep reporting the unmarked term until `elspais fix` marks it.
+
 A stale tip is not the only way a save comes back unsuccessful, and the
 `code` says which it was: `save_mutations` reports `write_scope_declined`
 where the save held back a file it was asked to write -- one an associate

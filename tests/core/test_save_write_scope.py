@@ -574,3 +574,92 @@ class TestAChangeStraddlingTheWriteScopeIsWrittenWhole:
         assert f"Validates: {RENAMED_PRIMARY_REQ}" in straddling.associate_journey.read_text(
             encoding="utf-8"
         ), "the citation in the member was not corrected although writes were permitted"
+
+
+# An associate requirement citing the primary's requirement by an Assertion.
+# Renaming the primary's requirement respells that citation, which a
+# requirement renders from its live edges -- so the rename reaches a file in
+# the associate exactly as the journey's citation does.
+ASSOCIATE_CITING_SPEC = f"""# Spec for lib
+
+## {ASSOCIATE_REQ}: A thing in lib
+
+**Level**: dev | **Status**: Active | **Implements**: {PRIMARY_REQ}-A
+
+The system shall do a thing.
+
+## Assertions
+
+A. The system SHALL do one thing.
+
+*End* *A thing in lib* | **Hash**: 00000000
+"""
+
+PRIMARY_SPEC_WITH_ASSERTION = f"""# Spec for core
+
+## {PRIMARY_REQ}: A thing in core
+
+**Level**: dev | **Status**: Active
+
+The system shall do a thing.
+
+## Assertions
+
+A. The system SHALL do the core thing.
+
+*End* *A thing in core* | **Hash**: 00000000
+"""
+
+
+class TestARenameCitedByAnAssociateRequirementIsWrittenWhole:
+    """Validates REQ-d00132-H, REQ-d00253-G.
+
+    The file of a requirement citing a renamed identifier holds text the rename
+    changes (REQ-d00132-H). Where that file belongs to a member the write scope
+    does not reach, the save declines to write any part of the rename
+    (REQ-d00253-G), as it does for a journey's citation.
+    """
+
+    @pytest.fixture
+    def citing(self, tmp_path: Path) -> Federation:
+        associate = make_repo(tmp_path, "lib")
+        (associate / "spec" / "reqs.md").write_text(ASSOCIATE_CITING_SPEC, encoding="utf-8")
+        primary = make_repo(tmp_path, "core", associates={"lib": str(associate)})
+        (primary / "spec" / "reqs.md").write_text(PRIMARY_SPEC_WITH_ASSERTION, encoding="utf-8")
+        config_path = primary / ".elspais.toml"
+        graph = build_graph(
+            config=load_config(config_path),
+            config_path=config_path,
+            repo_root=primary,
+            scan_code=False,
+            scan_tests=False,
+        )
+        federation = Federation(graph, primary, associate)
+        federation.graph.rename_node(PRIMARY_REQ, RENAMED_PRIMARY_REQ)
+        pending = {node.id for node in _files_with_pending_mutations(federation.graph)}
+        assert pending == {
+            make_file_id(namespace_for("core"), "spec/reqs.md"),
+            make_file_id(namespace_for("lib"), "spec/reqs.md"),
+        }, f"the rename did not reach the citing associate file: {pending}"
+        return federation
+
+    # Verifies: REQ-d00253-G
+    def test_d00253_G_the_rename_is_declined_whole(self, citing):
+        result = citing.save()
+
+        assert result.get("code") == "write_scope_declined", result
+        assert result["saved_count"] == 0, result
+        assert citing.untouched(citing.primary_spec)
+        assert citing.untouched(citing.associate_spec)
+
+    # Verifies: REQ-d00132-H
+    def test_d00132_H_widening_the_scope_writes_the_citing_associate_file(self, citing):
+        result = citing.save(write_associates=True)
+
+        assert result["success"] is True, result["errors"]
+        assert str(citing.associate_spec) in result["files_modified"], result
+        cited = citing.associate_spec.read_text(encoding="utf-8")
+        assert f"{RENAMED_PRIMARY_REQ}-A" in cited
+        assert f"{PRIMARY_REQ}-A" not in cited, (
+            "the citing requirement still names the former identifier beside the new one"
+        )

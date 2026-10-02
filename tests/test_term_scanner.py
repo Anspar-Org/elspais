@@ -1182,6 +1182,38 @@ def test_REQ_d00237_D_canonical_bold_term_left_alone():
     assert result == text
 
 
+# Verifies: REQ-d00223-J
+def test_REQ_d00223_J_term_in_a_heading_is_left_unchanged():
+    """An unmarked term in an ATX heading line is syntax and keeps its form,
+    while the same term in the prose beneath it is marked."""
+    td = _td_with_term("Diary")
+    text = "## Open the Diary\n\nOpen the Diary."
+    result, repls = _canonicalize_text(text, td, "**", {"*", "**"})
+    assert result == "## Open the Diary\n\nOpen the **Diary**."
+    assert repls == [("Diary", "**Diary**")]
+
+
+# Verifies: REQ-d00223-J
+@pytest.mark.parametrize(
+    "heading",
+    ["# Diary", "### The Diary log", "   ###### Diary", "#### Diary ####"],
+)
+def test_REQ_d00223_J_every_heading_depth_is_left_unchanged(heading):
+    td = _td_with_term("Diary")
+    result, repls = _canonicalize_text(heading, td, "**", {"*", "**"})
+    assert result == heading
+    assert repls == []
+
+
+# Verifies: REQ-d00223-J
+def test_REQ_d00223_J_a_hash_without_a_heading_space_is_prose():
+    """A line opening with ``#`` and no space after it is not a heading, so
+    the term in it is still marked; the heading guard does not over-reach."""
+    td = _td_with_term("Diary")
+    result, _ = _canonicalize_text("#tag the Diary", td, "**", {"*", "**"})
+    assert result == "#tag the **Diary**"
+
+
 # =============================================================================
 # REQ-d00237-F: terms embedded in compound identifiers
 #

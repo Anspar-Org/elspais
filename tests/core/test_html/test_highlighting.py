@@ -7,7 +7,11 @@ Validates:
 
 from __future__ import annotations
 
+import html as _html
+import re
 from unittest.mock import patch
+
+import pytest
 
 from elspais.html.highlighting import (
     MAX_FILE_SIZE,
@@ -25,7 +29,6 @@ class TestHighlightFileContent:
         result = highlight_file_content("test.py", "def foo():\n    pass\n")
         assert "lines" in result
         assert "language" in result
-        assert "raw" in result
         # Pygments wraps keywords in <span> tags
         assert any("<span" in line for line in result["lines"])
 
@@ -53,12 +56,25 @@ class TestHighlightFileContent:
         result = highlight_file_content("data.xyz123", "some content\n")
         assert result["language"] == "text"
 
-    # Verifies: REQ-p00006-A
-    def test_REQ_p00006_A_preserves_raw_content(self):
-        """Raw content is preserved unchanged in the result."""
-        raw = "def foo():\n    return 42\n"
-        result = highlight_file_content("test.py", raw)
-        assert result["raw"] == raw
+    # Verifies: REQ-d00321-A
+    @pytest.mark.parametrize(
+        ("path", "raw"),
+        [
+            ("test.py", "def foo():\n    return 42\n"),
+            ("test.py", "\n\nimport os\nx = '<a & b>'\n\n"),
+            ("notes.md", "\n# Heading\n\nSome <b>text</b> &amp; more\n"),
+            ("data.xyz123", "\n\nplain\n"),
+        ],
+    )
+    def test_REQ_d00321_A_highlighted_lines_carry_the_text(self, path, raw):
+        """The highlighted lines alone carry the file's text, blank lines included."""
+        result = highlight_file_content(path, raw)
+        assert "raw" not in result
+        expected = raw.split("\n")
+        if expected and expected[-1] == "":
+            expected.pop()
+        plain = [_html.unescape(re.sub(r"<[^>]*>", "", line)) for line in result["lines"]]
+        assert plain == expected
 
     # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_line_count_matches(self):
@@ -74,7 +90,7 @@ class TestHighlightFileContent:
         """Empty content returns empty lines list."""
         result = highlight_file_content("test.py", "")
         assert result["lines"] == [] or result["lines"] == [""]
-        assert result["raw"] == ""
+        assert "raw" not in result
 
     # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_multiline_tokens_preserved(self):

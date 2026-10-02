@@ -134,25 +134,8 @@ body {
      EMBEDDED DATA
      ===================================================================== -->
 
-<script type="application/json" id="tree-data">
-{{ tree_data | tojson }}
-</script>
-
-<script type="application/json" id="source-files">
-{{ source_files | tojson }}
-</script>
-
-<script type="application/json" id="node-index">
-{{ node_index | tojson }}
-</script>
-
-<script type="application/json" id="coverage-index">
-{{ coverage_index | tojson }}
-</script>
-
-<script type="application/json" id="status-data">
-{{ status_data | tojson }}
-</script>
+{# Implements: REQ-d00321-D #}
+<script type="application/octet-stream" id="embedded-data" data-encoding="gzip+base64">{{ embedded_data }}</script>
 {% endif %}
 
 <!-- =====================================================================

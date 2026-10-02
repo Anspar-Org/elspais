@@ -47,6 +47,18 @@ The interactive viewer (`elspais viewer`) shows:
 The viewer's edit mode drives the repository through `/api/git/*`: status,
 branch, checkout, checkpoint commit, push, pull and pull request.
 
+The header's edit controls each name the operation they perform:
+
+  Save         Save edits to disk. Writes only the files your edits change.
+               A file it writes is written whole, in canonical form; where
+               that changed a part you did not edit, the save lists it. A
+               requirement you did not edit keeps its hash: the save does
+               not mark a defined term in its assertions (`elspais fix`
+               does that, on purpose).
+  Checkpoint   git commit saved edits.
+  Share        git push the commits. Drag the handle to the right, or focus
+               it and hold Enter. A plain click shows how and pushes nothing.
+
   POST /api/git/push   Push the current branch to origin
   POST /api/git/pull   Fast-forward the current branch
   POST /api/git/pr     Open a pull request proposing the pushed branch

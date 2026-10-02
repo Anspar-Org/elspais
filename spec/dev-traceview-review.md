@@ -188,3 +188,67 @@ A run writes into its output area for as long as it runs. Rebuilding on each wri
 - 2026-10-01 | e791c1a1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
 
 *End* *Served Graph Currency* | **Hash**: e791c1a1
+
+---
+
+## REQ-d00320: Viewer Edit Controls State What They Do
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006
+
+A control in the viewer's edit mode that acts on the repository tells the reader what it does before the reader uses it, and a control that needs more than a click tells the reader how to use it.
+
+### Assertions
+
+A. Each edit-mode control that changes the repository SHALL state the operation that it performs on the repository where the reader can read it before acting, and in the vocabulary of that operation.
+
+B. When a reader clicks a control that acts only on a gesture other than a click, the viewer SHALL tell the reader the gesture that operates the control.
+
+C. A control that acts only on a gesture other than a click SHALL perform no operation on the repository in response to a click.
+
+D. When a save from the viewer changes text that no edit changed, the viewer SHALL show the reader who saved each requirement and each file-level text section that the save changed in that way.
+
+### Rationale
+
+The viewer is put in front of readers who have never run the tool and do not know its git vocabulary. A control whose label does not say what it does to the repository reads as broken, and a reader who learns only afterwards that a click published their commits has lost the chance to decide. Naming the operation in its own vocabulary (saving to disk, committing, pushing) lets a reader who knows git predict the result and lets a reader who does not look it up. Publishing commits to the remote is guarded by a gesture so that a stray click cannot publish them; the guard stays, and the click it absorbs answers with how to perform the gesture rather than with silence.
+
+A save is a control whose effect can reach past what the reader edited: a file it writes is written whole, in canonical form. D tells the reader who saved what else changed, before they commit it.
+
+---
+
+### Changelog
+
+- 2026-10-01 | e8010396 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-01 | 646a8606 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
+
+*End* *Viewer Edit Controls State What They Do* | **Hash**: e8010396
+
+## REQ-d00321: Static View Embedded Content
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00006-C
+
+A static view with embedded content carries what the page can show, once, in a form the browser reads as data.
+
+### Assertions
+
+A. A static view with embedded content SHALL carry the text of each embedded source file once.
+
+B. A static view with embedded content SHALL hold an index entry for each node that the page can open, and for no other node.
+
+C. A static view with embedded content SHALL keep every embedded value intact as data, including a value whose text closes or comments out a script element.
+
+D. A static view with embedded content SHALL carry its embedded content compressed.
+
+E. When a static view with embedded content opens, the page SHALL restore its embedded content exactly as it was before compression.
+
+### Rationale
+
+A reviewer generates the static view with embedded content to read requirement text in context without a server, often on an estate holding many source files. The page is only useful if a browser can open it, and its size is set by what it carries: a source file carried as plain text beside its highlighted form, or a node whose content is repeated inside every node containing it, multiplies the output without showing anything more. A node the page can never open is pure weight. The embedded values sit inside the page as script data, and source text can contain the characters that end such a block early, so the encoding keeps every value whole whatever text it holds.
+
+The content an estate embeds is mostly source text and highlighting markup, which compress to a small fraction of their size, so carrying it compressed is what keeps a page over a large estate small enough to open and to send. The page restores the content with the decompression the browser itself provides, which needs no library inside the page and makes a current browser a requirement for reading a static view.
+
+### Changelog
+
+- 2026-10-01 | 736babc4 | - | Michael Lewis (<michael@anspar.org>) | Add assertions D and E: embedded content is carried compressed and restored exactly
+- 2026-10-01 | 38f520e0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
+
+*End* *Static View Embedded Content* | **Hash**: 736babc4

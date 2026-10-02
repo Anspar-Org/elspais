@@ -108,7 +108,7 @@ def test_render_save_associate_file_filter(monkeypatch, write_associates, expect
     associate = FakeFileNode("file:spec/b.md", "spec/b.md", "lib")
     nodes = {n.id: n for n in (primary, associate)}
 
-    monkeypatch.setattr(render, "_find_dirty_files", lambda g, resolver=None: [primary, associate])
+    monkeypatch.setattr(render, "_find_dirty_files", lambda g, **_: [primary, associate])
     monkeypatch.setattr(render, "_wire_new_requirements_to_files", lambda g: None)
     monkeypatch.setattr(render, "render_file", lambda node, resolver=None: "body\n")
     monkeypatch.setattr(
@@ -160,7 +160,7 @@ def test_render_save_ownership_map_path(monkeypatch, write_associates, expect_as
         "file:lib/b.md": "lib",
     }
 
-    monkeypatch.setattr(render, "_find_dirty_files", lambda g, resolver=None: [primary, associate])
+    monkeypatch.setattr(render, "_find_dirty_files", lambda g, **_: [primary, associate])
     monkeypatch.setattr(render, "_wire_new_requirements_to_files", lambda g: None)
     monkeypatch.setattr(render, "render_file", lambda node, resolver=None: "body\n")
     monkeypatch.setattr(

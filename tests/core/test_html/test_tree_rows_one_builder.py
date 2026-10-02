@@ -9,14 +9,12 @@ nothing and said nothing about why.
 
 from __future__ import annotations
 
-import json
-import re
-
 import pytest
 
 from elspais.html.generator import HTMLGenerator
 from elspais.view_model import build_tree_rows
 from tests.core.graph_test_helpers import build_graph, make_journey, make_requirement
+from tests.embedded_page import embedded_data
 
 
 @pytest.fixture
@@ -43,7 +41,7 @@ def test_the_embedded_rows_are_a_list(graph):
     """
     html = HTMLGenerator(graph).generate(embed_content=True)
 
-    embedded = json.loads(re.search(r'id="tree-data">(.*?)</script>', html, re.S).group(1))
+    embedded = embedded_data(html)["tree"]
 
     assert isinstance(embedded, list), f"rows must be a list, got {type(embedded).__name__}"
     assert embedded, "a graph holding requirements yields rows"
@@ -54,7 +52,7 @@ def test_the_embedded_rows_are_the_rows_the_route_serves(graph):
     """One builder answers for both pages, so the two cannot disagree."""
     html = HTMLGenerator(graph).generate(embed_content=True)
 
-    embedded = json.loads(re.search(r'id="tree-data">(.*?)</script>', html, re.S).group(1))
+    embedded = embedded_data(html)["tree"]
     served = build_tree_rows(graph, {})
 
     assert embedded == served

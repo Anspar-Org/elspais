@@ -66,22 +66,24 @@
             Undo
         </button>
 
-        <button class="btn btn-primary" id="btn-save" onclick="doSave()" disabled title="Save mutations to disk"
-                data-help="Persist all pending in-memory mutations to spec files on disk. The badge shows the number of unsaved changes.">
+        <button class="btn btn-primary" id="btn-save" onclick="doSave()" disabled title="Save edits to disk"
+                data-help="Write your pending edits to the spec files on disk. Only the files your edits change are written. The badge shows the number of unsaved edits.">
             Save
             <span class="unsaved-badge hidden" id="unsaved-badge">0</span>
         </button>
 
         <button class="btn btn-warning edit-only" id="btn-checkpoint" onclick="showCheckpointModal()" disabled
-                title="Commit spec changes as a local checkpoint"
-                data-help="Create a local git checkpoint (commit) of your spec file changes. This is rewindable — you can always go back.">
+                title="git commit saved edits"
+                data-help="git commit the edits you saved to disk, as a local checkpoint. This is rewindable — you can always go back.">
             Checkpoint
             <span class="uncommitted-badge hidden" id="uncommitted-badge">0</span>
         </button>
 
+        {# Implements: REQ-d00320-A, REQ-d00320-B #}
         <button class="btn btn-success edit-only" id="btn-share" disabled
-                title="Push local commits to remote">
-            Share
+                title="git push the commits"
+                data-help="git push the commits on this branch to origin. Drag the handle to the right, or focus Share and hold Enter. A plain click shows how and pushes nothing.">
+            Share <span class="share-grip" aria-hidden="true">&#x21E5;</span>
         </button>
 
         {% endif %}

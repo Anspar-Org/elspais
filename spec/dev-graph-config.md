@@ -121,8 +121,11 @@ C. The viewer SHALL offer the statuses the project declares, which are the statu
 
 D. Statuses presented in order SHALL run active first, then provisional, then aspirational, then retired, keeping the order they were given in within each of those groups. A status belonging to no declared role SHALL be ordered as an active one.
 
+E. Where a reader chooses the type of a new or an existing relationship, the viewer SHALL show every relationship type that the reader may author as a choice in one control.
+
 ### Changelog
 
+- 2026-10-01 | 6b90f87f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-14 | 254fcba9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-14 | 3feb798c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-14 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: state what the viewer offers a reader rather than which variables carry it; two assertions named configuration fields that do not exist
@@ -130,7 +133,7 @@ D. Statuses presented in order SHALL run active first, then provisional, then as
 - 2026-05-11 | a9cc41d2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | a9cc41d2 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Config-Driven Viewer UI Values* | **Hash**: 254fcba9
+*End* *Config-Driven Viewer UI Values* | **Hash**: 6b90f87f
 ---
 
 ## REQ-d00212: Configuration Schema

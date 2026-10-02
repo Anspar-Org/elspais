@@ -16,6 +16,7 @@ Validates REQ-d00255-D, REQ-d00256-D: journey UAT verdict badge and
 failing-step identification are visible in the viewer.
 """
 
+import contextlib
 import json
 import os
 import random
@@ -35,6 +36,8 @@ import pytest
 pw = pytest.importorskip("playwright", reason="playwright not installed")
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError  # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
+
+from tests.embedded_page import embedded_data  # noqa: E402
 
 from .conftest import REPO_ROOT  # noqa: E402
 from .helpers import resolve_elspais  # noqa: E402
@@ -3888,7 +3891,9 @@ def static_viewer_site(tmp_path_factory):
         text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert _REMEMBERED_CARD in page_file.read_text(), "the static page embedded no nodes"
+    assert _REMEMBERED_CARD in embedded_data(page_file.read_text(encoding="utf-8"))["nodes"], (
+        "the static page embedded no nodes"
+    )
     for sub in ("a", "b"):
         (site / sub).mkdir()
         shutil.copy2(page_file, site / sub / "index.html")
@@ -4458,3 +4463,581 @@ class TestBrowserPullRequestModal:
 
         page.wait_for_function("() => !document.getElementById('pr-modal-overlay')")
         assert sent == [{"title": "Propose core", "body": "", "repo": "core"}]
+
+
+# ---------------------------------------------------------------------------
+# Edit controls state what they do (REQ-d00320) and offer every authorable
+# relationship type in one control (REQ-d00211-E)
+# ---------------------------------------------------------------------------
+
+_EDIT_CONTROLS_CITED = "REQ-p00001"
+_EDIT_CONTROLS_CITING = "REQ-d00001"
+
+_EDIT_CONTROLS_TOML = """version = 5
+
+[project]
+name = "edit-controls-fixture"
+namespace = "REQ"
+
+[rules.format]
+require_hash = false
+"""
+
+_EDIT_CONTROLS_PRD = f"""# Product
+
+## {_EDIT_CONTROLS_CITED}: Cited Requirement
+
+**Level**: prd | **Status**: Active
+
+The cited requirement.
+
+### Assertions
+
+A. The tool SHALL be cited.
+
+*End* *Cited Requirement*
+"""
+
+# The file opens with a blank line: a highlighter that drops it moves every
+# line number after it (REQ-d00321-A).
+_EDIT_CONTROLS_DEV = f"""
+# Dev
+
+## {_EDIT_CONTROLS_CITING}: Citing Requirement
+
+**Level**: dev | **Status**: Active | **Implements**: {_EDIT_CONTROLS_CITED}
+
+The citing requirement.
+
+### Assertions
+
+A. The tool SHALL cite.
+
+*End* *Citing Requirement*
+"""
+
+
+def _worktree_env() -> dict:
+    """The environment that runs this worktree's own elspais package."""
+    env = dict(os.environ)
+    worktree_src = str(REPO_ROOT / "src")
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{worktree_src}:{existing}" if existing else worktree_src
+    return env
+
+
+def _write_edit_controls_project(dest: Path) -> None:
+    """A project holding one relationship, as a git repository on a working branch."""
+    (dest / "spec").mkdir()
+    (dest / ".elspais.toml").write_text(_EDIT_CONTROLS_TOML, encoding="utf-8")
+    (dest / "spec" / "prd.md").write_text(_EDIT_CONTROLS_PRD, encoding="utf-8")
+    (dest / "spec" / "dev.md").write_text(_EDIT_CONTROLS_DEV, encoding="utf-8")
+    _commit_on_working_branch(dest, "edit-controls")
+
+
+def _commit_on_working_branch(dest: Path, branch: str) -> None:
+    """Make ``dest`` a git repository with its files committed, on ``branch``."""
+    git_env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "test",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "test",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    for argv in (
+        ["git", "init"],
+        ["git", "add", "."],
+        ["git", "commit", "-m", "init"],
+        ["git", "checkout", "-b", branch],
+    ):
+        subprocess.run(argv, cwd=dest, capture_output=True, env=git_env, check=True)
+
+
+@contextlib.contextmanager
+def _served_viewer(dest: Path):
+    """Serve ``dest`` with a viewer run from this worktree's source; yield its URL."""
+    port = _find_free_port()
+    base_url = f"http://127.0.0.1:{port}"
+    proc, log_path = _spawn_viewer(
+        [
+            sys.executable,
+            "-m",
+            "elspais",
+            "viewer",
+            "--server",
+            "--port",
+            str(port),
+            "--path",
+            str(dest),
+        ],
+        cwd=str(dest),
+        env=_worktree_env(),
+    )
+    try:
+        _wait_for_server(base_url, proc=proc, log_path=log_path)
+        yield base_url
+    finally:
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(f"{base_url}/api/shutdown", method="POST")
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                proc.wait(timeout=5)
+
+
+@pytest.fixture(scope="module")
+def edit_controls_viewer_url(tmp_path_factory):
+    """A viewer, run from this worktree's source, over a private project.
+
+    Private because the relationship-type test changes a relationship. The
+    project is on a working branch so the edit toggle activates directly.
+    """
+    dest = tmp_path_factory.mktemp("viewer-edit-controls")
+    _write_edit_controls_project(dest)
+    with _served_viewer(dest) as base_url:
+        yield base_url
+
+
+@pytest.fixture()
+def page_edit_controls(edit_controls_viewer_url):
+    """Launch headless Chromium against the edit-controls viewer."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        pg = context.new_page()
+        pg.set_default_timeout(10_000)
+        yield pg
+        browser.close()
+
+
+def _requests_to(page, path: str) -> list:
+    """Record every request the page makes whose URL path ends with ``path``."""
+    seen: list = []
+    page.on(
+        "request", lambda req: seen.append(req) if req.url.split("?")[0].endswith(path) else None
+    )
+    return seen
+
+
+class TestBrowserEditControlsStateWhatTheyDo:
+    """Validates REQ-d00320-A/B/C and REQ-d00211-E.
+
+    The relationship-type test changes the project, so it runs last.
+    """
+
+    # Verifies: REQ-d00320-A
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00320_A_repository_controls_name_their_operation(
+        self, page_edit_controls, edit_controls_viewer_url
+    ):
+        page = page_edit_controls
+        page.goto(edit_controls_viewer_url, wait_until="networkidle")
+        _enter_edit_mode(page)
+
+        assert page.get_attribute("#btn-save", "title") == "Save edits to disk"
+        assert page.get_attribute("#btn-checkpoint", "title") == "git commit saved edits"
+        assert page.get_attribute("#btn-share", "title") == "git push the commits"
+
+    # Verifies: REQ-d00320-B, REQ-d00320-C
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00320_BC_a_click_on_share_says_how_and_pushes_nothing(
+        self, page_edit_controls, edit_controls_viewer_url
+    ):
+        """Share acts on a drag or a held Enter. A click shows how, and sends no push."""
+        page = page_edit_controls
+        pushes = _requests_to(page, "/api/git/push")
+        page.goto(edit_controls_viewer_url, wait_until="networkidle")
+        _enter_edit_mode(page)
+        # The project has no remote, so nothing is ahead of it and Share
+        # starts disabled; enable it to reach the click handler.
+        page.evaluate("() => { document.getElementById('btn-share').disabled = false; }")
+
+        page.click("#btn-share")
+
+        hint = page.wait_for_selector("#share-hint", state="visible")
+        text = hint.text_content() or ""
+        assert "drag" in text and "hold Enter" in text, text
+        assert "git push" in text, text
+        assert hint.get_attribute("role") == "status"
+        page.wait_for_timeout(1500)
+        assert pushes == [], f"a click on Share sent a push: {[r.url for r in pushes]}"
+
+    # Verifies: REQ-d00320-C
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00320_C_holding_enter_on_share_does_push(
+        self, page_edit_controls, edit_controls_viewer_url
+    ):
+        """Companion: the gesture that operates Share does reach the push."""
+        page = page_edit_controls
+        pushes = _requests_to(page, "/api/git/push")
+        page.goto(edit_controls_viewer_url, wait_until="networkidle")
+        _enter_edit_mode(page)
+        page.evaluate("() => { document.getElementById('btn-share').disabled = false; }")
+
+        page.focus("#btn-share")
+        page.keyboard.down("Enter")
+        page.wait_for_timeout(1500)
+        page.keyboard.up("Enter")
+
+        deadline = time.monotonic() + 5
+        while not pushes and time.monotonic() < deadline:
+            page.wait_for_timeout(100)
+        assert len(pushes) == 1, f"holding Enter sent {len(pushes)} pushes"
+        assert pushes[0].method == "POST"
+
+    # Verifies: REQ-d00211-E
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00211_E_one_control_offers_every_relationship_type(
+        self, page_edit_controls, edit_controls_viewer_url
+    ):
+        page = page_edit_controls
+        base = edit_controls_viewer_url
+        edge_posts = _requests_to(page, "/api/mutate/edge")
+        page.goto(base, wait_until="networkidle")
+        _enter_edit_mode(page)
+        page.evaluate(f"() => window.openCard('{_EDIT_CONTROLS_CITING}')")
+        card = page.locator(f"#card-{_EDIT_CONTROLS_CITING}")
+        card.wait_for(state="visible", timeout=10_000)
+        card.locator(".outgoing-link-toggle").first.click()
+
+        control = card.locator(".card-parent-kind-select")
+        assert control.count() == 1, "the relationship has no single type control"
+        assert card.locator(".card-parent-kind-toggle").count() == 0
+        options = control.locator("option").evaluate_all(
+            "(opts) => opts.filter(o => !o.disabled).map(o => o.value)"
+        )
+        assert options == ["implements", "refines", "satisfies"], options
+        assert control.input_value() == "implements"
+
+        control.select_option("refines")
+
+        deadline = time.monotonic() + 5
+        while not edge_posts and time.monotonic() < deadline:
+            page.wait_for_timeout(100)
+        assert len(edge_posts) == 1, f"{len(edge_posts)} edge requests sent"
+        sent = json.loads(edge_posts[0].post_data or "{}")
+        assert sent["action"] == "change_kind"
+        assert sent["new_kind"] == "refines"
+        assert sent["source_id"] == _EDIT_CONTROLS_CITING
+        assert sent["target_id"] == _EDIT_CONTROLS_CITED
+
+        node = page.request.get(f"{base}/api/node/{_EDIT_CONTROLS_CITING}").json()
+        kinds = [p["edge_kind"] for p in node["parents"] if p["id"] == _EDIT_CONTROLS_CITED]
+        assert kinds == ["refines"], node["parents"]
+
+
+# ---------------------------------------------------------------------------
+# A save from the viewer shows the reader the text it changed that no edit
+# changed (REQ-d00320-D)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def save_disclosure_viewer_url(tmp_path_factory):
+    """A viewer over a canonical project whose one file holds an untidy neighbour.
+
+    The neighbour requirement and the file-level prose beside the requirement
+    the test edits are out of canonical form, so a save of that edit rewrites
+    them. Private because the test saves to disk.
+    """
+    from tests.core.graph_test_helpers import (
+        MARKED_PROSE,
+        TIDY_NEIGHBOUR,
+        UNMARKED_PROSE,
+        UNTIDY_NEIGHBOUR,
+        replace_in_file,
+        write_canonical_repo,
+    )
+
+    dest = tmp_path_factory.mktemp("viewer-save-disclosure")
+    spec = write_canonical_repo(dest)
+    replace_in_file(spec / "dev.md", TIDY_NEIGHBOUR, UNTIDY_NEIGHBOUR)
+    replace_in_file(spec / "dev.md", MARKED_PROSE, UNMARKED_PROSE)
+    # The edited requirement is a Draft: the page's own save sends no changelog
+    # reason, which a change to an Active requirement needs.
+    replace_in_file(
+        spec / "dev.md",
+        "**Status**: Active | **Implements**: -\n\nBeta body.",
+        "**Status**: Draft | **Implements**: -\n\nBeta body.",
+    )
+    _commit_on_working_branch(dest, "save-disclosure")
+    with _served_viewer(dest) as base_url:
+        yield base_url
+
+
+@pytest.fixture()
+def page_save_disclosure(save_disclosure_viewer_url):
+    """Launch headless Chromium against the save-disclosure viewer."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        pg = browser.new_context().new_page()
+        pg.set_default_timeout(10_000)
+        yield pg
+        browser.close()
+
+
+class TestBrowserSaveDisclosesTextNoEditChanged:
+    """Validates REQ-d00320-D."""
+
+    # Verifies: REQ-d00320-D
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00320_D_save_lists_the_parts_it_changed_beyond_the_edit(
+        self, page_save_disclosure, save_disclosure_viewer_url
+    ):
+        page = page_save_disclosure
+        js_errors: list[str] = []
+        page.on("pageerror", lambda err: js_errors.append(str(err)))
+        page.goto(save_disclosure_viewer_url, wait_until="networkidle")
+        _enter_edit_mode(page)
+
+        edited = page.evaluate(
+            """async () => await mutate('/api/mutate/title',
+                {node_id: 'REQ-d00001', new_title: 'Beta Renamed'})"""
+        )
+        assert edited and edited.get("success"), edited
+        page.wait_for_selector("#btn-save:not([disabled])", timeout=10_000)
+        saves: list = []
+        page.on("response", lambda r: saves.append(r) if r.url.endswith("/api/save") else None)
+        page.click("#btn-save")
+
+        try:
+            overlay = page.wait_for_selector("#save-disclosure-overlay", timeout=10_000)
+        except PlaywrightTimeoutError:
+            bodies = [r.text() for r in saves]
+            pytest.fail(f"no disclosure after save; /api/save answered {bodies}, JS {js_errors}")
+        named = page.locator("#save-disclosure-overlay li.save-disclosure-item").evaluate_all(
+            "(items) => items.map(i => i.dataset.nodeId)"
+        )
+        assert "REQ-d00002" in named, named
+        assert "REQ-d00001" not in named, named
+        assert any(n.startswith("rem:") for n in named), named
+        assert len(named) == 2, named
+        assert overlay.is_visible()
+        assert not js_errors, f"JS errors on save: {js_errors}"
+
+        page.click("#save-disclosure-dismiss")
+        page.wait_for_selector("#save-disclosure-overlay", state="detached")
+
+
+@pytest.fixture(scope="module")
+def refused_save_viewer(tmp_path_factory):
+    """A viewer over a project whose Active requirement a page save cannot write.
+
+    The page's save sends no changelog reason, which a change to an Active
+    requirement needs. Private because the test edits the graph. Yields the
+    viewer's URL and the project directory.
+    """
+    dest = tmp_path_factory.mktemp("viewer-refused-save")
+    _write_edit_controls_project(dest)
+    with _served_viewer(dest) as base_url:
+        yield base_url, dest
+
+
+@pytest.fixture()
+def page_refused_save(refused_save_viewer):
+    """Launch headless Chromium against the refused-save viewer."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        pg = browser.new_context().new_page()
+        pg.set_default_timeout(10_000)
+        yield pg
+        browser.close()
+
+
+class TestBrowserSaveReportsRefusal:
+    """Validates REQ-p00015-B."""
+
+    # Verifies: REQ-p00015-B
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_p00015_B_refused_save_names_its_cause_and_keeps_the_edit(
+        self, page_refused_save, refused_save_viewer
+    ):
+        page = page_refused_save
+        base_url, project = refused_save_viewer
+        spec_file = project / "spec" / "dev.md"
+        before = spec_file.read_text(encoding="utf-8")
+        js_errors: list[str] = []
+        page.on("pageerror", lambda err: js_errors.append(str(err)))
+        page.goto(base_url, wait_until="networkidle")
+        _enter_edit_mode(page)
+
+        edited = page.evaluate(
+            f"""async () => await mutate('/api/mutate/title',
+                {{node_id: '{_EDIT_CONTROLS_CITING}', new_title: 'Citing Renamed'}})"""
+        )
+        assert edited and edited.get("success"), edited
+        page.wait_for_selector("#btn-save:not([disabled])", timeout=10_000)
+        saves: list = []
+        page.on("response", lambda r: saves.append(r) if r.url.endswith("/api/save") else None)
+        page.click("#btn-save")
+
+        try:
+            overlay = page.wait_for_selector("#error-modal-overlay", timeout=10_000)
+        except PlaywrightTimeoutError:
+            bodies = [(r.status, r.text()) for r in saves]
+            pytest.fail(f"no error shown for a refused save; /api/save answered {bodies}")
+        assert overlay.is_visible()
+        assert [r.status for r in saves] == [400]
+        shown = page.locator("#error-modal-overlay").inner_text()
+        assert "Save failed" in shown, shown
+        assert "changelog" in shown.lower(), shown
+        assert _EDIT_CONTROLS_CITING in shown, shown
+
+        dirty = page.request.get(f"{base_url}/api/dirty").json()
+        assert dirty.get("mutation_count", 0) > 0, dirty
+        assert spec_file.read_text(encoding="utf-8") == before
+        assert not js_errors, f"JS errors on save: {js_errors}"
+
+
+# ---------------------------------------------------------------------------
+# A static page with embedded content opens a card and its source (REQ-d00321)
+# ---------------------------------------------------------------------------
+
+
+# A requirement whose text holds non-ASCII characters, and a file whose text
+# holds a script closer and a comment opener, so the restored content is
+# checked against text that compression and its decoding could mangle.
+_EMBEDDED_NOTES_REQ = "REQ-d00002"
+_EMBEDDED_NOTES_ASSERTION = "The tool SHALL keep na\u00efve caf\u00e9 notes \u2014 \u2713."
+_EMBEDDED_NOTES_SPEC = f"""# Notes
+
+## {_EMBEDDED_NOTES_REQ}: Notes Requirement
+
+**Level**: dev | **Status**: Active
+
+The notes requirement.
+
+### Assertions
+
+A. {_EMBEDDED_NOTES_ASSERTION}
+
+*End* *Notes Requirement*
+
+Trailing note: </script><!-- not a comment --> \u2713
+"""
+
+
+def _restored_source_panel(page, req_id: str, file_name: str) -> list[str]:
+    """Open ``req_id``'s card, open its file in the source panel, and return
+    the text of each numbered line the panel shows."""
+    page.evaluate(f"() => window.openCard('{req_id}')")
+    card = page.locator(f"#card-{req_id}")
+    card.wait_for(state="visible", timeout=10_000)
+    card.locator("a", has_text=f"{file_name}:").first.click()
+    page.wait_for_selector("#fv-body .source-line")
+    source_mode = page.locator(".file-viewer-mode-btn[data-mode='source']")
+    if source_mode.is_visible():
+        source_mode.click()
+    page.wait_for_selector("#fv-body code.line-content")
+    return page.locator("#fv-body .line-content").all_text_contents()
+
+
+def _file_lines(path: Path) -> list[str]:
+    """A file's text line by line, without the empty line after a final newline."""
+    lines = path.read_text(encoding="utf-8").split("\n")
+    if lines[-1] == "":
+        lines.pop()
+    return lines
+
+
+@pytest.fixture(scope="module")
+def embedded_static_page(tmp_path_factory) -> tuple[str, Path]:
+    """A static page with embedded content, generated by this worktree's source.
+
+    Yields the page's ``file://`` URL and the project it was generated from.
+    """
+    project = tmp_path_factory.mktemp("embedded-static-project")
+    _write_edit_controls_project(project)
+    (project / "spec" / "notes.md").write_text(_EMBEDDED_NOTES_SPEC, encoding="utf-8")
+    page_file = tmp_path_factory.mktemp("embedded-static-site") / "index.html"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "elspais",
+            "viewer",
+            "--static",
+            "--embed-content",
+            "-o",
+            str(page_file),
+            "--path",
+            str(project),
+        ],
+        cwd=str(project),
+        env=_worktree_env(),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return page_file.as_uri(), project
+
+
+class TestBrowserStaticEmbeddedContent:
+    """Validates REQ-d00321-A, REQ-d00321-B, REQ-d00321-E, REQ-p00006-C."""
+
+    # Verifies: REQ-d00321-A, REQ-d00321-B, REQ-d00321-E, REQ-p00006-C
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00321_AB_a_card_opens_its_source_with_every_line_numbered(
+        self, page, embedded_static_page
+    ):
+        """The card opens from the restored index, and its file's highlighted
+        lines are numbered from 1 and carry the file's text line for line."""
+        url, project = embedded_static_page
+        js_errors: list[str] = []
+        page.on("pageerror", lambda err: js_errors.append(str(err)))
+        page.goto(url, wait_until="load")
+
+        texts = _restored_source_panel(page, _EDIT_CONTROLS_CITING, "dev.md")
+
+        expected = _file_lines(project / "spec" / "dev.md")
+        numbers = page.locator("#fv-body .line-num").all_text_contents()
+        assert numbers == [str(n) for n in range(1, len(expected) + 1)]
+        assert texts == expected
+        highlighted = page.locator("#fv-body code.line-content span[class]")
+        assert highlighted.count() > 0, "the source panel shows no highlighting markup"
+        assert page.locator("#embedded-data-error").count() == 0
+        assert not js_errors, f"JS errors on the static page: {js_errors}"
+
+    # Verifies: REQ-d00321-E
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00321_E_the_page_restores_its_content_exactly(self, page, embedded_static_page):
+        """The content the page restores in the browser is the content the
+        generator compressed, and a card and its source show text holding
+        non-ASCII characters, a script closer and a comment opener whole."""
+        url, project = embedded_static_page
+        js_errors: list[str] = []
+        page.on("pageerror", lambda err: js_errors.append(str(err)))
+        page.goto(url, wait_until="load")
+
+        restored = page.evaluate("() => _embeddedReady")
+        from urllib.parse import unquote, urlparse
+
+        page_text = Path(unquote(urlparse(url).path)).read_text(encoding="utf-8")
+        assert restored == embedded_data(page_text)
+        assert _EMBEDDED_NOTES_REQ in restored["nodes"]
+
+        texts = _restored_source_panel(page, _EMBEDDED_NOTES_REQ, "notes.md")
+        card = page.locator(f"#card-{_EMBEDDED_NOTES_REQ}")
+        assert _EMBEDDED_NOTES_ASSERTION in card.inner_text()
+        assert texts == _file_lines(project / "spec" / "notes.md")
+        assert any("</script><!-- not a comment -->" in line for line in texts)
+        assert page.locator("#embedded-data-error").count() == 0
+        assert not js_errors, f"JS errors on the static page: {js_errors}"

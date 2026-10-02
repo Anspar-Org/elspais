@@ -381,7 +381,7 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     from elspais.config import get_config
     from elspais.graph import NodeKind
     from elspais.graph.factory import build_graph
-    from elspais.graph.render import compute_hash_for_node, render_save
+    from elspais.graph.render import compute_hash_for_node, iter_untidy_prose, render_save
 
     spec_dir = getattr(args, "spec_dir", None)
     config_path = getattr(args, "config", None)
@@ -399,6 +399,13 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     rc = _abort_if_duplicates(graph)
     if rc:
         return rc
+
+    # Implements: REQ-d00132-L
+    # Marking a term in an *Assertion* moves the hash, so the build leaves
+    # that text as written. Fixing is the deliberate act that marks it.
+    from elspais.graph.term_scanner import mark_terms_in_hashed_text
+
+    mark_terms_in_hashed_text(graph, list(graph.nodes_by_kind(NodeKind.REQUIREMENT)))
 
     typed_config = _validate_config(config)
     changelog_enforce = typed_config.changelog.hash_current
@@ -449,7 +456,16 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
                 file=sys.stderr,
             )
 
-    if not fixable_nodes:
+    # Implements: REQ-d00132-K
+    # A journey or a section of file-level prose whose term forms the build
+    # brought into canonical form is tidied with its file, like a requirement.
+    untidy_prose = [
+        n
+        for n in iter_untidy_prose(graph)
+        if n.file_node() is None or n.file_node().id not in unfixable_file_ids
+    ]
+
+    if not fixable_nodes and not untidy_prose:
         req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
         print(f"Validated {req_count} requirements")
         return _scan_and_report_unfixable(graph)
@@ -482,6 +498,17 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
                 print(line.format(prefix=prefix, node_id=node.id, detail=detail))
             else:
                 detail = _REASON_LABELS.get(r, r)
+                print(line.format(prefix=prefix, node_id=node.id, detail=detail))
+    for node in untidy_prose:
+        if not write_associates and _is_associate_owned(graph, node):
+            line = "[skipping] {node_id}: {detail} (associate-owned; write_associates=false)"
+        else:
+            line = "{prefix} {node_id}: {detail}"
+        seen_prose: set[tuple[str, str]] = set()
+        for old_form, new_form in node.get_field("term_replacements") or []:
+            if (old_form, new_form) not in seen_prose:
+                seen_prose.add((old_form, new_form))
+                detail = f"canonicalize term {old_form} -> {new_form}"
                 print(line.format(prefix=prefix, node_id=node.id, detail=detail))
 
     if dry_run:
@@ -523,6 +550,7 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
         graph,
         repo_root=repo_root,
         write_associates=config.get("federation", {}).get("write_associates", False),
+        tidy=True,
     )
     saved = result.get("saved_count", 0)
     if saved:
@@ -540,9 +568,9 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     """Fix a single requirement via the render pipeline.
 
     Builds the graph (which canonicalizes terms and marks dirty nodes),
-    then uses render_save to re-render the file containing the target
-    requirement.  This ensures canonical term forms, correct hashes,
-    and deduplicated references — all through one render path.
+    marks the terms in the target's hashed text, then uses render_save to
+    re-render the file containing the target requirement. This ensures
+    canonical term forms, correct hashes, and deduplicated references — all through one render path.
     """
     from elspais.config import get_config
     from elspais.graph import NodeKind
@@ -583,6 +611,11 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     if node is None:
         print(f"Error: Requirement {req_id} not found", file=sys.stderr)
         return 1
+
+    # Implements: REQ-d00132-L
+    from elspais.graph.term_scanner import mark_terms_in_hashed_text
+
+    mark_terms_in_hashed_text(graph, [node])
 
     computed = compute_hash_for_node(node, hash_mode)
     stored = node.hash
@@ -674,6 +707,7 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
         graph,
         repo_root=repo_root,
         write_associates=config.get("federation", {}).get("write_associates", False),
+        tidy=True,
     )
     if result.get("errors"):
         for err in result["errors"]:

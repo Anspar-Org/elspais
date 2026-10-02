@@ -314,19 +314,38 @@ F. The render-based save SHALL derive implements and refines reference lists fro
 
 G. Rendering SHALL preserve reference entries that never resolved to graph edges (unresolved references), including when they coexist with edge-derived references, so a rewrite does not silently delete an author's unresolved reference.
 
+H. A save of pending mutations SHALL write each file that holds text those mutations change, including each file that cites an identifier a mutation renamed.
+
+I. A save of pending mutations SHALL leave unwritten each file that holds no text those mutations change, also where that file is not in canonical form.
+
+J. When a save changes the text of a requirement or of a file-level text section that no pending mutation changed, inside a file that the save writes, the save SHALL name that requirement or text section to the caller.
+
+K. The checks SHALL report each requirement and each file-level text section whose text a build changes into canonical form.
+
+L. When a save writes a file, the save SHALL leave the hash of each requirement in that file that no pending mutation changed equal to the hash that requirement had before the save.
+
 ### Rationale
 
 Render-based save replaces the brittle text surgery in persistence.py with graph-native serialization. Each FILE node renders its content from the graph, making the graph the single source of truth. The consistency check (rebuild + compare) proves round-trip fidelity.
 
+A save carries the edits somebody made. Bringing a file into canonical form is the work of the fix operation, which the author runs on purpose and reviews as its own change. A save that also rewrote every non-canonical file in the repository would turn a one-line edit into a broad change in files nobody opened, and a reviewer could not tell the edit from the tidying. A rename is the exception that proves the boundary: the files citing the renamed identifier hold text the rename changes, so they are part of the edit.
+
+Inside a file that a save does write, the file is rendered whole, so text that is not in canonical form is written in canonical form beside the edit. J makes that visible: the caller is told which requirements and which sections of file prose changed although nobody edited them, so a reviewer can tell the edit from the tidying. K is what keeps that list short. Text that a build brings into canonical form is reported where the reader can act on it with the fix operation, on purpose and as its own change, rather than first appearing as a side effect of somebody's edit.
+
+Canonical form applies whenever elspais writes a requirement, and a change that leaves the hash where it was, such as spacing, layout or the depth of a heading, is fair game for any write. A change that moves the hash is material: it changes what the requirement is recorded as saying. Marking a *Defined Term* in an *Assertion* is such a change, because the emphasis says the word carries its defined meaning. L keeps a material change a deliberate act. A save makes it to a requirement somebody edited, and the fix operation makes it to any requirement on purpose, but a save never makes it to a requirement nobody edited. The hash L speaks of is the one the requirement's text yields. A recorded hash that no longer matches that text is a separate condition with its own check, and a save that records the hash the text already has changes no requirement's hash.
+
 ### Changelog
 
+- 2026-10-01 | b7f05ffb | - | Michael Lewis (<michael@anspar.org>) | Add assertion L: a save leaves the hash of each requirement it did not edit unchanged
+- 2026-10-01 | 6eb9b930 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-01 | bd3e0684 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | f5a4193c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | 91068610 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | c40e6417 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 7043f7af | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 7043f7af | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Render-Based Save Operation* | **Hash**: f5a4193c
+*End* *Render-Based Save Operation* | **Hash**: b7f05ffb
 ---
 
 ## REQ-d00134: Mutation Round-Trip Fidelity

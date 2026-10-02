@@ -9,6 +9,9 @@ Uses Jinja2 templates for rich interactive output.
 
 from __future__ import annotations
 
+import base64
+import gzip
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -21,6 +24,7 @@ from elspais.graph.aggregation import (
     measure_phrase,
     relative_tier_for,
 )
+from elspais.graph.GraphNode import NodeKind
 from elspais.graph.parsers.directives import counted_assertion_labels
 from elspais.graph.parsers.patterns import JNY_ID_PATTERN
 from elspais.html.theme import get_catalog
@@ -30,6 +34,22 @@ if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
     from elspais.graph.GraphNode import GraphNode
     from elspais.graph.metrics import CoverageDimension
+
+# The node kinds the static page never opens as a card (REQ-d00321-B).
+_NOT_INDEXED_KINDS = frozenset({NodeKind.REMAINDER, NodeKind.FILE})
+
+
+# Implements: REQ-d00321-C, REQ-d00321-D
+def compress_embedded(value: Any) -> str:
+    """Serialize a value as JSON, gzip it, and spell the result in base64.
+
+    The page restores it with the browser's own ``DecompressionStream``.
+    Base64 holds no ``<``, so no text the value carries can end the script
+    element holding it or open a comment there. The gzip header records no
+    time, so one value always yields one page.
+    """
+    raw = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return base64.b64encode(gzip.compress(raw, compresslevel=9, mtime=0)).decode("ascii")
 
 
 @dataclass
@@ -745,13 +765,18 @@ class HTMLGenerator:
             journeys=journeys,
             statuses=statuses_ctx,
             topics=sorted(topics),
-            tree_data=tree_data,
-            source_files=source_files,
             pygments_css=pygments_css,
             pygments_css_dark=pygments_css_dark,
-            node_index=node_index,
-            coverage_index=coverage_index,
-            status_data=status_data,
+            # Implements: REQ-d00321-D
+            embedded_data=compress_embedded(
+                {
+                    "tree": tree_data,
+                    "sources": source_files,
+                    "nodes": node_index,
+                    "coverage": coverage_index,
+                    "status": status_data,
+                }
+            ),
             version=self.version,
             base_path=self.base_path,
             # A static page requests nothing, so it carries no prefix.
@@ -1310,19 +1335,38 @@ class HTMLGenerator:
 
         return build_tree_rows(self.graph, self.config)
 
-    # Implements: REQ-p00006-A
+    # Implements: REQ-p00006-A, REQ-d00321-B
     def _build_node_index(self) -> dict[str, Any]:
         """Build node index for embedded JSON — matches /api/node/<id> response shape.
 
         Delegates to the MCP server's _serialize_node_generic() to produce
         identical JSON as the live API, ensuring view mode and edit mode
         see the same data structure.
+
+        The index holds the nodes the static page can open. A REMAINDER is
+        never opened: its text arrives inside the entry of the node that owns
+        it. A FILE is opened only where an indexed node links to it; its
+        source text is in the source-files block, and its own entry repeats
+        the text of everything it contains.
         """
+        from elspais.graph import NodeKind
         from elspais.mcp.server import _serialize_node_generic
 
         index: dict[str, Any] = {}
         for node in self.graph.all_nodes():
+            if node.kind in _NOT_INDEXED_KINDS:
+                continue
             index[node.id] = _serialize_node_generic(node, self.graph)
+        linked = {
+            link["id"]
+            for entry in index.values()
+            for link in entry.get("links") or ()
+            if link.get("kind") == NodeKind.FILE.value
+        }
+        for file_id in sorted(linked - index.keys()):
+            node = self.graph.find_by_id(file_id)
+            if node is not None:
+                index[file_id] = _serialize_node_generic(node, self.graph)
         return index
 
     # Implements: REQ-p00006-B
@@ -1358,7 +1402,7 @@ class HTMLGenerator:
 
         return _get_graph_status(self.graph)
 
-    # Implements: REQ-p00006-C
+    # Implements: REQ-p00006-C, REQ-d00321-A
     def _collect_source_files(self) -> dict[str, Any]:
         """Collect source file contents with syntax highlighting for inline viewer.
 
@@ -1368,7 +1412,8 @@ class HTMLGenerator:
 
         Returns:
             Dict mapping file paths to their content data:
-            {path: {lines: [highlighted_html_per_line], language: str, raw: str}}
+            {path: {lines: [highlighted_html_per_line], language: str}}
+            Each file's text is carried once, as its highlighted lines.
         """
         from elspais.html.highlighting import MAX_FILE_SIZE, highlight_file_content
 
