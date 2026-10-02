@@ -619,6 +619,10 @@ U. When a citation is bound to a group of tests, the system SHALL credit the cit
 
 V. The system SHALL end the extent of each test before the comment lines written directly above the next test.
 
+W. An estate-wide figure of executed implementation lines that belong to a requirement SHALL count each line once, however many requirements that line serves.
+
+X. Line figures that a surface states beside each other SHALL each be taken over the same set of files.
+
 Y. When a coverage artifact of a test target records a relative source path, the system SHALL resolve that path against the working directory of that test target.
 
 ### Rationale
@@ -643,10 +647,15 @@ Q is the half that bites. Evidence read in part yields a figure whose basis is n
 
 R, S and T give a citation in a test file one place to bind. A test's extent is where a runner's verdict lands, so a citation that reaches no test binds to none: it is not a default for every test in its file, and D's reading of the lines that follow a citation does not reach a test. U exists because a runner reports results for the tests in a group and never for the group itself, and V keeps a comment written above one test out of the extent derived for the test before it.
 
+W and X keep the difference between two line figures a count of lines. A line that two requirements implement is one line that ran, so a figure counting it once per requirement is in a different unit from a figure counting lines in files, and subtracting one from the other gives a number that looks like a count and is not one. The same holds for figures taken over different files: a file left out of one figure and kept in another moves the difference by exactly the lines nobody could measure.
+
 Y anchors a relative path to the place the measuring tool ran, because that is the place the tool wrote it from: Flutter writes a path relative to its package, and coverage.py writes one relative to its working directory when it records relative files. Where an artifact is stored says nothing about where it was measured. A target that declares no working directory runs in the repository root, and a member of a federation resolves the working directory of its own targets against its own root. A path that names no scanned file under that directory credits nothing.
 
 ### Changelog
 
+- 2026-10-01 | 192b9bb4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-01 | 04c09b44 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-98: an estate-wide figure of executed implementation lines counts each line once, and line figures stated together are taken over one set of files (W, X)
 - 2026-10-01 | a33f61f1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-48: a relative source path in a coverage artifact resolves against the working directory of its test target (Y)
 - 2026-09-30 | 824c778f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -682,7 +691,7 @@ Y anchors a relative path to the place the measuring tool ran, because that is t
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: a33f61f1
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 192b9bb4
 
 ---
 
@@ -1001,6 +1010,12 @@ G. A citation in a scanned test file that binds to no test SHALL be reported.
 
 H. A citation that binds to no test SHALL contribute no coverage to the assertions it names.
 
+I. If a result binds to tests only through the file that holds them, then the tool SHALL report that result, naming the artifact that holds it and the tests it could have bound to.
+
+J. The severity of the report of results that bind only through a file SHALL be what the project configures for it, or a warning where the project configures nothing.
+
+K. A report that itemises the evidence behind its coverage figures SHALL state the number of results that bind only through a file apart from those figures, exactly where any exist, whatever severity the project gives their finding.
+
 ### Rationale
 
 An error default is the honest reading of what the condition means. A test that names an *Assertion* nothing implements is one of two defects: the implementation exists and its `Implements:` reference was never written, or the test is aimed at an *Assertion* it does not exercise. Neither is a matter of style, and both cost the estate the same thing — a requirement that reads as untested when it is tested, or as tested when it is not. A warning would leave the author to decide which of those two they are looking at without telling them there is a decision to make.
@@ -1011,15 +1026,19 @@ A and B divide the question between them. B settles what the dimension counts, w
 
 This is not the question REQ-d00258-M answers. That assertion governs surfaces listing what remains to be done, which read the immediate direct measure so an *Assertion* with no evidence naming it cannot hide behind its requirement's. Here the *Assertion* is not missing evidence; it has evidence that credits nothing.
 
+I, J and K answer for a result the tool read and then declined to count. A result that says which file it came from and not which test produced it binds to every test in that file, and REQ-d00254-G withholds its credit, because crediting it would credit assertions of tests that possibly did not run. Without a report, a suite whose results all bind that way reads as a suite with no evidence, and a reader looks for a test nobody wrote. The default is a warning because the cause is usually the producer of the results rather than the project, and a project cannot always change its producer. K keeps the count in the report whatever the finding's severity: a severity governs whether a finding is raised, and a reader who turns the finding off has not asked the tool to hide what it read.
+
 ### Changelog
 
+- 2026-10-01 | bf276438 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-96: a result that binds only through the file holding its tests is reported, at a warning by default, and a report itemising its evidence states their number whatever that finding's severity (I-K)
 - 2026-08-25 | 01a8f7d7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | b29be09f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: a citation binding to no test is reported and credits nothing
 - 2026-08-18 | 2f1e6599 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | b7624174 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Uncredited Coverage Evidence* | **Hash**: 01a8f7d7
+*End* *Uncredited Coverage Evidence* | **Hash**: bf276438
 
 ## REQ-d00276: Tests Outside the Requirement Estate
 

@@ -174,7 +174,7 @@
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | b49bd5ee |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 3b102d6f |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | 8360f2f4 |
-| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | a33f61f1 |
+| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 192b9bb4 |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 1ea68210 |
@@ -193,7 +193,7 @@
 | REQ-d00271 | Diagnostic Code Vocabulary                                    | dev-cli.md              | 6f4019d1 |
 | REQ-d00272 | Reference Fault Diagnosis                                     | dev-graph-core.md       | 58971daa |
 | REQ-d00273 | Requirement Metadata Block                                    | dev-graph-file-nodes.md | 2d7e25e8 |
-| REQ-d00274 | Uncredited Coverage Evidence                                  | dev-graph-core.md       | 01a8f7d7 |
+| REQ-d00274 | Uncredited Coverage Evidence                                  | dev-graph-core.md       | bf276438 |
 | REQ-d00275 | Whose Configuration Governs a Federated Answer                | dev-graph-federation.md | 9ab2ef7c |
 | REQ-d00276 | Tests Outside the Requirement Estate                          | dev-graph-core.md       | ca4cd1fc |
 | REQ-d00277 | Coverage Dimensions                                           | dev-graph-core.md       | b097dcd7 |

@@ -488,6 +488,15 @@ one name.  Post-processing the XML to inject `file="<repo-relative path>"` into
 each `<testcase>` still works and takes precedence, since a producer that names
 the source file leaves nothing to resolve.
 
+A result whose source file resolves but whose line matches no test in it binds
+to every test in that file. It names no test, so it credits no assertion:
+crediting it would credit the assertions of tests that possibly did not run.
+`elspais checks` reports such results under `tests.file_bound_results`, one
+finding per artifact holding them, naming the tests they could have bound to,
+and `elspais summary` states their number beside its coverage figures. A
+producer that records each test's source line removes the condition; for
+Playwright, use the reporter below.
+
 ### A reporter that names each test's source
 
 Playwright holds each test's location and uses it only in the message of a

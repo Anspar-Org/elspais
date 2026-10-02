@@ -185,12 +185,13 @@ _REMEDIES: dict[str, str] = {
     "tests.verified": "elspais failing",
     "tests.uncredited_evidence": "elspais -v checks --tests",
     "tests.external": "elspais failing",
-    # `tests.unbound_citation`, `tests.unrunnable_file` and
-    # `tests.ingestion_fault` are deliberately absent, as
-    # `code.unscanned_keyword_file` is: each is resolved by moving a citation
-    # onto the test it describes, by repairing the artifact a target names, or
-    # by editing the configuration that decides which files are scanned and
-    # what can run them. No command does any of those, and naming one would
+    # `tests.unbound_citation`, `tests.file_bound_results`,
+    # `tests.unrunnable_file` and `tests.ingestion_fault` are deliberately
+    # absent, as `code.unscanned_keyword_file` is: each is resolved by moving a
+    # citation onto the test it describes, by changing how a runner's results
+    # name their tests, by repairing the artifact a target names, or by editing
+    # the configuration that decides which files are scanned and what can run
+    # them. No command does any of those, and naming one would
     # send a reader to a surface that reports the condition again rather than
     # resolving it. `tests.run_in_progress` is absent for another reason:
     # the condition ends when the run ends, and no command ends it sooner.
@@ -393,6 +394,10 @@ _DESCRIPTIONS: dict[str, str] = {
     "tests.external": (
         "A test that failed and reaches no requirement, so nobody will find the failure through "
         "the spec"
+    ),
+    "tests.file_bound_results": (
+        "A result that names only the file holding its tests, not the test that produced it -- it "
+        "binds to every test in that file, so it credits no assertion and is reported here instead"
     ),
     "tests.unbound_citation": (
         "A citation in a scanned test file that found no test to attach to -- it names assertions "
@@ -616,6 +621,11 @@ def _registry() -> dict[str, CheckRule]:
         # ill-placed comment does. What it credits is not a severity question
         # at all -- REQ-d00274-H withdraws the coverage whatever this says.
         _general("tests.unbound_citation", "tests", Severity.WARNING),
+        # A result naming only its file is reported at warning because the
+        # cause is usually the runner that wrote it, and a project cannot
+        # always change its runner. What it credits is not a severity question:
+        # REQ-d00254-G withholds the credit whatever this says.
+        _general("tests.file_bound_results", "tests", Severity.WARNING),
         # An artifact ingestion could not read is reported at `error`. Every
         # case it covers is one a run owed: a report that will not parse, a
         # reporter nothing provides, or results and coverage missing for a

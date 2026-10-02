@@ -1106,6 +1106,82 @@ def aggregate_line_coverage(
     return agg
 
 
+@dataclass(frozen=True)
+class EstateLines:
+    """Line figures for the whole estate, each a count of distinct lines.
+
+    Every figure is taken over the same files: those whose source was
+    analysed. A file whose source could not be analysed has no known size, so
+    it enters no figure and is counted in ``unmeasured_files`` instead
+    (REQ-d00254-Q). The difference between any two figures is therefore itself
+    a count of lines.
+
+    ``requirement_executed_lines`` counts an executed line once however many
+    requirements implement it. It is not ``LineCoverage.attributed_lines``,
+    which counts lines a requirement's own tests executed.
+    """
+
+    executable_lines: int = 0
+    executed_lines: int = 0
+    requirement_executed_lines: int = 0
+    unmeasured_files: int = 0
+
+    @property
+    def executed_without_requirement(self) -> int:
+        """Executed lines that no counted requirement implements."""
+        return self.executed_lines - self.requirement_executed_lines
+
+    def to_dict(self) -> dict[str, int]:
+        return {
+            "executable_lines": self.executable_lines,
+            "executed_lines": self.executed_lines,
+            "requirement_executed_lines": self.requirement_executed_lines,
+            "executed_without_requirement": self.executed_without_requirement,
+            "unmeasured_files": self.unmeasured_files,
+        }
+
+
+# Implements: REQ-d00254-Q+W+X, REQ-d00258-C
+def aggregate_estate_lines(graph: Any, config: dict[str, Any] | None = None) -> EstateLines:
+    """How many lines the estate holds, ran, and ran inside a requirement.
+
+    The requirement figure is the union of every counted requirement's
+    implementation lines, intersected with the executed lines. A requirement
+    counts under the same status gate as :func:`aggregate_line_coverage`, so
+    the two line reports describe one estate (REQ-d00258-C).
+    """
+    from elspais.graph.annotators import implementation_lines
+
+    executable = 0
+    unmeasured = 0
+    executed_by_file: dict[str, set[int]] = {}
+    for node in graph.iter_by_kind(NodeKind.FILE):
+        if node.get_field("source_analysed") is False:
+            unmeasured += 1
+            continue
+        executable += node.get_field("executable_lines") or 0
+        line_coverage = node.get_field("line_coverage")
+        if line_coverage:
+            executed_by_file[node.id] = {ln for ln, hit in line_coverage.items() if hit > 0}
+
+    claimed: set[tuple[str, int]] = set()
+    region_cache: dict = {}
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if not _counts_for_coverage(config, node.status):
+            continue
+        for fid, lines in implementation_lines(node, region_cache).items():
+            executed = executed_by_file.get(fid)
+            if executed:
+                claimed.update((fid, ln) for ln in lines & executed)
+
+    return EstateLines(
+        executable_lines=executable,
+        executed_lines=sum(len(lines) for lines in executed_by_file.values()),
+        requirement_executed_lines=len(claimed),
+        unmeasured_files=unmeasured,
+    )
+
+
 # Implements: REQ-d00258-A, REQ-d00258-C
 def tier_buckets(
     graph: Any,
@@ -1160,6 +1236,69 @@ def _measure_fields(prefix: str, sums: DimensionSums) -> dict[str, float]:
         f"{prefix}_rolled_indirect": round(sums.rolled_indirect, 3),
         f"{prefix}_total_covered": round(sums.total_covered, 3),
     }
+
+
+@dataclass(frozen=True)
+class FileBoundResults:
+    """The results one artifact holds that bind only through a test file.
+
+    ``artifact`` is where the records were read: the results file, or the
+    target name where the runner's output held them and no file exists.
+    ``namespace`` names the repository that read them, because two members
+    can hold one repository-relative path. ``tests`` are the tests each result
+    could have bound to: every test in the file its record names.
+    """
+
+    namespace: str
+    artifact: str
+    result_file: str | None
+    target: str | None
+    result_ids: tuple[str, ...]
+    first_line: int | None
+    tests: tuple[str, ...]
+
+
+# Implements: REQ-d00274-I+K
+def iter_file_bound_results(graph: Any) -> list[FileBoundResults]:
+    """Results that bind to tests only through the file holding them, by artifact.
+
+    A result of this kind names no test, so it credits nothing (REQ-d00254-G).
+    The selection is the annotator's own predicate and a YIELDS parent: a
+    result with no YIELDS parent bound to no test at all, and the
+    unmatched-results report answers for it. The two populations are
+    therefore disjoint.
+    """
+    from elspais.graph.annotators import result_names_no_test
+    from elspais.graph.GraphNode import parse_structural_id
+    from elspais.graph.relations import EdgeKind
+
+    groups: dict[tuple[str, str], list[Any]] = {}
+    for result in graph.iter_by_kind(NodeKind.RESULT):
+        if not result_names_no_test(result):
+            continue
+        if not any(True for _ in result.iter_parents(edge_kinds={EdgeKind.YIELDS})):
+            continue
+        # A RESULT id names the repository that read it and the place of
+        # record, which is the artifact.
+        _prefix, namespace, place, _ordinal = parse_structural_id(result.id)
+        groups.setdefault((namespace, place), []).append(result)
+
+    records: list[FileBoundResults] = []
+    for (namespace, artifact), results in sorted(groups.items()):
+        lines = [r.get_field("result_line") for r in results if r.get_field("result_line")]
+        tests = {test.id for r in results for test in r.iter_parents(edge_kinds={EdgeKind.YIELDS})}
+        records.append(
+            FileBoundResults(
+                namespace=namespace,
+                artifact=artifact,
+                result_file=results[0].get_field("result_file"),
+                target=results[0].get_field("target"),
+                result_ids=tuple(sorted(r.id for r in results)),
+                first_line=min(lines) if lines else None,
+                tests=tuple(sorted(tests)),
+            )
+        )
+    return records
 
 
 # Implements: REQ-d00086-A, REQ-d00258-C, REQ-d00291-I
@@ -1266,12 +1405,28 @@ def collect_coverage(
             "has_failures": tot.has_failures,
         }
 
+    # Implements: REQ-d00274-K
+    # Results that bind only through a file are evidence the tool read and
+    # did not count. Their number is stated apart from the figures, and it is
+    # stated whatever severity their finding carries. The tally is over every
+    # ingested result, as the carried-target tally below is: a result is
+    # evidence about tests, and a scope selects requirements.
+    # Where none exist the payload carries no key, so no format states them.
     result: dict[str, Any] = {
         "levels": levels,
         "excluded": excluded_counts,
         "integrations": integrations,
         "integration_total": integration_total,
     }
+    file_bound = iter_file_bound_results(graph)
+    if file_bound:
+        result["file_bound_results"] = {
+            "count": sum(len(r.result_ids) for r in file_bound),
+            "artifacts": [
+                {"namespace": r.namespace, "artifact": r.artifact, "count": len(r.result_ids)}
+                for r in file_bound
+            ],
+        }
 
     # Implements: REQ-d00254-I
     # Carry-forward provenance (distinct RESULT target names + how many are
@@ -1304,6 +1459,8 @@ __all__ = [
     "TIER_TO_BUCKET",
     "WORK_LIST_MEASURE",
     "DimensionAggregate",
+    "EstateLines",
+    "FileBoundResults",
     "LineAggregate",
     "DimensionSums",
     "LevelAggregate",
@@ -1319,10 +1476,12 @@ __all__ = [
     "measure_phrase",
     "measure_total",
     "aggregate_dimension",
+    "aggregate_estate_lines",
     "aggregate_line_coverage",
     "authored_dimension",
     "denominator_labels",
     "dimension_measures",
+    "iter_file_bound_results",
     "iter_uncredited_evidence",
     "named_labels",
     "numerator_dimension",
