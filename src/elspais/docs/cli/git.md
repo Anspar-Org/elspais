@@ -51,7 +51,10 @@ The header's edit controls each name the operation they perform:
 
   Save         Save edits to disk. Writes only the files your edits change.
                A file it writes is written whole, in canonical form; where
-               that changed a part you did not edit, the save lists it.
+               that changed a part you did not edit, the save lists it. A
+               requirement you did not edit keeps its hash: the save does
+               not mark a defined term in its assertions (`elspais fix`
+               does that, on purpose).
   Checkpoint   git commit saved edits.
   Share        git push the commits. Drag the handle to the right, or focus
                it and hold Enter. A plain click shows how and pushes nothing.

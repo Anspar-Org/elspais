@@ -564,51 +564,105 @@ def _canonicalize_text(
     return text, replacements
 
 
+def _canonical_term_text(
+    node,  # noqa: ANN001
+    td: TermDictionary,
+    markup_style: str,
+    styles_set: set[str],
+) -> tuple[str, str, list[tuple[str, str]]] | None:
+    """The field of *node* holding term-bearing text, and that text in canonical form.
+
+    Returns ``(field, new_text, replacements)``, or None where the node
+    holds no such text or the text is already canonical.
+    """
+    kind = node.kind
+    if kind == NodeKind.ASSERTION:
+        field, old = "", node.get_label() or ""
+    elif kind == NodeKind.REMAINDER:
+        if node.get_field("content_type") == "definition_block":
+            return None
+        field, old = "text", node.get_field("text") or ""
+    elif kind == NodeKind.USER_JOURNEY:
+        field, old = "body", node.get_field("body") or ""
+    else:
+        # REQUIREMENT titles are in headings -- skip canonicalization
+        return None
+    if not old:
+        return None
+    new, repls = _canonicalize_text(old, td, markup_style, styles_set)
+    if not repls:
+        return None
+    return field, new, repls
+
+
+def _set_term_text(node, field: str, text: str) -> None:  # noqa: ANN001
+    if field:
+        node.set_field(field, text)
+    else:
+        node.set_label(text)
+
+
 def canonicalize_node_terms(
     node,  # noqa: ANN001
     td: TermDictionary,
     markup_style: str,
     markup_styles: list[str] | None = None,
+    *,
+    apply: bool = True,
 ) -> bool:
-    """Canonicalize term forms in a spec node's text.
+    """Bring term forms in a spec node's text into canonical form.
 
-    Modifies the node's text in-place and sets ``parse_dirty`` if changed.
-    Returns True if the node was modified.
+    The part of the file whose text is not canonical is marked
+    ``parse_dirty`` with the replacements it needs. With ``apply`` the
+    node's text is changed in place too; without it the text stays as
+    written and only the finding is recorded.
+
+    Returns True if the node's text is not in canonical form.
     """
     styles_set = set(markup_styles or _DEFAULT_MARKUP_STYLES)
-    kind = node.kind
+    found = _canonical_term_text(node, td, markup_style, styles_set)
+    if found is None:
+        return False
+    field, new, repls = found
+    if apply:
+        _set_term_text(node, field, new)
+    _mark_req_dirty(node, "non_canonical_term", repls)
+    return True
 
-    if kind == NodeKind.ASSERTION:
-        old = node.get_label() or ""
-        if not old:
-            return False
-        new, repls = _canonicalize_text(old, td, markup_style, styles_set)
-        if repls:
-            node.set_label(new)
-            _mark_req_dirty(node, "non_canonical_term", repls)
-            return True
-    elif kind == NodeKind.REMAINDER:
-        if node.get_field("content_type") == "definition_block":
-            return False
-        old = node.get_field("text") or ""
-        if not old:
-            return False
-        new, repls = _canonicalize_text(old, td, markup_style, styles_set)
-        if repls:
-            node.set_field("text", new)
-            _mark_req_dirty(node, "non_canonical_term", repls)
-            return True
-    elif kind == NodeKind.USER_JOURNEY:
-        old = node.get_field("body") or ""
-        if not old:
-            return False
-        new, repls = _canonicalize_text(old, td, markup_style, styles_set)
-        if repls:
-            node.set_field("body", new)
-            _mark_req_dirty(node, "non_canonical_term", repls)
-            return True
-    # REQUIREMENT titles are in headings — skip canonicalization
-    return False
+
+# Implements: REQ-d00132-L, REQ-d00237-G
+def mark_terms_in_hashed_text(graph, requirements) -> None:  # noqa: ANN001
+    """Bring term forms into canonical form in the text each requirement's hash covers.
+
+    A build leaves that text as written, because marking a term there moves
+    the hash. A save calls this for the requirements its mutations changed,
+    and the fix command for every requirement, so the change is only ever
+    made to a requirement somebody acted on.
+
+    Args:
+        graph: The federated graph holding the requirements and the terms.
+        requirements: The REQUIREMENT nodes to bring into canonical form.
+    """
+    from elspais.graph.render import iter_hashed_parts
+
+    td = getattr(graph, "terms", None)
+    if td is None or len(td) == 0:
+        return
+    for req in requirements:
+        try:
+            config = graph.repo_for_node(req).config
+        except (KeyError, AttributeError):
+            config = getattr(graph, "root_config", None) or {}
+        terms_cfg = config.get("terms", {}) or {}
+        if _is_excluded(req, terms_cfg.get("exclude_files") or []):
+            continue
+        styles = list(terms_cfg.get("markup_styles") or _DEFAULT_MARKUP_STYLES)
+        styles_set = set(styles)
+        for part in iter_hashed_parts(req, getattr(graph, "hash_mode", None)):
+            found = _canonical_term_text(part, td, styles[0], styles_set)
+            if found is not None:
+                field, new, _repls = found
+                _set_term_text(part, field, new)
 
 
 def _mark_req_dirty(
@@ -835,6 +889,8 @@ def scan_graph(
 
     # Post-scan: canonicalize term forms in spec nodes and mark dirty
     if canonicalize:
+        from elspais.graph.render import is_hashed_part
+
         preferred = (markup_styles or _DEFAULT_MARKUP_STYLES)[0]
         canon_kinds = [NodeKind.ASSERTION, NodeKind.REMAINDER, NodeKind.USER_JOURNEY]
         for kind in canon_kinds:
@@ -845,7 +901,12 @@ def scan_graph(
                     file_n = node.file_node()
                     if file_n and file_n.get_field("file_type") in _CODE_FILE_TYPES:
                         continue
-                canonicalize_node_terms(node, terms, preferred, markup_styles)
+                # Implements: REQ-d00132-L
+                # Marking a term in text the hash covers moves the hash, so
+                # the build records it and leaves the text as written.
+                canonicalize_node_terms(
+                    node, terms, preferred, markup_styles, apply=not is_hashed_part(node)
+                )
 
     return unmatched
 

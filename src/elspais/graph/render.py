@@ -177,6 +177,37 @@ def compute_hash_for_node(node: GraphNode, hash_mode: str) -> str | None:
         return calculate_hash(body)
 
 
+# Implements: REQ-d00131-J, REQ-d00132-L
+def iter_hashed_parts(node: GraphNode, hash_mode: str | None = None) -> Any:
+    """Yield each part of a requirement whose text its hash covers.
+
+    The parts ``compute_hash_for_node`` reads: every *Assertion*, and under
+    full-text hashing every section of the requirement as well.
+
+    Args:
+        node: A REQUIREMENT node.
+        hash_mode: The hash mode; the requirement's own where not given.
+
+    Yields:
+        The ASSERTION and REMAINDER children the hash covers.
+    """
+    mode = hash_mode or node.get_field("hash_mode") or "normalized-text"
+    for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
+        if child.kind == NodeKind.ASSERTION:
+            yield child
+        elif child.kind == NodeKind.REMAINDER and mode != "normalized-text":
+            yield child
+
+
+# Implements: REQ-d00132-L
+def is_hashed_part(node: GraphNode) -> bool:
+    """Whether the text of *node* is covered by its requirement's hash."""
+    for parent in node.iter_parents(edge_kinds={EdgeKind.STRUCTURES}):
+        if parent.kind == NodeKind.REQUIREMENT:
+            return any(part is node for part in iter_hashed_parts(parent))
+    return False
+
+
 # Implements: REQ-d00131-L
 def _version_owner(node: GraphNode) -> GraphNode:
     """Return the authoring unit whose version governs ``node``.
@@ -917,12 +948,14 @@ def _files_with_pending_mutations(graph: FederatedGraph) -> list[Any]:
     Returns:
         The FILE nodes containing mutated content, unique by identity.
     """
-    files, _nodes = _mutation_reach(graph)
+    files, _nodes, _edited = _mutation_reach(graph)
     return files
 
 
-# Implements: REQ-d00132-A, REQ-d00132-H, REQ-d00132-J
-def _mutation_reach(graph: FederatedGraph) -> tuple[list[Any], dict[int, Any]]:
+# Implements: REQ-d00132-A, REQ-d00132-H, REQ-d00132-J, REQ-d00132-L
+def _mutation_reach(
+    graph: FederatedGraph,
+) -> tuple[list[Any], dict[int, Any], list[GraphNode]]:
     """The files and the content nodes whose text the pending mutations change.
 
     Walks the mutation log once. Each node a mutation changes the text of
@@ -938,14 +971,22 @@ def _mutation_reach(graph: FederatedGraph) -> tuple[list[Any], dict[int, Any]]:
     Args:
         graph: The traceability graph with pending mutations.
 
+    A requirement reached only because it cites a renamed identifier is
+    not one somebody edited: its citation is respelled and nothing else of
+    it changes. The requirements a mutation did change are returned apart,
+    since only those may be given a form that moves their hash.
+
     Returns:
-        The FILE nodes containing mutated content, unique by identity, and
-        the reached content nodes keyed by identity.
+        The FILE nodes containing mutated content, unique by identity, the
+        reached content nodes keyed by identity, and the requirements the
+        mutations changed.
     """
     from elspais.graph.declarations import DECLARATION_OPERATIONS
 
     dirty_files: dict[int, Any] = {}
     reached: dict[int, Any] = {}
+    # Reached only through a citation of a renamed identifier.
+    by_citation: set[int] = set()
 
     def _mark(node: Any) -> None:
         if node is not None and node.kind == NodeKind.FILE:
@@ -961,7 +1002,14 @@ def _mutation_reach(graph: FederatedGraph) -> tuple[list[Any], dict[int, Any]]:
             _mark(node)
         else:
             reached[id(node)] = node
+            by_citation.discard(id(node))
             _mark(node.file_node())
+
+    def _mark_file_of(node_id: str) -> None:
+        """Mark the FILE holding a node whose own text no mutation changed."""
+        node = graph.find_by_id(node_id)
+        if node is not None:
+            _mark(node if node.kind == NodeKind.FILE else node.file_node())
 
     # Implements: REQ-d00251-L
     def _mark_owning_file_of_assertion(assertion_id: str) -> None:
@@ -1002,6 +1050,8 @@ def _mutation_reach(graph: FederatedGraph) -> tuple[list[Any], dict[int, Any]]:
                 if label is not None and label not in edge.assertion_targets:
                     continue
                 if edge.target.kind == NodeKind.REQUIREMENT:
+                    if id(edge.target) not in reached:
+                        by_citation.add(id(edge.target))
                     reached[id(edge.target)] = edge.target
                     _mark(edge.target.file_node())
 
@@ -1050,11 +1100,12 @@ def _mutation_reach(graph: FederatedGraph) -> tuple[list[Any], dict[int, Any]]:
             else:
                 _mark_owning_file_of_assertion(target_id)
 
-        # For add_requirement, the target file is the parent's file
+        # For add_requirement, the target file is the parent's file. The
+        # parent's own text is unchanged.
         if entry.operation == "add_requirement":
             parent_id = entry.after_state.get("parent_id")
             if parent_id:
-                _mark_node_file(parent_id)
+                _mark_file_of(parent_id)
 
         # For delete_requirement, use the FILE id stored at delete time.
         # The path stored beside it cannot name the repository, so it is
@@ -1065,7 +1116,7 @@ def _mutation_reach(graph: FederatedGraph) -> tuple[list[Any], dict[int, Any]]:
                 _mark(graph.find_by_id(source_file_id))
             # Also try parent IDs from before_state
             for pid in entry.before_state.get("parent_ids", []):
-                _mark_node_file(pid)
+                _mark_file_of(pid)
 
         # For rename_node, both old and new locations
         if entry.operation == "rename_node":
@@ -1123,7 +1174,17 @@ def _mutation_reach(graph: FederatedGraph) -> tuple[list[Any], dict[int, Any]]:
             if new_file_id:
                 _mark(graph.find_by_id(new_file_id))
 
-    return list(dirty_files.values()), reached
+    edited: dict[int, GraphNode] = {}
+    for key, node in reached.items():
+        if key in by_citation:
+            continue
+        if node.kind == NodeKind.REQUIREMENT:
+            edited[id(node)] = node
+            continue
+        for parent in node.iter_parents(edge_kinds={EdgeKind.STRUCTURES}):
+            if parent.kind == NodeKind.REQUIREMENT:
+                edited[id(parent)] = parent
+    return list(dirty_files.values()), reached, list(edited.values())
 
 
 # Implements: REQ-d00132-K
@@ -1449,7 +1510,15 @@ def render_save(
                     new_path.parent.mkdir(parents=True, exist_ok=True)
                     old_path.rename(new_path)
 
-    _reached_files, reached = _mutation_reach(graph)
+    _reached_files, reached, edited = _mutation_reach(graph)
+
+    # Implements: REQ-d00132-L
+    # Canonical form for a requirement somebody edited includes the term
+    # markup in the text its hash covers. Every other requirement keeps that
+    # text as written, so its hash does not move.
+    from elspais.graph.term_scanner import mark_terms_in_hashed_text
+
+    mark_terms_in_hashed_text(graph, edited)
 
     # Render and write each dirty FILE
     for file_node in sorted(dirty_files, key=lambda n: n.id):

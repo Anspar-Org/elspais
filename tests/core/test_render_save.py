@@ -8,11 +8,14 @@ Validates REQ-d00132-D: persistence.py deleted
 Validates REQ-d00132-E: Mutation log cleared after save
 Validates REQ-d00132-F: Derives implements/refines from live graph edges
 Validates REQ-d00132-J: A save names the text it changed that no mutation changed
+Validates REQ-d00132-L: A save keeps the hash of each requirement no mutation changed
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+
+import pytest
 
 from elspais.graph import GraphNode, NodeKind
 from elspais.graph.builder import TraceGraph
@@ -20,13 +23,19 @@ from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import FileType
 from elspais.graph.relations import EdgeKind
 from tests.core.graph_test_helpers import (
+    EDITED_ASSERTION,
     MARKED_PROSE,
+    NEIGHBOUR_ASSERTION,
+    PLAIN_ASSERTION,
     TIDY_NEIGHBOUR,
     UNMARKED_PROSE,
     UNTIDY_NEIGHBOUR,
+    end_marker_hash,
     grammar_for,
     replace_in_file,
+    requirement_block,
     write_canonical_repo,
+    write_unmarked_term_repo,
 )
 
 
@@ -754,3 +763,158 @@ class TestASaveNamesTheTextNoMutationChanged:
         assert [(c["node_id"], c["kind"]) for c in changed] == [("JNY-001", "journey")], changed
         text = journeys.read_text(encoding="utf-8")
         assert "counts the *Widget*" in text and "**Actor**: Shipper" in text, text
+
+
+class TestASaveKeepsTheHashOfARequirementNobodyEdited:
+    """Validates REQ-d00132-L: marking a *Defined Term* in an *Assertion* moves
+    the requirement's hash, so a save makes that change only to a requirement
+    a pending mutation changed."""
+
+    MARKED_NEIGHBOUR = "The tool SHALL count every *Widget*."
+
+    @staticmethod
+    def _hash_of(assertion: str) -> str:
+        from elspais.utilities.hasher import compute_normalized_hash
+
+        return compute_normalized_hash([("A", assertion)])
+
+    # Verifies: REQ-d00132-L
+    def test_REQ_d00132_L_an_unedited_neighbour_keeps_its_assertion_and_hash(self, tmp_path: Path):
+        from elspais.graph.factory import build_graph
+        from elspais.graph.render import render_save
+
+        spec = write_unmarked_term_repo(tmp_path, edited_assertion=PLAIN_ASSERTION)
+        before = (spec / "dev.md").read_text(encoding="utf-8")
+
+        graph = build_graph(repo_root=tmp_path)
+        # The build records the unmarked term and leaves the text as written.
+        assert graph.find_by_id("REQ-d00002-A").get_label() == NEIGHBOUR_ASSERTION
+        assert "non_canonical_term" in (
+            graph.find_by_id("REQ-d00002").get_field("parse_dirty_reasons") or []
+        )
+
+        graph.update_title("REQ-d00001", "Beta Renamed")
+        result = render_save(graph, repo_root=tmp_path)
+
+        assert result["success"] is True, result["errors"]
+        after = (spec / "dev.md").read_text(encoding="utf-8")
+        assert "## REQ-d00001: Beta Renamed" in after
+        assert requirement_block(after, "REQ-d00002") == requirement_block(before, "REQ-d00002")
+        assert end_marker_hash(after, "REQ-d00002") == self._hash_of(NEIGHBOUR_ASSERTION)
+        assert result["changed_beyond_edits"] == []
+
+    # Verifies: REQ-d00132-L, REQ-d00132-J
+    def test_REQ_d00132_L_a_neighbour_still_gets_canonical_form_that_keeps_its_hash(
+        self, tmp_path: Path
+    ):
+        """The neighbour's body is outside its normalized-text hash, so its term
+        is marked there while the term in its *Assertion* is left as written."""
+        from elspais.graph.factory import build_graph
+        from elspais.graph.render import render_save
+
+        spec = write_unmarked_term_repo(
+            tmp_path,
+            edited_assertion=PLAIN_ASSERTION,
+            neighbour_body="Delta body names the Widget.",
+        )
+
+        graph = build_graph(repo_root=tmp_path)
+        graph.update_title("REQ-d00001", "Beta Renamed")
+        result = render_save(graph, repo_root=tmp_path)
+
+        assert result["success"] is True, result["errors"]
+        neighbour = requirement_block((spec / "dev.md").read_text(encoding="utf-8"), "REQ-d00002")
+        assert "Delta body names the *Widget*." in neighbour
+        assert f"A. {NEIGHBOUR_ASSERTION}" in neighbour
+        assert end_marker_hash(neighbour, "REQ-d00002") == self._hash_of(NEIGHBOUR_ASSERTION)
+        assert [(c["node_id"], c["kind"]) for c in result["changed_beyond_edits"]] == [
+            ("REQ-d00002", "requirement")
+        ]
+
+    # Verifies: REQ-d00132-L
+    def test_REQ_d00132_L_a_neighbour_restored_to_canonical_spacing_keeps_its_hash(
+        self, tmp_path: Path
+    ):
+        from elspais.graph.factory import build_graph
+        from elspais.graph.render import render_save
+
+        spec = write_unmarked_term_repo(tmp_path, edited_assertion=PLAIN_ASSERTION)
+        replace_in_file(
+            spec / "dev.md",
+            f"Delta body.\n\n### Assertions\n\nA. {NEIGHBOUR_ASSERTION}",
+            f"Delta body.\n### Assertions\nA. {NEIGHBOUR_ASSERTION}",
+        )
+
+        graph = build_graph(repo_root=tmp_path)
+        graph.update_title("REQ-d00001", "Beta Renamed")
+        result = render_save(graph, repo_root=tmp_path)
+
+        assert result["success"] is True, result["errors"]
+        neighbour = requirement_block((spec / "dev.md").read_text(encoding="utf-8"), "REQ-d00002")
+        assert f"Delta body.\n\n### Assertions\n\nA. {NEIGHBOUR_ASSERTION}" in neighbour
+        assert end_marker_hash(neighbour, "REQ-d00002") == self._hash_of(NEIGHBOUR_ASSERTION)
+        assert "REQ-d00002" in {c["node_id"] for c in result["changed_beyond_edits"]}
+
+    # Verifies: REQ-d00132-L
+    @pytest.mark.parametrize(
+        ("on_disk", "edit", "marked"),
+        [
+            pytest.param(
+                EDITED_ASSERTION,
+                ("title", "Beta Renamed"),
+                "The tool SHALL make a *Widget*.",
+                id="term-on-disk-title-edited",
+            ),
+            pytest.param(
+                PLAIN_ASSERTION,
+                ("assertion", "The tool SHALL ship a Widget."),
+                "The tool SHALL ship a *Widget*.",
+                id="term-introduced-by-the-edit",
+            ),
+        ],
+    )
+    def test_REQ_d00132_L_the_edited_requirement_gets_its_term_marked(
+        self, tmp_path: Path, on_disk: str, edit: tuple[str, str], marked: str
+    ):
+        from elspais.graph.factory import build_graph
+        from elspais.graph.render import render_save
+
+        spec = write_unmarked_term_repo(tmp_path, edited_assertion=on_disk)
+
+        graph = build_graph(repo_root=tmp_path)
+        what, value = edit
+        if what == "title":
+            graph.update_title("REQ-d00001", value)
+        else:
+            graph.update_assertion("REQ-d00001-A", value)
+        result = render_save(graph, repo_root=tmp_path)
+
+        assert result["success"] is True, result["errors"]
+        text = (spec / "dev.md").read_text(encoding="utf-8")
+        edited = requirement_block(text, "REQ-d00001")
+        assert f"A. {marked}" in edited
+        assert end_marker_hash(text, "REQ-d00001") == self._hash_of(marked)
+        # The neighbour in the same file is not edited and keeps its text.
+        assert f"A. {NEIGHBOUR_ASSERTION}" in requirement_block(text, "REQ-d00002")
+        assert end_marker_hash(text, "REQ-d00002") == self._hash_of(NEIGHBOUR_ASSERTION)
+
+    # Verifies: REQ-d00132-L, REQ-d00132-H
+    def test_REQ_d00132_L_a_rename_respells_the_citation_and_keeps_the_citer_hash(
+        self, tmp_path: Path
+    ):
+        """A requirement reached only because it cites a renamed one is not edited."""
+        from elspais.graph.factory import build_graph
+        from elspais.graph.render import render_save
+
+        spec = write_unmarked_term_repo(tmp_path, edited_assertion=PLAIN_ASSERTION)
+
+        graph = build_graph(repo_root=tmp_path)
+        graph.rename_node("REQ-p00001", "REQ-p00009")
+        result = render_save(graph, repo_root=tmp_path)
+
+        assert result["success"] is True, result["errors"]
+        citer = requirement_block((spec / "dev.md").read_text(encoding="utf-8"), "REQ-d00002")
+        assert "**Implements**: REQ-p00009-A" in citer
+        assert f"A. {NEIGHBOUR_ASSERTION}" in citer
+        assert self.MARKED_NEIGHBOUR not in citer
+        assert end_marker_hash(citer, "REQ-d00002") == self._hash_of(NEIGHBOUR_ASSERTION)

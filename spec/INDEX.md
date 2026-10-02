@@ -117,7 +117,7 @@
 | REQ-d00129 | SourceLocation Removal and Consumer Migration                 | dev-graph-file-nodes.md | 6d11df36 |
 | REQ-d00130 | Parameterized Root Iteration and Kind-Based Index Query       | dev-graph-file-nodes.md | 5733741e |
 | REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | c81d018a |
-| REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | 6eb9b930 |
+| REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | b7f05ffb |
 | REQ-d00133 | MCP FILE Node Integration                                     | dev-mcp-tools.md        | 08e2973f |
 | REQ-d00134 | Mutation Round-Trip Fidelity                                  | dev-graph-file-nodes.md | 19cb065b |
 | REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | 67a9ca83 |

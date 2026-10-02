@@ -322,6 +322,8 @@ J. When a save changes the text of a requirement or of a file-level text section
 
 K. The checks SHALL report each requirement and each file-level text section whose text a build changes into canonical form.
 
+L. When a save writes a file, the save SHALL leave the hash of each requirement in that file that no pending mutation changed equal to the hash that requirement had before the save.
+
 ### Rationale
 
 Render-based save replaces the brittle text surgery in persistence.py with graph-native serialization. Each FILE node renders its content from the graph, making the graph the single source of truth. The consistency check (rebuild + compare) proves round-trip fidelity.
@@ -330,8 +332,11 @@ A save carries the edits somebody made. Bringing a file into canonical form is t
 
 Inside a file that a save does write, the file is rendered whole, so text that is not in canonical form is written in canonical form beside the edit. J makes that visible: the caller is told which requirements and which sections of file prose changed although nobody edited them, so a reviewer can tell the edit from the tidying. K is what keeps that list short. Text that a build brings into canonical form is reported where the reader can act on it with the fix operation, on purpose and as its own change, rather than first appearing as a side effect of somebody's edit.
 
+Canonical form applies whenever elspais writes a requirement, and a change that leaves the hash where it was, such as spacing, layout or the depth of a heading, is fair game for any write. A change that moves the hash is material: it changes what the requirement is recorded as saying. Marking a *Defined Term* in an *Assertion* is such a change, because the emphasis says the word carries its defined meaning. L keeps a material change a deliberate act. A save makes it to a requirement somebody edited, and the fix operation makes it to any requirement on purpose, but a save never makes it to a requirement nobody edited. The hash L speaks of is the one the requirement's text yields. A recorded hash that no longer matches that text is a separate condition with its own check, and a save that records the hash the text already has changes no requirement's hash.
+
 ### Changelog
 
+- 2026-10-01 | b7f05ffb | - | Michael Lewis (<michael@anspar.org>) | Add assertion L: a save leaves the hash of each requirement it did not edit unchanged
 - 2026-10-01 | 6eb9b930 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-01 | bd3e0684 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | f5a4193c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -340,7 +345,7 @@ Inside a file that a save does write, the file is rendered whole, so text that i
 - 2026-05-11 | 7043f7af | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 7043f7af | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Render-Based Save Operation* | **Hash**: 6eb9b930
+*End* *Render-Based Save Operation* | **Hash**: b7f05ffb
 ---
 
 ## REQ-d00134: Mutation Round-Trip Fidelity

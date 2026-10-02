@@ -241,13 +241,16 @@ current graph. Reports missing IDs, extra IDs, or both.
 
 #### `spec.needs_rewrite` — Pending Rewrites
 
-Flags each part of a spec file whose text the build changed from its on-disk
-form: requirements (duplicate references, stale hashes, spacing, section
-header depth, term forms), and journeys and sections of file-level prose
-(term forms). `elspais fix` writes them in canonical form. A save of pending
+Flags each part of a spec file that is not in canonical form on disk:
+requirements (duplicate references, stale hashes, spacing, section header
+depth, term forms), and journeys and sections of file-level prose (term
+forms). `elspais fix` writes them in canonical form. A save of pending
 changes from the viewer or by an agent also writes a flagged part in
 canonical form when it writes the file holding it, and names the part in its
-`changed_beyond_edits` result.
+`changed_beyond_edits` result. The one exception is a change that would move
+a hash: a save marks a defined term in an assertion only in a requirement it
+edited, so every other requirement keeps its hash until `elspais fix` marks
+the term.
 
 #### `spec.hash_integrity` — Template Hash Review
 

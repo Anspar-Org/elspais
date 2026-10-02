@@ -400,6 +400,13 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     if rc:
         return rc
 
+    # Implements: REQ-d00132-L
+    # Marking a term in an *Assertion* moves the hash, so the build leaves
+    # that text as written. Fixing is the deliberate act that marks it.
+    from elspais.graph.term_scanner import mark_terms_in_hashed_text
+
+    mark_terms_in_hashed_text(graph, list(graph.nodes_by_kind(NodeKind.REQUIREMENT)))
+
     typed_config = _validate_config(config)
     changelog_enforce = typed_config.changelog.hash_current
     hash_mode = getattr(graph, "hash_mode", "full-text")
@@ -561,9 +568,9 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     """Fix a single requirement via the render pipeline.
 
     Builds the graph (which canonicalizes terms and marks dirty nodes),
-    then uses render_save to re-render the file containing the target
-    requirement.  This ensures canonical term forms, correct hashes,
-    and deduplicated references — all through one render path.
+    marks the terms in the target's hashed text, then uses render_save to
+    re-render the file containing the target requirement. This ensures
+    canonical term forms, correct hashes, and deduplicated references — all through one render path.
     """
     from elspais.config import get_config
     from elspais.graph import NodeKind
@@ -604,6 +611,11 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     if node is None:
         print(f"Error: Requirement {req_id} not found", file=sys.stderr)
         return 1
+
+    # Implements: REQ-d00132-L
+    from elspais.graph.term_scanner import mark_terms_in_hashed_text
+
+    mark_terms_in_hashed_text(graph, [node])
 
     computed = compute_hash_for_node(node, hash_mode)
     stored = node.hash
