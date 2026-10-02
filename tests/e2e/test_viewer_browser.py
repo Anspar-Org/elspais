@@ -486,11 +486,22 @@ class TestViewerExport:
         raised came with the click itself."""
         dialogs: list[str] = []
         page.on("dialog", lambda d: (dialogs.append(d.type), d.dismiss()))
+
+        # The page takes its pending count from /api/dirty on load and on every
+        # server event, so a count set from the page is overwritten by the next
+        # probe. The route makes every probe report pending work instead.
+        def _report_pending(route):
+            response = route.fetch()
+            body = response.json()
+            body["mutation_count"] = 1
+            route.fulfill(response=response, json=body)
+
+        page.route("**/api/dirty", _report_pending)
         page.goto(viewer_url, wait_until="domcontentloaded", timeout=_PAGE_LOAD_TIMEOUT)
         page.wait_for_selector("#btn-export", timeout=_PAGE_LOAD_TIMEOUT)
-        page.evaluate("() => { editState.mutationCount = 1; }")
-        assert page.evaluate("unloadWarningState().willWarnOnClose") is True, (
-            "precondition: the page must be one that warns before it is left"
+        page.wait_for_function(
+            "() => unloadWarningState().willWarnOnClose === true",
+            timeout=_PAGE_LOAD_TIMEOUT,
         )
         page.select_option("#export-report", "summary")
         page.select_option("#export-format", "csv")

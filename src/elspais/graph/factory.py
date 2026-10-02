@@ -62,27 +62,30 @@ from elspais.utilities.patterns import FederatedIdReader, IdResolver, build_reso
 _log = logging.getLogger(__name__)
 
 
-# Known schema fields (by alias and Python name) for filtering non-schema keys
-def _resolve_coverage_file_node(graph, source_file, lcov_path, repo_root):
-    """Resolve an lcov SF path to a repo-relative FILE node.
+# Implements: REQ-d00254-Y
+def _resolve_coverage_file_node(graph, source_file, working_dir, repo_root):
+    """The FILE node a coverage artifact's source path names, or None.
 
-    Tries the SF verbatim, then resolves it relative to the package root
-    (the directory containing the lcov file, minus a trailing 'coverage').
+    A relative path is read against *working_dir*, the directory the target
+    ran in, because the measuring tool wrote it from there. An absolute path
+    is read as it stands. A path that names no scanned file of this
+    repository resolves to nothing.
+
+    The path is placed in the repository as written first, and through
+    symbolic links second: a tool may record either spelling.
     """
+    root = Path(repo_root).absolute()
+    named = Path(os.path.normpath(Path(working_dir).absolute() / source_file))
+    try:
+        rel = named.relative_to(Path(os.path.normpath(root)))
+    except ValueError:
+        try:
+            rel = named.resolve().relative_to(root.resolve())
+        except ValueError:
+            return None
     # Coverage is ingested into the repository whose graph this is, so the
     # id is written in that repository's namespace.
-    namespace = graph.namespace
-    node = graph.find_by_id(make_file_id(namespace, source_file))
-    if node is not None:
-        return node
-    pkg_root = lcov_path.parent
-    if pkg_root.name == "coverage":
-        pkg_root = pkg_root.parent
-    try:
-        rel = (pkg_root / source_file).resolve().relative_to(Path(repo_root).resolve())
-    except ValueError:
-        return None
-    return graph.find_by_id(make_file_id(namespace, str(rel)))
+    return graph.find_by_id(make_file_id(graph.namespace, rel.as_posix()))
 
 
 # Implements: REQ-d00254-F, REQ-d00254-I
@@ -1511,10 +1514,9 @@ def build_graph(
                 # for measured files that actually resolve to a FILE node --
                 # unresolvable ones (test files, out-of-tree sources) are
                 # discarded by the annotation loop below anyway.
-                def _wanted(source_file: str, _cov_path: Path = cov_path) -> bool:
+                def _wanted(source_file: str, _cwd: Path = cwd_path) -> bool:
                     return (
-                        _resolve_coverage_file_node(graph, source_file, _cov_path, repo_root)
-                        is not None
+                        _resolve_coverage_file_node(graph, source_file, _cwd, repo_root) is not None
                     )
 
                 parsed_cov = cov_parser.parse(cov_content, str(cov_path), wanted_files=_wanted)
@@ -1525,7 +1527,7 @@ def build_graph(
                 graph, cov_parser, "coverage", target.name, str(cov_path), repo_root
             )
             for source_file, data in parsed_cov.items():
-                cov_node = _resolve_coverage_file_node(graph, source_file, cov_path, repo_root)
+                cov_node = _resolve_coverage_file_node(graph, source_file, cwd_path, repo_root)
                 if cov_node is None:
                     continue
                 cov_node.set_field("line_coverage", data["line_coverage"])
