@@ -619,6 +619,37 @@ class TestCheckUnclaimedReferences:
         assert not any("widget-42" in f.message for f in broken.findings)
         assert broken.passed
 
+    # Verifies: REQ-p00019-G
+    @pytest.mark.parametrize(
+        ("citation", "item"),
+        [("REQ-d00001-A,B", "B"), ("EVS-d00001-A", "EVS-d00001-A")],
+    )
+    def test_unclaimed_item_finding_states_what_was_read(
+        self, tmp_path, citation: str, item: str
+    ) -> None:
+        """The finding quotes the item as written and lists every declared
+        namespace, and offers no guess at what the author meant."""
+        from elspais.graph.factory import build_graph
+
+        repo = make_repo(tmp_path, "solo", namespace="REQ", req_id="REQ-d00001")
+        (repo / "src").mkdir()
+        (repo / "src" / "impl.py").write_text(
+            f"# Implements: {citation}\ndef impl():\n    pass\n", encoding="utf-8"
+        )
+
+        unclaimed = check_unclaimed_references(build_graph(repo_root=repo))
+
+        assert not unclaimed.passed
+        messages = [f.message for f in unclaimed.findings if f"'{item}'" in f.message]
+        assert len(messages) == 1
+        message = messages[0]
+        assert (
+            f"'{item}' does not open with a namespace any configured repository "
+            "declares; the declared namespaces are: REQ"
+        ) in message
+        assert "+" not in message
+        assert "assertion label" not in message.lower()
+
     # Verifies: REQ-d00269-F
     def test_REQ_d00269_F_claimed_target_stays_with_unresolved_references(self) -> None:
         """A misspelt local identifier is a broken reference, not an unclaimed one."""
