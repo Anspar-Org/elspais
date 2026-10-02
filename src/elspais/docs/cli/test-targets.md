@@ -189,7 +189,7 @@ under that base credits nothing.
 | --- | --- | --- | --- |
 | `coverage-json` | file | coverage | Parses the JSON report `coverage json` (coverage.py) writes, in either its aggregate or its per-context form, into per-file line coverage. |
 | `coverage-sqlite` | file | coverage | Reads coverage.py's own `.coverage` SQLite data file through coverage.py's public API, so per-test contexts are read compactly rather than through a JSON expansion of them. Needs the `coverage` package (`elspais[coverage]`) importable, and degrades to unattributed coverage where it is not. |
-| `flutter-machine` | stdout | results | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the real `suite.path` and test line, so `match = "source"` binds each result to the test that produced it. |
+| `flutter-machine` | stdout | results | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the file and line where each test is declared, and the file that executed it, so `match = "source"` binds each result to its test, including a test declared in a shared file that a runner file executes. |
 | `junit` | file | results | Parses JUnit XML result files matched by the `results` glob. Honours an optional per-`<testcase>` `file` attribute (a real source path) and `line` attribute, so `match = "source"` can bind to a scanned test node. |
 | `lcov` | file | coverage | Parses an LCOV report -- the `lcov.info` that `flutter test --coverage` and most language toolchains write -- into per-file line coverage. |
 | `pytest-json` | file | results | Parses the report pytest's `--json-report` writes, matched by the `results` glob. |
@@ -217,7 +217,7 @@ target need not name one.
 
 **`match = "source"` (default):** Per-test attribution.  elspais matches each
 result record to the specific `test()` by its source path AND line number
-(e.g., the `suite.path` + test line from `flutter-machine`).  A result also
+(e.g., the declaring file and line from `flutter-machine`).  A result also
 reaches a citation written above the `group()` that holds its test.
 Consequently, a citation on a group takes its verdict from the tests inside
 it.  If a line does not resolve to a known test node (shared-helper or
@@ -226,6 +226,14 @@ names no test.  Consequently, it credits and flags nothing.  The assertions
 its file's tests cite stay awaiting a result.
 Requires a reporter that emits real file paths and, for per-test resolution,
 the test's source line (`flutter-machine`).
+
+A test can be declared in a shared scenario file and executed through a
+runner file, one runner for each backend. `flutter-machine` then reports the
+file and line of the declaration (`test.url`, `test.line`) and the runner
+(`suite.path`). elspais binds the result to the test at the declaration,
+where its `Verifies:` citations are. Each runner's run is a result of that one
+test. The test passes only if every run passed. A failure names the runner
+that produced it, as `(run by <runner file>)`.
 
 The `junit` reporter also supports `match = "source"` when the JUnit XML
 carries a per-`<testcase>` `file` attribute naming the test's real source path
@@ -260,10 +268,10 @@ dimension:
 
 This is the recommended setup for Flutter/Dart packages.  Use
 `reporter = "flutter-machine"` with `match = "source"` to get real per-test
-attribution -- elspais reads the `suite.path` and test source line emitted by
-the Flutter test machine protocol and matches each result to the specific test
-node at that `(path, line)` in the graph, with a file-granular fallback for
-shared helpers and generated tests.
+attribution -- elspais reads the file and line where the Flutter test machine
+protocol says each test is declared, and matches each result to the specific
+test node at that `(path, line)` in the graph. A test declared in a shared
+scenario file binds there, whichever runner file executed it.
 
 ### Single-package example
 
@@ -613,6 +621,33 @@ Run elspais in CI after the test step:
 ```text
 elspais checks
 ```
+
+### Parallel jobs and one gate
+
+`elspais test` executes test targets and records their results. It evaluates
+no check. Its exit code is 1 if any target it executed failed, and 0 if all
+passed. It selects with `--targets` exactly as `checks --run-tests` does.
+
+Split the suite across jobs with `elspais test`, collect each job's target
+folders, and evaluate the checks once:
+
+```text
+# job 1                      # job 2
+elspais test --targets unit  elspais test --targets postgres
+
+# gate job, after the results of both are in place
+elspais checks --expect unit postgres
+```
+
+A job then fails only for its own tests. A specification error fails the
+gate alone. `--expect` makes a missing result of a named target a fault, so
+the gate stays strict.
+
+`elspais test` reads nothing while a command runs. Consequently, every target
+it executes must declare a `results` pattern that matches what the command
+writes into `$ELSPAIS_TARGET_OUTPUT`. A stdout reporter's output is not
+recorded on its own. The command refuses (exit 2), before it runs anything,
+a selection that holds a target with no `results` pattern.
 
 ## Groups
 

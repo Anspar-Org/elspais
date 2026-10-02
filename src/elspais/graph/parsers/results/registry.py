@@ -85,8 +85,9 @@ def _register_builtins() -> None:
             FlutterMachineParser,
             description=(
                 "Parses the `flutter test --machine` JSON-line protocol from the command's "
-                'stdout. Carries the real `suite.path` and test line, so `match = "source"` '
-                "binds each result to the test that produced it."
+                "stdout. Carries the file and line where each test is declared, and the file "
+                'that executed it, so `match = "source"` binds each result to its test, '
+                "including a test declared in a shared file that a runner file executes."
             ),
         )
     )

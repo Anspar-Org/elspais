@@ -5413,6 +5413,8 @@ class GraphBuilder:
             "line": data.get("line"),
             "root_line": data.get("root_line"),
             "root_file": data.get("root_file"),
+            # Implements: REQ-d00294-G
+            "runner_file": data.get("runner_file"),
             "carried": data.get("carried", False),
             "target": data.get("target"),
             # Results-file provenance: where this result was RECORDED

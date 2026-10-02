@@ -28,6 +28,76 @@ from pathlib import Path
 from elspais.config.schema import ElspaisConfig
 
 
+class SelectionRefused(Exception):
+    """A selection of targets that no run executes. The message names what to change."""
+
+
+# Implements: REQ-d00249-F+I, REQ-d00283-D+H+K+M+N+O
+def executable_selection(config: ElspaisConfig, selected: list[str]) -> set[str] | None:
+    """Resolve the ``--targets`` names of a run that executes targets.
+
+    Both runs that execute targets call this function, the one that evaluates
+    checks and the one that does not. Consequently, a name selects the same
+    targets in both, and both refuse the same selections.
+
+    Returns the selected target names, or ``None`` for every configured target.
+
+    Raises:
+        SelectionRefused: A name is neither a target nor a group, the
+            selection reaches no target, or no selected target has a command.
+    """
+    from elspais.config import empty_selection_refusal, selected_targets, unknown_target_refusal
+
+    # Targets and groups share one namespace. The config reader keeps their
+    # names apart (REQ-d00283-G). If a name is neither a target nor a group,
+    # then the run refuses it and does not resolve it to nothing.
+    if refusal := unknown_target_refusal(config, selected):
+        raise SelectionRefused(refusal)
+    if refusal := empty_selection_refusal(config, selected, executes=True):
+        raise SelectionRefused(refusal)
+    # One authority resolves both selectors; None means every configured
+    # target, which is what keeps a project declaring no groups rendering
+    # exactly as it did before (REQ-d00254-J).
+    try:
+        only = selected_targets(config, selected or None)
+    except ValueError as exc:
+        raise SelectionRefused(str(exc)) from exc
+    if not any(
+        t.command and (only is None or t.name in only) for t in config.scanning.test.targets
+    ):
+        raise SelectionRefused(
+            "a run that executes targets requires at least one "
+            "[[scanning.test.targets]] entry with a command field "
+            "(within the selected --targets when given; a run "
+            "naming neither executes the `default` group). "
+            "See docs/cli/test-targets.md for configuration examples."
+        )
+    return only
+
+
+# Implements: REQ-d00249-K
+def unrecorded_targets(config: ElspaisConfig, only: set[str] | None) -> list[str]:
+    """The selected targets whose results a run that evaluates no check would lose.
+
+    A target whose reporter reads results and which declares no ``results``
+    pattern leaves nothing on disk. A run that evaluates checks reads such a
+    target's output while it runs. A run that evaluates no check reads nothing.
+    """
+    from elspais.graph.parsers.results.registry import get_reporter
+
+    lost = []
+    for target in config.scanning.test.targets:
+        if not target.command or (only is not None and target.name not in only):
+            continue
+        try:
+            kind = get_reporter(target.reporter).kind
+        except KeyError:
+            continue  # tests.ingestion_fault names a reporter nothing reads
+        if kind == "results" and not target.results:
+            lost.append(target.name)
+    return lost
+
+
 @dataclass
 class RunnerResult:
     name: str

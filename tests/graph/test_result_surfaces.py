@@ -199,3 +199,35 @@ def test_a_failing_finding_names_the_environment_and_the_record():
     assert "[firefox]" in finding.message
     assert finding.file_path == "reports/junit.xml"
     assert finding.line == 31
+
+
+def _run_result(source_file: str, runner_file: str | None) -> GraphNode:
+    """A result of a test declared in *source_file* and run by *runner_file*."""
+    node = _result("result:REQ:.results/flutter/machine.jsonl:1", status="failed")
+    node.set_field("source_file", source_file)
+    node.set_field("runner_file", runner_file)
+    return node
+
+
+# Verifies: REQ-d00294-G
+def test_a_result_run_by_another_file_names_that_file():
+    node = _run_result("test/support/boot.dart", "test/b/b_test.dart")
+    graph = _graph(node)
+
+    entry = _serialize_result_entry(node, graph)
+    properties = _serialize_node_generic(node, graph)["properties"]
+
+    assert entry["runner_file"] == "test/b/b_test.dart"
+    assert properties["runner_file"] == "test/b/b_test.dart"
+
+
+# Verifies: REQ-d00294-G
+@pytest.mark.parametrize("runner_file", ["test/b/b_test.dart", None], ids=["same-file", "none"])
+def test_a_result_its_declaring_file_ran_names_no_runner(runner_file):
+    """The key is absent where the runner is the declaring file or is unknown."""
+    node = _run_result("test/b/b_test.dart", runner_file)
+    graph = _graph(node)
+
+    entry = _serialize_result_entry(node, graph)
+
+    assert "runner_file" not in entry

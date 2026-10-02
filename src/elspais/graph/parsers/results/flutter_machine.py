@@ -1,19 +1,26 @@
 """Parser for `flutter test --machine` newline-delimited JSON events.
 
-Builds RESULT records carrying the test file's real path (from ``suite.path``)
-and each test's identity within it (name, line).
+Builds RESULT records carrying where each test is declared (path, line), the
+file that executed it, and its name.
 
 Record shape mirrors sibling parsers (junit_xml, pytest_json):
 ``{"ordinal", "name", "classname", "status", "duration", "message",
-"source_path", "line", "root_path", "root_line", "test_id"}``.
+"source_path", "line", "root_path", "root_line", "runner_path", "test_id"}``.
 
-``line`` is the machine event's ``test.line``, counted from one, as the tool
-counts source lines. For a plain ``test()`` call it is the user's call site.
-For ``testWidgets(...)`` the framework reports a wrapper line instead (inside
-``package:flutter_test/src/widget_tester.dart``), which names no line of the
-user's file; the call site is then in ``test.root_line`` / ``test.root_url``.
-Both are carried so the builder can try ``(source_path, line)`` and fall back
-to ``(root_path, root_line)``.
+``test.url`` and ``test.line`` name the frame that called ``test()``, and
+``suite.path`` names the file the runner executed. The two differ for a
+scenario declared in a shared file and executed through a runner file. The
+test's citations sit at the declaration. Consequently, a ``file:`` URL in
+``test.url`` gives ``source_path`` and ``line``, and ``suite.path`` gives
+``runner_path`` (REQ-d00254-Z).
+
+For ``testWidgets(...)``, ``test.url`` names a frame inside
+``package:flutter_test``, which is no file of the project. The record then
+takes ``source_path`` from ``suite.path`` and carries ``test.root_url`` /
+``test.root_line``, which name the call site in the suite's file. The builder
+tries ``(source_path, line)`` and falls back to ``(root_path, root_line)``. A
+record that names its declaration carries no root location. Consequently,
+it never falls back to the runner file.
 
 ``test_id`` is always ``None``: which test a result belongs to is answered at
 graph-build time from the file and line, so nothing needs to be pre-baked.
@@ -25,8 +32,20 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from urllib.parse import unquote
 
 from elspais.graph.parsers.results.diagnostics import DiagnosticRecorder
+
+
+def _file_url_path(url: Any) -> str | None:
+    """The path a ``file:`` URL names, or ``None`` for any other URL.
+
+    Dart writes ``file:///abs/path``. A ``package:`` or ``dart:`` URL names
+    no file of the project.
+    """
+    if isinstance(url, str) and url.startswith("file://"):
+        return unquote(url[len("file://") :])
+    return None
 
 
 # Implements: REQ-d00254-E
@@ -61,18 +80,15 @@ class FlutterMachineParser(DiagnosticRecorder):
                 suites[s.get("id")] = s.get("path", "")
             elif etype == "testStart":
                 t = ev.get("test", {})
-                raw_root_url = t.get("root_url")
-                # root_url is a file:///abs/path URL (Dart); strip the scheme prefix to get a path
-                if raw_root_url and raw_root_url.startswith("file://"):
-                    root_path = raw_root_url[len("file://") :]
-                else:
-                    root_path = None
+                # Implements: REQ-d00254-Z
+                declared_path = _file_url_path(t.get("url"))
                 tests[t.get("id")] = {
                     "name": t.get("name", ""),
                     "suiteID": t.get("suiteID"),
                     "line": t.get("line"),
-                    "root_line": t.get("root_line"),
-                    "root_path": root_path,
+                    "declared_path": declared_path,
+                    "root_line": None if declared_path else t.get("root_line"),
+                    "root_path": None if declared_path else _file_url_path(t.get("root_url")),
                 }
             elif etype == "testDone":
                 if ev.get("hidden"):
@@ -86,7 +102,7 @@ class FlutterMachineParser(DiagnosticRecorder):
                     status = "passed"
                 else:  # "failure" | "error"
                     status = "failed"
-                path = suites.get(meta["suiteID"], "")
+                runner = suites.get(meta["suiteID"], "")
                 results.append(
                     {
                         # Implements: REQ-d00294-B
@@ -100,10 +116,12 @@ class FlutterMachineParser(DiagnosticRecorder):
                         "status": status,
                         "duration": 0.0,
                         "message": None,
-                        "source_path": path,
+                        "source_path": meta["declared_path"] or runner,
                         "line": meta["line"],
                         "root_line": meta["root_line"],
                         "root_path": meta["root_path"],
+                        # Implements: REQ-d00294-G
+                        "runner_path": runner or None,
                         "test_id": None,
                         # This format usually arrives on a runner's output,
                         # where there is no artifact to name. It is also saved

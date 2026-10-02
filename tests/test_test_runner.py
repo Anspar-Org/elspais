@@ -303,3 +303,254 @@ def test_REQ_d00249_B_stdout_channel_streams_live_not_at_exit(tmp_path: Path):
         f"output was withheld until the runner finished (EARLY seen at {seen_early_at[0]:.2f}s "
         f"of a {total:.2f}s run)"
     )
+
+
+# ---------------------------------------------------------------------------
+# `elspais test`: execute targets and record their results, evaluating no check
+# ---------------------------------------------------------------------------
+
+# The command writes a junit artifact into the target's output area.
+_WRITES_RESULTS = (
+    'python3 -c "import os,pathlib; '
+    "pathlib.Path(os.environ['ELSPAIS_TARGET_OUTPUT'], 'junit.xml')"
+    ".write_text('<testsuite/>')\""
+)
+
+_SPEC_OK = """\
+# Requirements
+
+---
+
+### REQ-d00001: Thing
+
+**Level**: dev | **Status**: Active
+
+## Assertions
+
+A. The system SHALL do the thing.
+
+*End* *Thing*
+---
+"""
+
+# REQ-d00001 implements a requirement nothing declares.
+_SPEC_BROKEN = _SPEC_OK.replace(
+    "**Level**: dev | **Status**: Active\n",
+    "**Level**: dev | **Status**: Active\n\n**Implements**: REQ-d09999\n",
+)
+
+
+def _target_toml(
+    name: str,
+    command: str,
+    reporter: str = "junit",
+    results: str | None = "junit.xml",
+    groups: list[str] | None = None,
+) -> str:
+    lines = [
+        "[[scanning.test.targets]]",
+        f'name = "{name}"',
+        f'reporter = "{reporter}"',
+        f'command = """{command}"""',
+    ]
+    if results is not None:
+        lines.append(f'results = "{results}"')
+    if groups:
+        lines.append("groups = [" + ", ".join(f'"{g}"' for g in groups) + "]")
+    return "\n".join(lines) + "\n"
+
+
+def _cli_project(tmp_path: Path, monkeypatch, *targets: str, spec: str = _SPEC_OK) -> Path:
+    """A git repository declaring *targets*, made the working directory."""
+    import subprocess
+
+    root = tmp_path / "repo"
+    (root / "spec").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    (root / "spec" / "requirements.md").write_text(spec, encoding="utf-8")
+    (root / ".elspais.toml").write_text(
+        'version = 5\n\n[project]\nname = "runs"\nnamespace = "REQ"\n\n'
+        '[scanning.spec]\ndirectories = ["spec"]\n\n'
+        "[changelog]\nhash_current = false\n\n"
+        "[scanning.test]\nenabled = true\n\n"
+        '[scanning.test.groups]\nslow = "runs for over a minute"\n\n' + "\n".join(targets),
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(root)
+    return root
+
+
+# Verifies: REQ-d00249-H, REQ-d00249-J
+def test_a_run_of_passing_targets_records_their_results_and_exits_zero(
+    tmp_path, monkeypatch, capsys
+):
+    from elspais.cli import main
+    from elspais.utilities.fingerprint import RECORD_NAME, judge
+
+    root = _cli_project(tmp_path, monkeypatch, _target_toml("unit", _WRITES_RESULTS))
+
+    assert main(["test", "--targets", "unit"]) == 0
+
+    out = capsys.readouterr().out
+    assert "1 target(s) passed" in out
+    folder = root / ".results" / "unit"
+    assert sorted(p.name for p in folder.iterdir()) == sorted([RECORD_NAME, "junit.xml"])
+    from elspais.config import load_config
+
+    assert judge(root, load_config(root / ".elspais.toml"), "unit").state == "fresh"
+
+
+# Verifies: REQ-d00249-J
+def test_a_run_with_a_failing_target_exits_one_naming_it(tmp_path, monkeypatch, capsys):
+    from elspais.cli import main
+
+    _cli_project(
+        tmp_path,
+        monkeypatch,
+        _target_toml("unit", _WRITES_RESULTS),
+        _target_toml("broken", "false"),
+    )
+
+    assert main(["test"]) == 1
+
+    out = capsys.readouterr().out
+    assert "1 of 2 target(s) failed: broken" in out
+
+
+# Verifies: REQ-d00249-I
+def test_a_group_name_selects_the_targets_claiming_it(tmp_path, monkeypatch, capsys):
+    from elspais.cli import main
+
+    fast = tmp_path / "fast.txt"
+    slow_one = tmp_path / "slow1.txt"
+    slow_two = tmp_path / "slow2.txt"
+    _cli_project(
+        tmp_path,
+        monkeypatch,
+        _target_toml("fast", f"touch {fast}"),
+        _target_toml("slow1", f"touch {slow_one}", groups=["slow"]),
+        _target_toml("slow2", f"touch {slow_two}", groups=["slow"]),
+    )
+
+    assert main(["test", "--targets", "slow"]) == 0
+
+    assert "2 target(s) passed" in capsys.readouterr().out
+    assert slow_one.exists() and slow_two.exists()
+    assert not fast.exists()
+
+
+# Verifies: REQ-d00249-I
+@pytest.mark.parametrize(
+    "named,wording",
+    [
+        (["nope"], "unknown --targets: nope"),
+        (["none"], "--targets none selects no test target"),
+    ],
+    ids=["unknown-name", "none"],
+)
+def test_a_selection_no_run_executes_is_refused(tmp_path, monkeypatch, capsys, named, wording):
+    from elspais.cli import main
+
+    marker = tmp_path / "ran.txt"
+    root = _cli_project(tmp_path, monkeypatch, _target_toml("unit", f"touch {marker}"))
+
+    assert main(["test", "--targets", *named]) == 2
+
+    assert wording in capsys.readouterr().err
+    assert not marker.exists()
+    assert not (root / ".results").exists()
+
+
+# Verifies: REQ-d00249-I
+def test_both_runs_refuse_an_unknown_name_with_one_text(tmp_path, monkeypatch, capsys):
+    from elspais.cli import main
+
+    _cli_project(tmp_path, monkeypatch, _target_toml("unit", "true"))
+
+    assert main(["checks", "--run-tests", "--targets", "nope"]) == 2
+    checks_err = capsys.readouterr().err
+    assert main(["test", "--targets", "nope"]) == 2
+    test_err = capsys.readouterr().err
+
+    assert test_err == checks_err
+    assert "unknown --targets: nope" in test_err
+
+
+# Verifies: REQ-d00249-K
+def test_a_target_whose_results_would_not_be_recorded_refuses_the_run(
+    tmp_path, monkeypatch, capsys
+):
+    """The flutter target reads its command's output and declares no artifact.
+    The whole selection is refused before the other target runs."""
+    from elspais.cli import main
+
+    marker = tmp_path / "ran.txt"
+    _cli_project(
+        tmp_path,
+        monkeypatch,
+        _target_toml("unit", f"touch {marker}"),
+        _target_toml("widgets", "true", reporter="flutter-machine", results=None),
+    )
+
+    assert main(["test"]) == 2
+
+    err = capsys.readouterr().err
+    assert "widgets" in err
+    assert "results" in err
+    assert not marker.exists()
+
+
+# Verifies: REQ-d00249-K
+def test_a_stdout_target_declaring_its_results_is_executed(tmp_path, monkeypatch, capsys):
+    """The negative: the same reporter with a results pattern is not refused."""
+    from elspais.cli import main
+
+    marker = tmp_path / "ran.txt"
+    _cli_project(
+        tmp_path,
+        monkeypatch,
+        _target_toml("widgets", f"touch {marker}", reporter="flutter-machine", results="m.jsonl"),
+    )
+
+    assert main(["test"]) == 0
+    assert marker.exists()
+
+
+# Verifies: REQ-d00249-H
+def test_fail_fast_stops_at_the_first_failing_target(tmp_path, monkeypatch, capsys):
+    from elspais.cli import main
+
+    marker = tmp_path / "after.txt"
+    _cli_project(
+        tmp_path,
+        monkeypatch,
+        _target_toml("broken", "false"),
+        _target_toml("after", f"touch {marker}"),
+    )
+
+    assert main(["test", "--fail-fast"]) == 1
+
+    assert "1 of 1 target(s) failed: broken" in capsys.readouterr().out
+    assert not marker.exists()
+
+
+# Verifies: REQ-d00249-H, REQ-d00249-J
+@pytest.mark.parametrize(
+    "spec,checks_exit",
+    [(_SPEC_OK, 0), (_SPEC_BROKEN, 1)],
+    ids=["sound-spec", "broken-reference"],
+)
+def test_a_specification_error_does_not_change_the_outcome(
+    tmp_path, monkeypatch, capsys, spec, checks_exit
+):
+    """The same passing target: `checks --run-tests` fails over the broken
+    spec alone, and `test`, which evaluates no check, passes over both."""
+    from elspais.cli import main
+
+    _cli_project(tmp_path, monkeypatch, _target_toml("unit", _WRITES_RESULTS), spec=spec)
+
+    assert main(["checks", "--lenient", "--run-tests", "--targets", "unit"]) == checks_exit
+    capsys.readouterr()
+
+    assert main(["test", "--targets", "unit"]) == 0
+    assert "1 target(s) passed" in capsys.readouterr().out

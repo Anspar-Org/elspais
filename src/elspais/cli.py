@@ -88,6 +88,7 @@ from elspais.commands.args import (
     SearchArgs,
     SummaryArgs,
     TermIndexArgs,
+    TestArgs,
     TraceArgs,
     UncitedArgs,
     UncoveredArgs,
@@ -161,6 +162,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         UninstallArgs: "uninstall",
         McpArgs: "mcp",
         DaemonArgs: "daemon",
+        TestArgs: "test",
         FingerprintArgs: "fingerprint",
         LinkArgs: "link",
         CompletionArgs: "completion",
@@ -482,6 +484,10 @@ def main(argv: list[str] | None = None) -> int:
             from elspais.commands import daemon_cmd
 
             return daemon_cmd.run(args)
+        elif args.command == "test":
+            from elspais.commands import test_cmd
+
+            return test_cmd.run(args)
         elif args.command == "fingerprint":
             from elspais.commands import fingerprint_cmd
 

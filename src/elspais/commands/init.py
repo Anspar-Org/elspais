@@ -260,7 +260,8 @@ _FIELD_COMMENTS: dict[str, str] = {
         "relative source paths in its coverage report are read from it"
     ),
     "scanning.test.targets.command": (
-        "Shell command executed by --run-tests; omit in CI (ingest pre-produced files)"
+        "Shell command executed by `checks --run-tests` and `test`;"
+        " omit in CI (ingest pre-produced files)"
     ),
     "scanning.test.targets.reporter": (
         'Parser format: "flutter-machine" | "junit" | "pytest-json"'

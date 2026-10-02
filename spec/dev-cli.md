@@ -617,6 +617,14 @@ F. The system SHALL return exit code 2 and an error message pointing at `docs/cl
 
 G. The system SHALL return a non-zero exit code if any runner failed OR any check failed, and 0 only if all succeeded.
 
+H. The system SHALL provide a run that executes a selection of test targets, records their results, and evaluates no check.
+
+I. A run that evaluates no check SHALL select its targets by the same target and group names, and SHALL refuse the same selections, as a run that evaluates checks.
+
+J. A run that evaluates no check SHALL return a non-zero exit code if any target it executed failed, and 0 only if every target it executed succeeded.
+
+K. A run that evaluates no check SHALL refuse, before it executes any target, a selection that holds a target whose results it would not record.
+
 ### Rationale
 
 A single command executes a project's test targets and then evaluates
@@ -624,8 +632,29 @@ the checks over the results they wrote. Where results are missing, the
 checks say so rather than reporting zero coverage; whether results that
 are present are still current is REQ-d00311.
 
+H separates the two outcomes that G combines. A project that splits its
+suite across parallel jobs runs part of the targets in each job and
+evaluates the checks once, over every recorded result. A check evaluated
+over part of the results reports targets that did not run in that job,
+and one error in a spec file fails every job. Under H, a job fails only
+for its own tests, and the single gate fails for the spec file error.
+
+I keeps one selection grammar for both runs, so a name that selects a
+target in one run selects the same target in the other.
+
+J reads the outcome from the targets alone, because that run produced
+nothing else to judge.
+
+K exists because the run records nothing that it does not write to disk.
+A target whose reporter reads the command's output, and which declares
+no results artifact, leaves no result for a later run to read. Such a
+run would succeed and leave the gate with nothing, so it is refused
+before any time is spent.
+
 ### Changelog
 
+- 2026-10-02 | eaae2588 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-125: test targets can be executed and their results recorded without evaluating checks (H, I, J, K)
 - 2026-10-01 | fcac603a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-30 | 5375d51e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-30 | 99a07dd5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -634,7 +663,7 @@ are present are still current is REQ-d00311.
 - 2026-09-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: point the no-runners error at the document carrying target configuration examples (F)
 - 2026-09-12 | 784f8350 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Configured test runner execution* | **Hash**: fcac603a
+*End* *Configured test runner execution* | **Hash**: eaae2588
 
 ## REQ-d00259: Requirement Format Reference Command
 
