@@ -24,10 +24,10 @@ elspais checks --code E_IDENTIFIER_WITH_TRAILING_TEXT
 elspais checks --file 'spec/*.md'
 ```
 
-`elspais unresolved`, `elspais errors` and `elspais uncited` are that last
-narrowing under a shorter name — each is this report narrowed to the checks
-that answer one question, and each prints the `--check` flags that reproduce
-it.
+`elspais unresolved`, `elspais malformed`, `elspais errors` and `elspais
+uncited` are that last narrowing under a shorter name — each is this report
+narrowed to the checks that answer one question, and each prints the `--check`
+flags that reproduce it.
 
 ## Check Severity
 
@@ -367,11 +367,11 @@ that never cost the relationship they name.
 
 | Check | Description | Default severity | Configured by | Remedy |
 | --- | --- | --- | --- | --- |
-| `references.malformed` | No reference fails to read as a reference at all | warning | `[rules.references] malformed` | `elspais unresolved` |
+| `references.malformed` | No reference fails to read as a reference at all | warning | `[rules.references] malformed` | `elspais malformed` |
 | `references.unknown_namespace` | No reference names a target no configured repository claims | info | `[rules.references] unknown_namespace` | `elspais unresolved` |
 | `references.unknown_requirement` | No claimed reference names a requirement that repository does not hold | error | `[rules.references] unknown_requirement` | `elspais unresolved` |
 | `references.unknown_assertion` | No claimed reference names an assertion label its requirement lacks | error | `[rules.references] unknown_assertion` | `elspais unresolved` |
-| `references.forbidden` | No reference that reads and resolves has its relationship refused — a keyword the file kind may not use, or a target the list names twice | error | `[rules.references] forbidden` | `elspais unresolved` |
+| `references.forbidden` | No reference that reads and resolves has its relationship refused — a keyword the file kind may not use, or a target the list names twice | error | `[rules.references] forbidden` | `elspais checks --check references.forbidden` |
 | `references.keyword_form` | No keyword is written in a non-canonical case, spacing, or markdown-emphasis form (never costs the edge its keyword introduces) | warning | `[rules.references] keyword_form` | `elspais -v checks --spec` |
 | `references.identifier_form` | No reference is spelled in a non-canonical form the configuration admits (never costs the relationship it names) | warning | `[rules.references] identifier_form` | `elspais -v checks --spec` |
 | `references.undeclared` | No comment opens with an identifier that no keyword introduces (produces no relationship) | warning | `[rules.references] undeclared` | `elspais -v checks --spec` |
@@ -442,8 +442,9 @@ Where prose citations are house style, set `undeclared = "info"` — the
 findings still appear, and the run does not fail on them. Set `"off"` instead
 to stop reporting them altogether.
 
-**Follow-up:** Run `elspais unresolved` to list every unresolved reference,
-across every class.
+**Follow-up:** Run `elspais unresolved` to list every reference that read as an
+identifier and named nothing, and `elspais malformed` to list every reference
+that did not read as one.
 
 ### UAT Checks
 
@@ -958,7 +959,9 @@ one report knows how to narrow the other.
 select are rendered whether or not `-v` was given.
 
 `--check` is what the preset listings are made of. `elspais unresolved` is
-this report narrowed to the five reference checks; `elspais errors` to the
+this report narrowed to the three checks for a reference that read and named
+nothing; `elspais malformed` to the one for a reference that did not read;
+`elspais errors` to the
 spec-file checks; `elspais uncited` to the two uncited-file checks. Each
 listing prints the `--check` line that reproduces it, so what a shortcut
 selected is always checkable. Because a listing IS the report, every finding
@@ -1011,9 +1014,10 @@ source of truth for flag names and descriptions.
 
 `elspais checks --run-tests` executes each configured
 `[[scanning.test.targets]]` entry before evaluating checks. `--targets NAME
-...` restricts `--run-tests` to a named subset. An unknown name is exit code
-2. A selection standing for no target is also exit code 2. The flag only
-affects execution here. `--targets none` selects nothing to run.
+...` restricts `--run-tests` to a named subset; without `--run-tests` it is
+refused (exit 2), as `--fail-fast` is. An unknown name is exit code 2. A
+selection standing for no target is also exit code 2. The flag only affects
+execution here. `--targets none` selects nothing to run.
 Consequently, `--run-tests` refuses it. A bare `--run-tests` selects the
 `default` group. If that group holds no target, then the command refuses the
 run (exit 2). Name targets or groups instead. Per-PR selectivity rendering

@@ -22,6 +22,7 @@ from elspais.utilities.doc_tables import (
     renderers,
     splice,
 )
+from elspais.utilities.docs_loader import PSEUDO_TOPICS, TOPIC_ORDER
 from elspais.utilities.findings import REGISTRY
 from elspais.utilities.md_renderer import render_markdown
 
@@ -158,6 +159,46 @@ class TestCommandIndex:
             f"Write one for each -- the index alone says a command exists without "
             f"saying how to use it."
         )
+
+
+class TestTopicIndex:
+    """Validates REQ-d00286-E+G: the topic index lists exactly the served topics."""
+
+    @staticmethod
+    def _indexed_topics() -> list[str]:
+        """The first-column names of the topic-index fragment in commands.md."""
+        text = COMMANDS_DOC.read_text(encoding="utf-8")
+        start = text.index("<!-- generated: topic-index -->")
+        end = text.index("<!-- /generated: topic-index -->", start)
+        names: list[str] = []
+        for line in text[start:end].splitlines():
+            if line.startswith("| `"):
+                names.append(line.split("`")[1])
+        return names
+
+    # Verifies: REQ-d00286-E+G
+    def test_REQ_d00286_G_index_lists_exactly_the_declared_topics_in_order(self) -> None:
+        """The index commands.md presents names every declared topic in reading
+        order, then the pseudo-topics, and nothing else."""
+        expected = list(TOPIC_ORDER) + list(PSEUDO_TOPICS)
+        assert self._indexed_topics() == expected, (
+            f"The topic index in {COMMANDS_DOC} does not list exactly the declared "
+            f"topics in order. Regenerate with: {REGENERATE}"
+        )
+
+    # Verifies: REQ-d00286-E
+    def test_REQ_d00286_E_every_declared_topic_is_described(self) -> None:
+        """Each row carries its topic's description; an empty cell means the
+        topic loaded nothing to take a heading from."""
+        text = COMMANDS_DOC.read_text(encoding="utf-8")
+        for topic in [*TOPIC_ORDER, *PSEUDO_TOPICS]:
+            row = next(
+                (line for line in text.splitlines() if line.startswith(f"| `{topic}` |")),
+                None,
+            )
+            assert row is not None, f"The topic index has no row for {topic!r}"
+            description = row.split("|")[2].strip()
+            assert description, f"The topic index describes {topic!r} with nothing"
 
 
 class TestMarkersAreInvisibleToAReader:

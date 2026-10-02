@@ -452,7 +452,7 @@ def check_unresolved_references(graph: FederatedGraph, config: dict | None = Non
         config,
         FaultClass.UNKNOWN_REQUIREMENT,
         "references.unknown_requirement",
-        "claimed, but no such requirement exists",
+        "name a requirement its repository does not hold",
     )
 
 
@@ -463,7 +463,7 @@ def check_unclaimed_references(graph: FederatedGraph, config: dict | None = None
         config,
         FaultClass.UNKNOWN_NAMESPACE,
         "references.unknown_namespace",
-        "no configured repository claims this identifier",
+        "name an identifier no configured repository claims",
     )
 
 

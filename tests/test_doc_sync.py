@@ -371,3 +371,116 @@ class TestCLIIntegration:
         )
         assert result.returncode == 0, f"Failed for {topic}: {result.stderr}"
         assert len(result.stdout) > 100, f"{topic} output too short"
+
+
+_README = Path(__file__).resolve().parent.parent / "README.md"
+_UNDECLARED_NAMES = ["README", "../../../../README", "health", "topics", "all", "CHANGELOG"]
+
+
+def _readme_marker() -> str:
+    """A distinctive line of the repository README, which is not a topic."""
+    for line in _README.read_text(encoding="utf-8").splitlines():
+        if line.startswith("**elspais** is"):
+            return line
+    raise AssertionError(f"{_README} no longer carries its opening description line")
+
+
+class TestServedTopicSet:
+    """Validates REQ-d00286-G: every surface serves exactly the declared topics."""
+
+    # Verifies: REQ-d00286-G
+    @pytest.mark.parametrize("name", _UNDECLARED_NAMES)
+    def test_REQ_d00286_G_loader_refuses_an_undeclared_name(self, name: str):
+        """A name outside TOPIC_ORDER loads nothing, even where a file of that
+        name is reachable relative to the docs directory."""
+        assert load_topic(name) is None
+
+    # Verifies: REQ-d00286-G
+    @pytest.mark.parametrize("topic", TOPIC_ORDER)
+    def test_REQ_d00286_G_loader_serves_every_declared_topic(self, topic: str):
+        """Every declared topic loads its content."""
+        content = load_topic(topic)
+        assert content is not None and content.strip(), f"{topic!r} loaded nothing"
+
+    # Verifies: REQ-d00286-G
+    @pytest.mark.parametrize("request_", ["", "topics"])
+    def test_REQ_d00286_G_mcp_listing_is_the_declared_set(self, request_: str):
+        """The MCP listing, asked for either way, names the declared topics in order."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_docs
+
+        result = _get_docs(request_)
+        assert result["topics"] == get_available_topics() == TOPIC_ORDER
+
+    # Verifies: REQ-d00286-G
+    def test_REQ_d00286_G_mcp_all_is_the_cli_concatenation(self):
+        """`all` over MCP returns the same text the CLI's `docs all` prints."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_docs
+
+        result = _get_docs("all")
+        assert result["topic"] == "all"
+        assert result["content"] == load_all_topics()
+
+    # Verifies: REQ-d00286-G
+    def test_REQ_d00286_G_mcp_does_not_serve_a_file_outside_the_set(self):
+        """A path reaching the repository README is searched for, never served."""
+        pytest.importorskip("mcp")
+        from elspais.mcp.server import _get_docs
+
+        name = "../../../../README"
+        result = _get_docs(name)
+        assert result.get("topic") != name
+        assert _readme_marker() not in repr(result)
+
+    # Verifies: REQ-d00286-G
+    def test_REQ_d00286_G_cli_and_mcp_offer_the_same_topics(self):
+        """The topics the CLI positional accepts, less the pseudo-topics, are
+        the topics the MCP listing names."""
+        pytest.importorskip("mcp")
+        import typing
+
+        from elspais.commands.args import DocsArgs
+        from elspais.mcp.server import _get_docs
+
+        annotation = typing.get_type_hints(DocsArgs, include_extras=True)["topic"]
+        literal = next(
+            arg for arg in typing.get_args(annotation) if typing.get_origin(arg) is typing.Literal
+        )
+        cli_topics = set(typing.get_args(literal)) - set(PSEUDO_TOPICS)
+        assert cli_topics == set(_get_docs("topics")["topics"])
+
+
+_CONFIGURATION_DOC = Path(__file__).resolve().parent.parent / "docs" / "configuration.md"
+
+
+class TestConfigVersionStated:
+    """Validates REQ-d00286-E: the schema version the docs state is the program's."""
+
+    # Verifies: REQ-d00286-E
+    @pytest.mark.parametrize(
+        "doc",
+        [lambda: find_docs_dir() / "config.md", lambda: _CONFIGURATION_DOC],
+        ids=["cli-config-topic", "configuration-reference"],
+    )
+    def test_REQ_d00286_E_documented_version_line_is_current(self, doc):
+        import re
+
+        from elspais.config import CURRENT_CONFIG_VERSION
+
+        path = doc()
+        stated = re.findall(r"^version\s*=\s*(\d+)", path.read_text(encoding="utf-8"), re.M)
+        assert stated, f"{path} states no `version = N` line"
+        assert {int(v) for v in stated} == {CURRENT_CONFIG_VERSION}
+
+    # Verifies: REQ-d00286-E
+    def test_REQ_d00286_E_reference_heading_names_current_version(self):
+        import re
+
+        from elspais.config import CURRENT_CONFIG_VERSION
+
+        stated = re.findall(
+            r"configuration reference \(v(\d+)\)", _CONFIGURATION_DOC.read_text(encoding="utf-8")
+        )
+        assert stated, "the full configuration reference names no schema version"
+        assert {int(v) for v in stated} == {CURRENT_CONFIG_VERSION}

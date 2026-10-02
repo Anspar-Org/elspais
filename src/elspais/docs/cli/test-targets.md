@@ -702,7 +702,8 @@ configuration would then have to know.
 
 ## Per-PR selectivity
 
-`--targets NAME ...` (accepted by `checks`, `summary`, and `trace`) names the
+`--targets NAME ...` (accepted by `checks --run-tests`, `summary` and `trace`,
+alone or composed with other report sections) names the
 subset of `[[scanning.test.targets]]` that are **fresh** for this invocation.
 Everything else is the **complement** — targets not named on `--targets`.
 A run that covers every configured target is a full run; one that leaves any
@@ -769,10 +770,17 @@ footnote appears — output is unchanged from before this flag existed. The
 `elspais checks` itself (the health-report / gate command) only consumes
 `--targets` for *execution* under `--run-tests`; it does not render
 `(baseline)`/`—`/`*` — that provenance rendering is `summary`/`trace`'s job.
-Running `elspais checks --targets NAME ...` without `--run-tests` accepts
-the flag but has no execution or rendering effect; to require results a
-run did not execute, name them with `--expect` (see below). `checks --run-tests
---targets none` selects nothing to run. Consequently, the command refuses it.
+Without `--run-tests`, `checks` executes nothing, so it refuses `--targets`
+and `--fail-fast` (exit 2) rather than accept a selection nothing reads; to
+require results a run did not execute, name them with `--expect` (see below).
+`checks --run-tests --targets none` selects nothing to run. Consequently, the
+command refuses it.
+
+In a composed report the selection marks provenance exactly as it does on
+`summary` or `trace` alone, and is refused the same way: `elspais checks
+summary --targets NAME` marks NAME fresh for the summary and refuses an
+unknown name. A composition holding neither `summary` nor `trace` reads no
+provenance, so it refuses `--targets`.
 
 ### Worked example
 

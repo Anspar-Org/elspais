@@ -345,7 +345,7 @@ the `Integrates:` keyword:
 ```
 
 `Integrates:` is external-only -- the target must resolve to an associate
-repo (a same-repo target is an unresolved reference), the library is never
+repo (a same-repo target is a refused relationship), the library is never
 modified and contains no reference back, and the consumer inherits the
 library requirement's implemented/verified coverage. See
 `elspais docs graph-model` (INTEGRATES edge) and `elspais docs format`.

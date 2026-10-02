@@ -265,7 +265,23 @@ def render_section(
     data = compute_summary(
         graph, config, SummaryRequest(inputs.scope, inputs.values, inputs.treat_active)
     )
+    from elspais.commands.report import renders_quietly
+
+    if renders_quietly(args):
+        return render_summary_line(data), 0
     return render_summary(data, fmt, config).rstrip("\n"), 0
+
+
+# Implements: REQ-d00085-F
+def render_summary_line(data: dict) -> str:
+    """The one line a quiet summary prints: what the summary is over."""
+    levels = [lv for lv in data["levels"] if lv["total"]]
+    requirements = sum(lv["total"] for lv in levels)
+    assertions = sum(lv["total_assertions"] for lv in levels)
+    return (
+        f"Coverage Summary: {requirements} active requirements, "
+        f"{assertions} assertions, {len(levels)} level{'' if len(levels) == 1 else 's'}"
+    )
 
 
 # Implements: REQ-d00279-C
@@ -363,7 +379,12 @@ def run(args: argparse.Namespace) -> int:
     # facts are stated, never what they are (REQ-d00282-D).
     _stamp_values(data, request.values)
 
-    content = render_summary(data, fmt, config)
+    from elspais.commands.report import renders_quietly
+
+    if renders_quietly(args):
+        content = render_summary_line(data) + "\n"
+    else:
+        content = render_summary(data, fmt, config)
     sys.stdout.write(content)
 
     return 0

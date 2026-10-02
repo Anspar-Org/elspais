@@ -387,7 +387,7 @@ def orphan_func():
             None,
             FaultClass.UNKNOWN_REQUIREMENT,
             "references.unknown_requirement",
-            "claimed, but no such requirement exists",
+            "name a requirement its repository does not hold",
         )
 
         assert not check.passed, "Expected check to fail with broken references"

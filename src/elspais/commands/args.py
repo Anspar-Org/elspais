@@ -137,8 +137,8 @@ class ChecksArgs:
         default_factory=list
     )
     """Report only these checks by name, e.g. references.malformed
-    (space-separated). This is what the `unresolved`, `errors` and `uncited`
-    listings are: this report narrowed to one set of checks."""
+    (space-separated). This is what the `unresolved`, `malformed`, `errors`
+    and `uncited` listings are: this report narrowed to one set of checks."""
 
     code: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
         default_factory=list
@@ -183,7 +183,8 @@ class ChecksArgs:
     name of a group they claim (space-separated, repeatable). A group is an
     alias for the targets in it, so both are named here. Default: the targets of
     the `default` group. With --run-tests, executes only this subset; on
-    summary/trace, marks the rest as carried baselines. A selection standing
+    summary/trace, marks the rest as carried baselines; checks refuses it
+    without --run-tests. A selection standing
     for no target is refused; `none` is refused here too: it selects nothing to
     run. A run naming nothing selects `default`, refused where that group holds
     no target."""
@@ -317,16 +318,33 @@ class FailingArgs(ScopeOptions):
 class UnresolvedArgs:
     """List references that name nothing the federation holds.
 
-    A shortcut for `checks` narrowed to the five reference checks: every
-    reference that did not read as an identifier, or read as one and resolved
-    to nothing.
+    A shortcut for `checks` narrowed to the three checks for a reference that
+    read as an identifier and named nothing: no configured repository claims
+    it, no such requirement exists, or the requirement has no such assertion.
+    A reference that did not read as an identifier is listed by `malformed`.
     """
 
     format: Literal["text", "markdown", "json", "junit", "sarif"] = "text"
     """Output format."""
 
-    verbose: Annotated[bool, tyro.conf.arg(aliases=["-v"])] = False
-    """Show the full detail of every check, including the ones that passed."""
+    lenient: bool = False
+    """Allow warnings without affecting exit code."""
+
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
+    """Write output to file instead of stdout."""
+
+
+@dataclasses.dataclass
+class MalformedArgs:
+    """List references that do not read as an identifier.
+
+    A shortcut for `checks` narrowed to the one check for a reference the
+    identifier grammar does not read. A reference that read as an identifier
+    and named nothing is listed by `unresolved`.
+    """
+
+    format: Literal["text", "markdown", "json", "junit", "sarif"] = "text"
+    """Output format."""
 
     lenient: bool = False
     """Allow warnings without affecting exit code."""
@@ -347,9 +365,6 @@ class ErrorsArgs:
     format: Literal["text", "markdown", "json", "junit", "sarif"] = "text"
     """Output format."""
 
-    verbose: Annotated[bool, tyro.conf.arg(aliases=["-v"])] = False
-    """Show the full detail of every check, including the ones that passed."""
-
     lenient: bool = False
     """Allow warnings without affecting exit code."""
 
@@ -366,9 +381,6 @@ class UncitedArgs:
 
     format: Literal["text", "markdown", "json", "junit", "sarif"] = "text"
     """Output format."""
-
-    verbose: Annotated[bool, tyro.conf.arg(aliases=["-v"])] = False
-    """Show the full detail of every check, including the ones that passed."""
 
     lenient: bool = False
     """Allow warnings without affecting exit code."""
@@ -1256,6 +1268,7 @@ Command = (
     | Annotated[FailingArgs, tyro.conf.subcommand("failing")]
     | Annotated[ErrorsArgs, tyro.conf.subcommand("errors")]
     | Annotated[UnresolvedArgs, tyro.conf.subcommand("unresolved")]
+    | Annotated[MalformedArgs, tyro.conf.subcommand("malformed")]
     | Annotated[UncitedArgs, tyro.conf.subcommand("uncited")]
     | Annotated[DoctorArgs, tyro.conf.subcommand("doctor")]
     | Annotated[TraceArgs, tyro.conf.subcommand("trace")]
@@ -1305,10 +1318,12 @@ class GlobalArgs:
     """Override spec directory."""
 
     verbose: Annotated[bool, tyro.conf.arg(aliases=["-v"])] = False
-    """Verbose output."""
+    """Verbose output: render each report section with the detail it withholds by default.
+    Accepted anywhere in the invocation."""
 
     quiet: Annotated[bool, tyro.conf.arg(aliases=["-q"])] = False
-    """Suppress non-error output."""
+    """Render each report section as one summary line (text and markdown).
+    Accepted anywhere in the invocation."""
 
 
 # ---------------------------------------------------------------------------
@@ -1329,6 +1344,7 @@ COMMAND_GROUPS: dict[str, str] = {
     "failing": "Gaps & Issues",
     "errors": "Gaps & Issues",
     "unresolved": "Gaps & Issues",
+    "malformed": "Gaps & Issues",
     "uncited": "Gaps & Issues",
     "search": "Reports",
     "analysis": "Authoring",
@@ -1489,8 +1505,8 @@ def generate_help(version: str) -> str:
 
     lines.append("")
     lines.append("Global options:")
-    lines.append(f"  {'--verbose, -v':<{opt_col}}Verbose output")
-    lines.append(f"  {'--quiet, -q':<{opt_col}}Suppress non-error output")
+    lines.append(f"  {'--verbose, -v':<{opt_col}}Show the detail each report section withholds")
+    lines.append(f"  {'--quiet, -q':<{opt_col}}Render each section as one line (text, markdown)")
     lines.append(f"  {'--directory, -C DIR':<{opt_col}}Run as if started in this directory")
     lines.append(f"  {'--config PATH':<{opt_col}}Path to configuration file")
     lines.append(f"  {'--spec-dir PATH':<{opt_col}}Override spec directory")

@@ -94,7 +94,8 @@ Get current graph health and statistics.
     node_counts       Count by node kind (requirement, assertion, code, test)
     total_nodes       Total nodes in graph
     has_orphans       Whether orphaned nodes exist
-    has_unresolved_references  Whether unresolved references exist
+    has_unresolved_references  Whether a reference read as an identifier and names nothing held
+    has_malformed_references   Whether a reference does not read as an identifier
 
   Example response:
     {
@@ -102,7 +103,8 @@ Get current graph health and statistics.
       "node_counts": {"requirement": 45, "assertion": 120, "code": 30},
       "total_nodes": 195,
       "has_orphans": false,
-      "has_unresolved_references": false
+      "has_unresolved_references": false,
+      "has_malformed_references": false
     }
 
 **refresh_graph(path, force, if_tip_mutation_id)**
@@ -123,6 +125,32 @@ Force rebuild the graph from spec files.
 A configuration that cannot be parsed publishes nothing: `success` is false,
 `message` begins `CONFIG ERROR:`, and the graph already being served stays
 live.
+
+**get_unresolved_references()**
+
+List every reference that read as an identifier and names nothing held: the
+findings `elspais unresolved` prints, under `unresolved_references`.
+
+**get_check_findings(check)**
+
+List the findings of any health check, named as `elspais checks` names it.
+The answer is the report `elspais checks --check <check> --format json`
+prints, without its `meta` block.
+
+  Parameters:
+    check (str)   A check name, e.g. "references.malformed"
+
+  Returns:
+    checks        The named check: its severity, remedy and findings, each
+                  finding carrying its location and diagnostic codes
+    healthy       The whole run's verdict, as `elspais checks` reaches it
+    summary       The whole run's counts
+    filter        What the narrowing withheld
+
+A name the tool runs no check under is refused: `success` is false, `error`
+names the problem, and `known_checks` lists every check name. A check that
+did not run in this report appears in no entry of `checks`, and `filter`
+reports `checks_shown` as 0.
 
 ### Requirement Search & Navigation
 
@@ -271,7 +299,8 @@ Get summary statistics for the project.
       - branch_changed    Changed vs main branch
     total_nodes            Total nodes in graph
     orphan_count           Requirements without parents
-    unresolved_reference_count References to non-existent requirements
+    unresolved_reference_count References that read and name nothing held
+    malformed_reference_count  References that do not read as an identifier
     file_bound_results     Present only where some ingested result names
                              only the file holding its tests, not its test.
                              Such a result credits no assertion. `count` is
@@ -485,6 +514,7 @@ Add to Cursor's MCP settings:
 ### Project Health Check
 
 1. `get_graph_status()` - Check for orphans/unresolved refs
+   - `get_check_findings("references.malformed")` - List one check's findings
 2. `get_project_summary()` - Review coverage stats
 3. Address requirements with `coverage: none`
 

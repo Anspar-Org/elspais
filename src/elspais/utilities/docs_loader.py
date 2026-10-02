@@ -71,15 +71,22 @@ def find_docs_dir() -> Path | None:
     return package_docs if package_docs.is_dir() else None
 
 
+# Implements: REQ-d00286-G
 def load_topic(topic: str) -> str | None:
     """Load a single documentation topic.
+
+    Only a declared topic is served. A name outside `TOPIC_ORDER` loads
+    nothing, so no surface can reach a file the declaration does not name.
 
     Args:
         topic: Topic name (e.g., 'quickstart', 'format').
 
     Returns:
-        Markdown content, or None if topic not found.
+        Markdown content, or None if the name is not a declared topic or its
+        file is missing.
     """
+    if topic not in TOPIC_ORDER:
+        return None
     docs_dir = find_docs_dir()
     if docs_dir is None:
         return None
@@ -112,6 +119,32 @@ def load_all_topics() -> str:
     return "\n\n".join(parts)
 
 
+# The two pseudo-topics, as the topic index describes them.
+PSEUDO_TOPIC_DESCRIPTIONS = {
+    "all": "Display all topics",
+    "topics": "This listing",
+}
+
+
+def topic_description(topic: str) -> str:
+    """The one-line description of a topic: its file's first heading.
+
+    Returns:
+        The heading text, or the empty string if the topic has no file.
+    """
+    if topic in PSEUDO_TOPIC_DESCRIPTIONS:
+        return PSEUDO_TOPIC_DESCRIPTIONS[topic]
+    content = load_topic(topic)
+    if content is None:
+        return ""
+    for line in content.splitlines():
+        stripped = line.strip().lstrip("#").strip()
+        if stripped:
+            return stripped
+    return ""
+
+
+# Implements: REQ-d00286-E+G
 def list_topics() -> str:
     """Build a topic index with descriptions from each file's first heading.
 
@@ -124,22 +157,12 @@ def list_topics() -> str:
 
     lines: list[str] = ["# Available Topics", "", "Usage: elspais docs <topic>", ""]
     max_name = max(len(t) for t in TOPIC_ORDER)
-    for topic in TOPIC_ORDER:
-        topic_file = docs_dir / f"{topic}.md"
-        if not topic_file.is_file():
-            continue
-        # Extract description from first markdown heading
-        desc = ""
-        for line in topic_file.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip().lstrip("#").strip()
-            if stripped:
-                desc = stripped
-                break
-        lines.append(f"  {topic:<{max_name}}  {desc}")
+    for topic in get_available_topics():
+        lines.append(f"  {topic:<{max_name}}  {topic_description(topic)}")
 
     lines.append("")
-    lines.append(f"  {'all':<{max_name}}  Display all topics")
-    lines.append(f"  {'topics':<{max_name}}  This listing")
+    for pseudo in ("all", "topics"):
+        lines.append(f"  {pseudo:<{max_name}}  {topic_description(pseudo)}")
     return "\n".join(lines)
 
 

@@ -23,6 +23,7 @@ Complete reference for all elspais commands.
 | `failing` | Gaps & Issues | List requirements with failing test or UAT results |
 | `errors` | Gaps & Issues | List what is wrong with the spec files themselves |
 | `unresolved` | Gaps & Issues | List references that name nothing the federation holds |
+| `malformed` | Gaps & Issues | List references that do not read as an identifier |
 | `uncited` | Gaps & Issues | List scanned code and test files that cite no requirement |
 | `analysis` | Authoring | Analyze foundational requirement importance |
 | `fix` | Authoring | Auto-fix spec file issues (hashes, formatting) |
@@ -53,12 +54,40 @@ Each command's own section below says how to use it. `elspais <command>
 
 ## Global Options
 
-These options work with all commands:
+These options work with all commands, and mean the same thing wherever they
+stand in the invocation: `elspais -q checks`, `elspais checks -q` and
+`elspais checks summary -q` are one request.
 
-  `-v, --verbose`    Verbose output with details
-  `-q, --quiet`      Suppress non-error output
+  `-v, --verbose`    Render each report section with the detail it withholds
+                     by default
+  `-q, --quiet`      Render each report section as one summary line in text
+                     and markdown
   `--config PATH`    Path to configuration file
   `--spec-dir PATH`  Override spec directory
+  `-C PATH`          Run as if started in PATH
+
+`-q` collapses the renderings a person reads, `text` and `markdown`; a
+structured format (`json`, `csv`, `junit`, `sarif`) is read by a program and is
+rendered whole.
+
+What `-v` expands depends on what a section holds back. `checks` and its
+listings report each check individually, with the findings of every failing
+check (`--include-passing-details` adds those of passing checks). `trace`
+renders at the `full` preset with bodies, assertions and tests, and refuses a
+lighter `--preset` named beside `-v`. `summary`, `gaps` and `changed` withhold
+nothing by default, so `-v` leaves them as they are.
+
+### Composed reports
+
+Name several report sections and they are rendered in order as one report:
+`elspais checks summary trace`. The shared options, the scope and value
+selections and `--targets` mean the same thing composed as they do on one
+section, so `elspais summary trace --targets unit` marks the same targets
+fresh as `elspais summary --targets unit` does. An option no composed section
+reads is refused: `--targets` needs `summary` or `trace` in the composition,
+and an option only one section offers alone, such as `checks --check`, is
+refused in a composition. The exit code sets one bit per section that
+failed.
 
 ## checks
 
@@ -73,6 +102,7 @@ Verify requirements traceability across configuration, spec files, code, and tes
 To auto-fix issues, use: `elspais fix`
 To see specific errors, use: `elspais errors`
 To see unresolved references, use: `elspais unresolved`
+To see malformed references, use: `elspais malformed`
 
 **Options:**
 
@@ -83,7 +113,7 @@ To see unresolved references, use: `elspais unresolved`
   `--severity S...`  Report only findings whose check carries these severities
   `--category C...`  Report only findings in these check categories
   `--check NAME...`  Report only these checks by name (what the `unresolved`,
-                   `errors` and `uncited` listings are)
+                   `malformed`, `errors` and `uncited` listings are)
   `--code CODE...`   Report only findings carrying these diagnostic codes
   `--file GLOB...`   Report only findings located in matching files
   `--format {text,markdown,json,junit,sarif}`  Output format (default: text)
@@ -97,11 +127,12 @@ To see unresolved references, use: `elspais unresolved`
                    The run then records a fingerprint of its inputs there.
                    Exits 2 if no target has a command.
   `--fail-fast`    Stop at the first target failure and skip the checks pass.
-                   Requires `--run-tests`.
+                   Requires `--run-tests`; refused without it (exit 2).
   `--targets T...` Run and ingest only these test targets rather than the
                    `default` group. The command refuses a selection
                    standing for no target, `none` included (exit 2). It also
                    refuses a bare run if `default` holds no target.
+                   Requires `--run-tests`; refused without it (exit 2).
   `--expect T...`  Require the results of these test targets (or groups)
                    without executing them, e.g. results an earlier job left.
                    Missing results of an executed or expected target are
@@ -113,8 +144,10 @@ To see unresolved references, use: `elspais unresolved`
                    Unknown names and namespaces exit 2.
   `-o, --output PATH`  Write output to file instead of stdout
 
-`-v, --verbose` is a global option (see Global Options above) and reports each
-check individually rather than only the summary.
+`-v, --verbose` and `-q, --quiet` are global options (see Global Options
+above): `-v` reports each check individually rather than only the summary,
+and `-q` prints the one verdict line in text and markdown; `json`, `junit`
+and `sarif` stay whole.
 
 ## fingerprint
 
@@ -157,7 +190,31 @@ nothing worth narrowing.
 **Options:**
 
   `--format {text,markdown,json,junit,sarif}`  Output format (default: text)
-  `-v, --verbose`                  Show the full detail of every check
+  `-v, --verbose`                  Show the full detail of every check (global option)
+  `--lenient`                      Allow warnings without affecting exit code
+  `-o, --output PATH`              Write output to file instead of stdout
+
+## malformed
+
+List references that do not read as an identifier.
+
+  $ elspais malformed                  # Every malformed reference
+  $ elspais malformed --format json    # JSON output
+
+This is `elspais checks` narrowed to the one check for a reference the
+identifier grammar does not read — exactly `elspais checks --check
+references.malformed`. Each finding carries the check, its severity, the
+diagnostic codes reading the reference produced, its location and its remedy.
+The fix is to the spelling; a reference that read and named nothing is listed
+by `elspais unresolved`.
+
+Like `unresolved`, the listing has no scoping, honours the severity a project
+configured, and composes with other sections: `elspais unresolved malformed`.
+
+**Options:**
+
+  `--format {text,markdown,json,junit,sarif}`  Output format (default: text)
+  `-v, --verbose`                  Show the full detail of every check (global option)
   `--lenient`                      Allow warnings without affecting exit code
   `-o, --output PATH`              Write output to file instead of stdout
 
@@ -330,17 +387,19 @@ List references that name nothing the federation holds.
   $ elspais unresolved --format json   # JSON output
   $ elspais unresolved -o refs.txt     # Write to file
 
-This is `elspais checks` narrowed to the five reference checks, and nothing
-else — it is exactly `elspais checks --check references.malformed
-references.unknown_namespace references.unknown_requirement
-references.unknown_assertion references.forbidden`. Each finding therefore
-carries what every finding carries: the check that raised it (which names the
-class the reference reached), its severity, the diagnostic codes reading it
-produced, its location and its remedy.
+This is `elspais checks` narrowed to the three checks for a reference that
+read as an identifier and named nothing, and nothing else — it is exactly
+`elspais checks --check references.unknown_namespace
+references.unknown_requirement references.unknown_assertion`. Each finding
+therefore carries what every finding carries: the check that raised it (which
+names the class the reference reached), its severity, the diagnostic codes
+reading it produced, its location and its remedy.
 
-A reference is *malformed* when it did not read as an identifier at all, and
-*unresolved* when it read as one and named nothing. The listing covers both,
-which is why it is named for the union.
+A reference is *unresolved* when it read as an identifier and named nothing
+the federation holds, and *malformed* when it did not read as an identifier at
+all. The two are disjoint: `elspais malformed` lists the second. A reference
+that resolved and declares a relationship the tool refuses is neither; list it
+with `elspais checks --check references.forbidden`.
 
 The listing opens by naming the narrowing and how much of the run it withheld,
 so a short list is never mistaken for a clean run.
@@ -353,7 +412,7 @@ lists nothing, and the skipped line says so.
 **Options:**
 
   `--format {text,markdown,json,junit,sarif}`  Output format (default: text)
-  `-v, --verbose`                  Show the full detail of every check
+  `-v, --verbose`                  Show the full detail of every check (global option)
   `--lenient`                      Allow warnings without affecting exit code
   `-o, --output PATH`              Write output to file instead of stdout
 
@@ -389,7 +448,7 @@ and nine unlinked ones is full of unlinked nodes and is not uncited.
 **Options:**
 
   `--format {text,markdown,json,junit,sarif}`  Output format (default: text)
-  `-v, --verbose`                  Show the full detail of every check
+  `-v, --verbose`                  Show the full detail of every check (global option)
   `--lenient`                      Allow warnings without affecting exit code
   `-o, --output PATH`              Write output to file instead of stdout
 
@@ -815,26 +874,45 @@ View and manage content rules.
 
 Read the user guide.
 
-  $ elspais docs                  # Quickstart guide
+  $ elspais docs                  # List the topics
   $ elspais docs config           # Configuration reference
   $ elspais docs all              # Complete documentation
 
-**Arguments:**
+**Arguments:** one topic name. With none, the command lists the topics.
 
-  `quickstart`     Getting started guide (default)
-  `format`         Requirement file format
-  `hierarchy`      PRD/OPS/DEV levels
-  `assertions`     Writing testable assertions
-  `traceability`   Linking to code and tests
-  `linking`        Code and test linking details
-  `satisfies`      Cross-cutting templates
-  `validation`     Running validation
-  `git`            Change detection
-  `config`         Configuration reference
-  `commands`       This CLI reference
-  `health`         Health check details
-  `mcp`            MCP server for AI integration
-  `all`            All topics concatenated
+<!-- generated: topic-index -->
+<!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
+
+| Topic | What it covers |
+| --- | --- |
+| `quickstart` | ELSPAIS QUICK START GUIDE |
+| `format` | REQUIREMENT FORMAT REFERENCE |
+| `hierarchy` | REQUIREMENT HIERARCHY |
+| `assertions` | WRITING ASSERTIONS |
+| `authoring` | REQUIREMENT AUTHORING DECISIONS |
+| `traceability` | TRACEABILITY |
+| `scoping` | Scoping a Report to an Audience |
+| `linking` | LINKING REQUIREMENTS TO CODE AND TESTS |
+| `satisfies` | Satisfies (cross-cutting templates) |
+| `validation` | VALIDATION |
+| `git` | GIT INTEGRATION |
+| `config` | CONFIGURATION |
+| `commands` | CLI COMMANDS REFERENCE |
+| `checks` | CHECKS |
+| `pdf` | PDF COMPILATION |
+| `test-targets` | elspais test-targets |
+| `doctor` | DOCTOR |
+| `analysis` | ANALYSIS |
+| `terms` | DEFINED TERMS |
+| `associate` | ASSOCIATE |
+| `ignore` | IGNORING FILES DURING SCANNING |
+| `graph-model` | GRAPH MODEL REFERENCE |
+| `mcp` | MCP SERVER |
+| `concurrency` | OPTIMISTIC CONCURRENCY |
+| `comments` | COMMENTS |
+| `topics` | This listing |
+| `all` | Display all topics |
+<!-- /generated: topic-index -->
 
 **Options:**
 

@@ -1651,10 +1651,38 @@ class TestGetOrphanedNodes:
         assert "REQ-o00001" in [o["id"] for o in result["orphans"]]
 
 
-class TestGetUnresolvedReferences:
-    """Tests for get_unresolved_references() tool."""
+class TestGetPresetReferences:
+    """Tests for get_unresolved_references() and for the malformed population,
+    which an agent reaches by naming its check through get_check_findings()."""
 
-    # Verifies: REQ-o00060-A, REQ-d00285-C
+    _CONFIG = {"project": {"name": "test", "namespace": NAMESPACE}}
+
+    @classmethod
+    def _malformed_findings(cls, federated):
+        from elspais.mcp.server import _get_check_findings
+
+        (check,) = _get_check_findings(federated, cls._CONFIG, "references.malformed")["checks"]
+        return check
+
+    @staticmethod
+    def _federated_with(mutation_graph, fault_class, target_id):
+        from elspais.graph.federated import FederatedGraph
+
+        mutation_graph._unresolved_references.append(
+            ReferenceFault(
+                source_id="REQ-o00001",
+                target_id=target_id,
+                edge_kind=EdgeKind.IMPLEMENTS,
+                fault_class=fault_class,
+            )
+        )
+        return FederatedGraph.from_single(
+            mutation_graph,
+            config=TestGetPresetReferences._CONFIG,
+            repo_root=Path("/test/repo"),
+        )
+
+    # Verifies: REQ-o00060-A, REQ-d00285-C, REQ-d00272-P
     def test_returns_the_findings_the_reference_checks_raised(self, mutation_graph):
         """Returns findings, not a shape of its own.
 
@@ -1663,25 +1691,14 @@ class TestGetUnresolvedReferences:
         is told what a person running `elspais unresolved` is told.
         """
         pytest.importorskip("mcp")
-        from elspais.graph.federated import FederatedGraph
         from elspais.graph.reference_faults import FaultClass
-        from elspais.mcp.server import _get_unresolved_references
+        from elspais.mcp.server import _get_preset_references
 
-        mutation_graph._unresolved_references.append(
-            ReferenceFault(
-                source_id="REQ-o00001",
-                target_id="REQ-MISSING",
-                edge_kind=EdgeKind.IMPLEMENTS,
-                fault_class=FaultClass.UNKNOWN_REQUIREMENT,
-            )
-        )
-        federated = FederatedGraph.from_single(
-            mutation_graph,
-            config={"project": {"name": "test", "namespace": NAMESPACE}},
-            repo_root=Path("/test/repo"),
+        federated = self._federated_with(
+            mutation_graph, FaultClass.UNKNOWN_REQUIREMENT, "REQ-MISSING"
         )
 
-        result = _get_unresolved_references(federated)
+        result = _get_preset_references(federated, "unresolved")
 
         assert result["count"] == 1
         entry = result["unresolved_references"][0]
@@ -1690,13 +1707,45 @@ class TestGetUnresolvedReferences:
         assert entry["check"] == "references.unknown_requirement"
         assert entry["severity"] == "error"
         assert entry["remedy"] == "elspais unresolved"
-        # Every class is accounted for, whether or not it found anything.
+        # Every class the listing names is accounted for, whether or not it
+        # found anything -- and only those classes.
         assert {c["name"] for c in result["checks"]} == {
-            "references.malformed",
             "references.unknown_namespace",
             "references.unknown_requirement",
             "references.unknown_assertion",
-            "references.forbidden",
+        }
+        assert self._malformed_findings(federated)["findings"] == []
+
+    # Verifies: REQ-d00272-P, REQ-o00060-H
+    def test_a_malformed_reference_is_reported_as_malformed_not_unresolved(self, mutation_graph):
+        pytest.importorskip("mcp")
+        from elspais.graph.reference_faults import FaultClass
+        from elspais.mcp.server import _get_preset_references
+
+        federated = self._federated_with(mutation_graph, FaultClass.MALFORMED, "not a reference")
+
+        check = self._malformed_findings(federated)
+
+        (entry,) = check["findings"]
+        assert entry["node_id"] == "REQ-o00001"
+        assert check["remedy"] == "elspais malformed"
+        assert _get_preset_references(federated, "unresolved")["count"] == 0
+
+    # Verifies: REQ-d00272-P
+    def test_a_forbidden_reference_is_counted_as_neither_population(self, mutation_graph):
+        pytest.importorskip("mcp")
+        from elspais.graph.reference_faults import FaultClass
+        from elspais.mcp.server import _get_preset_references, _reference_fault_counts
+
+        federated = self._federated_with(mutation_graph, FaultClass.FORBIDDEN, "REQ-p00001")
+
+        assert _get_preset_references(federated, "unresolved")["count"] == 0
+        assert self._malformed_findings(federated)["findings"] == []
+        assert _reference_fault_counts(federated) == {
+            "has_unresolved_references": False,
+            "unresolved_reference_count": 0,
+            "has_malformed_references": False,
+            "malformed_reference_count": 0,
         }
 
 

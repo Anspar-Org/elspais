@@ -75,6 +75,7 @@ from elspais.commands.args import (
     InstallArgs,
     LinkArgs,
     LinkSuggestArgs,
+    MalformedArgs,
     McpArgs,
     McpEnvArgs,
     McpInstallArgs,
@@ -136,6 +137,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         FailingArgs: "failing",
         ErrorsArgs: "errors",
         UnresolvedArgs: "unresolved",
+        MalformedArgs: "malformed",
         UncitedArgs: "uncited",
         DoctorArgs: "doctor",
         TraceArgs: "trace",
@@ -307,6 +309,13 @@ def main(argv: list[str] | None = None) -> int:
         filtered_argv.append(arg)
     argv = filtered_argv
 
+    # Implements: REQ-d00085-O
+    # A global flag means one thing wherever it stands, so it is lifted out of
+    # the invocation before either parser sees it, and the flags written ahead
+    # of the section names are read as if written after them.
+    lifted, argv = _lift_global_options(argv)
+    argv = _sections_first(argv)
+
     sections: list[str] = []
     i = 0
     while i < len(argv) and argv[i] in COMPOSABLE_SECTIONS:
@@ -322,13 +331,13 @@ def main(argv: list[str] | None = None) -> int:
 
         from elspais.commands import report
 
-        return report.run(sections, argv[i:])
+        return report.run(sections, argv[i:] + lifted)
 
     # Single command — Tyro parsing
     import tyro
 
     try:
-        global_args = tyro.cli(GlobalArgs, args=argv)
+        global_args = tyro.cli(GlobalArgs, args=lifted + argv)
     except SystemExit as e:
         # Tyro calls sys.exit on parse errors and --help
         return e.code if isinstance(e.code, int) else 2
@@ -404,7 +413,7 @@ def main(argv: list[str] | None = None) -> int:
             from elspais.commands import gaps
 
             return gaps.run(args)
-        elif args.command in ("unresolved", "errors", "uncited"):
+        elif args.command in ("unresolved", "malformed", "errors", "uncited"):
             # Each is the checks report narrowed to the checks that answer one
             # question -- never a second renderer over the same facts
             # (REQ-d00285-C). The population each names is `PRESETS` in
@@ -536,6 +545,98 @@ def _print_help() -> None:
     from elspais.commands.args import generate_help
 
     print(generate_help(__version__))
+
+
+# Implements: REQ-d00085-O
+def _global_option_spellings() -> tuple[frozenset[str], frozenset[str]]:
+    """The switches and the value-taking options `GlobalArgs` declares.
+
+    Read off its fields, so a global added there is lifted without a second
+    list. `directory` is handled before this, because it changes where the
+    run starts.
+    """
+    import typing
+
+    switches: set[str] = set()
+    valued: set[str] = set()
+    hints = typing.get_type_hints(GlobalArgs, include_extras=True)
+    for field in dataclasses.fields(GlobalArgs):
+        if field.name in ("command", "directory"):
+            continue
+        hint = hints[field.name]
+        names = {"--" + field.name.replace("_", "-")}
+        base = hint
+        if typing.get_origin(hint) is typing.Annotated:
+            base, *meta = typing.get_args(hint)
+            for m in meta:
+                names.update(getattr(m, "aliases", None) or ())
+        if base is bool:
+            switches.update(names)
+            switches.add("--no-" + field.name.replace("_", "-"))
+        else:
+            valued.update(names)
+    return frozenset(switches), frozenset(valued)
+
+
+def _lift_global_options(argv: list[str]) -> tuple[list[str], list[str]]:
+    """Split *argv* into its global options and everything else.
+
+    Nothing after `--` is lifted, because there an option is an argument.
+    """
+    switches, valued = _global_option_spellings()
+    lifted: list[str] = []
+    rest: list[str] = []
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--":
+            rest.extend(argv[i:])
+            break
+        if arg in switches:
+            lifted.append(arg)
+        elif arg in valued and i + 1 < len(argv):
+            lifted.extend(argv[i : i + 2])
+            i += 1
+        elif arg.split("=", 1)[0] in valued and "=" in arg:
+            lifted.append(arg)
+        else:
+            rest.append(arg)
+        i += 1
+    return lifted, rest
+
+
+def _sections_first(argv: list[str]) -> list[str]:
+    """Move report flags written ahead of the section names to after them.
+
+    `elspais --format json checks` then reads as `elspais checks --format
+    json`. Only an invocation whose first word is a report section is
+    reordered; the value an option takes is told from a section name by the
+    composed report's own parser.
+    """
+    from elspais.commands.report import COMPOSABLE_SECTIONS, shared_parser
+
+    nargs = {
+        option: action.nargs
+        for action in shared_parser()._actions
+        for option in action.option_strings
+    }
+    i = 0
+    while i < len(argv) and argv[i].startswith("-"):
+        arity = nargs.get(argv[i], 0)
+        i += 1
+        if arity in ("*", "+"):
+            while (
+                i < len(argv) and not argv[i].startswith("-") and argv[i] not in COMPOSABLE_SECTIONS
+            ):
+                i += 1
+        elif arity != 0:
+            i += 1
+    if i == 0 or i >= len(argv) or argv[i] not in COMPOSABLE_SECTIONS:
+        return argv
+    j = i
+    while j < len(argv) and argv[j] in COMPOSABLE_SECTIONS:
+        j += 1
+    return argv[i:j] + argv[:i] + argv[j:]
 
 
 # Implements: REQ-d00286-B
