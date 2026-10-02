@@ -533,11 +533,22 @@ def config_document_paths(config_path: Path) -> list[Path]:
     holds a node for exactly these, so the two cannot come to disagree
     about which documents a repository's configuration came from.
     """
-    paths = [config_path]
-    local_path = _local_config_path(config_path)
+    committed, local_path = config_document_candidates(config_path)
+    paths = [committed]
     if local_path.is_file():
         paths.append(local_path)
     return paths
+
+
+# Implements: REQ-d00313-A
+def config_document_candidates(config_path: Path) -> list[Path]:
+    """Every path a configuration document is read from for a repository, present or not.
+
+    A process watching what its graph was built from watches the overlay's
+    path before an overlay exists, because creating one changes the
+    configuration as surely as editing one.
+    """
+    return [config_path, _local_config_path(config_path)]
 
 
 # Implements: REQ-d00207-B
@@ -1433,20 +1444,23 @@ def empty_selection_refusal(config: Any, named: list[str] | None, *, executes: b
 
 
 # Implements: REQ-d00283-H
-def unknown_target_refusal(config: Any, named: list[str] | None) -> str | None:
+def unknown_target_refusal(
+    config: Any, named: list[str] | None, *, flag: str = "--targets"
+) -> str | None:
     """Return the reason to refuse a run that names an unknown target or group.
 
     The function returns ``None`` if every name is a configured target or a
     declared or reserved group. A run names targets and groups alike.
     Consequently, the refusal lists both the targets and the groups. A reader
-    who corrects the name needs both lists.
+    who corrects the name needs both lists. *flag* is the option the names
+    came from, so the refusal names the option the reader wrote.
     """
     unknown = unknown_target_names(config, named)
     if not unknown:
         return None
     configured = sorted(t.name for t in config.scanning.test.targets)
     return (
-        f"unknown --targets: {', '.join(unknown)}. "
+        f"unknown {flag}: {', '.join(unknown)}. "
         f"Configured targets: {', '.join(configured)}. "
         f"Known groups: {', '.join(sorted(known_group_names(config)))}."
     )

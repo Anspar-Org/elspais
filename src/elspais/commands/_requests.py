@@ -42,6 +42,28 @@ def treat_active_from_params(params: Mapping[str, str]) -> tuple[str, ...]:
     return tuple(item.strip() for item in raw.split(TREAT_ACTIVE_SEPARATOR) if item.strip())
 
 
+# The key that carries the targets a checks run expects results from. The
+# names are final target names, each qualified by its member's namespace,
+# divided by a comma.
+EXPECTED_TARGETS_PARAM = "expected_targets"
+EXPECTED_TARGETS_SEPARATOR = ","
+
+
+# Implements: REQ-d00283-P
+def expected_targets_from_params(params: Mapping[str, str]) -> tuple[str, ...]:
+    """The test targets a serving process was told the run expects results from.
+
+    ONE reader of the wire key, so a request and the process that answers it
+    divide the list the same way.
+    """
+    raw = (params or {}).get(EXPECTED_TARGETS_PARAM)
+    if not raw:
+        return ()
+    return tuple(
+        sorted({item.strip() for item in raw.split(EXPECTED_TARGETS_SEPARATOR) if item.strip()})
+    )
+
+
 @dataclass(frozen=True)
 class ReportInputs:
     """The axes every report over a set of requirements reads."""
@@ -150,6 +172,12 @@ class ChecksRequest:
     terms_only: bool = False
     lenient: bool = False
     treat_active: tuple[str, ...] = ()
+    # Implements: REQ-d00283-P+Q+U+W
+    # The targets whose results this run expects: every target it executed,
+    # and every target it named as expected. Each is a final target name
+    # qualified by the namespace of the member declaring it, a group already
+    # expanded at the edge by that member's declarations.
+    expected_targets: tuple[str, ...] = ()
 
     @property
     def run_all(self) -> bool:
@@ -163,6 +191,8 @@ class ChecksRequest:
         }
         if self.treat_active:
             params[TREAT_ACTIVE_PARAM] = TREAT_ACTIVE_SEPARATOR.join(self.treat_active)
+        if self.expected_targets:
+            params[EXPECTED_TARGETS_PARAM] = EXPECTED_TARGETS_SEPARATOR.join(self.expected_targets)
         return params
 
 

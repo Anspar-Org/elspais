@@ -94,6 +94,9 @@ skip = [
     # during every run, then no run produces fresh results.
     "**/.pytest_cache", "**/.ruff_cache", "**/.mypy_cache", "htmlcov", "**/*.egg-info",
     ".coverage", ".coverage.*", ".claude/worktrees",
+    # The PDF tests leave a TeX `missfont.log`, and the journey-uat fixtures'
+    # daemons write their records under `.elspais/`. Both appear during a run.
+    "missfont.log", "tests/fixtures/journey-uat/*/.elspais",
 ]
 
 # Spec file scanning
@@ -138,7 +141,7 @@ skip_dirs = ["**/fixtures"]
 prescan_command = ""
 # Additional regex patterns for reference detection
 reference_patterns = []
-# output_root holds the folder of each test target (REQ-d00313).
+# output_root holds the folder of each test target (REQ-d00312).
 output_root = ".results"
 # Test targets drive result + coverage ingestion ([[scanning.test.targets]]).
 # Each target writes into its own folder under `output_root`. The command of

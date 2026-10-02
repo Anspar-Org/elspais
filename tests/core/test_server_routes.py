@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import time
 from pathlib import Path
 
 import pytest
@@ -337,14 +336,13 @@ class TestFreshnessConcurrencySignals:
     """REQ-o00062-Q: /api/check-freshness carries what a polling viewer needs
     to notice the OTHER writer on the shared graph.
 
-    Two things can change under a viewer's feet: spec files on disk (mtime
-    staleness, the historical answer) and the in-memory graph (an MCP agent or
-    a second viewer mutating through the same holder). The second writes no
-    file at all, so mtime staleness can never reveal it -- hence the
-    mutation-log tip in the same payload. And the build_time the mtime
-    comparison uses lives in the shared holder, so a rebuild on the MCP side
-    moves it too; reading a private copy is how a freshly-saved file gets
-    reported as changed.
+    Two things can change under a viewer's feet: files on disk that the
+    served graph was built from, and the in-memory graph (an MCP agent or a
+    second viewer mutating through the same holder). The second writes no
+    file at all, so the files' staleness can never reveal it -- hence the
+    mutation-log tip in the same payload. The files' staleness is judged
+    against the snapshot the one rebuild routine takes, so a rebuild reached
+    through any surface leaves nothing reported as changed.
     """
 
     _VALID_SPEC = (
@@ -439,30 +437,31 @@ class TestFreshnessConcurrencySignals:
         assert first and second
         assert second != first
 
-    # Verifies: REQ-p00006-A
-    @pytest.mark.parametrize(
-        "offset,expect_stale",
-        [(-3600.0, True), (3600.0, False)],
-        ids=["holder-build-time-in-the-past", "holder-build-time-in-the-future"],
-    )
-    def test_staleness_reads_build_time_from_the_shared_holder(
-        self, freshness, offset, expect_stale
+    # Verifies: REQ-p00006-A, REQ-p00004-O
+    def test_a_rebuild_through_the_shared_routine_leaves_nothing_reported_stale(
+        self, freshness, tmp_path
     ):
-        """The mtime comparison uses ``shared["build_time"]``, not a private copy.
+        """A rebuild reached through any surface -- the MCP save and refresh
+        tools call the same routine -- brings the snapshot forward with it.
+        If it did not, the viewer would report the files that rebuild just
+        read as changed on disk."""
+        import os
 
-        The MCP save/refresh tools stamp the holder cell directly after they
-        swap the graph. If the route read a value only AppState could update,
-        a save would leave build_time behind its own freshly-written files and
-        the viewer would raise a false "spec files changed on disk" alarm.
-        """
+        from elspais.mcp.shared_state import rebuild_shared_graph
+
         client, state = freshness
-        assert client.get("/api/check-freshness").json()["stale"] is False
+        spec_file = tmp_path / "spec" / "test.md"
+        later = spec_file.stat().st_mtime + 10
+        os.utime(spec_file, (later, later))
+        assert [p.name for p in state.changed_files()] == ["test.md"], (
+            "fixture must present a genuinely changed file"
+        )
 
-        state.shared["build_time"] = time.time() + offset
+        assert rebuild_shared_graph(state.shared).get("success") is True
 
         data = client.get("/api/check-freshness").json()
-        assert data["stale"] is expect_stale
-        assert bool(data["stale_files"]) is expect_stale
+        assert data["stale"] is False
+        assert data["stale_files"] == []
 
     # Verifies: REQ-o00062-N
     def test_dirty_reports_the_whole_log_not_a_capped_slice(self, freshness):
@@ -984,12 +983,13 @@ class TestServedValueFreshness:
     current. The tool discharges the obligation on both of its branches, and
     both are exercised here:
 
-    - mark stale -- ``/api/check-freshness`` compares each spec file's mtime
-      against the build_time stamped on the served graph and names every file
-      that has moved since, which is what lets a polling client disclose the
-      divergence instead of trusting the answer it already has;
     - recompute -- ``AppState.ensure_fresh()`` rebuilds from the current
-      content, so the next answer is computed from what is on disk now.
+      content, so the next answer is computed from what is on disk now;
+    - mark stale -- where the server declines to rebuild because a writer
+      holds unsaved changes, ``/api/check-freshness`` and every
+      ``/api/run/*`` answer name each file the served graph predates, which
+      is what lets a client disclose the divergence instead of trusting the
+      answer it already has.
 
     The unchanged-source case is asserted alongside the changed one on purpose:
     a surface that reports staleness unconditionally discloses nothing, so the
@@ -1022,35 +1022,76 @@ class TestServedValueFreshness:
 
         return {n.id for n in state.graph.iter_by_kind(NodeKind.REQUIREMENT)}
 
-    # Verifies: REQ-p00015-E
-    def test_REQ_p00015_E_changed_source_marks_the_served_value_stale(
-        self, client: TestClient, app_state, elspais_project: Path
-    ):
+    _VALID_SPEC = TestFreshnessConcurrencySignals._VALID_SPEC
+
+    @pytest.fixture
+    def held(self, tmp_path: Path):
+        """(client, state, root) over a parseable requirement with one unsaved
+        change pending, so the server declines to rebuild over it."""
+        from elspais.server.app import create_app
+        from elspais.server.state import AppState
+
+        (tmp_path / ".elspais.toml").write_text(_MINIMAL_CONFIG)
+        (tmp_path / "spec").mkdir()
+        (tmp_path / "spec" / "test.md").write_text(self._VALID_SPEC)
+        state = AppState.from_config(repo_root=tmp_path)
+        client = TestClient(create_app(state=state, mount_mcp=False))
+        TestFreshnessConcurrencySignals._mutate(client, "Draft")
+        return client, state, tmp_path
+
+    # Verifies: REQ-p00015-E, REQ-d00313-C
+    def test_REQ_p00015_E_changed_source_marks_the_served_value_stale(self, held):
         """A spec file that moved after the build is disclosed, by name.
 
         The boolean alone would leave a client unable to say *what* went
         stale, so the changed file has to be named in the same answer.
         """
-        spec_file = elspais_project / "spec" / "test.md"
-        self._set_mtime(spec_file, app_state.build_time + 10)
+        client, state, root = held
+        spec_file = root / "spec" / "test.md"
+        self._set_mtime(spec_file, spec_file.stat().st_mtime + 10)
+        state._last_stale_check = 0.0
 
         data = client.get("/api/check-freshness").json()
 
+        assert data["has_pending_mutations"] is True
         assert data["stale"] is True, "a spec file edited after the build was served as current"
-        assert "spec/test.md" in data["stale_files"]
+        assert data["stale_files"] == ["spec/test.md"]
+
+    # Verifies: REQ-d00313-C
+    @pytest.mark.parametrize(
+        "endpoint",
+        [
+            "/api/run/checks",
+            "/api/run/summary",
+            "/api/run/gaps",
+            "/api/run/analysis",
+            "/api/run/trace",
+        ],
+    )
+    def test_each_answer_from_a_graph_behind_the_disk_names_the_file(self, held, endpoint):
+        client, state, root = held
+        before = client.get(endpoint)
+        assert before.status_code == 200, before.text
+        assert "graph_predates" not in before.json(), "nothing changed yet"
+
+        spec_file = root / "spec" / "test.md"
+        self._set_mtime(spec_file, spec_file.stat().st_mtime + 10)
+        state._last_stale_check = 0.0
+
+        after = client.get(endpoint)
+        assert after.status_code == 200, after.text
+        assert after.json()["graph_predates"] == ["spec/test.md"]
 
     # Verifies: REQ-p00015-E
-    def test_REQ_p00015_E_unchanged_source_is_not_marked_stale(
-        self, client: TestClient, app_state, elspais_project: Path
-    ):
+    def test_REQ_p00015_E_unchanged_source_is_not_marked_stale(self, held):
         """Nothing moved, so nothing is disclosed.
 
         This is what gives the marking its meaning: a surface that always
         says "stale" tells a consumer exactly as much as one that never does.
+        The pending change keeps the server from rebuilding, so a clean
+        answer here is the watch's, not a rebuild's.
         """
-        spec_file = elspais_project / "spec" / "test.md"
-        self._set_mtime(spec_file, app_state.build_time - 10)
-
+        client, _state, _root = held
         data = client.get("/api/check-freshness").json()
 
         assert data["stale"] is False

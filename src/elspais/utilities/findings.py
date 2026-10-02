@@ -179,6 +179,7 @@ _REMEDIES: dict[str, str] = {
     "tests.uncited_file": "elspais uncited",
     "tests.results": "elspais failing",
     "tests.results_stale": "elspais checks --run-tests",
+    "tests.not_run": "elspais checks --run-tests",
     "tests.unmatched_results": "elspais -v checks --tests",
     "tests.tested": "elspais untested",
     "tests.verified": "elspais failing",
@@ -191,7 +192,8 @@ _REMEDIES: dict[str, str] = {
     # by editing the configuration that decides which files are scanned and
     # what can run them. No command does any of those, and naming one would
     # send a reader to a surface that reports the condition again rather than
-    # resolving it.
+    # resolving it. `tests.run_in_progress` is absent for another reason:
+    # the condition ends when the run ends, and no command ends it sooner.
     # -- uat -------------------------------------------------------------
     "uat.results": "elspais failing",
     "uat.uat_coverage": "elspais unvalidated",
@@ -399,10 +401,18 @@ _DESCRIPTIONS: dict[str, str] = {
     ),
     "tests.ingestion_fault": (
         "An artifact ingestion could not read at all -- a results or coverage report that would "
-        "not parse, one in a format no reporter reads, a reporter name that matches none, a "
-        "results pattern that matched nothing, a coverage file that is not there, or a target "
-        "whose working directory leaves the repository. What went unread is absent from every "
+        "not parse, one in a format no reporter reads, a reporter name that matches none, or a "
+        "target whose working directory leaves the repository -- and results or coverage missing "
+        "for a target the run executed or expected. What went unread is absent from every "
         "figure, and absence reads as a zero"
+    ),
+    "tests.not_run": (
+        "A test target with no results that the run neither executed nor named as expected. "
+        "The target has not run; that is information about the run, not a fault in the project"
+    ),
+    "tests.run_in_progress": (
+        "A test target whose run started and has not recorded its end. Nothing in its output "
+        "area is read until the run ends, so its results and coverage are not judged"
     ),
     "tests.partial_read": (
         "An artifact ingestion read only in part -- a coverage report whose per-file re-analysis "
@@ -606,21 +616,21 @@ def _registry() -> dict[str, CheckRule]:
         # ill-placed comment does. What it credits is not a severity question
         # at all -- REQ-d00274-H withdraws the coverage whatever this says.
         _general("tests.unbound_citation", "tests", Severity.WARNING),
-        # An artifact ingestion could not read, or could not read in full, is
-        # reported at `warning`, which is "needs attention" -- the true claim,
-        # and the whole of what the tool knows. `error` says "a defect", and that is not true of
-        # every cause this name covers: a results pattern matching nothing is
-        # the ordinary state of a checkout whose suite has not run yet, so an
-        # `error` default would fail every build made before its tests and
-        # push projects to turn the check off, ending the reporting outright.
-        # Severity is also not what cures the harm here. What makes an
-        # unreadable report indistinguishable from a suite that never ran is
-        # that nobody was told WHICH artifact went unread; the findings name
-        # each one with its path, its line and its target, and that is the
-        # repair. A project for which an unread artifact IS a defect -- one
-        # whose results are always present by the time the graph is built --
-        # raises it to `error` under `[rules.severity]`.
-        _general("tests.ingestion_fault", "tests", Severity.WARNING),
+        # An artifact ingestion could not read is reported at `error`. Every
+        # case it covers is one a run owed: a report that will not parse, a
+        # reporter nothing provides, or results and coverage missing for a
+        # target the run executed or expected. A target nobody ran never
+        # reaches this check -- it is `tests.not_run` -- so what remains is a
+        # figure computed without evidence the run said would be there, and
+        # absence reads as a zero. The findings name each artifact with its
+        # path, its line and its target, which is the repair.
+        _general("tests.ingestion_fault", "tests", Severity.ERROR),
+        # A target the run neither executed nor expected, with no results, has
+        # not run. That is a fact about the run, so it is stated at `info`.
+        _general("tests.not_run", "tests", Severity.INFO),
+        # A run that has not finished is a fact with a time on it, not a
+        # defect. A reader who knows the run died acts on the time given.
+        _general("tests.run_in_progress", "tests", Severity.INFO),
         _general("tests.partial_read", "tests", Severity.INFO),
         # A target may legitimately carry no command -- the schema says so
         # ("omitted in CI", where the tests already ran) -- so a project whose

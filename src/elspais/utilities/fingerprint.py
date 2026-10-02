@@ -1,4 +1,4 @@
-# Implements: REQ-d00311-A+B+C+D+I+J+K+L+M, REQ-d00312-A+B+D
+# Implements: REQ-d00311-A+B+C+D+I+J+K+L+M+N, REQ-d00312-A+B+D
 """Record the fingerprint of a test target's run, and judge the freshness of its results.
 
 Terms:
@@ -43,8 +43,10 @@ _RECORD_VERSION = 1
 class Freshness:
     """The freshness of the results of one target.
 
-    ``state`` is ``"fresh"``, ``"stale"`` or ``"absent"``. ``"absent"`` means
-    that no results are on disk. The missing-results check reports that case.
+    ``state`` is ``"fresh"``, ``"stale"``, ``"absent"`` or ``"running"``.
+    ``"absent"`` means that no results are on disk. The missing-results check
+    reports that case. ``"running"`` means that a run of the target started
+    and recorded no end. ``record`` then holds the record of that run.
     ``reason`` holds ``"no-fingerprint"``, ``"changed"`` or
     ``"changed-during-run"`` for stale results. Otherwise ``reason`` is empty.
     ``changed`` names the inputs that differ.
@@ -280,6 +282,18 @@ def finish_run(repo_root: Path, config: Any, target_name: str) -> dict[str, Any]
     return record
 
 
+def run_in_progress(folder: Path) -> dict[str, Any] | None:
+    """Return the record of the run in progress in the output area *folder*, or ``None``.
+
+    A run is in progress from the time its record is written with no end
+    until the time its end is recorded.
+    """
+    record = read_record(folder)
+    if record is None or record.get("finished_at"):
+        return None
+    return record
+
+
 def results_present(repo_root: Path, config: Any, target: Any) -> bool:
     """Return whether the results pattern of a file-channel target matches a file.
 
@@ -298,9 +312,16 @@ def judge(repo_root: Path, config: Any, target_name: str) -> Freshness:
     """
     root = Path(repo_root).resolve()
     target = _find_target(config, target_name)
+    folder = target_folder(root, config, target_name)
+    # Implements: REQ-d00311-N
+    # The record is read before the results. A run empties the area when it
+    # starts, so an area with no results yet holds a run that is not finished.
+    running = run_in_progress(folder)
+    if running is not None:
+        return Freshness(target=target_name, state="running", record=running)
     if not results_present(root, config, target):
         return Freshness(target=target_name, state="absent")
-    record = read_record(target_folder(root, config, target_name))
+    record = read_record(folder)
     if record is None:
         return Freshness(target=target_name, state="stale", reason="no-fingerprint")
     during = tuple(record.get("changed_during_run") or ())

@@ -4,6 +4,8 @@
 import time
 from pathlib import Path
 
+import pytest
+
 _MINIMAL_CONFIG = """\
 version = 5
 
@@ -934,3 +936,418 @@ class TestEnsureFreshReportsTheRoutinesFailureMessage:
         err = capsys.readouterr().err
         assert "CONFIG ERROR:" in err, f"report does not carry the routine's reason: {err!r}"
         assert ".elspais.toml" in err, f"report does not name the offending file: {err!r}"
+
+
+_TARGET_CONFIG = (
+    _MINIMAL_CONFIG
+    + """
+[scanning.test]
+enabled = true
+
+[[scanning.test.targets]]
+name = "unit"
+reporter = "junit"
+results = "junit.xml"
+coverage = "coverage.json"
+"""
+)
+
+_JUNIT = (
+    '<?xml version="1.0" encoding="utf-8"?>\n<testsuites><testsuite name="t" tests="1">'
+    '<testcase classname="tests.test_a" name="test_a" time="0.01"/></testsuite></testsuites>\n'
+)
+
+
+def _bump(path: Path) -> None:
+    """Move a file's mtime past anything a snapshot recorded."""
+    import os
+
+    later = path.stat().st_mtime + 10
+    os.utime(path, (later, later))
+
+
+class TestServedGraphCurrency:
+    """Validates REQ-d00313-A+B+C+D: a serving process judges its graph against
+    every file the graph was built from -- the test targets' output areas and
+    the configuration overlay included, in every member of the federation --
+    and names the files its graph predates."""
+
+    @staticmethod
+    def _repo(root: Path, config: str = _TARGET_CONFIG) -> Path:
+        root.mkdir(parents=True, exist_ok=True)
+        (root / ".elspais.toml").write_text(config)
+        (root / "spec").mkdir(exist_ok=True)
+        return root
+
+    @staticmethod
+    def _state(root: Path):
+        from elspais.server.state import AppState
+
+        state = AppState.from_config(repo_root=root)
+        state._last_stale_check = 0.0
+        return state
+
+    @staticmethod
+    def _results_read(state) -> bool:
+        from elspais.graph.GraphNode import NodeKind
+
+        return any(True for _ in state.graph.iter_by_kind(NodeKind.RESULT))
+
+    # Verifies: REQ-d00313-A+B
+    def test_results_written_after_the_build_make_the_graph_stale_and_are_read(self, tmp_path):
+        """A file that arrived after the build would otherwise read as absent,
+        the reading a project that never ran its tests gets."""
+        root = self._repo(tmp_path)
+        state = self._state(root)
+        assert not self._results_read(state)
+        assert not state.is_stale()
+
+        area = root / ".results" / "unit"
+        area.mkdir(parents=True)
+        (area / "junit.xml").write_text(_JUNIT)
+
+        assert [p.name for p in state.changed_files()] == ["junit.xml"]
+        assert state.ensure_fresh() is True
+        assert self._results_read(state)
+        assert not state.is_stale(), "the rebuild must absorb the file it read"
+
+    # Verifies: REQ-d00313-B
+    def test_coverage_written_after_the_build_makes_the_graph_stale(self, tmp_path):
+        root = self._repo(tmp_path)
+        state = self._state(root)
+
+        area = root / ".results" / "unit"
+        area.mkdir(parents=True)
+        (area / "coverage.json").write_text('{"files": {}}')
+
+        assert [p.name for p in state.changed_files()] == ["coverage.json"]
+
+    # Verifies: REQ-d00313-D
+    def test_writes_during_a_run_count_only_when_the_run_records_its_end(self, tmp_path):
+        from elspais.config import load_config
+        from elspais.utilities.fingerprint import RECORD_NAME, finish_run, start_run
+
+        root = self._repo(tmp_path)
+        config = load_config(root / ".elspais.toml")
+        folder = start_run(root, config, "unit")
+        state = self._state(root)
+        assert not state.is_stale()
+
+        (folder / "junit.xml").write_text(_JUNIT)
+        (folder / "coverage.json").write_text('{"files": {}}')
+        assert not state.is_stale(), "a write by a run in progress counted as a change"
+        assert state.ensure_fresh() is False
+
+        finish_run(root, config, "unit")
+
+        changed = state.changed_files()
+        assert RECORD_NAME in {p.name for p in changed}
+        state._last_stale_check = 0.0
+        assert state.ensure_fresh() is True
+        assert self._results_read(state)
+
+    # Verifies: REQ-d00313-D
+    def test_starting_a_run_is_a_change(self, tmp_path):
+        """The record changes when a run starts, and that says the area's
+        content is about to go."""
+        from elspais.config import load_config
+        from elspais.utilities.fingerprint import RECORD_NAME, start_run
+
+        root = self._repo(tmp_path)
+        state = self._state(root)
+
+        start_run(root, load_config(root / ".elspais.toml"), "unit")
+
+        assert [p.name for p in state.changed_files()] == [RECORD_NAME]
+
+    # Verifies: REQ-d00313-A, REQ-p00004-J
+    def test_creating_the_configuration_overlay_makes_the_graph_stale(self, tmp_path):
+        root = self._repo(tmp_path)
+        state = self._state(root)
+
+        (root / ".elspais.local.toml").write_text('[project]\nname = "local-name"\n')
+
+        assert [p.name for p in state.changed_files()] == [".elspais.local.toml"]
+        assert state.ensure_fresh() is True
+
+    # Verifies: REQ-d00313-A
+    def test_an_unrelated_file_outside_what_the_graph_read_is_not_a_change(self, tmp_path):
+        """The negative: the watch covers what the build read, not the tree."""
+        root = self._repo(tmp_path)
+        state = self._state(root)
+
+        (root / "NOTES.txt").write_text("scratch\n")
+        (root / ".results").mkdir()
+        (root / ".results" / "stray.txt").write_text("not a target's\n")
+
+        assert state.changed_files() == []
+
+    # Verifies: REQ-d00313-A+B
+    def test_an_associates_output_area_is_watched_too(self, tmp_path):
+        core = self._repo(
+            tmp_path / "core",
+            _MINIMAL_CONFIG + '\n[associates.lib]\npath = "../lib"\nnamespace = "LIB"\n',
+        )
+        lib = self._repo(
+            tmp_path / "lib",
+            _TARGET_CONFIG.replace('name = "test"', 'name = "lib"', 1).replace(
+                'namespace = "REQ"', 'namespace = "LIB"', 1
+            ),
+        )
+        state = self._state(core)
+        assert {e.name for e in state.graph.iter_repos()} == {"test", "lib"}
+        assert not state.is_stale()
+
+        area = lib / ".results" / "unit"
+        area.mkdir(parents=True)
+        (area / "junit.xml").write_text(_JUNIT)
+
+        assert state.changed_files() == [area / "junit.xml"]
+
+    # Verifies: REQ-d00313-A
+    def test_an_associates_spec_edit_is_watched(self, tmp_path):
+        core = self._repo(
+            tmp_path / "core",
+            _MINIMAL_CONFIG + '\n[associates.lib]\npath = "../lib"\nnamespace = "LIB"\n',
+        )
+        lib = self._repo(
+            tmp_path / "lib",
+            _MINIMAL_CONFIG.replace('name = "test"', 'name = "lib"', 1).replace(
+                'namespace = "REQ"', 'namespace = "LIB"', 1
+            ),
+        )
+        spec = lib / "spec" / "lib.md"
+        spec.write_text("# notes\n")
+        state = self._state(core)
+
+        _bump(spec)
+
+        assert state.changed_files() == [spec]
+
+    # Verifies: REQ-d00313-C
+    def test_the_holder_names_the_files_its_graph_predates(self, tmp_path):
+        """A path in the serving repository is named relative to it, and one in
+        another member in full."""
+        from elspais.server.watch import graph_predates
+
+        core = self._repo(
+            tmp_path / "core",
+            _MINIMAL_CONFIG + '\n[associates.lib]\npath = "../lib"\nnamespace = "LIB"\n',
+        )
+        lib = self._repo(
+            tmp_path / "lib",
+            _TARGET_CONFIG.replace('name = "test"', 'name = "lib"', 1).replace(
+                'namespace = "REQ"', 'namespace = "LIB"', 1
+            ),
+        )
+        own = core / "spec" / "core.md"
+        own.write_text("# notes\n")
+        state = self._state(core)
+        assert graph_predates(state.shared) == []
+
+        _bump(own)
+        area = lib / ".results" / "unit"
+        area.mkdir(parents=True)
+        (area / "junit.xml").write_text(_JUNIT)
+
+        assert graph_predates(state.shared) == sorted(
+            ["spec/core.md", str((area / "junit.xml").resolve())]
+        )
+
+    # Verifies: REQ-d00313-C
+    def test_get_graph_status_names_the_files_its_graph_predates(self, tmp_path):
+        import pytest as _pytest
+
+        _pytest.importorskip("mcp")
+        from elspais.mcp.server import create_server
+
+        root = self._repo(tmp_path)
+        spec = root / "spec" / "core.md"
+        spec.write_text("# notes\n")
+        state = self._state(root)
+        server = create_server(graph=state.graph, working_dir=root, shared_state=state.shared)
+        status = server._tool_manager._tools["get_graph_status"].fn
+
+        assert "graph_predates" not in status()
+
+        _bump(spec)
+
+        assert status()["graph_predates"] == ["spec/core.md"]
+
+    # Verifies: REQ-d00313-C
+    def test_get_graph_status_over_a_private_holder_discloses_nothing(self, tmp_path):
+        """A process that watches nothing knows of no file its graph predates,
+        and says nothing rather than claiming the graph is current."""
+        import pytest as _pytest
+
+        _pytest.importorskip("mcp")
+        from elspais.mcp.server import create_server
+
+        root = self._repo(tmp_path)
+        spec = root / "spec" / "core.md"
+        spec.write_text("# notes\n")
+        state = self._state(root)
+        server = create_server(graph=state.graph, working_dir=root)
+        status = server._tool_manager._tools["get_graph_status"].fn
+
+        _bump(spec)
+
+        assert "graph_predates" not in status()
+
+    # A project whose scan selects some of what its directories hold: spec
+    # reads `*.md`, code skips `src/vendor`, and `[scanning] skip` names any
+    # `generated` directory for every kind.
+    _SELECTIVE_CONFIG = (
+        _MINIMAL_CONFIG
+        + """
+[scanning]
+skip = ["**/generated"]
+
+[scanning.spec]
+directories = ["spec"]
+file_patterns = ["*.md"]
+
+[scanning.code]
+directories = ["src"]
+skip_dirs = ["src/vendor"]
+
+[scanning.test]
+enabled = true
+directories = ["tests"]
+"""
+    )
+
+    @classmethod
+    def _selective(cls, tmp_path: Path) -> Path:
+        root = cls._repo(tmp_path / "project", cls._SELECTIVE_CONFIG)
+        (root / "spec" / "core.md").write_text("# notes\n")
+        for rel in ("src/app.py", "src/vendor/lib.py", "src/generated/out.py"):
+            (root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (root / rel).write_text("x = 1\n")
+        (root / "tests").mkdir()
+        (root / "tests" / "test_app.py").write_text("def test_a():\n    pass\n")
+        return root
+
+    # Verifies: REQ-d00313-A
+    @pytest.mark.parametrize("scanned", ["src", "tests"])
+    def test_compiled_bytecode_in_a_scanned_directory_is_not_a_change(self, tmp_path, scanned):
+        """A `.pyc` is what running the code leaves behind. The scan's
+        patterns decline it, so the graph was not built from it."""
+        root = self._selective(tmp_path)
+        state = self._state(root)
+
+        cache = root / scanned / "__pycache__"
+        cache.mkdir()
+        (cache / "app.cpython-312.pyc").write_bytes(b"\x00\x01")
+
+        assert state.changed_files() == []
+        assert not state.is_stale()
+
+    # Verifies: REQ-d00313-A, REQ-p00015-H
+    @pytest.mark.parametrize(
+        "rel",
+        [
+            "src/vendor/new.py",  # [scanning.code] skip_dirs
+            "src/generated/new.py",  # [scanning] skip
+            "spec/generated/new.md",  # [scanning] skip, another kind
+        ],
+    )
+    def test_a_file_in_a_skipped_directory_is_not_a_change(self, tmp_path, rel):
+        root = self._selective(tmp_path)
+        state = self._state(root)
+
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text("x = 2\n")
+        _bump(root / "src" / "vendor" / "lib.py")
+        _bump(root / "src" / "generated" / "out.py")
+
+        assert state.changed_files() == []
+
+    # Verifies: REQ-d00313-A
+    def test_a_file_the_patterns_decline_is_not_a_change(self, tmp_path):
+        root = self._selective(tmp_path)
+        state = self._state(root)
+
+        (root / "spec" / "notes.txt").write_text("scratch\n")
+        (root / "tests" / "helpers.txt").write_text("scratch\n")
+
+        assert state.changed_files() == []
+
+    # Verifies: REQ-d00313-A
+    @pytest.mark.parametrize("rel", ["spec/new.md", "src/new.py", "src/pkg/deep.py"])
+    def test_a_new_file_the_selection_admits_is_a_change(self, tmp_path, rel):
+        root = self._selective(tmp_path)
+        state = self._state(root)
+
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text("x = 3\n")
+
+        assert [p.resolve() for p in state.changed_files()] == [(root / rel).resolve()]
+        assert state.is_stale()
+
+    # Verifies: REQ-d00313-A
+    @pytest.mark.parametrize("rel", ["spec/core.md", "src/app.py", "tests/test_app.py"])
+    def test_a_changed_file_the_selection_admits_is_a_change(self, tmp_path, rel):
+        root = self._selective(tmp_path)
+        state = self._state(root)
+
+        _bump(root / rel)
+
+        assert [p.resolve() for p in state.changed_files()] == [(root / rel).resolve()]
+
+    # Verifies: REQ-d00313-A
+    def test_the_watched_selection_is_what_the_build_read(self, tmp_path):
+        """Every spec, code and test file the built graph holds is a file the
+        plan's selection gives, and the selection holds nothing else of those
+        kinds that the build passed over."""
+        from elspais.config import load_config
+        from elspais.graph.factory import build_graph, scan_plan
+        from elspais.graph.file_selection import select_files
+        from elspais.graph.GraphNode import FileType, NodeKind
+
+        root = self._selective(tmp_path)
+        (root / "spec" / "notes.txt").write_text("scratch\n")
+        (root / "src" / "__pycache__").mkdir()
+        (root / "src" / "__pycache__" / "app.pyc").write_bytes(b"\x00")
+        config = load_config(root / ".elspais.toml")
+
+        selected: dict[str, set[Path]] = {}
+        for kind in scan_plan(config, root):
+            for directory in kind.directories:
+                rel = directory.resolve().relative_to(root.resolve()).as_posix()
+                selection = select_files(
+                    root, [rel], list(kind.skip_dirs), list(kind.skip_files), list(kind.patterns)
+                )
+                selected.setdefault(kind.kind, set()).update(selection.selected)
+
+        graph = build_graph(config_path=root / ".elspais.toml", repo_root=root)
+        held: dict[str, set[Path]] = {}
+        by_type = {FileType.SPEC: "spec", FileType.CODE: "code", FileType.TEST: "test"}
+        for node in graph.iter_by_kind(NodeKind.FILE):
+            kind = by_type.get(node.get_field("file_type"))
+            if kind is not None:
+                held.setdefault(kind, set()).add(Path(node.get_field("absolute_path")).resolve())
+
+        for kind, files in held.items():
+            assert files <= {p.resolve() for p in selected.get(kind, set())}, kind
+        assert held["spec"] == {(root / "spec" / "core.md").resolve()}
+        assert held["code"] == {(root / "src" / "app.py").resolve()}
+        assert held["test"] == {(root / "tests" / "test_app.py").resolve()}
+
+    # Verifies: REQ-d00313-A
+    @pytest.mark.parametrize("scanned,rel", [("src", "src/app.py"), ("tests", "tests/test_app.py")])
+    def test_a_scanned_directory_created_after_the_build_is_watched(self, tmp_path, scanned, rel):
+        """The configuration names the directory before it exists. Once it
+        exists, a file the selection admits in it is one the graph predates."""
+        import shutil
+
+        root = self._selective(tmp_path)
+        shutil.rmtree(root / scanned)
+        state = self._state(root)
+        assert not state.is_stale()
+
+        (root / scanned).mkdir()
+        (root / rel).write_text("def test_a():\n    pass\n")
+
+        assert [p.resolve() for p in state.changed_files()] == [(root / rel).resolve()]
+        assert state.is_stale()

@@ -945,18 +945,108 @@ def _resolve_spec_dir_config(
     registry.register(JourneyParser(FederatedIdReader(resolver)))
     registry.register(RemainderParser())
 
-    patterns = typed_repo_config.scanning.spec.file_patterns
-    # patterns can be list[str] or dict — extract list if needed
-    # Fall back to ["*.md"] if patterns is empty or not a list
-    file_patterns = patterns if isinstance(patterns, list) and patterns else ["*.md"]
-    _spec_skips = scan_exclusions(repo_config, "spec")
+    file_patterns, skip_dirs, skip_files = _spec_selection(repo_config, typed_repo_config)
     return SpecDirConfig(
         registry=registry,
         dispatcher=dispatcher,
         file_patterns=file_patterns,
-        skip_dirs=_spec_skips[0],
-        skip_files=_spec_skips[1],
+        skip_dirs=skip_dirs,
+        skip_files=skip_files,
     )
+
+
+def _spec_selection(config: Any, typed_config: Any) -> tuple[list[str], list[str], list[str]]:
+    """The patterns, skipped directories and skipped files the spec kind selects by."""
+    patterns = typed_config.scanning.spec.file_patterns
+    # Fall back to ["*.md"] if patterns is empty or not a list.
+    file_patterns = patterns if isinstance(patterns, list) and patterns else ["*.md"]
+    skip_dirs, skip_files = scan_exclusions(config, "spec")
+    return list(file_patterns), skip_dirs, skip_files
+
+
+@dataclass(frozen=True)
+class KindScan:
+    """What one scanning kind of one repository reads.
+
+    Attributes:
+        kind: ``spec``, ``code`` or ``test``.
+        directories: The existing directories the kind walks, absolute.
+        patterns: The file patterns that select among what they hold.
+        skip_dirs: The directories the walk does not enter.
+        skip_files: The file-name globs the walk does not read.
+    """
+
+    kind: str
+    directories: tuple[Path, ...]
+    patterns: tuple[str, ...]
+    skip_dirs: tuple[str, ...]
+    skip_files: tuple[str, ...]
+
+
+# Implements: REQ-p00015-H, REQ-d00313-A
+def scan_plan(
+    config: dict[str, Any],
+    repo_root: Path,
+    *,
+    spec_dirs: list[Path] | None = None,
+    scan_code: bool = True,
+    scan_tests: bool = True,
+) -> list[KindScan]:
+    """The directories, patterns and exclusions each scanning kind of a repository reads by.
+
+    ONE derivation: a build walks what this returns, and a serving process
+    watches the same selection, so the files it judges a graph against are
+    the files that graph was built from.
+    """
+    typed = _validate_config(config) if isinstance(config, dict) else config
+    raw = config if isinstance(config, dict) else {}
+    plan: list[KindScan] = []
+
+    spec_patterns, spec_skip_dirs, spec_skip_files = _spec_selection(raw, typed)
+    plan.append(
+        KindScan(
+            kind="spec",
+            directories=tuple(
+                spec_dirs if spec_dirs is not None else get_spec_directories(None, raw, repo_root)
+            ),
+            patterns=tuple(spec_patterns),
+            skip_dirs=tuple(spec_skip_dirs),
+            skip_files=tuple(spec_skip_files),
+        )
+    )
+    if scan_code:
+        code_skip_dirs, code_skip_files = scan_exclusions(raw, "code")
+        plan.append(
+            KindScan(
+                kind="code",
+                directories=tuple(get_code_directories(raw, repo_root)),
+                patterns=tuple(
+                    _patterns_for_kind(typed.scanning.code.file_patterns, DEFAULT_CODE_PATTERNS)
+                ),
+                skip_dirs=tuple(code_skip_dirs),
+                skip_files=tuple(code_skip_files),
+            )
+        )
+    if scan_tests and typed.scanning.test.enabled:
+        test_skip_dirs, test_skip_files = scan_exclusions(raw, "test")
+        test_dirs: list[Path] = []
+        for dir_pattern in typed.scanning.test.directories:
+            # A test directory is a glob over the repository.
+            for matched in glob(str(repo_root / dir_pattern), recursive=True):
+                if Path(matched).is_dir():
+                    test_dirs.append(Path(matched))
+        plan.append(
+            KindScan(
+                kind="test",
+                directories=tuple(test_dirs),
+                patterns=tuple(
+                    _patterns_for_kind(typed.scanning.test.file_patterns, DEFAULT_TEST_PATTERNS)
+                ),
+                skip_dirs=tuple(test_skip_dirs),
+                skip_files=tuple(test_skip_files),
+            )
+        )
+    return plan
 
 
 # Implements: REQ-p00005-B, REQ-d00203-A+B+E
@@ -1028,6 +1118,9 @@ def build_graph(
     # 2. Resolve spec directories
     if spec_dirs is None:
         spec_dirs = get_spec_directories(None, config, repo_root)
+    _plan = scan_plan(
+        config, repo_root, spec_dirs=spec_dirs, scan_code=scan_code, scan_tests=scan_tests
+    )
 
     # 3. Create default resolver
     default_resolver = build_resolver(config)
@@ -1176,19 +1269,15 @@ def build_graph(
     if scan_code:
         scanned_code_files: set[str] = set()
 
-        code_dirs = get_code_directories(config, repo_root)
-        code_patterns = _patterns_for_kind(
-            typed_config.scanning.code.file_patterns, DEFAULT_CODE_PATTERNS
-        )
-        ignore_dirs, code_skip_files = scan_exclusions(config, "code")
+        (code_scan,) = (k for k in _plan if k.kind == "code")
 
-        for code_dir in code_dirs:
+        for code_dir in code_scan.directories:
             domain_file = DomainFile(
                 code_dir,
-                patterns=code_patterns,
+                patterns=list(code_scan.patterns),
                 recursive=True,
-                skip_dirs=ignore_dirs,
-                skip_files=code_skip_files,
+                skip_dirs=list(code_scan.skip_dirs),
+                skip_files=list(code_scan.skip_files),
                 repo_root=repo_root,
             )
             # One file is scanned once, however many declared directories
@@ -1215,8 +1304,10 @@ def build_graph(
         if testing_cfg.enabled:
             test_dirs = list(testing_cfg.directories)
             # Implements: REQ-d00212-Q+W
-            test_patterns = _patterns_for_kind(testing_cfg.file_patterns, DEFAULT_TEST_PATTERNS)
-            test_skip_dirs, test_skip_files = scan_exclusions(config, "test")
+            (test_scan,) = (k for k in _plan if k.kind == "test")
+            test_patterns = list(test_scan.patterns)
+            test_skip_dirs = list(test_scan.skip_dirs)
+            test_skip_files = list(test_scan.skip_files)
 
             # Run external prescan command if configured
             prescan_command = testing_cfg.prescan_command
@@ -1249,48 +1340,44 @@ def build_graph(
 
             scanned_test_files: set[str] = set()
             resolved_root = repo_root.resolve()
-            for dir_pattern in test_dirs:
-                # Resolve glob pattern to get directories
-                matched_dirs = glob(str(repo_root / dir_pattern), recursive=True)
-                for dir_path in matched_dirs:
-                    path = Path(dir_path)
-                    if path.is_dir():
-                        # Implements: REQ-d00212-Q+W, REQ-d00241-G
-                        # The ignore configuration governs the test kind too:
-                        # it was never asked here, so `[scanning.test]`'s own
-                        # exclusions decided nothing.
-                        domain_file = DomainFile(
-                            path,
-                            patterns=test_patterns,
-                            recursive=True,
-                            skip_dirs=test_skip_dirs,
-                            skip_files=test_skip_files,
-                            repo_root=repo_root,
-                        )
-                        for parsed_content in domain_file.dispatch(_dispatch_test):
-                            # Implements: REQ-d00128-A
-                            source_path = parsed_content.source_context.metadata.get("path")
-                            fn = None
-                            if source_path:
-                                fn = _get_or_create_file_node(Path(source_path), FileType.TEST)
-                                # Implements: REQ-d00284-B
-                                # The candidates a result's recorded name is
-                                # resolved among, gathered as they are scanned.
-                                try:
-                                    scanned_test_files.add(
-                                        str(Path(source_path).resolve().relative_to(resolved_root))
-                                    )
-                                except ValueError:
-                                    pass
-                            builder.add_parsed_content(parsed_content, file_node=fn)
+            for path in test_scan.directories:
+                # Implements: REQ-d00212-Q+W, REQ-d00241-G
+                # The ignore configuration governs the test kind too:
+                # it was never asked here, so `[scanning.test]`'s own
+                # exclusions decided nothing.
+                domain_file = DomainFile(
+                    path,
+                    patterns=test_patterns,
+                    recursive=True,
+                    skip_dirs=test_skip_dirs,
+                    skip_files=test_skip_files,
+                    repo_root=repo_root,
+                )
+                for parsed_content in domain_file.dispatch(_dispatch_test):
+                    # Implements: REQ-d00128-A
+                    source_path = parsed_content.source_context.metadata.get("path")
+                    fn = None
+                    if source_path:
+                        fn = _get_or_create_file_node(Path(source_path), FileType.TEST)
+                        # Implements: REQ-d00284-B
+                        # The candidates a result's recorded name is
+                        # resolved among, gathered as they are scanned.
+                        try:
+                            scanned_test_files.add(
+                                str(Path(source_path).resolve().relative_to(resolved_root))
+                            )
+                        except ValueError:
+                            pass
+                    builder.add_parsed_content(parsed_content, file_node=fn)
 
-                        _record_declined_files(builder, domain_file, "test", repo_root)
+                _record_declined_files(builder, domain_file, "test", repo_root)
 
             # 6b-target. Ingest results from [[scanning.test.targets]] via reporter registry.
             # Implements: REQ-d00128-A+H
             # RemainderParser is NOT registered for RESULT file types.
             # When targets is empty (the default) this loop is a no-op.
-            from elspais.utilities.fingerprint import target_folder
+            from elspais.graph.builder import UnreadArtifact
+            from elspais.utilities.fingerprint import run_in_progress, target_folder
 
             _captured = captured_results or {}
             from elspais.graph.parsers.results.registry import get_reporter as _get_reporter
@@ -1348,6 +1435,31 @@ def build_graph(
                 target_tests = frozenset(
                     f for f in scanned_test_files if not prefix or f.startswith(prefix)
                 )
+                # Implements: REQ-d00311-N
+                # A run in progress has emptied the area and writes into it
+                # while it runs, so nothing there is read until it ends.
+                # Output this invocation captured is read: it is a run that
+                # has ended.
+                _running = run_in_progress(target_folder(repo_root, typed_config, target.name))
+                if target.name not in _captured and _running is not None:
+                    builder.record_unread_artifact(
+                        UnreadArtifact(
+                            target=target.name,
+                            artifact="results",
+                            path=(
+                                _repo_relative(
+                                    target_folder(repo_root, typed_config, target.name)
+                                    / target.results,
+                                    repo_root,
+                                )
+                                if target.results
+                                else ""
+                            ),
+                            reason="running",
+                            started_at=str(_running.get("started_at", "")),
+                        )
+                    )
+                    continue
                 if target.name in _captured:
                     _ingest_target_results(
                         builder,
@@ -1388,55 +1500,44 @@ def build_graph(
                                     results_pattern=target.results,
                                     results_base=area,
                                 )
-                    else:
-                        # Implements: REQ-d00285-G
-                        # A results pattern matching nothing is a run that
-                        # left no report where the target says one is written
-                        # -- not a run whose report said nothing.
+                    elif target_spec.kind == "results":
+                        # Implements: REQ-d00283-R+S+T
+                        # The build records that no results are there. Whether
+                        # that is a fault depends on what the run executed and
+                        # expected, which a health check judges.
                         _log.debug("target %r: no files matched %r", target.name, target.results)
-                        if target_spec.kind == "results":
-                            builder.record_ingestion_fault(
-                                path=_repo_relative(area / target.results, repo_root),
-                                stage="results",
-                                cause=(
-                                    "no file matched this target's results pattern, so "
-                                    "no test results were read for it"
-                                ),
+                        builder.record_unread_artifact(
+                            UnreadArtifact(
                                 target=target.name,
+                                artifact="results",
+                                path=_repo_relative(area / target.results, repo_root),
+                                reason="absent",
                             )
+                        )
                 elif target_spec.kind == "results":
+                    # Implements: REQ-d00283-R+S+T
+                    # The same fact as a results pattern that matched nothing,
+                    # for a target whose reporter reads its runner's output.
                     _log.debug(
-                        "target %r: stdout reporter with no captured output and no results"
-                        " glob -- skipping",
+                        "target %r: stdout reporter with no captured output and no results glob",
                         target.name,
                     )
-                    # Implements: REQ-d00285-G
-                    # Only where this build actually ran the targets: with no
-                    # run in this invocation, a target whose reporter reads a
-                    # runner's stdout has nothing to have produced, and
-                    # recording that would report the tool's own mode of
-                    # invocation as a defect in the project.
-                    if captured_results is not None:
-                        builder.record_ingestion_fault(
-                            path="",
-                            stage="results",
-                            cause=(
-                                f"reporter {target.reporter!r} reads a runner's output, "
-                                f"the run produced none, and the target names no "
-                                f"results file"
-                            ),
-                            target=target.name,
+                    builder.record_unread_artifact(
+                        UnreadArtifact(
+                            target=target.name, artifact="results", path="", reason="absent"
                         )
+                    )
 
     graph = builder.build()
 
     # 6c-target. Per-target coverage ingestion: scan coverage files and annotate FILE nodes.
     # When targets is empty (the default), this loop is a no-op.
     if typed_config.scanning.test.targets:
+        from elspais.graph.builder import UnreadArtifact
         from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
         from elspais.graph.parsers.results.coverage_sqlite import CoverageSqliteParser
         from elspais.graph.parsers.results.lcov import LcovParser
-        from elspais.utilities.fingerprint import target_folder
+        from elspais.utilities.fingerprint import run_in_progress, target_folder
 
         lcov_parser = LcovParser()
         cov_json_parser = CoverageJsonParser()
@@ -1467,19 +1568,34 @@ def build_graph(
                 )
                 continue
             # Implements: REQ-d00312-A+C
-            cov_path = (
-                target_folder(repo_root, typed_config, target.name) / target.coverage
-            ).resolve()
+            cov_area = target_folder(repo_root, typed_config, target.name)
+            cov_path = (cov_area / target.coverage).resolve()
+            # Implements: REQ-d00311-N
+            _running = run_in_progress(cov_area)
+            if _running is not None and target.name not in (captured_results or {}):
+                graph.record_unread_artifact(
+                    UnreadArtifact(
+                        target=target.name,
+                        artifact="coverage",
+                        path=_repo_relative(cov_path, repo_root),
+                        reason="running",
+                        started_at=str(_running.get("started_at", "")),
+                    )
+                )
+                continue
             if not cov_path.is_file():
-                # Implements: REQ-d00285-G
+                # Implements: REQ-d00283-V
                 # No coverage file and coverage measuring nothing are the same
-                # zero once the numbers are aggregated.
+                # zero once the numbers are aggregated, so the absence is
+                # recorded for a health check to judge.
                 _log.debug("target %r: coverage file not found: %s", target.name, cov_path)
-                graph.record_ingestion_fault(
-                    path=_repo_relative(cov_path, repo_root),
-                    stage="coverage",
-                    cause="the coverage file this target names is not there",
-                    target=target.name,
+                graph.record_unread_artifact(
+                    UnreadArtifact(
+                        target=target.name,
+                        artifact="coverage",
+                        path=_repo_relative(cov_path, repo_root),
+                        reason="absent",
+                    )
                 )
                 continue
             if lcov_parser.can_parse(cov_path):

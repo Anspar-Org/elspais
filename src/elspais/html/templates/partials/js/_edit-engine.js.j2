@@ -2620,7 +2620,7 @@ function applyServerEvent(data) {
     if (!data) return;
     editState.lastAnnouncedTip = data.mutation_tip || '';
     if (data.stale) {
-        showStaleBanner('Spec files have changed on disk.');
+        showStaleBanner('Files this graph was built from have changed on disk.');
         return;
     }
     var tip = data.mutation_tip || '';

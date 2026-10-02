@@ -3721,7 +3721,7 @@ def _configured_test_targets(graph: FederatedGraph, config: dict | None) -> list
     return targets
 
 
-# Implements: REQ-d00249-D
+# Implements: REQ-d00294-E+F
 def check_test_results(graph: FederatedGraph, config: dict | None = None) -> HealthCheck:
     """Check the results ingested from JUnit/pytest output.
 
@@ -3731,8 +3731,9 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
 
     Returns one of:
     - ``tests.results`` severity=info, passed=True -- no patterns configured.
-    - ``tests.results`` severity=warning, passed=False -- patterns configured
-      but no matching files on disk. Flips exit code unless ``--lenient``.
+    - ``tests.results`` severity=info, passed=True -- targets configured and no
+      results ingested. ``tests.ingestion_fault`` and ``tests.not_run`` judge
+      each absent target.
     - ``tests.results`` severity=warning, passed=False -- some results failed.
     - ``tests.results`` severity=info, passed=True -- every result passed.
 
@@ -3759,17 +3760,20 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
                 category="tests",
                 severity="info",
             )
+        # Implements: REQ-d00283-R+S
+        # Which absent results are faults depends on what the run executed and
+        # expected. `tests.ingestion_fault` and `tests.not_run` report each
+        # target by that rule, so this check states the count and no verdict.
         repos = sorted({name for name, _ in targets if name})
         where = f" across {len(repos)} repositories" if len(repos) > 1 else ""
         return HealthCheck(
             name="tests.results",
-            passed=False,
+            passed=True,
             message=(
-                f"Test targets configured ({len(targets)}){where} but no results ingested. "
-                "Run `elspais checks --run-tests` or refresh manually."
+                f"No results ingested from the {len(targets)} configured test target(s){where}"
             ),
             category="tests",
-            severity=severity,
+            severity="info",
         )
 
     # Implements: REQ-d00294-E
@@ -3861,7 +3865,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
 
 
 # Implements: REQ-d00285-F
-# Implements: REQ-d00311-A+B+C+D+E+F+G
+# Implements: REQ-d00311-A+B+C+D+E+F+G+N
 def check_test_results_stale(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:
@@ -3889,7 +3893,9 @@ def check_test_results_stale(
         member = _validate_config(entry.config)
         for target in member.scanning.test.targets:
             verdict = judge(entry.repo_root, member, target.name)
-            if verdict.state == "absent":
+            # Implements: REQ-d00311-N
+            # A run in progress is reported by `tests.run_in_progress`.
+            if verdict.state in ("absent", "running"):
                 continue
             judged += 1
             if verdict.state == "fresh":
@@ -4629,20 +4635,113 @@ def check_unbound_citations(
     )
 
 
-# Implements: REQ-p00019-H, REQ-d00285-A, REQ-d00285-B
+# Implements: REQ-d00283-Q+R+S+T+U+V, REQ-d00311-N
+@dataclass(frozen=True)
+class _TargetOutcomes:
+    """The artifacts a build did not read, divided by what the run asked for.
+
+    ONE division, so `tests.ingestion_fault`, `tests.not_run` and
+    `tests.run_in_progress` cannot disagree about which of them reports a
+    target.
+
+    Attributes:
+        missing: ``(repo, artifact, cause)`` for each artifact a target the run
+            executed or expected did not leave, and for coverage a target with
+            results did not leave.
+        not_run: ``(repo, target, path)`` for each target with no results that
+            the run neither executed nor expected.
+        running: ``(repo, target, started_at)`` for each target whose run had
+            not recorded its end when the graph was built.
+    """
+
+    missing: tuple[tuple[str, Any, str], ...]
+    not_run: tuple[tuple[str, str, str], ...]
+    running: tuple[tuple[str, str, str], ...]
+
+
+def _target_outcomes(graph: FederatedGraph, expected_targets: tuple[str, ...]) -> _TargetOutcomes:
+    """Divide the artifacts the build did not read by what the run executed and expected.
+
+    Each expectation names its member's namespace with the target, so a target
+    another member declares is expected only where the run named it
+    (REQ-d00283-U+W). A member is its namespace; two members may share a
+    display name.
+    """
+    from elspais.commands._targets import qualified_target
+    from elspais.graph.parsers.results.registry import get_reporter
+
+    expected = set(expected_targets)
+    missing: list[tuple[str, Any, str]] = []
+    not_run: list[tuple[str, str, str]] = []
+    running: dict[tuple[str, str], str] = {}
+    for entry in graph.iter_repos():
+        unread = entry.graph.unread_artifacts()
+        for item in unread:
+            if item.reason == "running":
+                running.setdefault((entry.name, item.target), item.started_at)
+        absent = [item for item in unread if item.reason == "absent"]
+        results_absent = {item.target for item in absent if item.artifact == "results"}
+        # A target whose reporter reads results, and whose results were not
+        # recorded as absent, left results: it ran.
+        reads_results: set[str] = set()
+        for target in _validate_config(entry.config).scanning.test.targets:
+            try:
+                if target.reporter and get_reporter(target.reporter).kind == "results":
+                    reads_results.add(target.name)
+            except KeyError:
+                continue
+        for item in absent:
+            is_expected = qualified_target(entry.namespace, item.target) in expected
+            if item.artifact == "results":
+                if is_expected:
+                    missing.append((entry.name, item, _absent_results_cause(item)))
+                else:
+                    not_run.append((entry.name, item.target, item.path))
+                continue
+            ran = item.target in reads_results and item.target not in results_absent
+            if is_expected or ran:
+                missing.append(
+                    (entry.name, item, "the coverage file this target names is not there")
+                )
+            elif item.target not in results_absent:
+                not_run.append((entry.name, item.target, item.path))
+    return _TargetOutcomes(
+        missing=tuple(missing),
+        not_run=tuple(sorted(set(not_run))),
+        running=tuple(sorted((repo, target, at) for (repo, target), at in running.items())),
+    )
+
+
+def _absent_results_cause(item: Any) -> str:
+    """Return why no results were read for a target the run executed or expected."""
+    if item.path:
+        return (
+            "no file matched this target's results pattern, so no test results were "
+            "read for a target this run executed or expected"
+        )
+    return (
+        "the target's reporter reads its runner's output, no output was captured, and "
+        "the target names no results file, so no test results were read for a target "
+        "this run executed or expected"
+    )
+
+
+# Implements: REQ-p00019-H, REQ-d00285-A, REQ-d00285-B, REQ-d00283-R+T+V
 def check_ingestion_faults(
-    graph: FederatedGraph, config: dict[str, Any] | None = None
+    graph: FederatedGraph,
+    config: dict[str, Any] | None = None,
+    expected_targets: tuple[str, ...] = (),
 ) -> HealthCheck:
-    """Report every artifact ingestion could not read at all.
+    """Report every artifact ingestion could not read, and every artifact a run owed.
 
     A results file that will not parse, a coverage report in a format no
     reporter reads, a reporter name that matches none, a target whose working
-    directory leaves the repository, a results pattern that matched nothing, a
-    coverage file that is not there: each ends with a measurement the project
-    asked for absent from the graph. An artifact read only in PART is a
-    different condition with a different remedy, and is reported by
-    ``tests.partial_read`` (REQ-d00254-Q): this one is for artifacts that
-    yielded nothing, where somebody must fix something.
+    directory leaves the repository: each ends with a measurement the project
+    asked for absent from the graph. Results or coverage missing for a target
+    the run executed or expected is the same harm, so it is reported here too
+    (REQ-d00283-R+V). A target nobody ran is ``tests.not_run``. An artifact
+    read only in PART is a different condition with a different remedy, and
+    is reported by ``tests.partial_read`` (REQ-d00254-Q).
 
     Absence is the thing a reader cannot see. A requirement whose results
     never parsed reads exactly as one whose tests never ran, and the two call
@@ -4665,27 +4764,36 @@ def check_ingestion_faults(
     if severity == Severity.OFF:
         return skipped_check("tests.ingestion_fault", "Artifacts ingestion produced nothing from")
 
-    findings: list[HealthFinding] = []
+    rows: list[tuple[str, str, str, str, int | None, str]] = []
     for entry in graph.iter_repos():
-        for fault in sorted(
-            (f for f in entry.graph.ingestion_faults() if not f.partial),
-            key=lambda f: (f.stage, f.path, f.target or "", f.cause),
-        ):
-            # The artifact is named first, because it is what the reader
-            # goes to. Where the configuration named no file -- a reporter
-            # nothing matches, a target whose directory left the repository
-            # -- the target is the location there is, and saying so beats
-            # saying nothing.
-            where = fault.path or (f"target {fault.target}" if fault.target else "configuration")
-            under = f" (target {fault.target})" if fault.path and fault.target else ""
-            findings.append(
-                HealthFinding(
-                    message=f"{where}{under}: {fault.cause}",
-                    file_path=fault.path or None,
-                    line=fault.line,
-                    repo=entry.name,
-                )
+        for fault in entry.graph.ingestion_faults():
+            if fault.partial:
+                continue
+            rows.append(
+                (entry.name, fault.stage, fault.path, fault.target or "", fault.line, fault.cause)
             )
+    for repo, item, cause in _target_outcomes(graph, expected_targets).missing:
+        rows.append((repo, item.artifact, item.path, item.target, None, cause))
+
+    findings: list[HealthFinding] = []
+    for repo, _stage, path, target, line, cause in sorted(
+        rows, key=lambda r: (r[0], r[1], r[2], r[3], r[5])
+    ):
+        # The artifact is named first, because it is what the reader
+        # goes to. Where the configuration named no file -- a reporter
+        # nothing matches, a target whose directory left the repository
+        # -- the target is the location there is, and saying so beats
+        # saying nothing.
+        where = path or (f"target {target}" if target else "configuration")
+        under = f" (target {target})" if path and target else ""
+        findings.append(
+            HealthFinding(
+                message=f"{where}{under}: {cause}",
+                file_path=path or None,
+                line=line,
+                repo=repo,
+            )
+        )
 
     if not findings:
         return HealthCheck(
@@ -4699,6 +4807,99 @@ def check_ingestion_faults(
         name="tests.ingestion_fault",
         passed=False,
         message=f"{len(findings)} artifact(s) ingestion could not read",
+        category="tests",
+        severity=severity,
+        details={"count": len(findings)},
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00283-S+T+U
+def check_targets_not_run(
+    graph: FederatedGraph,
+    config: dict[str, Any] | None = None,
+    expected_targets: tuple[str, ...] = (),
+) -> HealthCheck:
+    """Report each test target with no results that the run neither executed nor expected.
+
+    The target has not run. That is a fact about the run, and naming each
+    target keeps it from reading as a target whose results were read.
+    """
+    severity = severity_for("tests.not_run", config)
+    if severity == Severity.OFF:
+        return skipped_check(
+            "tests.not_run",
+            "Test targets with no results that the run neither executed nor expected",
+        )
+    findings = [
+        HealthFinding(
+            message=(
+                f"target {target}: not run -- this run neither executed it nor "
+                f"named it as expected, and nothing it reports is on disk"
+            ),
+            file_path=path or None,
+            repo=repo,
+        )
+        for repo, target, path in _target_outcomes(graph, expected_targets).not_run
+    ]
+    if not findings:
+        return HealthCheck(
+            name="tests.not_run",
+            passed=True,
+            message="No test target is without results",
+            category="tests",
+            severity="info",
+        )
+    return HealthCheck(
+        name="tests.not_run",
+        passed=False,
+        message=f"{len(findings)} test target(s) not run",
+        category="tests",
+        severity=severity,
+        details={"count": len(findings)},
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00311-N+O
+def check_runs_in_progress(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report each test target whose run had started and not ended when the graph was built.
+
+    Nothing in that target's output area was read, so its results and its
+    coverage are neither judged nor counted. The finding states when the run
+    started and nothing more: a run that has not recorded its end may still be
+    going, or may have stopped, and the record cannot say which.
+    """
+    severity = severity_for("tests.run_in_progress", config)
+    if severity == Severity.OFF:
+        return skipped_check(
+            "tests.run_in_progress", "Test targets whose run started and has not recorded its end"
+        )
+    findings = [
+        HealthFinding(
+            message=(
+                f"target {target}: a run started at {started_at or 'an unrecorded time'} "
+                f"and has not recorded its end; its results and coverage are not read "
+                f"until it does"
+            ),
+            repo=repo,
+        )
+        for repo, target, started_at in _target_outcomes(graph, ()).running
+    ]
+    if not findings:
+        return HealthCheck(
+            name="tests.run_in_progress",
+            passed=True,
+            message="No test target has a run in progress",
+            category="tests",
+            severity="info",
+        )
+    return HealthCheck(
+        name="tests.run_in_progress",
+        passed=False,
+        message=f"{len(findings)} test target(s) have a run in progress",
         category="tests",
         severity=severity,
         details={"count": len(findings)},
@@ -4875,8 +5076,14 @@ def run_test_checks(
     graph: FederatedGraph,
     exclude_status: set[str] | None = None,
     config: dict | None = None,
+    expected_targets: tuple[str, ...] = (),
 ) -> list[HealthCheck]:
-    """Run all test file health checks."""
+    """Run all test file health checks.
+
+    *expected_targets* names the targets whose results the run executed or
+    expected, each qualified by the namespace of the member declaring it
+    (REQ-d00283-P+Q+W).
+    """
     from elspais.graph import NodeKind
 
     return [
@@ -4890,7 +5097,9 @@ def run_test_checks(
         check_test_results(graph, config=config),
         check_test_results_stale(graph, config),
         check_unmatched_results(graph, config),
-        check_ingestion_faults(graph, config),
+        check_ingestion_faults(graph, config, expected_targets),
+        check_targets_not_run(graph, config, expected_targets),
+        check_runs_in_progress(graph, config),
         check_partial_reads(graph, config),
         _check_status_references(
             graph, NodeKind.TEST, StatusRole.RETIRED, exclude_status=exclude_status, config=config
@@ -5051,7 +5260,12 @@ def compute_checks(
 
     # Test checks
     if run_all or tests_only:
-        for check in run_test_checks(graph, exclude_status=exclude_status, config=cov_config):
+        for check in run_test_checks(
+            graph,
+            exclude_status=exclude_status,
+            config=cov_config,
+            expected_targets=request.expected_targets,
+        ):
             report.add(check)
 
     # UAT checks
@@ -5128,6 +5342,26 @@ def run(args: argparse.Namespace) -> int:
     runner_failed = False
     skip_due_to_fail_fast = False
 
+    # Implements: REQ-d00283-P+Q
+    # The targets whose results this run expects: those named with --expect,
+    # resolved here at the edge, and every target the run executes.
+    from elspais.commands._scope import flag_values
+
+    expected: set[str] = set()
+    expect_named = list(flag_values(args, "expect"))
+    if expect_named:
+        from elspais.commands._targets import resolve_expected_targets
+
+        try:
+            expected = resolve_expected_targets(
+                get_config(getattr(args, "config", None), start_path=Path.cwd()),
+                expect_named,
+                find_git_root() or Path.cwd(),
+            )
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+
     if run_tests:
         config_path = getattr(args, "config", None)
         try:
@@ -5183,6 +5417,10 @@ def run(args: argparse.Namespace) -> int:
             cfg, repo_root, fail_fast=fail_fast, only=only
         )
         runner_failed = any(r.returncode != 0 for r in results)
+        # Implements: REQ-d00283-Q
+        from elspais.commands._targets import qualified_target
+
+        expected |= {qualified_target(cfg.project.namespace, t.name) for t in commandful}
         args._captured_results = captured_map
         # Implements: REQ-d00254-I
         args._fresh_targets = only
@@ -5206,6 +5444,7 @@ def run(args: argparse.Namespace) -> int:
         terms_only=bool(getattr(args, "terms_only", False)),
         lenient=bool(getattr(args, "lenient", False)),
         treat_active=flag_values(args, "treat_active"),
+        expected_targets=tuple(sorted(expected)),
     )
 
     spec_dir = getattr(args, "spec_dir", None)
@@ -5393,10 +5632,19 @@ def _format_graph_source(source: dict | None) -> str | None:
         started = source.get("started_at")
         if started:
             parts[0] += f", started {started}"
+        # Implements: REQ-d00313-C
+        predates = source.get("graph_predates") or []
+        if predates:
+            parts[0] += f", graph predates {len(predates)} changed file(s)"
         parts[0] += ")"
         return parts[0]
     if source_type == "viewer":
-        return f"viewer (port {source.get('port', '?')})"
+        line = f"viewer (port {source.get('port', '?')}"
+        # Implements: REQ-d00313-C
+        predates = source.get("graph_predates") or []
+        if predates:
+            line += f", graph predates {len(predates)} changed file(s)"
+        return line + ")"
     return source_type
 
 

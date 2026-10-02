@@ -2154,17 +2154,30 @@ class TestRunTestsFlag:
         shutil.copytree(project, scratch)
         marker_a = scratch / "a.txt"
         marker_b = scratch / "b.txt"
+        # Each target touches its marker and leaves real results, so a target
+        # the run executes is judged by what it left rather than faulted for
+        # leaving nothing (REQ-d00283-Q+R).
+        emitter = scratch / "emit_junit.py"
+        emitter.write_text(
+            "import os, pathlib, sys\n"
+            "pathlib.Path(sys.argv[1]).touch()\n"
+            "out = pathlib.Path(os.environ['ELSPAIS_TARGET_OUTPUT'])\n"
+            "(out / 'junit.xml').write_text(\n"
+            '    \'<?xml version="1.0" encoding="utf-8"?>\'\n'
+            '    \'<testsuites><testsuite name="t" tests="1">\'\n'
+            '    \'<testcase classname="tests.test_t" name="test_ok" time="0.01"/>\'\n'
+            "    '</testsuite></testsuites>'\n"
+            ")\n"
+        )
         raw = (scratch / ".elspais.toml").read_text()
         before_targets = raw.split("\n[[scanning.test.targets]]")[0]
-        targets_toml = (
+        targets_toml = "".join(
             "\n[[scanning.test.targets]]\n"
-            'name = "a"\n'
-            f'command = "touch {marker_a}"\n'
+            f'name = "{name}"\n'
+            f"command = 'python {emitter} {marker}'\n"
             'reporter = "junit"\n'
-            "\n[[scanning.test.targets]]\n"
-            'name = "b"\n'
-            f'command = "touch {marker_b}"\n'
-            'reporter = "junit"\n'
+            'results = "*.xml"\n'
+            for name, marker in (("a", marker_a), ("b", marker_b))
         )
         (scratch / ".elspais.toml").write_text(before_targets + targets_toml)
         out = run_elspais(
@@ -2392,3 +2405,90 @@ class TestStaleResultsWarning:
         assert stale_chk.get("passed") is False
         (finding,) = stale_chk.get("findings")
         assert "src/added.py" in finding["message"]
+
+
+# ===================================================================
+# Group 6: the daemon serving this project watches its test results
+# ===================================================================
+
+
+class TestServedGraphReadsResultsWrittenWhileServing:
+    """Results a run writes while the daemon serves the project reach the
+    daemon's answers, without restarting it. Runs against the shared project
+    so the daemon that answers is the one that was already serving.
+
+    Verifies: REQ-d00313-A, REQ-d00313-B, REQ-d00313-D, REQ-d00311-N, REQ-d00283-S
+    """
+
+    _SOURCE = re.compile(r"via daemon \(port (\d+)(?:, started ([^,)]+))?")
+
+    @classmethod
+    def _served_by(cls, project) -> tuple[str, str | None]:
+        """The port and start time of the daemon that answered."""
+        out = run_elspais("checks", "--tests", "--lenient", cwd=project)
+        found = cls._SOURCE.search(out.stdout or "")
+        assert found, f"answer did not come from a daemon: {out.stdout!r} {out.stderr!r}"
+        return found.group(1), found.group(2)
+
+    @staticmethod
+    def _checks(project) -> dict:
+        out = run_elspais("checks", "--tests", "--format", "json", "--lenient", cwd=project)
+        assert out.returncode == 0, f"stdout={out.stdout!r} stderr={out.stderr!r}"
+        data = json.loads(out.stdout)
+        return {c["name"]: c for c in data.get("checks", [])}
+
+    @staticmethod
+    def _names_stub(check: dict) -> bool:
+        return any("stub" in f.get("message", "") for f in check.get("findings") or [])
+
+    @classmethod
+    def _await(cls, project, condition, what: str) -> dict:
+        """Ask until *condition* holds; the daemon checks the disk at most once a second."""
+        import time
+
+        deadline = time.monotonic() + 15
+        checks = cls._checks(project)
+        while not condition(checks) and time.monotonic() < deadline:
+            time.sleep(0.5)
+            checks = cls._checks(project)
+        assert condition(checks), f"{what}: {json.dumps(checks, indent=1)}"
+        return checks
+
+    # Verifies: REQ-d00313-A+B+D, REQ-d00311-N, REQ-d00283-S
+    def test_results_written_while_serving_are_read_by_the_same_daemon(self, project):
+        serving = self._served_by(project)
+        before = self._checks(project)
+        assert self._names_stub(before["tests.not_run"]), before["tests.not_run"]
+
+        started = run_elspais("fingerprint", "start", "stub", cwd=project)
+        assert started.returncode == 0, started.stderr
+        (project / ".results" / "stub" / "test-results.json").write_text(
+            json.dumps(
+                {
+                    "created_at": "fixture",
+                    "summary": {"passed": 1, "failed": 0, "total": 1},
+                    "tests": [
+                        {"nodeid": "test_stub::test_ok", "outcome": "passed", "duration": 0.001}
+                    ],
+                }
+            )
+        )
+        running = self._await(
+            project,
+            lambda c: self._names_stub(c.get("tests.run_in_progress", {})),
+            "a started run was not reported as in progress",
+        )
+        assert running["tests.results"]["message"].startswith("No results ingested")
+
+        finished = run_elspais("fingerprint", "finish", "stub", cwd=project)
+        assert finished.returncode == 0, finished.stderr
+        after = self._await(
+            project,
+            lambda c: not c["tests.results"]["message"].startswith("No results ingested"),
+            "results written while the daemon served were never read",
+        )
+
+        assert not self._names_stub(after["tests.ingestion_fault"])
+        assert not self._names_stub(after["tests.not_run"])
+        assert not self._names_stub(after["tests.run_in_progress"])
+        assert self._served_by(project) == serving, "the daemon was replaced, not refreshed"

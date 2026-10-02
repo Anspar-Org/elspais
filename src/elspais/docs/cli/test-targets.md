@@ -112,6 +112,37 @@ Copy results from elsewhere with their folder, fingerprint included. An
 example is a baseline that another job produced. Such results read as fresh
 exactly while the inputs here match the inputs they ran against.
 
+### A run in progress
+
+A run is in progress from the time its fingerprint is written by `start` until
+`finish` records its end. While it is, its folder holds results and coverage
+that are partial or not yet written, so elspais reads nothing from that folder.
+`elspais checks` reports the target under `tests.run_in_progress` (info),
+stating when the run started, and judges neither its freshness nor whether its
+results are missing. A run that stopped without `finish` reads the same way:
+the record cannot tell a run that is still going from one that died, so the
+report states the start time and leaves that judgement to the reader.
+
+### Results written while a daemon is serving
+
+A daemon or viewer serving the graph watches every file the graph was built
+from, in every member of the federation: configuration, the files the spec,
+code and test scans select, and each target's folder -- its fingerprint, its
+results and its coverage. A file the scans skip or decline, such as a
+`__pycache__` file, is not watched, so writing one does not rebuild the graph;
+a new file the scans select is. Results written after the daemon started, by
+`elspais checks --run-tests` or by a recorder bracketing its run with
+`elspais fingerprint`, are read by the next command the daemon answers. While a
+run is in progress only its fingerprint is watched, so the coverage file a
+suite writes for minutes does not rebuild the graph on every request; `finish`
+rewrites the fingerprint, and that rebuilds it.
+
+A daemon does not rebuild while it holds unsaved changes. Until they are saved
+or discarded, every answer it gives says that its graph predates the files that
+changed and names them: the command line prints a warning, `/api/check-freshness`
+lists them in `stale_files`, and the MCP `get_graph_status` tool lists them in
+`graph_predates`.
+
 The word *fresh* in [Per-PR selectivity](#per-pr-selectivity) has another
 meaning. There it names the targets that the caller tells a reporting command
 ran in this invocation.
@@ -730,7 +761,8 @@ footnote appears — output is unchanged from before this flag existed. The
 `--targets` for *execution* under `--run-tests`; it does not render
 `(baseline)`/`—`/`*` — that provenance rendering is `summary`/`trace`'s job.
 Running `elspais checks --targets NAME ...` without `--run-tests` accepts
-the flag but has no execution or rendering effect. `checks --run-tests
+the flag but has no execution or rendering effect; to require results a
+run did not execute, name them with `--expect` (see below). `checks --run-tests
 --targets none` selects nothing to run. Consequently, the command refuses it.
 
 ### Worked example
@@ -752,6 +784,38 @@ every configured target runs and renders fresh:
 
 ```bash
 elspais checks --run-tests
+```
+
+### Expected results
+
+Which targets a run executes and which targets' results it requires are two
+questions. A tier can produce its results in an earlier job and leave them on
+disk for a later run to read; that later run names them with
+`elspais checks --expect NAME ...`, by target or group name, with or without
+`--run-tests`. Every target `--run-tests` executes is expected too.
+
+| Target | No results on disk | Results, no coverage it declares |
+|--------|--------------------|----------------------------------|
+| executed or expected | `tests.ingestion_fault` | `tests.ingestion_fault` |
+| neither | `tests.not_run` (info) | `tests.ingestion_fault` |
+
+The rule is the same for a target that reads a results file and for one that
+reads its runner's output. A target another federation member declares is
+expected only where the run names it, as `NAMESPACE:NAME`; the name is resolved
+by that member's own configuration, so a group of that member stands for that
+member's targets. An associate's targets the run does not name, with no
+results, read as not run. Because a target nobody ran is never a fault,
+`tests.ingestion_fault` is reported at `error`: what reaches it is evidence
+the run said would be there. A target or group name cannot contain `:`, which
+is what keeps the namespace apart from the name.
+
+```bash
+# The e2e job left .results/e2e behind; the merge run executes the unit tier
+# and requires both.
+elspais checks --run-tests --targets unit --expect e2e
+
+# The associate `lib` left its unit results too; require them.
+elspais checks --run-tests --targets unit --expect e2e lib:unit
 ```
 
 See also: `elspais docs checks`

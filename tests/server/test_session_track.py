@@ -223,7 +223,9 @@ async def test_REQ_o00079_A_open_change_stream_is_a_held_handle(canonical_federa
 
     async with anyio.create_task_group() as tg:
         tg.start_soon(_run, app, page)
-        await _until(lambda: tracker.held() == 1)
+        # The tracker counts the request when it enters the app. The response
+        # task sends the status afterwards, so the wait covers both.
+        await _until(lambda: tracker.held() == 1 and page.status is not None)
         assert page.status == 200
         page.disconnect()
         await _until(lambda: tracker.held() == 0)

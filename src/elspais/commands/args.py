@@ -89,8 +89,10 @@ class ChecksArgs:
 
     With --run-tests, executes each configured [[scanning.test.targets]]
     entry (that has a command) before evaluating checks so coverage runs
-    against fresh result files. Without the flag, checks still warns when
-    result files are missing or older than any scanned spec/code/test source.
+    against fresh result files. Missing results are a fault for a target the
+    run executed or named with --expect; a target neither executed nor
+    expected is reported as not run. Results whose inputs changed since they
+    ran are reported as stale.
     """
 
     spec_only: Annotated[bool, tyro.conf.arg(name="spec")] = False
@@ -185,6 +187,20 @@ class ChecksArgs:
     for no target is refused; `none` is refused here too: it selects nothing to
     run. A run naming nothing selects `default`, refused where that group holds
     no target."""
+
+    expect: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
+    """Require the results of these [[scanning.test.targets]], by target name or
+    by the name of a group they claim (space-separated, repeatable), without
+    executing them -- for results an earlier job left on disk. Missing results
+    of an expected target are a fault; a target neither executed nor expected
+    is reported as not run. Separate from --targets, which selects what
+    --run-tests executes; a target --run-tests executes is always expected.
+    `none` expects nothing beyond what runs. A bare name is a target or group
+    of this repository; NAMESPACE:NAME names a target or group another member
+    of the federation declares, resolved by that member's own configuration.
+    No other member's target is expected unless it is named."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""

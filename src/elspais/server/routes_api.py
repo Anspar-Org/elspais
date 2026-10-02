@@ -992,31 +992,23 @@ async def api_check_freshness(request: Request) -> JSONResponse:
     return JSONResponse(freshness_report(_st(request)))
 
 
-# Implements: REQ-p00006-A, REQ-o00079-C
+# Implements: REQ-p00006-A, REQ-o00079-C, REQ-d00313-C
 def freshness_report(state: Any) -> dict[str, Any]:
     """What a client needs to know about the graph it last read.
 
     The one computation behind ``/api/check-freshness`` and every
     announcement the change stream makes, so a page told of a change over
-    the stream and a client that asks read the same answer.
+    the stream and a client that asks read the same answer. ``stale_files``
+    names every file the served graph was built from that changed since:
+    specifications, code, tests, configuration and test-target results, in
+    every member of the federation.
     """
-    import os
+    from elspais.server.watch import graph_predates
 
-    build_time = state.build_time
-    spec_dirs = state.config.get("scanning", {}).get("spec", {}).get("directories", ["spec"])
-    working_dir = state.repo_root
-
-    stale_files: list[str] = []
-    for spec_dir in spec_dirs:
-        spec_path = Path(working_dir) / spec_dir
-        if not spec_path.is_dir():
-            continue
-        for md_file in spec_path.rglob("*.md"):
-            try:
-                if os.path.getmtime(md_file) > build_time:
-                    stale_files.append(str(md_file.relative_to(working_dir)))
-            except OSError:
-                continue
+    # Implements: REQ-d00313-A+C
+    # The files the served graph was built from that changed since it was
+    # built, from the one watch the rebuild decision also reads.
+    stale_files = graph_predates(state.shared)
 
     log = _get_mutation_log(state.graph, limit=1)
     has_pending = log.get("count", 0) > 0
@@ -1170,7 +1162,11 @@ def _request_or_400(build: Callable[[], Any]) -> Any | JSONResponse:
 
 
 def checks_request_from_params(params: Mapping[str, str]) -> ChecksRequest:
-    from elspais.commands._requests import ChecksRequest, treat_active_from_params
+    from elspais.commands._requests import (
+        ChecksRequest,
+        expected_targets_from_params,
+        treat_active_from_params,
+    )
 
     return ChecksRequest(
         spec_only=params.get("spec_only") == "true",
@@ -1179,6 +1175,7 @@ def checks_request_from_params(params: Mapping[str, str]) -> ChecksRequest:
         terms_only=params.get("terms_only") == "true",
         lenient=params.get("lenient") == "true",
         treat_active=treat_active_from_params(params),
+        expected_targets=expected_targets_from_params(params),
     )
 
 
@@ -1248,6 +1245,22 @@ EXPORT_REQUEST_BUILDERS: dict[str, Callable[[Mapping[str, str]], Any]] = {
 }
 
 
+# Implements: REQ-d00313-C
+def _served(state: Any, result: dict[str, Any]) -> JSONResponse:
+    """Answer a command with *result*, disclosing the files the served graph predates.
+
+    The process does not rebuild over unsaved changes, so a graph can stay
+    behind the files on disk while it answers. The answer says so itself,
+    naming each file, rather than leaving the reader to ask elsewhere.
+    """
+    from elspais.server.watch import graph_predates
+
+    predates = graph_predates(state.shared)
+    if predates:
+        result = {**result, "graph_predates": predates}
+    return JSONResponse(result)
+
+
 async def api_run_checks(request: Request) -> JSONResponse:
     """GET /api/run/checks - Run health checks and return structured report."""
     from elspais.commands.health import compute_checks
@@ -1255,7 +1268,7 @@ async def api_run_checks(request: Request) -> JSONResponse:
     state = _st(request)
     checks_request = checks_request_from_params(dict(request.query_params))
     result = compute_checks(state.graph, state.config, checks_request)
-    return JSONResponse(result)
+    return _served(state, result)
 
 
 # Implements: REQ-d00282-F
@@ -1268,7 +1281,7 @@ async def api_run_summary(request: Request) -> JSONResponse:
     built = _request_or_400(lambda: summary_request_from_params(params))
     if isinstance(built, JSONResponse):
         return built
-    return JSONResponse(compute_summary(state.graph, state.config, built))
+    return _served(state, compute_summary(state.graph, state.config, built))
 
 
 async def api_run_gaps(request: Request) -> JSONResponse:
@@ -1280,7 +1293,7 @@ async def api_run_gaps(request: Request) -> JSONResponse:
     built = _request_or_400(lambda: gaps_request_from_params(params))
     if isinstance(built, JSONResponse):
         return built
-    return JSONResponse(compute_gaps(state.graph, state.config, built))
+    return _served(state, compute_gaps(state.graph, state.config, built))
 
 
 async def api_run_analysis(request: Request) -> JSONResponse:
@@ -1292,7 +1305,7 @@ async def api_run_analysis(request: Request) -> JSONResponse:
     built = _request_or_400(lambda: analysis_request_from_params(params))
     if isinstance(built, JSONResponse):
         return built
-    return JSONResponse(compute_analysis(state.graph, state.config, built))
+    return _served(state, compute_analysis(state.graph, state.config, built))
 
 
 # Implements: REQ-d00282-F
@@ -1305,7 +1318,7 @@ async def api_run_trace(request: Request) -> JSONResponse:
     built = _request_or_400(lambda: trace_request_from_params(params))
     if isinstance(built, JSONResponse):
         return built
-    return JSONResponse(compute_trace(state.graph, state.config, built))
+    return _served(state, compute_trace(state.graph, state.config, built))
 
 
 # Implements: REQ-d00298-A, REQ-d00298-C, REQ-d00298-D, REQ-d00298-E, REQ-d00298-F
