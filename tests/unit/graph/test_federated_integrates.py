@@ -113,12 +113,16 @@ class TestIntegratesWiresEdge:
 
 
 class TestIntegratesUnresolved:
-    """Validates REQ-d00252-E: unresolved targets are soft or hard per claim."""
+    """Validates REQ-d00252-E: an unresolved target is classed like any reference."""
 
-    # Verifies: REQ-d00252-E
-    def test_REQ_d00252_E_unclaimed_id_format_is_soft(self, tmp_path):
+    # Verifies: REQ-d00252-E, REQ-d00272-C
+    def test_REQ_d00252_E_unclaimed_id_format_is_unknown_namespace(self, tmp_path):
         """No federated member claims the ``EVS`` namespace, so the target is
-        recorded as presumed foreign and the build still completes."""
+        reported as naming an unknown namespace -- not marked foreign -- and
+        the build still completes. How serious that is stays the project's
+        severity choice."""
+        from elspais.graph.reference_faults import FaultClass
+
         app_root = _copy_full(tmp_path)
         spec = app_root / "spec" / "dev-app.md"
         spec.write_text(
@@ -128,10 +132,15 @@ class TestIntegratesUnresolved:
         brs = fed.repo_for("APP-d00001").graph._unresolved_references
         matches = [b for b in brs if b.target_id == "EVS-d00007"]
         assert len(matches) == 1
-        assert matches[0].presumed_foreign is True
+        assert matches[0].fault_class is FaultClass.UNKNOWN_NAMESPACE
+        assert matches[0].presumed_foreign is False
 
-    # Verifies: REQ-d00252-E
-    def test_REQ_d00252_E_configured_but_missing_is_hard(self, tmp_path):
+    # Verifies: REQ-d00252-E, REQ-d00272-A
+    def test_REQ_d00252_E_configured_but_missing_is_unknown_requirement(self, tmp_path):
+        """The ``LIB`` member's grammar claims the target, so the namespace is
+        known and only the requirement is missing."""
+        from elspais.graph.reference_faults import FaultClass
+
         app_root = _copy_full(tmp_path)
         spec = app_root / "spec" / "dev-app.md"
         spec.write_text(
@@ -141,6 +150,7 @@ class TestIntegratesUnresolved:
         brs = fed.repo_for("APP-d00001").graph._unresolved_references
         matches = [b for b in brs if b.target_id == "LIB-d99999"]
         assert len(matches) == 1
+        assert matches[0].fault_class is FaultClass.UNKNOWN_REQUIREMENT
         assert matches[0].presumed_foreign is False
 
 
@@ -295,7 +305,7 @@ class TestIntegratesHierarchyLevels:
         assert len(integ_parents) == 1
         assert integ_parents[0].source.id == "APP-d00001"
 
-        res = check_spec_hierarchy_levels(lib_entry.graph, lib_entry.config)
+        res = check_spec_hierarchy_levels(fed, lib_entry.config, namespace=lib_entry.namespace)
         violations = res.details.get("violations", [])
         offending = [
             v for v in violations if v["child"] == "LIB-p00001" and v["parent"] == "APP-d00001"
@@ -436,7 +446,7 @@ class TestIntegratesHierarchyLevels:
         )
         entry = fed.repo_for("REPO-p00001")
 
-        res = check_spec_hierarchy_levels(entry.graph, entry.config)
+        res = check_spec_hierarchy_levels(fed, entry.config, namespace=entry.namespace)
         violations = res.details.get("violations", [])
         offending = [
             v for v in violations if v["child"] == "REPO-p00001" and v["parent"] == "REPO-d00001"

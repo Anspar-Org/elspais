@@ -11,24 +11,25 @@ from pathlib import Path
 from elspais.commands.fix_cmd import _fix_terms, _select_terms_dictionary
 
 
+# Verifies: REQ-d00253-C
 def test_select_terms_federated_returns_merged(canonical_federated_graph):
     g = canonical_federated_graph
     federated = _select_terms_dictionary(g, include_associates=True)
     assert federated is g.terms
 
 
+# Verifies: REQ-d00253-C, REQ-d00200-I
 def test_select_terms_primary_only_returns_root_terms_with_federated_references(
     canonical_federated_graph,
 ):
     """False branch must offer the root repo's own terms, carrying scanned references.
 
-    Which terms appear is the root repo's question: its own ``TraceGraph``
-    dictionary records what that repo defines, and a term only an associate
+    Which terms appear is the root repo's question: a term only an associate
     defines has no place in a primary-only index. What is KNOWN about each of
     those terms is the federation's question: the scan runs across every repo
     and establishes its findings on the federated dictionary's own entries, so
-    that is where a term's references live. A primary-only index therefore
-    reads the term list from one and each entry from the other.
+    a primary-only index lists the federation's entries for the terms the
+    root defines.
 
     Assertions:
       1. primary is NOT the merged federated dict     -- fails if False branch returns g.terms
@@ -193,3 +194,38 @@ def test_primary_term_index_drops_transitive_member_namespace(tmp_path, monkeypa
     assert "**MID:**" not in index, "a directly declared associate's namespace must be dropped"
     assert "**LEAF:**" not in index, "a transitively federated repo's namespace must be dropped"
     assert "LEAF-d00001" not in index
+
+
+# Verifies: REQ-d00253-C, REQ-d00200-I, REQ-d00239-A
+def test_REQ_d00253_C_primary_only_carries_references_from_other_members(tmp_path):
+    """The primary-only dictionary holds the terms the root defines, each with
+    the references every member made to it, and no term another member defines.
+    """
+    from elspais.config import get_config
+    from elspais.graph.factory import build_graph
+
+    assoc = _make_repo(tmp_path, "assoc", "ASC", "ASC-d00001")
+    (assoc / "spec" / "glossary.md").write_text(
+        "# Glossary\n\nGadget\n: A part only the associate defines.\n\n"
+        "## ASC-d00002: Uses gadget\n\n**Status**: active\n\n"
+        "The system shall provide a *gadget*.\n\n*End*\n",
+        encoding="utf-8",
+    )
+    root = _make_repo(
+        tmp_path,
+        "root",
+        "REQ",
+        "REQ-d00001",
+        defines_term=True,
+        associates={"assoc": ("../assoc", "ASC")},
+    )
+    fed = build_graph(config=get_config(None, root), repo_root=root)
+
+    federated = _select_terms_dictionary(fed, include_associates=True)
+    assert federated.lookup("gadget") is not None, "the associate's term is federated"
+
+    primary = _select_terms_dictionary(fed, include_associates=False)
+    assert {e.term.lower() for e in primary.iter_all()} == {"widget"}
+    widget = primary.lookup("widget")
+    assert {r.namespace for r in widget.references} == {"REQ", "ASC"}
+    assert len(widget.references) == len(federated.lookup("widget").references)

@@ -38,6 +38,16 @@ def _write(repo: Path, rel: str, body: str) -> None:
     full.write_text(textwrap.dedent(body).strip() + "\n")
 
 
+def _bare_member(repo: Path) -> RepoEntry:
+    """Build one repository's graph held by no federation yet."""
+    from elspais.config import get_config
+    from elspais.graph.factory import _build_repository
+
+    config = get_config(None, repo)
+    graph, _ = _build_repository(config, repo, scan_code=False, scan_tests=False)
+    return RepoEntry(name=repo.name, graph=graph, config=config, repo_root=repo)
+
+
 def _git_init(repo: Path) -> None:
     """Initialise a git repo at ``repo`` so capture_git_info doesn't warn."""
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
@@ -446,23 +456,13 @@ class TestCrossRepoCloneShape:
         )
         _git_init(tenant)
 
-        # Build each repo as a federation-of-one (no associates wiring),
-        # then stitch them into a single FederatedGraph.  This bypasses the
-        # automatic build_graph associate resolution so the same library
-        # graph object is shared across both satisfier repos.
-        lib_fed = build_graph(
-            repo_root=library, scan_code=False, scan_tests=False, _build_associates=False
-        )
-        app_fed = build_graph(
-            repo_root=app, scan_code=False, scan_tests=False, _build_associates=False
-        )
-        tenant_fed = build_graph(
-            repo_root=tenant, scan_code=False, scan_tests=False, _build_associates=False
-        )
-
-        lib_entry = next(iter(lib_fed.iter_repos()))
-        app_entry = next(iter(app_fed.iter_repos()))
-        tenant_entry = next(iter(tenant_fed.iter_repos()))
+        # Build each repo bare (no associates wiring), then stitch them into
+        # a single FederatedGraph.  This bypasses the automatic build_graph
+        # associate resolution so the same library graph object is shared
+        # across both satisfier repos.
+        lib_entry = _bare_member(library)
+        app_entry = _bare_member(app)
+        tenant_entry = _bare_member(tenant)
 
         fed2 = FederatedGraph(
             repos=[
@@ -636,6 +636,111 @@ class TestClaimForResolverProbe:
 # ---------------------------------------------------------------------------
 
 
+def _satisfies_cycle_federation(tmp_path: Path) -> FederatedGraph:
+    """Two repos whose templates satisfy each other, federated by hand."""
+    a = tmp_path / "repo_a"
+    b = tmp_path / "repo_b"
+    a.mkdir()
+    b.mkdir()
+    _write(
+        a,
+        ".elspais.toml",
+        """
+        version = 5
+        [project]
+        name = "repo_a"
+        namespace = "AAA"
+        [levels.prd]
+        rank = 1
+        letter = "p"
+        implements = ["prd"]
+        [scanning.spec]
+        directories = ["spec"]
+        [scanning.code]
+        directories = []
+        [scanning.test]
+        enabled = false
+        directories = []
+        """,
+    )
+    _write(
+        a,
+        "spec/prd.md",
+        """
+        # AAA-p00001: A Template
+
+        **Level**: PRD | **Status**: Approved | **Template**
+        **Satisfies**: BBB-p00001
+
+        ### Assertions
+
+        A. SHALL be A.
+
+        *End* *A Template*
+        """,
+    )
+    _write(
+        b,
+        ".elspais.toml",
+        """
+        version = 5
+        [project]
+        name = "repo_b"
+        namespace = "BBB"
+        [levels.prd]
+        rank = 1
+        letter = "p"
+        implements = ["prd"]
+        [scanning.spec]
+        directories = ["spec"]
+        [scanning.code]
+        directories = []
+        [scanning.test]
+        enabled = false
+        directories = []
+        """,
+    )
+    _write(
+        b,
+        "spec/prd.md",
+        """
+        # BBB-p00001: B Template
+
+        **Level**: PRD | **Status**: Approved | **Template**
+        **Satisfies**: AAA-p00001
+
+        ### Assertions
+
+        A. SHALL be B.
+
+        *End* *B Template*
+        """,
+    )
+    _git_init(a)
+    _git_init(b)
+
+    a_entry = _bare_member(a)
+    b_entry = _bare_member(b)
+
+    fed = FederatedGraph(
+        repos=[
+            RepoEntry(
+                name="repo_a",
+                graph=a_entry.graph,
+                config=a_entry.config,
+                repo_root=a,
+            ),
+            RepoEntry(
+                name="repo_b",
+                graph=b_entry.graph,
+                config=b_entry.config,
+                repo_root=b,
+            ),
+        ],
+    )
+    return fed
+
+
 # Verifies: REQ-p00014-J
 class TestFederatedDiagnostics:
     """Phase 4: typed diagnostics for federation-level Satisfies failures.
@@ -797,115 +902,13 @@ class TestFederatedDiagnostics:
         re-enters a node already on the path, a typed ReferenceFault with
         ``cycle`` in its diagnostic is emitted (one per build).
 
-        We assemble the federation by hand from per-repo
-        federation-of-one builds (``_build_associates=False``), bypassing
-        the on-disk transitive-associates guard so we can construct a
-        topology that the standard CLI path would refuse to load. This is
-        the same pattern as
+        ``_satisfies_cycle_federation`` assembles the federation by hand
+        from bare per-repo builds, bypassing the on-disk
+        transitive-associates guard so we can construct a topology that the
+        standard CLI path would refuse to load. This is the same pattern as
         ``test_two_satisfiers_get_independent_clones``.
         """
-        a = tmp_path / "repo_a"
-        b = tmp_path / "repo_b"
-        a.mkdir()
-        b.mkdir()
-        _write(
-            a,
-            ".elspais.toml",
-            """
-            version = 5
-            [project]
-            name = "repo_a"
-            namespace = "AAA"
-            [levels.prd]
-            rank = 1
-            letter = "p"
-            implements = ["prd"]
-            [scanning.spec]
-            directories = ["spec"]
-            [scanning.code]
-            directories = []
-            [scanning.test]
-            enabled = false
-            directories = []
-            """,
-        )
-        _write(
-            a,
-            "spec/prd.md",
-            """
-            # AAA-p00001: A Template
-
-            **Level**: PRD | **Status**: Approved | **Template**
-            **Satisfies**: BBB-p00001
-
-            ### Assertions
-
-            A. SHALL be A.
-
-            *End* *A Template*
-            """,
-        )
-        _write(
-            b,
-            ".elspais.toml",
-            """
-            version = 5
-            [project]
-            name = "repo_b"
-            namespace = "BBB"
-            [levels.prd]
-            rank = 1
-            letter = "p"
-            implements = ["prd"]
-            [scanning.spec]
-            directories = ["spec"]
-            [scanning.code]
-            directories = []
-            [scanning.test]
-            enabled = false
-            directories = []
-            """,
-        )
-        _write(
-            b,
-            "spec/prd.md",
-            """
-            # BBB-p00001: B Template
-
-            **Level**: PRD | **Status**: Approved | **Template**
-            **Satisfies**: AAA-p00001
-
-            ### Assertions
-
-            A. SHALL be B.
-
-            *End* *B Template*
-            """,
-        )
-        _git_init(a)
-        _git_init(b)
-
-        a_fed = build_graph(repo_root=a, scan_code=False, scan_tests=False, _build_associates=False)
-        b_fed = build_graph(repo_root=b, scan_code=False, scan_tests=False, _build_associates=False)
-        a_entry = next(iter(a_fed.iter_repos()))
-        b_entry = next(iter(b_fed.iter_repos()))
-
-        fed = FederatedGraph(
-            repos=[
-                RepoEntry(
-                    name="repo_a",
-                    graph=a_entry.graph,
-                    config=a_entry.config,
-                    repo_root=a,
-                ),
-                RepoEntry(
-                    name="repo_b",
-                    graph=b_entry.graph,
-                    config=b_entry.config,
-                    repo_root=b,
-                ),
-            ],
-        )
+        fed = _satisfies_cycle_federation(tmp_path)
 
         brs = list(fed.unresolved_references())
         cycle_brs = [br for br in brs if "cycle" in br.diagnostic.lower()]
@@ -913,6 +916,24 @@ class TestFederatedDiagnostics:
             f"expected a cycle diagnostic, got: "
             f"{[(b.source_id, b.target_id, b.diagnostic) for b in brs]}"
         )
+
+    # Verifies: REQ-d00204-K, REQ-d00200-J
+    def test_REQ_d00204_K_satisfies_cycle_reported_once_across_check_runs(
+        self, tmp_path: Path
+    ) -> None:
+        """Running the health checks again does not repeat the cycle fault."""
+        from elspais.commands.health import run_spec_checks
+
+        fed = _satisfies_cycle_federation(tmp_path)
+        config = next(iter(fed.iter_repos())).config
+
+        def cycles() -> list:
+            return [br for br in fed.unresolved_references() if "cycle" in br.diagnostic.lower()]
+
+        assert len(cycles()) == 1
+        for _ in range(3):
+            run_spec_checks(fed, config)
+            assert len(cycles()) == 1
 
 
 # ---------------------------------------------------------------------------

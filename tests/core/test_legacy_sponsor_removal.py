@@ -61,8 +61,8 @@ class TestKeptFunctionalityIntact:
 
         assert callable(discover_associate_from_path)
 
-    # Verifies: REQ-p00005-F
-    def test_REQ_p00005_F_get_associate_spec_directories_importable(self):
+    # Verifies: REQ-d00202-D
+    def test_REQ_d00202_D_get_associate_spec_directories_importable(self):
         from elspais.associates import get_associate_spec_directories
 
         assert callable(get_associate_spec_directories)

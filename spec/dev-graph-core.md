@@ -480,6 +480,8 @@ Q. <RETIRED> admitted trailing content that opened a comment. A reference list i
 
 R. <RETIRED> reported trailing content that opened neither a reference nor a comment. Content that is not part of the list is reported under E.
 
+S. An item SHALL be reported under the same class whichever *Traceability* keyword introduced it.
+
 ### Rationale
 
 Classes are only as useful as the rule that assigns them. Reading either reaches a stage or it does not, so a class is a fact about the item rather than a judgement of it, and the report says what was reached and stops there.
@@ -502,6 +504,7 @@ This requirement concretizes the REQ-p00019 anti-pattern template for reference 
 
 ### Changelog
 
+- 2026-10-01 | 58971daa | - | Michael Lewis (<michael@anspar.org>) | S added: the class an item reaches does not depend on the keyword that introduced it
 - 2026-08-25 | 9f1a7a6a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-25 | e46b563e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-25 | 27a0182e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -516,7 +519,7 @@ This requirement concretizes the REQ-p00019 anti-pattern template for reference 
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: record how each REQ-p00019 class is answered for this subsystem — concretized, bound through the instance, or left visibly uncovered with its reason
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: the rule assigning reference failure classes — the space and namespace tests, minimal relaxation, and reading within an item without binding from it
 
-*End* *Reference Fault Diagnosis* | **Hash**: 9f1a7a6a
+*End* *Reference Fault Diagnosis* | **Hash**: 58971daa
 ---
 
 ## REQ-d00287: Reading a Reference

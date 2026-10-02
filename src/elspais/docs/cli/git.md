@@ -5,15 +5,15 @@
 elspais automatically detects the git repository root and operates
 from there, so it works identically from any subdirectory.
 
-For **git worktrees**, elspais also detects the canonical (main)
-repository root. This ensures cross-repo paths (e.g. `../sibling`)
-resolve from the main repo, not the worktree location.
+A git worktree is a working tree like any other: its own root is the
+repository root, and a relative associate path (e.g. `../sibling`)
+resolves against it, not against the clone the worktree was made from.
 
-Use `-v` to see detected roots:
+Use `-v` to see the root and where each associate path resolved:
 
   $ elspais -v checks
   Working from repository root: /home/dev/worktrees/feature-x
-  Canonical root (main repo): /home/dev/my-project
+  Associate sibling: '../sibling' resolved against /home/dev/worktrees/feature-x -> /home/dev/worktrees/sibling
 
 ## Detecting Changes
 

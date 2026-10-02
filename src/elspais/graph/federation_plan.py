@@ -115,6 +115,11 @@ class PlannedRepo:
             repository inclusive, along the chain that first reached it.
         locally_overridden: Whether a machine-local overlay took part in
             assembling this repository's configuration.
+        declared_path: The path the declaration reaching this repository
+            wrote, as written. None for the root.
+        resolved_from: The root of the declaring repository's working tree,
+            against which a relative ``declared_path`` was resolved. None
+            for the root.
     """
 
     name: str
@@ -124,6 +129,8 @@ class PlannedRepo:
     error: str | None
     declaration_path: tuple[str, ...]
     locally_overridden: bool = False
+    declared_path: str | None = None
+    resolved_from: Path | None = None
 
 
 def _normalize_origin(url: str) -> str:
@@ -299,14 +306,30 @@ def plan_federation(
         resolved[identity] = entry
 
     def _fault(
-        name: str, assoc_path: Path, origin: str | None, reason: str, chain: tuple[str, ...]
+        name: str,
+        assoc_path: Path,
+        origin: str | None,
+        reason: str,
+        chain: tuple[str, ...],
+        declared: tuple[str, Path],
     ) -> None:
         # Implements: REQ-d00202-M, REQ-d00202-N
         # A fault is carried in the plan but placed nowhere: it claims no
         # namespace, and it does not stand for its directory, so a second
         # declaration pointing at that same path is reported in its own
         # right rather than converging on the first and going unfixed.
-        planned.append(PlannedRepo(name, assoc_path, None, origin, reason, chain))
+        planned.append(
+            PlannedRepo(
+                name,
+                assoc_path,
+                None,
+                origin,
+                reason,
+                chain,
+                declared_path=declared[0],
+                resolved_from=declared[1],
+            )
+        )
 
     def _visit(
         parent_config: dict[str, Any],
@@ -316,8 +339,12 @@ def plan_federation(
     ) -> None:
         associates = declared_associates(parent_config, parent_root)
         for name, info in associates.items():
+            # Implements: REQ-d00202-O
+            # A relative path is read against the working tree of the
+            # repository that declares it.
             assoc_path = Path(parent_root, info["path"]).resolve()
             child_path = declaration_path + (name,)
+            declared = (str(info["path"]), parent_root)
 
             # Implements: REQ-d00202-E
             # A cycle is the same directory reached again up the chain in
@@ -358,7 +385,14 @@ def plan_federation(
             # is not there instead of the declaration that points nowhere.
             if not assoc_path.exists():
                 # Nothing is there to have an origin.
-                _fault(name, assoc_path, None, f"Path does not exist: {assoc_path}", child_path)
+                _fault(
+                    name,
+                    assoc_path,
+                    None,
+                    f"Path does not exist: {assoc_path}",
+                    child_path,
+                    declared,
+                )
                 continue
 
             # Implements: REQ-d00203-B
@@ -374,6 +408,7 @@ def plan_federation(
                     repository_origin(assoc_path),
                     f"No .elspais.toml at {assoc_path}",
                     child_path,
+                    declared,
                 )
                 continue
             try:
@@ -385,6 +420,7 @@ def plan_federation(
                     repository_origin(assoc_path),
                     f"Configuration at {assoc_path} could not be loaded: {exc}",
                     child_path,
+                    declared,
                 )
                 continue
 
@@ -425,6 +461,8 @@ def plan_federation(
                     None,
                     child_path,
                     uses_local_overlay(assoc_path),
+                    declared_path=declared[0],
+                    resolved_from=parent_root,
                 ),
                 identity,
             )

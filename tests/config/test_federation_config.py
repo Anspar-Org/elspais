@@ -1093,3 +1093,178 @@ class TestLocalOverlayDisclosure:
 
         assert check.passed is True, [f.message for f in check.findings]
         assert "locally overridden" not in check.message, check.message
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Relative associate paths resolve against the declaring working tree
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _git_worktree(repo: Path, worktree: Path) -> Path:
+    """Add a git worktree of ``repo`` at ``worktree`` on a new branch."""
+    import subprocess
+
+    worktree.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@test.com",
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "wt",
+            str(worktree),
+        ],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+    return worktree
+
+
+class TestRelativePathResolution:
+    """Validates REQ-d00202-O+P: where a declaration's path was resolved from."""
+
+    # Verifies: REQ-d00202-O+P
+    def test_REQ_d00202_P_plan_records_declared_path_and_declaring_root(self, tmp_path):
+        """Direct and transitive members carry the path as written and the
+        root of the repository whose declaration reached them."""
+        root = _chain(tmp_path, ["top", "mid", "leaf"])
+
+        by_name = {entry.name: entry for entry in _plan(root)}
+
+        assert by_name["top"].declared_path is None
+        assert by_name["top"].resolved_from is None
+        assert by_name["mid"].declared_path == "../mid"
+        assert by_name["mid"].resolved_from.resolve() == root.resolve()
+        assert by_name["leaf"].declared_path == "../leaf"
+        assert by_name["leaf"].resolved_from.resolve() == (tmp_path / "mid").resolve()
+
+    @pytest.mark.parametrize("kind", ["missing", "unparseable", "invalid"])
+    # Verifies: REQ-d00202-O+P, REQ-d00202-M
+    def test_REQ_d00202_P_unreadable_declaration_carries_its_resolution(self, tmp_path, kind):
+        root, bad_path = _federation_with_bad_associate(tmp_path, kind)
+
+        bad = next(entry for entry in _plan(root) if entry.name == "bad")
+
+        assert bad.config is None
+        assert bad.declared_path == f"../{bad_path.name}"
+        assert bad.resolved_from.resolve() == root.resolve()
+
+    # Verifies: REQ-d00202-O, REQ-d00202-M
+    def test_REQ_d00202_O_worktree_resolves_against_itself_not_the_clone(self, tmp_path):
+        """A path valid only from the clone is unreadable from a worktree that
+        sits at another depth, and the fault names the path it reached."""
+        from elspais.config import get_config
+        from elspais.graph.federation_plan import plan_federation
+
+        make_repo(tmp_path / "libs", "lib")
+        clone = make_repo(tmp_path / "code", "app", associates={"lib": "../../libs/lib"})
+        worktree = _git_worktree(clone, tmp_path / "wt" / "deep" / "app-wt")
+
+        from_clone = {e.name: e for e in plan_federation(get_config(None, clone), clone)}
+        assert from_clone["lib"].error is None
+        assert from_clone["lib"].repo_root == (tmp_path / "libs" / "lib").resolve()
+
+        from_worktree = {e.name: e for e in plan_federation(get_config(None, worktree), worktree)}
+        lib = from_worktree["lib"]
+        reached = (worktree / "../../libs/lib").resolve()
+        assert lib.config is None
+        assert lib.repo_root == reached
+        assert str(reached) in lib.error
+        assert lib.resolved_from.resolve() == worktree.resolve()
+
+    # Verifies: REQ-d00202-O
+    def test_REQ_d00202_O_worktree_path_valid_from_worktree_resolves(self, tmp_path):
+        """A path the worktree's own configuration declares, valid from where
+        the worktree sits, joins the associate when building from it."""
+        from elspais.config import get_config
+        from elspais.graph.factory import build_graph
+
+        make_repo(tmp_path / "libs", "lib")
+        clone = make_repo(tmp_path / "code", "app", associates={"lib": "../../libs/lib"})
+        worktree = _git_worktree(clone, tmp_path / "wt" / "deep" / "app-wt")
+        (worktree / ".elspais.local.toml").write_text(
+            '[associates.lib]\npath = "../../../libs/lib"\nnamespace = "LIB"\n'
+        )
+
+        fed = build_graph(
+            config=get_config(None, worktree),
+            repo_root=worktree,
+            scan_code=False,
+            scan_tests=False,
+        )
+
+        members = {e.namespace: e for e in fed.iter_repos()}
+        assert set(members) == {"APP", "LIB"}
+        assert members["LIB"].repo_root.resolve() == (tmp_path / "libs" / "lib").resolve()
+        assert fed.find_by_id("LIB-d00001") is not None
+
+
+class TestAssociateResolutionIsVisible:
+    """Validates REQ-d00202-P: the resolution frame is reported, not inferred."""
+
+    # Verifies: REQ-d00202-P
+    def test_REQ_d00202_P_verbose_names_each_declaration_resolution(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        from elspais.cli import main
+
+        lib = make_repo(tmp_path, "lib")
+        app = make_repo(tmp_path, "app", associates={"lib": "../lib"})
+        monkeypatch.chdir(app)
+
+        assert main(["-v", "version"]) == 0
+
+        err = capsys.readouterr().err
+        expected = f"Associate lib: '../lib' resolved against {app.resolve()} -> {lib.resolve()}"
+        assert expected in err, err
+
+    # Verifies: REQ-d00202-P, REQ-d00202-M
+    def test_REQ_d00202_P_verbose_names_an_unreadable_declaration_and_why(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        from elspais.cli import main
+
+        app = make_repo(tmp_path, "app", associates={"lib": "../absent"})
+        monkeypatch.chdir(app)
+
+        assert main(["-v", "version"]) == 0
+
+        err = capsys.readouterr().err
+        reached = (tmp_path / "absent").resolve()
+        line = f"Associate lib: '../absent' resolved against {app.resolve()} -> {reached} ("
+        assert line in err, err
+        assert "does not exist" in err
+
+    # Verifies: REQ-d00202-P
+    def test_REQ_d00202_P_quiet_without_verbose(self, tmp_path, monkeypatch, capsys):
+        """Without -v the resolution lines are not printed."""
+        from elspais.cli import main
+
+        make_repo(tmp_path, "lib")
+        app = make_repo(tmp_path, "app", associates={"lib": "../lib"})
+        monkeypatch.chdir(app)
+
+        assert main(["version"]) == 0
+
+        assert "resolved against" not in capsys.readouterr().err
+
+    # Verifies: REQ-d00202-O+P
+    def test_REQ_d00202_P_associate_list_names_the_resolution_root(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        from elspais.cli import main
+
+        make_repo(tmp_path, "lib")
+        app = make_repo(tmp_path, "app", associates={"lib": "../lib"})
+        monkeypatch.chdir(app)
+
+        assert main(["associate", "--list"]) == 0
+
+        out = capsys.readouterr().out
+        assert f"Relative paths resolve against: {app.resolve()}" in out, out

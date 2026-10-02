@@ -7,7 +7,7 @@ Checks the elspais setup on this machine:
 - Configuration file exists and is valid
 - Required settings are present
 - Spec directories exist
-- Worktree detection and canonical root
+- Git root of the working tree
 - Associate path resolution
 - Local config overrides
 """

@@ -560,7 +560,7 @@ Assertion G keeps the process an accelerator rather than a dependency: a tool wh
 
 How a client reaches such a process, and what it may rely on when it does, is REQ-o00076's subject rather than this one's. That includes the two ways a process comes into existence: this requirement fixes that a process exists and is exclusive, not who asked for it.
 
-REQ-p00005-F obliges associate paths to resolve from the canonical, non-worktree repository root so cross-repository paths stay valid when working from a worktree. That governs where a path points, not what a process serves. The two roots answer different questions, and keying a serving process on the canonical root would collapse the isolation assertion C requires.
+A relative associate path resolves against the working tree that declares it (REQ-d00202-O). That governs where a path points, not what a process serves, and keying a serving process on anything wider than the working tree would collapse the isolation assertion C requires.
 
 ### Changelog
 

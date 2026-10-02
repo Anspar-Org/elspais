@@ -38,19 +38,20 @@ D. The tool SHALL discover an associated repository's identity — including its
 
 E. The tool SHALL report a clear configuration error when a configured associate path does not exist or does not contain a valid associated-repository configuration.
 
-F. The tool SHALL resolve relative associate paths from the canonical (non-worktree) repository root so that cross-repository paths remain valid when working from git worktrees.
+F. <RETIRED> resolved relative associate paths from the canonical repository root. A relative path is resolved against the working tree of the repository declaring it (REQ-d00202-O), so a worktree reads its declarations the way any other checkout does.
 
 G. If the identifier-pattern configurations of two repositories in a federation can each claim the same identifier, then the tool SHALL report the pattern conflict when the federation is built.
 
 ## Changelog
 
+- 2026-10-01 | f7cd689c | - | Michael Lewis (<michael@anspar.org>) | F retired: a relative associate path resolves against the declaring working tree (REQ-d00202-O)
 - 2026-08-02 | de05471c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-47: federated pattern compatibility — two repos whose patterns can claim the same identifier is a build-time configuration conflict (G)
 - 2026-07-31 | 3a6f18bd | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-03-30 | c3303546 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-03-30 | f935e564 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Multi-Repository Requirements* | **Hash**: de05471c
+*End* *Multi-Repository Requirements* | **Hash**: f7cd689c
 ---
 
 # REQ-p00081: Org-Wide Requirement Visibility

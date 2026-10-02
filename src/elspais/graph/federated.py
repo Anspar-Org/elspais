@@ -9,6 +9,8 @@ delegating to the appropriate sub-graph based on node ownership.
 from __future__ import annotations
 
 import copy
+import dataclasses
+import weakref
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,7 +44,39 @@ if TYPE_CHECKING:
     )
     from elspais.graph.comments import CommentThread
     from elspais.graph.terms import TermDictionary
-    from elspais.utilities.patterns import IdResolver
+    from elspais.utilities.patterns import IdResolver, ParsedId
+
+
+# Implements: REQ-d00200-J
+# Every member graph a federation holds, keyed by object identity. A
+# federation's passes write into the members they resolve -- edges, settled
+# faults, cloned subtrees -- so a member held twice would have that work done
+# twice. The table holds its graphs weakly, so a graph no federation keeps
+# alive leaves it.
+_HELD_MEMBERS: weakref.WeakValueDictionary[int, TraceGraph] = weakref.WeakValueDictionary()
+
+
+# Implements: REQ-d00200-K
+def _hold_members(repos: list[RepoEntry]) -> None:
+    """Record each member graph as held, refusing one another federation holds."""
+    for r in repos:
+        if _HELD_MEMBERS.get(id(r.graph)) is r.graph:
+            raise FederationError(
+                f"The graph of '{r.namespace}' is already held by a federation. "
+                f"A member graph belongs to the one federation that resolved it; "
+                f"reach it through that federation (iter_repos(), or a read "
+                f"restricted to its namespace) instead of building another."
+            )
+    for r in repos:
+        _HELD_MEMBERS[id(r.graph)] = r.graph
+
+
+# Implements: REQ-d00272-A
+# The classes a declaring member's own reading can stop at for a target that
+# another member's grammar reads further.
+_CLASSES_A_MEMBER_CAN_REACH_FURTHER = frozenset(
+    {FaultClass.MALFORMED, FaultClass.UNKNOWN_NAMESPACE, FaultClass.UNKNOWN_REQUIREMENT}
+)
 
 
 # Implements: REQ-d00201-B
@@ -323,6 +357,8 @@ class FederatedGraph:
                 f"member. A member is identified by the namespace it declares; "
                 f"this federation holds {sorted(self._repos)}."
             )
+        # Implements: REQ-d00200-J+K
+        _hold_members(repos)
         # Build ownership map: node_id -> owning repo's namespace
         self._ownership = self._build_ownership(repos)
         # Cache of per-repo IdResolvers, populated on first access by
@@ -374,20 +410,14 @@ class FederatedGraph:
         Every entry is COPIED. A repo's own dictionary holds the terms that
         repo defines; the federated dictionary holds what this federation
         makes of them, and ``_scan_terms`` then writes each entry's
-        references. Sharing the entry objects would put a federation's
-        findings inside state its members keep, so wrapping a live graph in
-        a second ``FederatedGraph`` -- which ``elspais checks`` does per repo
-        to obtain a per-repo config view -- would leave its scan behind in
-        the first federation's numbers.
+        references. The copies keep a federation's findings out of state its
+        members keep.
 
-        The copy is stamped with this federation's name for the owning repo.
-        An associate's TraceGraph reaches us carrying a ``repo_name`` from
-        its inner ``FederatedGraph.from_single`` build (stamped from
-        ``[project].name``); the host calls that same repo something else in
-        ``[associates]`` (e.g. the dict key ``hht_diary``), and only the
+        The copy is stamped with the host-side name of the owning repo
+        (``RepoEntry.name``): an associate's own ``[project].name`` can
+        differ from the key the host declares it under, and only the
         host-side name resolves via ``iter_repos()`` for
-        ``/api/file-content``, so the term card's ``repo_name`` must match
-        ``RepoEntry.name``.
+        ``/api/file-content``, so the term card's ``repo_name`` must match.
         """
         from dataclasses import replace
 
@@ -402,7 +432,7 @@ class FederatedGraph:
             self._term_duplicates.extend(merged.merge(owned))
         self._terms = merged
 
-    # Implements: REQ-d00239-A, REQ-d00239-B
+    # Implements: REQ-d00239-A+B+C+D
     def _scan_terms(self) -> None:
         """Run term scanner across all repos using the merged dictionary.
 
@@ -410,10 +440,9 @@ class FederatedGraph:
         ``scan_graph`` appends, and every repo is scanned against the one
         merged dictionary so that a term defined in one repo collects the
         references made to it in another, so the set is only whole once
-        every repo has been walked. What makes appending safe is that
-        ``_merge_terms`` supplies entries whose reference lists start empty
-        and belong to this graph alone, so a second federation built over
-        the same repo writes its findings somewhere else.
+        every repo has been walked. Each entry's list is cleared before the
+        first repo is walked, and ``_merge_terms`` supplies entries that
+        belong to this graph alone.
 
         Uses per-repo config for markup_styles and exclude_files so that
         cross-repo term references resolve correctly.  Always canonicalizes
@@ -429,6 +458,11 @@ class FederatedGraph:
         """
         from elspais.graph.term_scanner import scan_graph
 
+        # Implements: REQ-d00239-C
+        # The set is established by this scan, so whatever an earlier scan
+        # left is cleared before any repo is walked.
+        for term_entry in self._terms.iter_all():
+            term_entry.references.clear()
         self._unmatched_emphasis: list[dict] = []
         for entry in self._repos.values():
             config = entry.config
@@ -782,13 +816,18 @@ class FederatedGraph:
         return graph.find_by_id(node_id)
 
     # Implements: REQ-d00200-E
-    def iter_roots(self, kind: NodeKind | None = None) -> Iterator[GraphNode]:
+    def iter_roots(
+        self, kind: NodeKind | None = None, namespace: str | None = None
+    ) -> Iterator[GraphNode]:
         """Iterate root nodes from all repos.
 
         # Strategy: aggregate
+
+        ``namespace`` restricts the answer to the roots that member holds.
         """
-        for _name, graph in self._live_graphs():
-            yield from graph.iter_roots(kind)
+        for name, graph in self._live_graphs():
+            if namespace is None or name == namespace:
+                yield from graph.iter_roots(kind)
 
     # Implements: REQ-d00200-E
     def all_nodes(self) -> Iterator[GraphNode]:
@@ -809,13 +848,18 @@ class FederatedGraph:
             yield from graph.all_connected_nodes(order)
 
     # Implements: REQ-d00200-E
-    def nodes_by_kind(self, kind: NodeKind) -> Iterator[GraphNode]:
+    def nodes_by_kind(self, kind: NodeKind, namespace: str | None = None) -> Iterator[GraphNode]:
         """Get all nodes of a specific kind across all repos.
 
         # Strategy: aggregate
+
+        ``namespace`` restricts the answer to the nodes that member holds.
+        A question about one member is put to the federation holding it, so
+        the member's references still resolve against every member.
         """
-        for _name, graph in self._live_graphs():
-            yield from graph.nodes_by_kind(kind)
+        for name, graph in self._live_graphs():
+            if namespace is None or name == namespace:
+                yield from graph.nodes_by_kind(kind)
 
     # Implements: REQ-d00200-E
     def iter_by_kind(self, kind: NodeKind) -> Iterator[GraphNode]:
@@ -942,14 +986,17 @@ class FederatedGraph:
         return result
 
     # Implements: REQ-d00274-G
-    def unbound_citations(self) -> list[UnboundCitation]:
+    def unbound_citations(self, namespace: str | None = None) -> list[UnboundCitation]:
         """Every citation attaching to no test, across all repos.
 
         # Strategy: aggregate
+
+        ``namespace`` restricts the answer to that member's citations.
         """
         result: list[UnboundCitation] = []
-        for _name, graph in self._live_graphs():
-            result.extend(graph.unbound_citations())
+        for name, graph in self._live_graphs():
+            if namespace is None or name == namespace:
+                result.extend(graph.unbound_citations())
         return result
 
     # Implements: REQ-d00272-O
@@ -964,25 +1011,31 @@ class FederatedGraph:
         return result
 
     # Implements: REQ-d00285-G
-    def ingestion_faults(self) -> list[IngestionFault]:
+    def ingestion_faults(self, namespace: str | None = None) -> list[IngestionFault]:
         """Every artifact ingestion produced no content from, across all repos.
 
         # Strategy: aggregate
+
+        ``namespace`` restricts the answer to that member's artifacts.
         """
         result: list[IngestionFault] = []
-        for _name, graph in self._live_graphs():
-            result.extend(graph.ingestion_faults())
+        for name, graph in self._live_graphs():
+            if namespace is None or name == namespace:
+                result.extend(graph.ingestion_faults())
         return result
 
     # Implements: REQ-d00283-R+S+T+V, REQ-d00311-N
-    def unread_artifacts(self) -> list[UnreadArtifact]:
+    def unread_artifacts(self, namespace: str | None = None) -> list[UnreadArtifact]:
         """Every artifact a test target names that a build did not read, across all repos.
 
         # Strategy: aggregate
+
+        ``namespace`` restricts the answer to that member's artifacts.
         """
         result: list[UnreadArtifact] = []
-        for _name, graph in self._live_graphs():
-            result.extend(graph.unread_artifacts())
+        for name, graph in self._live_graphs():
+            if namespace is None or name == namespace:
+                result.extend(graph.unread_artifacts())
         return result
 
     # Implements: REQ-d00200-E
@@ -1026,13 +1079,16 @@ class FederatedGraph:
             yield from graph.iter_unlinked(kind)
 
     # Implements: REQ-d00200-E
-    def iter_structural_orphans(self) -> Iterator[GraphNode]:
+    def iter_structural_orphans(self, namespace: str | None = None) -> Iterator[GraphNode]:
         """Iterate structurally orphaned nodes across all repos.
 
         # Strategy: aggregate
+
+        ``namespace`` restricts the answer to the nodes that member holds.
         """
-        for _name, graph in self._live_graphs():
-            yield from graph.iter_structural_orphans()
+        for name, graph in self._live_graphs():
+            if namespace is None or name == namespace:
+                yield from graph.iter_structural_orphans()
 
     # Implements: REQ-d00200-E
     def deleted_nodes(self) -> list[GraphNode]:
@@ -1667,7 +1723,11 @@ class FederatedGraph:
 
         # Strategy: special — deep copy all sub-graphs independently
         """
-        return copy.deepcopy(self)
+        clone = copy.deepcopy(self)
+        # Implements: REQ-d00200-J
+        # The copies are new graphs, held by the copy alone.
+        _hold_members(list(clone._repos.values()))
+        return clone
 
     # ─────────────────────────────────────────────────────────────────────────
     # Cross-Graph Edge Wiring
@@ -1893,13 +1953,22 @@ class FederatedGraph:
                             )
                         replacements[i] = faults
                         continue
-                if target_repo_name and target_repo_name != source_entry.namespace:
+                if target_repo_name is None:
+                    # Implements: REQ-d00272-A+S
+                    reached = self._class_reached(br, source_entry.namespace)
+                    if reached is not br:
+                        replacements[i] = [reached]
+                    continue
+                if target_repo_name != source_entry.namespace:
                     target_entry = self._repos[target_repo_name]
                     # Implements: REQ-p00017-H
                     # The owning repository holds this id, but a retired
-                    # *Assertion* is not a target: the reference keeps the
-                    # classification it arrived with and stays reported.
+                    # *Assertion* is not a target: the reference stays
+                    # reported, as naming an *Assertion* the owner lacks.
                     if not self._holds_live_target(target_entry.graph, br.target_id):
+                        reached = self._class_reached(br, source_entry.namespace)
+                        if reached is not br:
+                            replacements[i] = [reached]
                         continue
                     # Implements: REQ-p00014-G
                     # The validation matrix judges a target owned by an
@@ -2013,28 +2082,87 @@ class FederatedGraph:
             self._resolver_cache[entry.namespace] = cached
         return cached
 
+    # Implements: REQ-d00272-A+C+S
+    def _grammar_claimant(
+        self, target_id: str, excluding: str | None = None
+    ) -> tuple[RepoEntry, ParsedId] | None:
+        """Return the member whose identifier grammar accepts ``target_id``.
+
+        Returns ``(entry, parsed)`` or ``None``. ``excluding`` names a member
+        not to ask -- the declaring member, whose own builder has already
+        classified every identifier its grammar accepts. Pattern
+        compatibility (REQ-p00005-G) leaves at most one claimant.
+        """
+        for entry in self._repos.values():
+            if entry.namespace == excluding:
+                continue
+            parsed = self._resolver_for(entry).parse(target_id)
+            if parsed is not None:
+                return entry, parsed
+        return None
+
     # Implements: REQ-p00014-H, REQ-p00014-N
     def _claim_for(self, target_id: str) -> tuple[str, str] | None:
-        """Ask each associated repo's resolver whether it claims ``target_id``.
+        """Return ``(repo_name, canonical_id)`` for the member holding ``target_id``.
 
-        Returns ``(repo_name, canonical_id_in_that_repo)`` or ``None``.
-
-        Probes in declaration order; first claimant wins.  Cold-path
-        fallback for when exact-match ``_ownership`` lookup misses
+        The claimant is the member whose grammar accepts the id; the claim
+        stands only where that member holds the canonical spelling.
+        Cold-path fallback for when exact-match ``_ownership`` lookup misses
         (e.g.  ID written in a non-canonical form like uppercase or
         different padding).
         """
-        for entry in self._repos.values():
-            resolver = self._resolver_for(entry)
-            if not resolver.is_local_id(target_id):
-                continue
-            parsed = resolver.parse(target_id)
-            if parsed is None:
-                continue
-            canonical = resolver.render_canonical(parsed)
-            if canonical in entry.graph._index:
-                return entry.namespace, canonical
+        claim = self._grammar_claimant(target_id)
+        if claim is None:
+            return None
+        entry, parsed = claim
+        canonical = self._resolver_for(entry).render_canonical(parsed)
+        if canonical in entry.graph._index:
+            return entry.namespace, canonical
         return None
+
+    # Implements: REQ-d00272-A+C+S, REQ-d00252-E
+    def _class_reached(self, br: ReferenceFault, declaring: str) -> ReferenceFault:
+        """Return ``br`` under the class reading it reached across the federation.
+
+        A member's builder reads only its own grammar, so a reference into
+        another member reaches it as malformed, as naming an unknown
+        namespace, or as naming an unknown requirement. Where another
+        member's grammar accepts the whole target, reading got as far as
+        that member: the namespace is known and the requirement, or the
+        *Assertion* of a requirement that exists, is what is missing. The
+        class follows from the target alone, so every keyword reaches the
+        same one. A fault of a later class, one no other member's grammar
+        accepts, and one whose target the claimant holds live are returned
+        unchanged.
+        """
+        if br.fault_class not in _CLASSES_A_MEMBER_CAN_REACH_FURTHER:
+            return br
+        claim = self._grammar_claimant(br.target_id, excluding=declaring)
+        if claim is None:
+            return br
+        entry, parsed = claim
+        resolver = self._resolver_for(entry)
+        if self._holds_live_target(entry.graph, resolver.render_canonical(parsed)):
+            return br
+        fault_class = FaultClass.UNKNOWN_REQUIREMENT
+        missing = "requirement"
+        if parsed.assertions:
+            base = resolver.parse(parsed.fqn)
+            if base is not None and resolver.render_canonical(base) in entry.graph._index:
+                fault_class = FaultClass.UNKNOWN_ASSERTION
+                missing = "Assertion"
+        return dataclasses.replace(
+            br,
+            fault_class=fault_class,
+            # The codes described the item under the declaring member's
+            # grammar, which is not the grammar that read it.
+            codes=(),
+            presumed_foreign=False,
+            diagnostic=(
+                f"repository '{entry.namespace}' owns {br.target_id} in the identifier "
+                f"grammar it declares, but holds no such {missing}."
+            ),
+        )
 
     # Implements: REQ-p00014-H
     def _instantiate_cross_repo_satisfies(self) -> None:
@@ -2084,6 +2212,13 @@ class FederatedGraph:
                     # not an identifier cannot name a repository, declared or
                     # otherwise, so describing it as one names a cause the
                     # input does not determine.
+                    # Implements: REQ-d00272-A+S
+                    # A member's grammar claims the target, so the member is
+                    # declared and present and only the identifier is absent.
+                    reached = self._class_reached(br, source_entry.namespace)
+                    if reached is not br:
+                        source_entry.graph._unresolved_references[i] = reached
+                        continue
                     if reader_refused((br.fault_class, br.codes)):
                         continue
                     # Missing-associate: no associated repo claims this
@@ -2210,13 +2345,13 @@ class FederatedGraph:
 
         External-only enforcement: if the target resolves to the SAME repo as
         the declaring requirement, record a broken reference instead
-        (REQ-d00252-C). If the target can't be resolved, record a hard broken
-        reference when a configured associate claims the target's ID format but
-        lacks the ID, or a soft ``presumed_foreign`` broken reference when no
-        associate claims the format (REQ-d00252-E).
+        (REQ-d00252-C). A target that cannot be resolved is recorded under
+        the class every reference reaches (REQ-d00252-E): an unknown
+        requirement or *Assertion* where a member's grammar claims it, an
+        unknown namespace where none does.
 
         Runs unconditionally (even single-repo), so an unresolved Integrates in
-        a one-repo build still surfaces a presumed-foreign broken reference.
+        a one-repo build is still reported.
         """
         from elspais.graph.GraphNode import NodeKind
 
@@ -2298,25 +2433,6 @@ class FederatedGraph:
                     EdgeKind.INTEGRATES,
                     target_graph=source_entry.graph,
                 )
-                # Drop the consumer-side INTEGRATES broken reference left by an
-                # earlier integrates pass that could not resolve the target
-                # locally. The per-repo GraphBuilder only stores integrates_refs;
-                # the broken ref is recorded by _wire_one_integrates itself when
-                # this consumer repo was built as a federation-of-one (the target
-                # lives in a sibling associate not present at that point, so it
-                # was recorded as presumed-foreign). Now, in the full federation,
-                # the target resolves and we wire the correct edge --
-                # _wire_cross_graph_edges deliberately skips INTEGRATES, so clear
-                # the stale broken ref here or it surfaces as a false positive.
-                source_entry.graph._unresolved_references = [
-                    br
-                    for br in source_entry.graph._unresolved_references
-                    if not (
-                        br.source_id == source_id
-                        and br.target_id == target_id
-                        and br.edge_kind == EdgeKind.INTEGRATES.value
-                    )
-                ]
                 return
 
         # Same-repo target: external-only violation (REQ-d00252-C).
@@ -2335,31 +2451,21 @@ class FederatedGraph:
             )
             return
 
-        # Unresolved: hard if a configured associate claims the ID format but
-        # lacks the ID, soft presumed-foreign otherwise (REQ-d00252-E).
-        claimed = False
-        for entry in self._repos.values():
-            if entry.namespace == source_entry.namespace:
-                continue
-            if self._resolver_for(entry).is_local_id(target_id):
-                claimed = True
-                break
+        # Implements: REQ-d00252-E, REQ-d00272-S
+        # Unresolved: classed by the rule every reference meets.
         source_entry.graph._unresolved_references.append(
-            ReferenceFault(
-                source_id=source_id,
-                target_id=target_id,
-                edge_kind=EdgeKind.INTEGRATES.value,
-                fault_class=(
-                    FaultClass.UNKNOWN_REQUIREMENT if claimed else FaultClass.UNKNOWN_NAMESPACE
+            self._class_reached(
+                ReferenceFault(
+                    source_id=source_id,
+                    target_id=target_id,
+                    edge_kind=EdgeKind.INTEGRATES.value,
+                    fault_class=FaultClass.UNKNOWN_NAMESPACE,
+                    diagnostic=(
+                        f"{source_id} integrates {target_id}: no configured associate "
+                        f"claims this ID."
+                    ),
                 ),
-                presumed_foreign=not claimed,
-                diagnostic=(
-                    f"{source_id} integrates {target_id}: a configured associate "
-                    f"claims this ID format but is missing the ID."
-                    if claimed
-                    else f"{source_id} integrates {target_id}: no configured associate "
-                    f"claims this ID."
-                ),
+                source_entry.namespace,
             )
         )
 

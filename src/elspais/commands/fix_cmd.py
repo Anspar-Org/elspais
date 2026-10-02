@@ -798,38 +798,28 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
     _regenerate_index(graph, all_spec_dirs, args, include_associates=include_assoc)
 
 
-# Implements: REQ-d00253-C
+# Implements: REQ-d00253-C, REQ-d00200-I
 def _select_terms_dictionary(graph, include_associates: bool):
     """Return the TermDictionary to render for glossary/term-index.
 
     Federated returns the merged dictionary across all repos. Primary-only
-    (default) returns the root repo's own terms, selected BY the root's own
-    dictionary but taken FROM the merged one: a repo's dictionary records
-    what that repo defines, while the references to a term are established
-    by the federated scan and live on the federation's own entries. Reading
-    the definitions from one and the entry from the other is what lets a
-    primary-only artifact list the root's terms with the references made to
-    them. Implements: REQ-d00253-C
+    (default) returns the terms the root repository defines, taken from the
+    federation's own dictionary: the references to a term are established
+    by the federated scan and live only on the federation's entries, so a
+    primary-only artifact still lists the references made to the root's
+    terms from every member.
     """
     from elspais.graph.terms import TermDictionary
 
-    federated = graph.terms if hasattr(graph, "terms") else None
-    if include_associates or federated is None:
+    federated = graph.terms
+    if include_associates:
         return federated
-    root = getattr(graph, "root_repo_name", None)
-    if root is None or not hasattr(graph, "iter_repos"):
-        return federated
-    for entry in graph.iter_repos():
-        if entry.name != root:
-            continue
-        own = getattr(entry.graph, "terms", None)
-        if own is None:
-            return federated
-        selected = TermDictionary()
-        for defined in own.iter_all():
-            selected.add(federated.lookup(defined.term) or defined)
-        return selected
-    return federated
+    root = graph.root_repo_namespace
+    selected = TermDictionary()
+    for entry in federated.iter_all():
+        if entry.namespace == root:
+            selected.add(entry)
+    return selected
 
 
 # Implements: REQ-d00253-C

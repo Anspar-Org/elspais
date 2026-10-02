@@ -47,7 +47,7 @@ def spec_directory_name(config: dict) -> str:
     return directories[0] if directories else "spec"
 
 
-# Implements: REQ-p00005-F, REQ-d00202-D
+# Implements: REQ-d00202-D+O
 def get_associate_spec_directories(
     config: dict[str, Any],
     base_path: Path | None = None,

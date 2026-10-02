@@ -860,7 +860,7 @@ Diagnose your elspais environment and installation.
 
   Configuration file exists, syntax, required fields
   ID pattern placeholders and spec directory paths
-  Git worktree detection and canonical root
+  Git repository root
   Associate paths and configurations
   Local configuration (.elspais.local.toml)
 
@@ -889,7 +889,7 @@ Manage links to associated repositories.
   Links are stored in `.elspais.local.toml` (gitignored, not shared)
   Validates target has a `.elspais.toml` that loads under the standard schema (no `project.type` marker required)
   Accepts a path or a name (searches sibling directories)
-  Worktree-safe: resolves relative paths from canonical repo root
+  Relative paths resolve from this working tree's root (a worktree's own root)
 
 ## link
 

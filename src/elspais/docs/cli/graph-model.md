@@ -384,10 +384,12 @@ associate repo; a same-repo target is an unresolved reference (external-only).
 
 During federation an INTEGRATES edge is wired from this requirement to the
 library requirement, so the consumer counts as implemented and inherits the
-library requirement's implemented/verified coverage. Unresolved targets
-split into a hard error (a configured associate claims the ID format but
-lacks the ID) and a soft, non-failing case (no associate claims the format,
-treated as presumed-foreign).
+library requirement's implemented/verified coverage. An unresolved target
+is reported under the class any unresolved reference reaches, whichever
+keyword cited it: `unknown_requirement` (or `unknown_assertion`) where a
+federated repository's identifier grammar claims the target but that
+repository lacks it, and `unknown_namespace` where no repository claims
+it. Each class takes its own severity under `[rules.references]`.
 
 ### Keyword Validity by File Type
 

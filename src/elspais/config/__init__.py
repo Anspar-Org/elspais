@@ -386,6 +386,16 @@ _REPLACEMENT_SEVERITY = "off"
 # could set one and change no outcome.
 _WITHDRAWN_SETTINGS: tuple[tuple[str, ...], ...] = (("terms", "severity", "changed"),)
 
+# Settings whose question another setting now answers, with what to write in
+# their place.
+_REPLACED_SETTINGS: dict[tuple[str, ...], str] = {
+    ("validation", "allow_unresolved_cross_repo"): (
+        '[rules.references] unknown_namespace = "info"   (each class of unresolved '
+        "reference takes its own severity -- off, info, warning, error -- under "
+        "[rules.references]: unknown_namespace, unknown_requirement, unknown_assertion)"
+    ),
+}
+
 
 def _container_at(config: dict[str, Any], path: tuple[str, ...]) -> dict | None:
     """The table a setting lives in, or None where the file has no such table."""
@@ -443,6 +453,12 @@ def _setting_repairs(config: dict[str, Any]) -> list[tuple[str, str]]:
                     "delete the line -- nothing reads this setting",
                 )
             )
+
+    for path, replacement in _REPLACED_SETTINGS.items():
+        container = _container_at(config, path)
+        if container is not None and path[-1] in container:
+            section = ".".join(path[:-1])
+            repairs.append((f"[{section}] {path[-1]}", replacement))
 
     return repairs
 
@@ -749,46 +765,7 @@ def find_git_root(start_path: Path | None = None) -> Path | None:
     return None
 
 
-# Implements: REQ-p00005-F
-def find_canonical_root(start_path: Path | None = None) -> Path | None:
-    """Find the canonical (non-worktree) git repository root.
-
-    For normal repos: returns same as find_git_root().
-    For worktrees: returns the MAIN repo root via git-common-dir.
-    Use this for resolving cross-repo sibling paths.
-
-    Args:
-        start_path: Directory to start searching from (defaults to cwd).
-
-    Returns:
-        Path to canonical git repository root, or None if not in a git repo.
-    """
-    import subprocess
-
-    git_root = find_git_root(start_path)
-    if git_root is None:
-        return None
-
-    git_marker = git_root / ".git"
-    if git_marker.is_file():
-        try:
-            result = subprocess.run(
-                ["git", "rev-parse", "--git-common-dir"],
-                capture_output=True,
-                text=True,
-                cwd=git_root,
-            )
-            if result.returncode == 0:
-                common_dir = Path(result.stdout.strip())
-                if not common_dir.is_absolute():
-                    common_dir = (git_root / common_dir).resolve()
-                return common_dir.parent
-        except (OSError, subprocess.SubprocessError):
-            pass
-
-    return git_root
-
-
+# Implements: REQ-p00002-A
 def find_config_file(start_path: Path) -> Path | None:
     """Find .elspais.toml configuration file.
 
