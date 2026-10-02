@@ -80,14 +80,29 @@ async function apiFetch(url, options) {
 
 
 {% else %}
-// ── View mode: read from embedded JSON ──
-var _embeddedData = {
-    nodes: JSON.parse(document.getElementById('node-index').textContent),
-    coverage: JSON.parse(document.getElementById('coverage-index').textContent),
-    status: JSON.parse(document.getElementById('status-data').textContent),
-    tree: JSON.parse(document.getElementById('tree-data').textContent),
-    sources: JSON.parse(document.getElementById('source-files').textContent)
-};
+// ── View mode: read from the embedded content ──
+{# Implements: REQ-d00321-E #}
+// The embedded content is one gzip-compressed JSON document spelled in
+// base64. The browser's own DecompressionStream restores it, once, before
+// the first answer is given.
+function _restoreEmbeddedData() {
+    var el = document.getElementById('embedded-data');
+    var bin = atob((el ? el.textContent : '').trim());
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    var restored = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return new Response(restored).text().then(function (text) { return JSON.parse(text); });
+}
+var _embeddedReady = _restoreEmbeddedData();
+_embeddedReady.catch(function (err) {
+    var note = document.createElement('div');
+    note.id = 'embedded-data-error';
+    note.setAttribute('role', 'alert');
+    note.style.cssText = 'padding:8px 16px;background:#fde8e8;color:#8a1c1c;font-weight:600;';
+    note.textContent = 'This page could not read its embedded content (' + err.message +
+        '). Reading it needs a current browser.';
+    document.body.insertBefore(note, document.body.firstChild);
+});
 
 {# Implements: REQ-d00321-A #}
 // The embedded source of a file is carried once, as its highlighted lines.
@@ -100,6 +115,10 @@ function plainTextOfHighlightedLine(line) {
 }
 
 function apiFetch(url) {
+    return _embeddedReady.then(function (data) { return _answerFromEmbedded(data, url); });
+}
+
+function _answerFromEmbedded(_embeddedData, url) {
     var m;
     // /api/node/<id>
     if ((m = url.match(/\/api\/node\/(.+)/))) {

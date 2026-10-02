@@ -263,8 +263,15 @@ Journey verdicts: `pass` (all steps have a passing test, none failed), `fail`
   `--port PORT`           Server port (default: 5001)
   `--base-path PATH`      URL prefix the server sits under (default: none)
   `--embed-content`       Embed requirement content and every traced source
-                          file, highlighted, for offline viewing
+                          file, highlighted and compressed, for offline
+                          viewing in a current browser
   `--path DIR`            Path to repository root (default: auto-detect)
+
+A static page with embedded content carries it as one gzip-compressed
+document, which the page restores with the browser's own decompression
+(`DecompressionStream`) when it opens. That keeps a page over a large
+estate a small fraction of the size of the text it carries, and it means
+the page needs a current browser.
 
 ### Exporting a report from the viewer
 

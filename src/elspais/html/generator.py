@@ -9,6 +9,8 @@ Uses Jinja2 templates for rich interactive output.
 
 from __future__ import annotations
 
+import base64
+import gzip
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,8 +31,6 @@ from elspais.html.theme import get_catalog
 from elspais.utilities.patterns import INSTANCE_SEPARATOR
 
 if TYPE_CHECKING:
-    from markupsafe import Markup
-
     from elspais.graph.federated import FederatedGraph
     from elspais.graph.GraphNode import GraphNode
     from elspais.graph.metrics import CoverageDimension
@@ -39,20 +39,17 @@ if TYPE_CHECKING:
 _NOT_INDEXED_KINDS = frozenset({NodeKind.REMAINDER, NodeKind.FILE})
 
 
-# Implements: REQ-d00321-C
-def script_json(value: Any) -> Markup:
-    """Serialize a value as JSON for a ``<script type="application/json">`` block.
+# Implements: REQ-d00321-C, REQ-d00321-D
+def compress_embedded(value: Any) -> str:
+    """Serialize a value as JSON, gzip it, and spell the result in base64.
 
-    A script data block ends at the first ``</`` that starts its end tag, and
-    a ``<!--`` in it changes how the browser finds that end. JSON can spell
-    both without the characters that do this, so only those are respelled.
-    Every other character stays as it is, which keeps highlighted source
-    markup at about its own size.
+    The page restores it with the browser's own ``DecompressionStream``.
+    Base64 holds no ``<``, so no text the value carries can end the script
+    element holding it or open a comment there. The gzip header records no
+    time, so one value always yields one page.
     """
-    from markupsafe import Markup
-
-    text = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-    return Markup(text.replace("</", "<\\/").replace("<!--", "<\\u0021--"))
+    raw = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return base64.b64encode(gzip.compress(raw, compresslevel=9, mtime=0)).decode("ascii")
 
 
 @dataclass
@@ -711,7 +708,6 @@ class HTMLGenerator:
                 loader=PackageLoader("elspais.html", "templates"),
                 autoescape=select_autoescape(["html", "xml"]),
             )
-            env.filters["script_json"] = script_json
             template = env.get_template("trace_unified.html.j2")
         except ImportError as err:
             raise ImportError(
@@ -769,13 +765,18 @@ class HTMLGenerator:
             journeys=journeys,
             statuses=statuses_ctx,
             topics=sorted(topics),
-            tree_data=tree_data,
-            source_files=source_files,
             pygments_css=pygments_css,
             pygments_css_dark=pygments_css_dark,
-            node_index=node_index,
-            coverage_index=coverage_index,
-            status_data=status_data,
+            # Implements: REQ-d00321-D
+            embedded_data=compress_embedded(
+                {
+                    "tree": tree_data,
+                    "sources": source_files,
+                    "nodes": node_index,
+                    "coverage": coverage_index,
+                    "status": status_data,
+                }
+            ),
             version=self.version,
             base_path=self.base_path,
             # A static page requests nothing, so it carries no prefix.

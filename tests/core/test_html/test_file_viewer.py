@@ -13,6 +13,7 @@ from elspais.graph.builder import TraceGraph
 from elspais.graph.factory import build_graph
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.html.generator import HTMLGenerator
+from tests.embedded_page import embedded_data
 
 # Fixture root for hht-like tests
 _FIXTURE_ROOT = Path(__file__).parent.parent.parent / "fixtures" / "hht-like"
@@ -253,15 +254,15 @@ class TestGenerateEmbedContentSourceFiles:
         generator = HTMLGenerator(hht_graph)
         html = generator.generate(embed_content=True)
 
-        # The template should render source file paths from the fixture
-        # At minimum, one of the spec file paths should appear in the output
+        # At minimum, one of the fixture's spec files is among the embedded sources
         spec_paths = [
             "spec/prd-core.md",
             "spec/ops-deploy.md",
             "spec/dev-impl.md",
         ]
-        found_any = any(p in html for p in spec_paths)
-        assert found_any, "Expected at least one spec file path in embedded content HTML"
+        sources = embedded_data(html)["sources"]
+        found_any = any(p in sources for p in spec_paths)
+        assert found_any, f"Expected a fixture spec file among embedded sources: {sorted(sources)}"
 
     def test_REQ_p00006_C_generate_no_embed_has_empty_source_files(self, hht_graph):
         """generate(embed_content=False) does not include source file content."""

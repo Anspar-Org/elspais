@@ -559,7 +559,8 @@ also serves MCP tools at `/mcp` for AI agent integration.
   `--port PORT`          Server port (default: 5001)
   `--base-path PATH`     URL prefix the server sits under (default: none)
   `--embed-content`      Embed requirement content and every traced source
-                         file, highlighted, for offline viewing
+                         file, highlighted and compressed, for offline
+                         viewing in a current browser
   `--path DIR`           Path to repository root (default: auto-detect)
   `--session-lifetime`   Stop the server, saving held changes, once no
                          browser tab has held it open for the grace

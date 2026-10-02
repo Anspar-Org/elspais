@@ -236,12 +236,19 @@ B. A static view with embedded content SHALL hold an index entry for each node t
 
 C. A static view with embedded content SHALL keep every embedded value intact as data, including a value whose text closes or comments out a script element.
 
+D. A static view with embedded content SHALL carry its embedded content compressed.
+
+E. When a static view with embedded content opens, the page SHALL restore its embedded content exactly as it was before compression.
+
 ### Rationale
 
 A reviewer generates the static view with embedded content to read requirement text in context without a server, often on an estate holding many source files. The page is only useful if a browser can open it, and its size is set by what it carries: a source file carried as plain text beside its highlighted form, or a node whose content is repeated inside every node containing it, multiplies the output without showing anything more. A node the page can never open is pure weight. The embedded values sit inside the page as script data, and source text can contain the characters that end such a block early, so the encoding keeps every value whole whatever text it holds.
 
+The content an estate embeds is mostly source text and highlighting markup, which compress to a small fraction of their size, so carrying it compressed is what keeps a page over a large estate small enough to open and to send. The page restores the content with the decompression the browser itself provides, which needs no library inside the page and makes a current browser a requirement for reading a static view.
+
 ### Changelog
 
+- 2026-10-01 | 736babc4 | - | Michael Lewis (<michael@anspar.org>) | Add assertions D and E: embedded content is carried compressed and restored exactly
 - 2026-10-01 | 38f520e0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
 
-*End* *Static View Embedded Content* | **Hash**: 38f520e0
+*End* *Static View Embedded Content* | **Hash**: 736babc4

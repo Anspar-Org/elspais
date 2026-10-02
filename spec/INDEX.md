@@ -224,7 +224,7 @@
 | REQ-d00312 | Test Target Output Areas                                      | dev-graph-core.md       | a0788b2a |
 | REQ-d00313 | Served Graph Currency                                         | dev-traceview-review.md | e791c1a1 |
 | REQ-d00320 | Viewer Edit Controls State What They Do                       | dev-traceview-review.md | e8010396 |
-| REQ-d00321 | Static View Embedded Content                                  | dev-traceview-review.md | 38f520e0 |
+| REQ-d00321 | Static View Embedded Content                                  | dev-traceview-review.md | 736babc4 |
 
 ## User Journeys
 

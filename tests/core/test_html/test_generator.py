@@ -4,7 +4,6 @@
 """Tests for HTML Generator."""
 
 import json
-import re
 
 import pytest
 
@@ -16,15 +15,7 @@ from tests.core.graph_test_helpers import (
     make_requirement,
     make_test_ref,
 )
-
-
-def _embedded_block(page: str, block_id: str):
-    """Decode the embedded JSON data block with the given id."""
-    match = re.search(
-        rf'<script type="application/json" id="{block_id}">(.*?)</script>', page, re.S
-    )
-    assert match, f"no embedded block {block_id!r}"
-    return json.loads(match.group(1))
+from tests.embedded_page import embedded_data
 
 
 @pytest.fixture
@@ -84,17 +75,17 @@ class TestHTMLGeneratorBasic:
 
     # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_generate_includes_requirements_in_embedded_json(self, sample_graph):
-        """Includes requirement IDs in embedded JSON node-index."""
+        """Includes requirement IDs in the embedded node index."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate(embed_content=True)
 
-        # Requirement IDs are in the embedded node-index JSON, not in table rows
+        # Requirement IDs are in the embedded node index, not in table rows
         # Verifies: REQ-d00052-A
-        assert '"REQ-p00001"' in result
-        assert '"REQ-o00001"' in result
-        assert '"REQ-d00001"' in result
-        assert 'id="node-index"' in result
+        nodes = embedded_data(result)["nodes"]
+        assert "REQ-p00001" in nodes
+        assert "REQ-o00001" in nodes
+        assert "REQ-d00001" in nodes
 
     # Verifies: REQ-p00006-A
     def test_generate_includes_styles(self, sample_graph):
@@ -137,14 +128,14 @@ class TestHTMLGeneratorEmbedContent:
 
     # Verifies: REQ-p00006-A
     def test_embed_content_includes_json(self, sample_graph):
-        """Embedded mode includes node-index JSON data element."""
+        """Embedded mode includes the embedded-content data element."""
         generator = HTMLGenerator(sample_graph)
 
         # Verifies: REQ-p00006-A
         result = generator.generate(embed_content=True)
 
-        assert 'id="node-index"' in result
-        assert "application/json" in result
+        assert 'id="embedded-data"' in result
+        assert embedded_data(result)["nodes"]
 
 
 class TestHTMLGeneratorHierarchy:
@@ -275,7 +266,7 @@ class TestHTMLGeneratorTreeStructure:
         result = generator.generate(embed_content=True)
 
         # Depth data is now in the embedded tree-data JSON, not on table <tr> elements
-        rows = {row["id"]: row for row in _embedded_block(result, "tree-data")}
+        rows = {row["id"]: row for row in embedded_data(result)["tree"]}
         assert rows["REQ-p00001"]["level"] == "PRD"
         assert rows["REQ-p00001"]["depth"] == 0
         assert rows["REQ-o00001"]["level"] == "OPS"
@@ -298,13 +289,14 @@ class TestHTMLGeneratorCoverage:
 
     # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_includes_coverage_data_in_embedded_json(self, sample_graph):
-        """Includes coverage data in embedded coverage-index JSON."""
+        """Includes coverage data in the embedded coverage index."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate(embed_content=True)
 
-        # Coverage data is now in the embedded coverage-index JSON
-        assert 'id="coverage-index"' in result
+        # Coverage data is in the embedded coverage index, one entry per requirement
+        coverage = embedded_data(result)["coverage"]
+        assert {"REQ-p00001", "REQ-o00001", "REQ-d00001"} <= set(coverage)
 
     # Verifies: REQ-p00006-B
     def test_coverage_values(self, sample_graph):
@@ -363,15 +355,15 @@ class TestHTMLGeneratorTopics:
 
     # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_topic_data_in_embedded_node_index(self, sample_graph):
-        """Topic data is available in embedded node-index JSON."""
+        """Topic data is available in the embedded node index."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate(embed_content=True)
 
-        # Topics are now in the embedded node-index JSON, not data-topic attributes
-        assert 'id="node-index"' in result
-        # Source path info (from which topics are derived) is in the JSON
-        assert "spec/prd.md" in result
+        # Topics are in the embedded node index, not data-topic attributes.
+        # Source path info (from which topics are derived) is in the index.
+        nodes = embedded_data(result)["nodes"]
+        assert "spec/prd.md" in json.dumps(nodes)
 
 
 class TestHTMLGeneratorNavPanel:
@@ -444,13 +436,13 @@ class TestHTMLGeneratorGitIntegration:
 
     # Verifies: REQ-d00052-D
     def test_REQ_d00052_D_git_state_in_embedded_json(self, sample_graph):
-        """Git state data is in embedded node-index JSON with requirement properties."""
+        """Git state data is in the embedded node index with requirement properties."""
         generator = HTMLGenerator(sample_graph)
 
         result = generator.generate(embed_content=True)
 
-        # Node-index JSON contains serialized node data with requirement properties
-        props = _embedded_block(result, "node-index")["REQ-p00001"]["properties"]
+        # The node index holds serialized node data with requirement properties
+        props = embedded_data(result)["nodes"]["REQ-p00001"]["properties"]
         # The entry carries the requirement-specific fields (level, status, hash)
         assert props["level"] == "PRD"
         assert props["status"] == "Active"
