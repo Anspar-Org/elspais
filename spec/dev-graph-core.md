@@ -1493,6 +1493,10 @@ M. When a run that stops at the first failing test target meets a failure, the s
 
 N. When a run that stops at the first failing test target meets a failure, the system SHALL let each test target that is already running finish.
 
+O. A run SHALL be able to set, for that run alone, a maximum that replaces the maximum the project sets.
+
+P. The system SHALL refuse a maximum below one, whether the project or the run sets it.
+
 ### Rationale
 
 A project with many independent targets waits for the sum of their run times when they run one at a time, although most of them share nothing. Each target already writes into an output area of its own (REQ-d00312), so two targets never write the same file. What two targets can still share is outside the tool: a database, a network port, a device or emulator, a local service stack. Only the project knows which targets use which of these, so the project says so, and the tool never overlaps two targets that name a common one.
@@ -1507,7 +1511,9 @@ J and K keep a concurrent run readable. Lines from targets that run at the same 
 
 M and N define stopping at the first failure when several targets run. A target that has started is allowed to finish rather than being stopped, because a stopped target leaves a run that records a start and no end, and its results then read as in progress (REQ-d00311-N).
 
-*End* *Concurrent Test Target Runs* | **Hash**: f765eb88
+O lets one run depart from the project's setting without editing the configuration: a continuous-integration job on a larger machine, or a developer who needs the targets one at a time to read their output. P refuses a maximum that would execute nothing.
+
+*End* *Concurrent Test Target Runs* | **Hash**: 228b3b98
 
 ## REQ-d00315: Stale-Only Test Target Runs
 
@@ -1543,8 +1549,46 @@ A narrows the selection a run already makes rather than adding a second way to s
 
 C keeps one judgement. A target that a report calls stale is a target this run executes, and a target that a report calls fresh is one it carries. D and E answer the cases the judgement leaves open. A target with no results has nothing to carry, and a run that started and recorded no end left results that are partial or missing, so both are executed.
 
-F makes the carried results read as they read after a selective run: they are honoured, a carried failure still fails (REQ-d00254-I), and they render as carried. G treats a run that has nothing to execute as a run that succeeded, because a tree that changed no input of any selected target is the case this run exists to make cheap. H tells the reader which targets ran fresh, because a report rendered afterwards needs that set to mark the rest as carried.
+F makes the carried results read as they read after a selective run: they are honoured, a carried failure still fails (REQ-d00254-I), and they render as carried. G treats a run that has nothing to execute as a run that succeeded, because a tree that changed no input of any selected target is the case this run exists to make cheap. H tells the reader which targets ran fresh. REQ-d00316 records the same set for a report rendered afterwards.
 
 I applies the discipline of REQ-d00283-Y: a request read only by a run that executes targets is refused by a run that executes none, rather than accepted and ignored.
 
 *End* *Stale-Only Test Target Runs* | **Hash**: 890ea4b2
+
+## REQ-d00316: Record of the Test Targets a Run Executed
+
+**Level**: dev | **Status**: Draft | **Implements**: -
+
+A run that executes test targets leaves a record of which targets it executed. A later run that reads results names that record to mark those results as fresh and every other result as carried.
+
+### Assertions
+
+A. A run that executes test targets SHALL record the names of the test targets that it executed.
+
+B. The system SHALL keep the record in the test output location, outside the output area of every test target.
+
+C. The system SHALL write the record in a machine-readable form that the test-target documentation describes.
+
+D. A record SHALL replace the record of every earlier run.
+
+E. A run that reads results without executing test targets SHALL be able to name the test targets of the last recorded run wherever it names a test target.
+
+F. If a run names the test targets of the last recorded run and no readable record exists, then the system SHALL refuse the run and tell how to produce a record.
+
+G. If a run names the test targets of the last recorded run and the record names a test target that the project does not configure, then the system SHALL refuse the run and name that target.
+
+H. Where the last recorded run executed no test target, a run that names its test targets SHALL treat that name as an explicit statement that it selects no test target.
+
+I. If a run that executes test targets, or a run that names the test targets whose results it expects, names the test targets of the last recorded run, then the system SHALL refuse the run.
+
+### Rationale
+
+A report that marks results as fresh or carried needs to know which targets ran fresh. Without a record, the reader passes those names by hand or reads them out of the output of an earlier command, and a name typed wrong marks the wrong results as fresh.
+
+A, B and D keep one record, written by every run that executes targets, in the location that already holds each target's output area. The output area of a target is emptied whenever that target runs (REQ-d00312-D), so the record lives beside the areas and never inside one. C lets a program other than the tool read the record.
+
+E puts the record's name in the vocabulary that already names targets and groups (REQ-d00283-E), so a reader learns no second way to select. F and G refuse rather than guess. A run with no record, or a record naming a target the configuration no longer holds, cannot say which results ran fresh, and a report that assumed an answer would mark results with a provenance nobody established. H covers a run that executed nothing, such as a stale-only run whose targets were all fresh (REQ-d00315-G): every result it left was carried, which is what an explicit selection of no target states (REQ-d00283-J).
+
+I keeps the name to the one question it answers. A run that executes targets, and a run that states which results it expects, each ask about the run in progress, and a name standing for what an earlier run did would answer a different question.
+
+*End* *Record of the Test Targets a Run Executed* | **Hash**: c5639977

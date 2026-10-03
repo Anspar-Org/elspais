@@ -475,18 +475,23 @@ def _toml_target(name: str, command: str, inputs: str | None = None) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _project(tmp_path: Path, monkeypatch, *targets: str, extra: str = "") -> Path:
-    """A git repository declaring *targets*, made the working directory."""
+def _project(
+    tmp_path: Path, monkeypatch, *targets: str, extra: str = "", test_extra: str = ""
+) -> Path:
+    """A git repository declaring *targets*, made the working directory.
+
+    *test_extra* is written into ``[scanning.test]``. ``cli_ttl = 0`` keeps
+    every command in this process rather than starting a daemon."""
     root = tmp_path / "project"
     (root / "spec").mkdir(parents=True)
     subprocess.run(["git", "init", "-q", str(root)], check=True)
     (root / "spec" / "requirements.md").write_text(_SPEC, encoding="utf-8")
     (root / ".elspais.toml").write_text(
-        'version = 5\n\n[project]\nname = "runs"\nnamespace = "REQ"\n\n'
+        'version = 5\ncli_ttl = 0\n\n[project]\nname = "runs"\nnamespace = "REQ"\n\n'
         '[scanning.spec]\ndirectories = ["spec"]\n\n'
         "[changelog]\nhash_current = false\n\n"
         f"{extra}\n"
-        "[scanning.test]\nenabled = true\n\n" + "\n".join(targets),
+        f"[scanning.test]\nenabled = true\n{test_extra}\n" + "\n".join(targets),
         encoding="utf-8",
     )
     monkeypatch.chdir(root)
@@ -746,3 +751,387 @@ def test_checks_marks_only_the_executed_targets_fresh_and_expects_every_selected
     assert log.read_text().splitlines() == ["stale"]
     assert args._fresh_targets == {"stale"}
     assert set(request.expected_targets) == {"REQ:fresh", "REQ:stale"}
+
+
+# ---------------------------------------------------------------------------
+# The record of the targets a run executed
+# ---------------------------------------------------------------------------
+
+
+def _last_run(repo: Path, cfg) -> dict:
+    import json
+
+    from elspais.utilities.fingerprint import last_run_path
+
+    return json.loads(last_run_path(repo, cfg).read_text(encoding="utf-8"))
+
+
+# Verifies: REQ-d00316-A+B+C
+def test_a_run_records_the_targets_it_executed_beside_the_output_areas(repo, stub):
+    from elspais.utilities.fingerprint import LAST_RUN_NAME, last_run_path, output_root
+
+    names = ("c", "a", "b")
+    cfg = _cfg([_target(n, stub("hold", "0")) for n in names])
+
+    results, _ = run_configured_targets(cfg, repo, only={"c", "a"})
+
+    assert sorted(r.name for r in results) == ["a", "c"]
+    path = last_run_path(repo, cfg)
+    assert path == output_root(repo, cfg) / LAST_RUN_NAME
+    record = _last_run(repo, cfg)
+    assert record["version"] == 1
+    assert record["executed"] == ["a", "c"]
+    assert isinstance(record["finished_at"], str) and record["finished_at"]
+    for name in names:
+        folder = target_folder(repo, cfg, name)
+        assert folder not in path.parents and folder != path.parent
+
+
+# Verifies: REQ-d00316-D
+def test_a_record_replaces_the_record_of_every_earlier_run(repo, stub):
+    cfg = _cfg([_target(n, stub("hold", "0")) for n in ("a", "b", "c")])
+
+    run_configured_targets(cfg, repo)
+    assert _last_run(repo, cfg)["executed"] == ["a", "b", "c"]
+
+    run_configured_targets(cfg, repo, only={"b"})
+    assert _last_run(repo, cfg)["executed"] == ["b"]
+
+
+# Verifies: REQ-d00316-A
+def test_a_target_refused_before_its_run_began_is_not_recorded(repo, stub):
+    cfg = _cfg([_target("outside", stub("hold", "0"), cwd=".."), _target("b", stub("hold", "0"))])
+
+    results, _ = run_configured_targets(cfg, repo)
+
+    by_name = {r.name: r for r in results}
+    assert by_name["outside"].started is False
+    assert by_name["b"].started is True
+    assert _last_run(repo, cfg)["executed"] == ["b"]
+
+
+# Verifies: REQ-d00316-A
+def test_under_fail_fast_a_target_never_started_is_not_recorded(repo, stub):
+    """`a` fails and was executed, so it is recorded; `b` never starts."""
+    cfg = _cfg([_target("a", stub("fail", "1")), _target("b", stub("hold", "0"))])
+
+    results, _ = run_configured_targets(cfg, repo, fail_fast=True)
+
+    assert [(r.name, r.returncode) for r in results] == [("a", 1)]
+    assert _last_run(repo, cfg)["executed"] == ["a"]
+
+
+# Verifies: REQ-d00316-A
+def test_a_stale_only_run_executing_nothing_records_no_target(tmp_path, monkeypatch, stub):
+    from elspais.cli import main
+
+    root = _project(tmp_path, monkeypatch, _toml_target("a", stub("junit", "pass"), inputs="a"))
+    (root / "a").mkdir()
+    (root / "a" / "input.txt").write_text("one\n")
+    assert main(["test"]) == 0
+    assert _last_run(root, _config(root))["executed"] == ["a"]
+
+    assert main(["test", "--stale-only"]) == 0
+
+    assert _last_run(root, _config(root))["executed"] == []
+
+
+def _recorded(tmp_path, monkeypatch, recorded: list[str] | None) -> dict:
+    """A config dict declaring targets a, b, c whose last run executed *recorded*.
+
+    ``None`` leaves no record. The git root is pinned to *tmp_path*, where the
+    record is read from."""
+    from elspais.config import validate_config
+    from elspais.utilities.fingerprint import write_last_run
+
+    config = {
+        "version": 5,
+        "scanning": {
+            "test": {
+                "enabled": True,
+                "targets": [
+                    {"name": n, "command": "true", "reporter": "junit"} for n in ("a", "b", "c")
+                ],
+            }
+        },
+    }
+    monkeypatch.setattr("elspais.config.find_git_root", lambda *a, **k: tmp_path)
+    if recorded is not None:
+        write_last_run(tmp_path, validate_config(config), recorded)
+    return config
+
+
+# Verifies: REQ-d00316-E
+@pytest.mark.parametrize(
+    "named,recorded,fresh",
+    [
+        (["last-run"], ["a"], {"a"}),
+        (["Last-Run"], ["a", "c"], {"a", "c"}),
+        (["last-run", "b"], ["a"], {"a", "b"}),
+    ],
+    ids=["alone", "any-case", "with-a-target"],
+)
+def test_a_reading_run_names_the_targets_of_the_last_run(
+    tmp_path, monkeypatch, named, recorded, fresh
+):
+    from elspais.commands._targets import resolve_fresh_targets
+
+    config = _recorded(tmp_path, monkeypatch, recorded)
+
+    assert resolve_fresh_targets(argparse.Namespace(targets=named), config) == fresh
+
+
+# Verifies: REQ-d00316-H
+def test_a_last_run_that_executed_nothing_selects_no_target(tmp_path, monkeypatch):
+    """No target fresh: every result is carried. ``None`` would mean the opposite."""
+    from elspais.commands._targets import resolve_fresh_targets
+
+    config = _recorded(tmp_path, monkeypatch, [])
+
+    assert resolve_fresh_targets(argparse.Namespace(targets=["last-run"]), config) == set()
+
+
+# Verifies: REQ-d00316-F
+@pytest.mark.parametrize(
+    "content",
+    [
+        None,
+        "not json",
+        "[]",
+        '{"version": 2, "executed": ["a"]}',
+        '{"version": 1, "executed": "a"}',
+        '{"version": 1, "executed": [1]}',
+    ],
+    ids=["absent", "not-json", "not-an-object", "wrong-version", "not-a-list", "not-names"],
+)
+def test_naming_the_last_run_without_a_readable_record_is_refused(tmp_path, monkeypatch, content):
+    from elspais.commands._targets import resolve_fresh_targets
+    from elspais.config import validate_config
+    from elspais.utilities.fingerprint import last_run_path
+
+    config = _recorded(tmp_path, monkeypatch, None)
+    path = last_run_path(tmp_path, validate_config(config))
+    if content is not None:
+        path.parent.mkdir(parents=True)
+        path.write_text(content)
+
+    with pytest.raises(ValueError) as caught:
+        resolve_fresh_targets(argparse.Namespace(targets=["last-run"]), config)
+
+    message = str(caught.value)
+    assert str(path) in message
+    assert "elspais test" in message
+
+
+# Verifies: REQ-d00316-F
+def test_a_selection_not_naming_the_last_run_reads_no_record(tmp_path, monkeypatch):
+    from elspais.commands._targets import resolve_fresh_targets
+
+    config = _recorded(tmp_path, monkeypatch, None)
+
+    assert resolve_fresh_targets(argparse.Namespace(targets=["a"]), config) == {"a"}
+
+
+# Verifies: REQ-d00316-G
+def test_a_record_naming_an_unconfigured_target_is_refused_naming_it(tmp_path, monkeypatch):
+    from elspais.commands._targets import resolve_fresh_targets
+
+    config = _recorded(tmp_path, monkeypatch, ["a", "retired"])
+
+    with pytest.raises(ValueError) as caught:
+        resolve_fresh_targets(argparse.Namespace(targets=["last-run"]), config)
+
+    message = str(caught.value)
+    assert "retired" in message
+    assert "a, b, c" in message
+
+
+# Verifies: REQ-d00316-E
+def test_summary_reads_the_last_run_as_the_targets_named_by_hand(
+    tmp_path, monkeypatch, stub, capsys
+):
+    from elspais.cli import main
+
+    _project(
+        tmp_path,
+        monkeypatch,
+        *(_toml_target(n, stub("junit", "pass")) for n in ("a", "b", "c")),
+    )
+    assert main(["test"]) == 0
+    assert main(["test", "--targets", "a"]) == 0
+    capsys.readouterr()
+
+    assert main(["summary", "--targets", "last-run"]) == 0
+    from_record = capsys.readouterr().out
+    assert main(["summary", "--targets", "a"]) == 0
+    by_hand = capsys.readouterr().out
+
+    assert "2/3 test results from previous runs" in from_record
+    assert from_record == by_hand
+
+
+# Verifies: REQ-d00316-I
+@pytest.mark.parametrize(
+    "argv,flag",
+    [
+        (["test", "--targets", "last-run"], "--targets"),
+        (["checks", "--run-tests", "--targets", "last-run"], "--targets"),
+        (["checks", "--expect", "last-run"], "--expect"),
+    ],
+    ids=["test", "checks-run-tests", "checks-expect"],
+)
+def test_a_run_asking_about_itself_refuses_the_last_run(
+    tmp_path, monkeypatch, stub, capsys, argv, flag
+):
+    from elspais.cli import main
+
+    _project(tmp_path, monkeypatch, _toml_target("a", stub("junit", "pass")))
+    assert main(["test"]) == 0
+    log = tmp_path / "runs.log"
+    monkeypatch.setenv("STUB_LOG", str(log))
+    capsys.readouterr()
+
+    assert main(argv) == 2
+
+    err = capsys.readouterr().err
+    assert f"{flag} last-run names the targets an earlier run executed" in err
+    assert not log.exists(), "a target ran"
+
+
+# Verifies: REQ-d00316-I
+def test_expected_targets_refuse_the_last_run(tmp_path, monkeypatch):
+    from elspais.commands._targets import resolve_expected_targets
+
+    config = _recorded(tmp_path, monkeypatch, ["a"])
+
+    with pytest.raises(ValueError, match="--expect last-run"):
+        resolve_expected_targets(config, ["a", "last-run"])
+
+
+# Verifies: REQ-d00316-E
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"groups": {"last-run": "the last run"}},
+        {"targets": [TestTargetConfig(name="last-run")]},
+        {"targets": [TestTargetConfig(name="a", groups=["Last-Run"])]},
+    ],
+    ids=["declared-group", "target-name", "claimed-group"],
+)
+def test_no_project_name_can_mean_the_last_run(settings):
+    with pytest.raises(ValidationError, match="(?i)last-run"):
+        TestScanningConfig(**settings)
+
+
+# ---------------------------------------------------------------------------
+# A run's own maximum of simultaneous targets
+# ---------------------------------------------------------------------------
+
+
+def _test_args(**overrides) -> argparse.Namespace:
+    base = {"targets": None, "config": None, "stale_only": False, "fail_fast": False}
+    base.update(overrides)
+    return argparse.Namespace(**base)
+
+
+# Verifies: REQ-d00314-O
+def test_a_run_raises_the_maximum_the_project_sets(tmp_path, monkeypatch, stub):
+    """Each stub passes only if it meets the other while both run."""
+    from elspais.commands import test_cmd
+
+    _project(
+        tmp_path,
+        monkeypatch,
+        _toml_target("a", stub("meet", "b")),
+        _toml_target("b", stub("meet", "a")),
+        test_extra="concurrency = 1",
+    )
+
+    assert test_cmd.run(_test_args(concurrency=2)) == 0
+
+
+# Verifies: REQ-d00314-O
+def test_a_run_lowers_the_maximum_the_project_sets(tmp_path, monkeypatch, stub, capfd):
+    from elspais.commands import test_cmd
+
+    names = ("zeta", "alpha")
+    root = _project(
+        tmp_path,
+        monkeypatch,
+        *(_toml_target(n, stub("say", n.upper(), "2", "0")) for n in names),
+        test_extra="concurrency = 2",
+    )
+    order = tmp_path / "order.log"
+    monkeypatch.setenv("STUB_LOG", str(order))
+
+    assert test_cmd.run(_test_args(concurrency=1)) == 0
+
+    out, err = capfd.readouterr()
+    assert order.read_text().splitlines() == list(names)
+    cfg = _config(root)
+    first, second = (_interval(root, cfg, n) for n in names)
+    assert first[1] <= second[0]
+    assert "ZETA-OUT-0" in out.splitlines()
+    assert "] " not in "".join(line for line in (out + err).splitlines() if "-OUT-" in line)
+
+
+# Verifies: REQ-d00314-P
+@pytest.mark.parametrize("value", [0, -1])
+@pytest.mark.parametrize("surface", ["test", "checks"])
+def test_a_run_maximum_below_one_is_refused_before_any_target_runs(
+    tmp_path, monkeypatch, stub, capsys, value, surface
+):
+    from elspais.commands import test_cmd
+
+    _project(tmp_path, monkeypatch, _toml_target("a", stub("junit", "pass")))
+    log = tmp_path / "runs.log"
+    monkeypatch.setenv("STUB_LOG", str(log))
+
+    if surface == "test":
+        rc = test_cmd.run(_test_args(concurrency=value))
+    else:
+        rc = health.run(_checks_args(stale_only=False, concurrency=value))
+
+    assert rc == 2
+    assert f"--concurrency {value} must be" in capsys.readouterr().err
+    assert not log.exists(), "a target ran"
+
+
+# Verifies: REQ-d00314-P
+def test_the_command_line_refuses_a_maximum_of_zero(tmp_path, monkeypatch, stub, capsys):
+    from elspais.cli import main
+
+    _project(tmp_path, monkeypatch, _toml_target("a", stub("junit", "pass")))
+    log = tmp_path / "runs.log"
+    monkeypatch.setenv("STUB_LOG", str(log))
+
+    assert main(["test", "--concurrency", "0"]) == 2
+
+    assert "--concurrency 0 must be" in capsys.readouterr().err
+    assert not log.exists(), "a target ran"
+
+
+# Verifies: REQ-d00314-P
+def test_the_runner_refuses_a_maximum_below_one(repo, stub):
+    from elspais.utilities.fingerprint import last_run_path
+
+    cfg = _cfg([_target("a", stub("hold", "0"))], concurrency=2)
+
+    with pytest.raises(ValueError, match="--concurrency 0 must be"):
+        run_configured_targets(cfg, repo, concurrency=0)
+
+    assert not target_folder(repo, cfg, "a").exists()
+    assert not last_run_path(repo, cfg).exists()
+
+
+# Verifies: REQ-d00314-O
+def test_checks_refuses_concurrency_without_run_tests(tmp_path, monkeypatch, stub, capsys):
+    from elspais.cli import main
+
+    _project(tmp_path, monkeypatch, _toml_target("a", stub("junit", "pass")))
+
+    assert main(["checks", "--concurrency", "2"]) == 2
+
+    err = capsys.readouterr().err
+    assert "--concurrency chooses what --run-tests executes" in err
+    assert "Add --run-tests" in err

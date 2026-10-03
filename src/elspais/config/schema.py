@@ -642,7 +642,11 @@ class CodeScanningConfig(ScanningKindConfig):
 GROUP_ALL = "all"
 GROUP_DEFAULT = "default"
 GROUP_NONE = "none"
-RESERVED_GROUPS = frozenset({GROUP_ALL, GROUP_DEFAULT, GROUP_NONE})
+# Implements: REQ-d00316-E
+# `last-run` stands for the targets the last recorded run executed. It is read
+# from that run's record, so no target may claim it either.
+GROUP_LAST_RUN = "last-run"
+RESERVED_GROUPS = frozenset({GROUP_ALL, GROUP_DEFAULT, GROUP_NONE, GROUP_LAST_RUN})
 
 # Implements: REQ-d00312-A
 # The name of a target is also the name of its output area under the output root.
@@ -887,6 +891,13 @@ class TestScanningConfig(ScanningKindConfig):
                     raise ValueError(
                         f'test target "{target.name}" claims the group "{claimed}", '
                         f"which stands for no target; remove it from the target's groups"
+                    )
+                # Implements: REQ-d00316-E
+                if claimed.strip().lower() == GROUP_LAST_RUN:
+                    raise ValueError(
+                        f'test target "{target.name}" claims the group "{claimed}", '
+                        f"which stands for the targets the last recorded run executed; "
+                        f"remove it from the target's groups"
                     )
                 if claimed.strip().lower() not in known:
                     raise ValueError(

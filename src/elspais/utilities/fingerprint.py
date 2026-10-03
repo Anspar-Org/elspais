@@ -43,6 +43,12 @@ OUTPUT_ENV = "ELSPAIS_TARGET_OUTPUT"
 
 _RECORD_VERSION = 2
 
+#: The name of the record of the last run's executed targets, in the output root.
+#: A target name cannot start with ``.``, so no output area can take this name.
+LAST_RUN_NAME = ".elspais-last-run.json"
+
+_LAST_RUN_VERSION = 1
+
 
 @dataclass(frozen=True)
 class Freshness:
@@ -385,3 +391,44 @@ def judge(
             target=target_name, state="stale", reason="changed", changed=changed, record=record
         )
     return Freshness(target=target_name, state="fresh", record=record)
+
+
+def last_run_path(repo_root: Path, config: Any) -> Path:
+    """Return the path of the record of the last run's executed targets."""
+    return output_root(repo_root, config) / LAST_RUN_NAME
+
+
+# Implements: REQ-d00316-A+B+C+D
+def write_last_run(repo_root: Path, config: Any, executed: list[str]) -> Path:
+    """Record the targets a run executed, replacing the record of any earlier run.
+
+    The record is a JSON object: ``version`` (1), ``executed`` (the names of
+    the targets the run executed, sorted) and ``finished_at`` (an ISO 8601
+    time). It sits in the output root, beside the output areas, because a
+    target's own area is emptied whenever that target runs.
+    """
+    path = last_run_path(repo_root, config)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "version": _LAST_RUN_VERSION,
+        "executed": sorted(set(executed)),
+        "finished_at": _now(),
+    }
+    path.write_text(json.dumps(record, indent=1, sort_keys=True) + "\n")
+    return path
+
+
+# Implements: REQ-d00316-F
+def read_last_run(repo_root: Path, config: Any) -> list[str] | None:
+    """Return the targets the last recorded run executed, or ``None`` with no readable record."""
+    path = last_run_path(repo_root, config)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or data.get("version") != _LAST_RUN_VERSION:
+        return None
+    executed = data.get("executed")
+    if not isinstance(executed, list) or not all(isinstance(n, str) for n in executed):
+        return None
+    return executed

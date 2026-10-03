@@ -223,8 +223,9 @@
 | REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | 4fe7db4a |
 | REQ-d00312 | Test Target Output Areas                                      | dev-graph-core.md       | a0788b2a |
 | REQ-d00313 | Served Graph Currency                                         | dev-traceview-review.md | e791c1a1 |
-| REQ-d00314 | Concurrent Test Target Runs                                   | dev-graph-core.md       | f765eb88 |
+| REQ-d00314 | Concurrent Test Target Runs                                   | dev-graph-core.md       | 228b3b98 |
 | REQ-d00315 | Stale-Only Test Target Runs                                   | dev-graph-core.md       | 890ea4b2 |
+| REQ-d00316 | Record of the Test Targets a Run Executed                     | dev-graph-core.md       | c5639977 |
 | REQ-d00320 | Viewer Edit Controls State What They Do                       | dev-traceview-review.md | e8010396 |
 | REQ-d00321 | Static View Embedded Content                                  | dev-traceview-review.md | 736babc4 |
 

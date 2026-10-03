@@ -1372,7 +1372,7 @@ def empty_selection_refusal(config: Any, named: list[str] | None, *, executes: b
     selection that covers every configured target. ``unknown_target_names``
     handles a name that is neither a target nor a group. Callers call it first.
     """
-    from elspais.config.schema import GROUP_DEFAULT, GROUP_NONE
+    from elspais.config.schema import GROUP_DEFAULT, GROUP_LAST_RUN, GROUP_NONE
 
     configured = {t.name for t in config.scanning.test.targets}
     if not configured:
@@ -1394,7 +1394,7 @@ def empty_selection_refusal(config: Any, named: list[str] | None, *, executes: b
 
     choices = (
         f"Configured targets: {', '.join(sorted(configured))}. "
-        f"Groups: {', '.join(sorted(groups - {GROUP_NONE}))}."
+        f"Groups: {', '.join(sorted(groups - {GROUP_NONE, GROUP_LAST_RUN}))}."
     )
     if not wanted:
         cause = (
@@ -1461,3 +1461,60 @@ def unknown_target_names(config: Any, named: list[str] | None) -> list[str]:
     configured = {t.name for t in config.scanning.test.targets}
     groups = known_group_names(config)
     return sorted({n for n in named if n not in configured and n.strip().lower() not in groups})
+
+
+# Implements: REQ-d00316-E+F+G+H
+def expand_last_run(
+    config: Any, named: list[str] | None, recorded: list[str] | None, record_path: Any
+) -> list[str] | None:
+    """Replace `last-run` in *named* by the targets the last recorded run executed.
+
+    *recorded* is that run's executed targets, or ``None`` where no readable
+    record exists at *record_path*. A selection not naming `last-run` is
+    returned unchanged. Where the run executed nothing, the name becomes
+    `none`, which states explicitly that the run selects no test target.
+
+    Raises:
+        ValueError: The selection names `last-run` and no readable record
+            exists, or the record names a target the project does not configure.
+    """
+    from elspais.config.schema import GROUP_LAST_RUN, GROUP_NONE
+
+    if not named or not any(n.strip().lower() == GROUP_LAST_RUN for n in named):
+        return named
+    if recorded is None:
+        raise ValueError(
+            f"--targets {GROUP_LAST_RUN} names the targets the last recorded run executed, "
+            f"and no readable record exists at {record_path}. Run `elspais test` or "
+            f"`elspais checks --run-tests` to write one, or name the targets with --targets."
+        )
+    configured = {t.name for t in config.scanning.test.targets}
+    gone = sorted(set(recorded) - configured)
+    if gone:
+        raise ValueError(
+            f"--targets {GROUP_LAST_RUN}: the last recorded run ({record_path}) executed "
+            f"{', '.join(gone)}, which the configuration no longer holds. Run the targets "
+            f"again to replace the record, or name the targets with --targets. "
+            f"Configured targets: {', '.join(sorted(configured))}."
+        )
+    rest = [n for n in named if n.strip().lower() != GROUP_LAST_RUN]
+    return rest + (list(recorded) if recorded else [GROUP_NONE])
+
+
+# Implements: REQ-d00316-I
+def last_run_refusal(named: list[str] | None, *, flag: str = "--targets") -> str | None:
+    """Return the reason to refuse `last-run` where a run asks about the run in progress.
+
+    A run that executes targets, and a run naming the results it expects,
+    each ask about the run in progress, and `last-run` answers for an earlier one.
+    """
+    from elspais.config.schema import GROUP_LAST_RUN
+
+    if not named or not any(n.strip().lower() == GROUP_LAST_RUN for n in named):
+        return None
+    return (
+        f"{flag} {GROUP_LAST_RUN} names the targets an earlier run executed, and {flag} "
+        f"here names what this run itself covers. Name the targets or groups instead; "
+        f"`{GROUP_LAST_RUN}` is read by `summary` and `trace` to mark the last run's "
+        f"results fresh."
+    )

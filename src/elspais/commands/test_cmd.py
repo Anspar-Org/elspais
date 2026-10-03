@@ -24,6 +24,7 @@ def run(args: argparse.Namespace) -> int:
     from elspais.commands._scope import flag_values
     from elspais.commands.test_runner import (
         SelectionRefused,
+        concurrency_refusal,
         describe_stale_only,
         executable_selection,
         not_fresh_targets,
@@ -36,6 +37,12 @@ def run(args: argparse.Namespace) -> int:
         config = validate_config(get_config(getattr(args, "config", None), start_path=Path.cwd()))
     except Exception as exc:
         print(f"error: failed to load config: {exc}", file=sys.stderr)
+        return 2
+
+    # Implements: REQ-d00314-O+P
+    concurrency = getattr(args, "concurrency", None)
+    if concurrency is not None and concurrency < 1:
+        print(f"error: {concurrency_refusal(concurrency)}", file=sys.stderr)
         return 2
 
     try:
@@ -65,7 +72,11 @@ def run(args: argparse.Namespace) -> int:
         print(describe_stale_only(only, carry), file=sys.stderr)
 
     results, _captured = run_configured_targets(
-        config, repo_root, fail_fast=bool(getattr(args, "fail_fast", False)), only=only
+        config,
+        repo_root,
+        fail_fast=bool(getattr(args, "fail_fast", False)),
+        only=only,
+        concurrency=concurrency,
     )
 
     # Implements: REQ-d00249-J

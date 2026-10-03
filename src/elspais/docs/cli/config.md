@@ -259,6 +259,12 @@ skip_dirs = []
 reference_keyword = "Verifies"   # Keyword for test-to-req references
 reference_patterns = []          # Additional reference patterns
 concurrency = 1                  # Most test targets one run executes at once
+# concurrency defaults to 1 because targets that share something no
+# declaration names (a database, a network port, a device or emulator, a
+# local service stack) would corrupt each other's runs. Declare each such
+# resource under [scanning.test.resources] and list it in the `resources` of
+# every target that uses it before raising concurrency. `--concurrency N` on
+# `elspais test` and `elspais checks --run-tests` replaces it for one run.
 prescan_command = ""             # External test discovery command
 # prescan_command receives file paths on stdin, outputs JSON on stdout:
 #   [{"file": "path", "function": "name", "class": "Name|null", "line": N,
@@ -276,7 +282,12 @@ prescan_command = ""             # External test discovery command
 
 # Test result ingestion is configured via [[scanning.test.targets]], and
 # the shared resources that keep two targets from overlapping under
-# [scanning.test.resources].
+# [scanning.test.resources]:
+# [scanning.test.resources]
+# db = "The local Postgres instance the backend suites share"
+# Every run that executes targets records the targets it executed in
+# <output_root>/.elspais-last-run.json; `--targets last-run` on `summary`
+# and `trace` reads it.
 # See: elspais docs test-targets
 
 [scanning.journey]

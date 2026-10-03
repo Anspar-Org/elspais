@@ -5508,6 +5508,9 @@ def run(args: argparse.Namespace) -> int:
         # Implements: REQ-d00315-I
         if getattr(args, "stale_only", False):
             inert.append("--stale-only")
+        # Implements: REQ-d00314-O
+        if getattr(args, "concurrency", None) is not None:
+            inert.append("--concurrency")
         if inert:
             named = ", ".join(inert[:-1]) + " and " + inert[-1] if len(inert) > 1 else inert[0]
             verb = "choose" if len(inert) > 1 else "chooses"
@@ -5553,7 +5556,17 @@ def run(args: argparse.Namespace) -> int:
         from elspais.commands._scope import flag_values
 
         selected = list(flag_values(args, "targets"))
-        from elspais.commands.test_runner import SelectionRefused, executable_selection
+        from elspais.commands.test_runner import (
+            SelectionRefused,
+            concurrency_refusal,
+            executable_selection,
+        )
+
+        # Implements: REQ-d00314-P
+        concurrency = getattr(args, "concurrency", None)
+        if concurrency is not None and concurrency < 1:
+            print(f"error: {concurrency_refusal(concurrency)}", file=sys.stderr)
+            return 2
 
         try:
             only = executable_selection(cfg, selected)
@@ -5578,7 +5591,7 @@ def run(args: argparse.Namespace) -> int:
             fresh = (configured if only is None else only) - carry
             only = None if fresh == configured else fresh
         results, captured_map = run_configured_targets(
-            cfg, repo_root, fail_fast=fail_fast, only=only
+            cfg, repo_root, fail_fast=fail_fast, only=only, concurrency=concurrency
         )
         runner_failed = any(r.returncode != 0 for r in results)
         # Implements: REQ-d00283-Q

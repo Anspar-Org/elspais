@@ -112,6 +112,10 @@ Copy results from elsewhere with their folder, fingerprint included. An
 example is a baseline that another job produced. Such results read as fresh
 exactly while the inputs here match the inputs they ran against.
 
+`elspais fingerprint` writes no [record of the last run](#the-record-of-the-last-run).
+That record lists only the targets elspais itself executed, so a report after
+a bracketed run names the target with `--targets` rather than `last-run`.
+
 ### The fingerprint file
 
 The fingerprint is the JSON file `.elspais-run.json` in the target's folder.
@@ -134,6 +138,36 @@ stating when the run started, and judges neither its freshness nor whether its
 results are missing. A run that stopped without `finish` reads the same way:
 the record cannot tell a run that is still going from one that died, so the
 report states the start time and leaves that judgement to the reader.
+
+### The record of the last run
+
+Every run that executes targets, `elspais test` or
+`elspais checks --run-tests`, records which targets it executed. The record is
+the JSON file `.elspais-last-run.json` in the output root, by default
+`.results/.elspais-last-run.json`. It sits beside the target folders and never
+inside one, because a target's folder is emptied when that target runs. A
+target name cannot start with `.`, so no target folder can take the record's
+name.
+
+```json
+{
+ "executed": ["api", "unit"],
+ "finished_at": "2026-01-01T12:00:00+00:00",
+ "version": 1
+}
+```
+
+`version` states the format. `executed` lists the names of the targets the
+run executed, sorted. `finished_at` is the time the run ended, in ISO 8601
+UTC. Each run replaces the record of the run before it. A target is listed
+only if its run began: a target refused before it started, such as one whose
+`cwd` resolves outside the repository, is not listed, and neither is a target
+that `--fail-fast` kept from starting. A run that executed nothing, such as a
+`--stale-only` run whose selected targets were all fresh, records an empty
+list.
+
+A later `summary` or `trace` names the record with `--targets last-run` (see
+[Groups](#groups)), so it marks fresh exactly the results that run produced.
 
 ### Results written while a daemon is serving
 
@@ -159,7 +193,7 @@ The word *fresh* in [Per-PR selectivity](#per-pr-selectivity) has another
 meaning. There it names the targets that the caller tells a reporting command
 ran in this invocation. `--stale-only` joins the two: it uses the fingerprint
 judgement to decide which targets to execute, and those targets are the ones a
-later `summary` or `trace` names as fresh.
+later `summary` or `trace` names as fresh, with `--targets last-run`.
 
 ## Target Fields
 
@@ -689,7 +723,8 @@ before it runs anything, a selection that holds such a target with no
 `results` pattern. A coverage target is not affected.
 
 Separate jobs divide a suite across machines. On one machine, `[scanning.test]
-concurrency` runs several targets of one run at the same time (see
+concurrency` runs several targets of one run at the same time, and
+`--concurrency N` sets that number for one run (see
 [Concurrent Targets](#concurrent-targets)).
 
 ## Concurrent Targets
@@ -717,6 +752,19 @@ With a larger value, a run schedules its targets as follows:
 elspais schedules targets, not tests. A target's own runner owns the
 parallelism inside that target, such as `pytest -n` or
 `flutter test --concurrency`.
+
+`--concurrency N`, on `elspais test` and on `elspais checks --run-tests`,
+replaces `[scanning.test] concurrency` for that run alone. A CI job on a
+larger machine raises it; `--concurrency 1` runs the targets one at a time, so
+their output reads one target after another. A value below 1 is refused
+(exit 2):
+
+```text
+error: --concurrency 0 must be a whole number of targets, 1 or more; 1 runs the targets one at a time
+```
+
+`elspais checks` without `--run-tests` executes nothing, so it refuses
+`--concurrency` as it refuses `--targets`.
 
 ### Output of targets that run together
 
@@ -823,7 +871,7 @@ groups = ["uat"]
 command = "./scripts/run-enroll-e2e.sh"
 ```
 
-Three names are reserved. A project cannot declare them, give them to a
+Four names are reserved. A project cannot declare them, give them to a
 target, or have a target claim them:
 
 - **`default`** — what a run executes when it names nothing. A target that
@@ -837,6 +885,13 @@ target, or have a target claim them:
 - **`none`** — no target. A run naming it marks no target fresh.
   Consequently, `summary` and `trace` render every result read from disk as
   carried from an earlier run.
+- **`last-run`** — the targets that the last run of `elspais test` or
+  `elspais checks --run-tests` executed, read from its record (see
+  [The record of the last run](#the-record-of-the-last-run)). It is read by
+  `summary`, `trace` and composed reports holding either, so a report marks
+  those results fresh and every other result carried, with no names passed
+  by hand. It combines with other names like any group. If the record lists
+  no target, then `last-run` means what `none` means.
 
 A group is an **alias for a set of targets**, so it is named where a target is
 named — there is no separate flag:
@@ -848,6 +903,7 @@ elspais checks --run-tests --targets all    # everything
 elspais checks --run-tests --targets uat elspais-unit   # the group, plus one more
 elspais checks --run-tests --targets uat --targets elspais-unit   # the same
 elspais trace --targets none                # every result carried
+elspais trace --targets last-run            # fresh: what the last run executed
 ```
 
 A run executes every target it names, whether it named it directly or through a
@@ -881,6 +937,24 @@ error: --targets none selects no test target, so there is nothing to run. Config
 error: the `default` group holds no test target, so a run naming no targets selects none. Name targets or groups with --targets, or have a target claim the `default` group. Configured targets: .... Groups: ....
 ```
 
+`last-run` is refused (exit 2) where it cannot say which results ran fresh.
+With no readable record, the refusal names the record's absolute path and how to write
+one. With a record that names a target the configuration no longer holds, it
+names that target:
+
+```text
+error: --targets last-run names the targets the last recorded run executed, and no readable record exists at <repo>/.results/.elspais-last-run.json. Run `elspais test` or `elspais checks --run-tests` to write one, or name the targets with --targets.
+error: --targets last-run: the last recorded run (<repo>/.results/.elspais-last-run.json) executed <names>, which the configuration no longer holds. Run the targets again to replace the record, or name the targets with --targets. Configured targets: ....
+```
+
+A run that executes targets, and `--expect`, each ask about the run in
+progress, so both refuse `last-run` (exit 2). The refusal names the flag that
+carried it, `--targets` or `--expect`:
+
+```text
+error: --targets last-run names the targets an earlier run executed, and --targets here names what this run itself covers. Name the targets or groups instead; `last-run` is read by `summary` and `trace` to mark the last run's results fresh.
+```
+
 Because targets and groups are named in one place, they share one namespace: a
 configuration declaring a group with the same name as a test target is refused
 when it is read, rather than resolved by a precedence rule every reader of that
@@ -909,7 +983,9 @@ The flag means something slightly different depending on the command:
   invocation* (normally by a preceding `checks --run-tests --targets ...`
   with the same names) versus which targets' results are left over from an
   earlier run. `--targets none` marks no target fresh. Consequently, every
-  result read from disk renders as carried.
+  result read from disk renders as carried. `--targets last-run` marks fresh
+  the targets the last executing run recorded, so the names need not be
+  repeated.
 
 On `trace`, the complement (non-named) targets render one of two ways in the
 per-requirement `verified` value, depending on whether prior result data
@@ -957,8 +1033,8 @@ footnote appears — output is unchanged from before this flag existed. The
 `--targets` for *execution* under `--run-tests`; it does not render
 `(baseline)`/`—`/`*` — that provenance rendering is `summary`/`trace`'s job.
 Without `--run-tests`, `checks` executes nothing, so it refuses `--targets`,
-`--fail-fast` and `--stale-only` (exit 2) rather than accept a selection
-nothing reads; to
+`--fail-fast`, `--stale-only` and `--concurrency` (exit 2) rather than accept
+a selection nothing reads; to
 require results a run did not execute, name them with `--expect` (see below).
 `checks --run-tests --targets none` selects nothing to run. Consequently, the
 command refuses it.
@@ -971,17 +1047,28 @@ provenance, so it refuses `--targets`.
 
 ### Worked example
 
-Per-PR: run only the targets touched by this change, then render the full
-matrix with the rest carried as baselines:
+Per-PR: run only the targets whose results this change made stale, then
+render the full matrix with the rest carried as baselines:
+
+```bash
+elspais checks --run-tests --stale-only
+elspais trace --targets last-run --format markdown
+```
+
+The targets the first command executed show fresh, just-run results. The
+first command records them (see
+[The record of the last run](#the-record-of-the-last-run)), and
+`--targets last-run` reads that record. Every other configured target shows
+`(baseline)` (carried from its last run) or `—` (no prior result data for that
+target).
+
+To choose the targets by hand instead, name them on the run. The report still
+reads the record, so the names are written once:
 
 ```bash
 elspais checks --run-tests --targets clinical_diary portal_ui_evs
-elspais trace --targets clinical_diary portal_ui_evs --format markdown
+elspais trace --targets last-run --format markdown
 ```
-
-`clinical_diary` and `portal_ui_evs` show fresh, just-run results.  Every
-other configured target shows `(baseline)` (carried from its last run) or
-`—` (no prior result data for that target).
 
 Full regression (e.g. promoting a build from qa to uat): omit `--targets` so
 every configured target runs and renders fresh:
@@ -1030,11 +1117,15 @@ exits 0. A run without `--stale-only` executes every target it names, fresh
 or not.
 
 To render `summary` or `trace` afterwards with the rest marked as carried,
-pass the executed targets from the stale-only line to `--targets`:
+name the record the run left:
 
 ```bash
-elspais trace --targets api unit --format markdown
+elspais trace --targets last-run --format markdown
 ```
+
+The stale-only line is for a reader. The record is how a later report learns
+which targets ran fresh. If every selected target was fresh, then the record
+lists no target, and `last-run` marks every result carried.
 
 ### Expected results
 

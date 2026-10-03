@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 import tyro
 
+from elspais.commands import args as cli_args
 from elspais.commands._scope import flag_values
 from elspais.commands.args import ChecksArgs
 
@@ -39,6 +40,16 @@ def test_fail_fast_flag_parses():
 def test_stale_only_flag_defaults_false_and_parses():
     assert tyro.cli(ChecksArgs, args=[]).stale_only is False
     assert tyro.cli(ChecksArgs, args=["--run-tests", "--stale-only"]).stale_only is True
+
+
+# Verifies: REQ-d00314-O
+@pytest.mark.parametrize(
+    "cls,leading", [(ChecksArgs, ["--run-tests"]), (cli_args.TestArgs, [])], ids=["checks", "test"]
+)
+def test_concurrency_flag_defaults_unset_and_parses(cls, leading):
+    """Unset leaves the project's maximum in force; a value replaces it."""
+    assert tyro.cli(cls, args=[]).concurrency is None
+    assert tyro.cli(cls, args=[*leading, "--concurrency", "2"]).concurrency == 2
 
 
 # Verifies: REQ-d00254-H

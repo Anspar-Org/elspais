@@ -54,8 +54,16 @@ def executable_selection(config: ElspaisConfig, selected: list[str]) -> set[str]
         SelectionRefused: A name is neither a target nor a group, the
             selection reaches no target, or no selected target has a command.
     """
-    from elspais.config import empty_selection_refusal, selected_targets, unknown_target_refusal
+    from elspais.config import (
+        empty_selection_refusal,
+        last_run_refusal,
+        selected_targets,
+        unknown_target_refusal,
+    )
 
+    # Implements: REQ-d00316-I
+    if refusal := last_run_refusal(selected):
+        raise SelectionRefused(refusal)
     # Targets and groups share one namespace. The config reader keeps their
     # names apart (REQ-d00283-G). If a name is neither a target nor a group,
     # then the run refuses it and does not resolve it to nothing.
@@ -146,6 +154,9 @@ class RunnerResult:
     returncode: int  # -1 if the runner could not be spawned at all
     duration_seconds: float
     error: str = ""  # populated only on spawn failure
+    # False where the target was refused before its run began (a cwd outside
+    # the repository), so its output area and results are untouched.
+    started: bool = True
 
     @property
     def succeeded(self) -> bool:
@@ -186,8 +197,45 @@ def _run_teeing_stdout(
     return subprocess.CompletedProcess(command, returncode, "".join(chunks), None)
 
 
-# Implements: REQ-d00254-F+H
+# Implements: REQ-d00316-A+D, REQ-d00314-O
 def run_configured_targets(
+    config: ElspaisConfig,
+    repo_root: Path,
+    *,
+    fail_fast: bool = False,
+    only: set[str] | None = None,
+    concurrency: int | None = None,
+) -> tuple[list[RunnerResult], dict[str, str]]:
+    """Execute the selected targets, then record which of them the run executed.
+
+    *concurrency* replaces ``[scanning.test] concurrency`` for this run.
+    Everything else is :func:`_run_targets`.
+    """
+    from elspais.utilities.fingerprint import write_last_run
+
+    if concurrency is not None and concurrency < 1:
+        raise ValueError(concurrency_refusal(concurrency))
+    if concurrency is not None and concurrency != config.scanning.test.concurrency:
+        test_cfg = config.scanning.test.model_copy(update={"concurrency": concurrency})
+        config = config.model_copy(
+            update={"scanning": config.scanning.model_copy(update={"test": test_cfg})}
+        )
+    results, captured = _run_targets(config, repo_root, fail_fast=fail_fast, only=only)
+    write_last_run(repo_root, config, [r.name for r in results if r.started])
+    return results, captured
+
+
+# Implements: REQ-d00314-P
+def concurrency_refusal(value: int) -> str:
+    """The reason to refuse a run's maximum of simultaneous targets below one."""
+    return (
+        f"--concurrency {value} must be a whole number of targets, 1 or more; "
+        f"1 runs the targets one at a time"
+    )
+
+
+# Implements: REQ-d00254-F+H
+def _run_targets(
     config: ElspaisConfig,
     repo_root: Path,
     *,
@@ -262,6 +310,7 @@ def run_configured_targets(
                     returncode=-1,
                     duration_seconds=elapsed,
                     error=err,
+                    started=False,
                 )
             )
             if fail_fast:
@@ -368,7 +417,7 @@ def _run_one_attributed(
         err = f"cwd '{target.cwd}' resolves to {cwd} which is outside the repo root {resolved_root}"
         _emit(sys.stderr, f"\n<<< {target.name}: FAILED (config error: {err}) (0.0s)\n")
         return (
-            RunnerResult(target.name, target.command, cwd, -1, 0.0, error=err),
+            RunnerResult(target.name, target.command, cwd, -1, 0.0, error=err, started=False),
             None,
         )
 
