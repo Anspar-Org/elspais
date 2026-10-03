@@ -19,7 +19,7 @@ __all__ = [
 ]
 
 
-# Implements: REQ-d00283-D+E+H+I+J+K+L+O, REQ-d00254-I
+# Implements: REQ-d00283-D+E+H+I+J+K+L+O, REQ-d00254-I, REQ-d00316-E
 def resolve_fresh_targets(args: Any, config: dict[str, Any]) -> set[str] | None:
     """The targets *args* marks as freshly-run, or ``None`` for every target.
 
@@ -53,6 +53,7 @@ def resolve_fresh_targets(args: Any, config: dict[str, Any]) -> set[str] | None:
 
     named = list(flag_values(args, "targets")) or None
     cfg = validate_config(config)
+    named = _expand_last_run(cfg, named)
     if refusal := unknown_target_refusal(cfg, named):
         raise ValueError(refusal)
     if refusal := empty_selection_refusal(cfg, named, executes=False):
@@ -60,6 +61,19 @@ def resolve_fresh_targets(args: Any, config: dict[str, Any]) -> set[str] | None:
     if named is None:
         return None
     return selected_targets(cfg, named)
+
+
+# Implements: REQ-d00316-E+F+G+H
+def _expand_last_run(cfg: Any, named: list[str] | None) -> list[str] | None:
+    """Read the last run's record where *named* names `last-run`, and expand it."""
+    from elspais.config import expand_last_run, find_git_root
+    from elspais.config.schema import GROUP_LAST_RUN
+    from elspais.utilities.fingerprint import last_run_path, read_last_run
+
+    if not named or not any(n.strip().lower() == GROUP_LAST_RUN for n in named):
+        return named
+    root = find_git_root() or Path.cwd()
+    return expand_last_run(cfg, named, read_last_run(root, cfg), last_run_path(root, cfg))
 
 
 # Implements: REQ-d00283-W+X
@@ -103,13 +117,16 @@ def resolve_expected_targets(
             member of the federation declares, or if the names stand for no
             target and do not name ``none``.
     """
-    from elspais.config import validate_config
+    from elspais.config import last_run_refusal, validate_config
     from elspais.config.schema import GROUP_NONE
 
     root_cfg = validate_config(config) if isinstance(config, dict) else config
     wanted = [n for n in (x.strip() for x in (named or [])) if n]
     if not wanted:
         return set()
+    # Implements: REQ-d00316-I
+    if refusal := last_run_refusal(wanted, flag="--expect"):
+        raise ValueError(refusal)
     root_ns = root_cfg.project.namespace
 
     by_member: dict[str, list[str]] = {}

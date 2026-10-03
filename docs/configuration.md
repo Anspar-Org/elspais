@@ -289,7 +289,34 @@ reference_keyword = "Verifies"
 # run then records a fingerprint of the target's inputs there.
 # `tests.results_stale` reads that fingerprint (see
 # `elspais docs test-targets`, Target Folders and Fresh Results).
+# Every run that executes targets (`elspais test`, `elspais checks
+# --run-tests`) also records the targets it executed in
+# <output_root>/.elspais-last-run.json, beside the target folders and never
+# inside one: a target's folder is emptied when it runs, and a target name
+# cannot start with `.`. The record is a JSON object, {"version": 1,
+# "executed": [sorted target names], "finished_at": "<ISO 8601 UTC>"}, and
+# each run replaces it. A target refused before it started, or kept from
+# starting by --fail-fast, is not listed; a run that executed nothing records
+# an empty list. `--targets last-run` reads it (see the groups below).
 output_root = ".results"
+# concurrency is the most test targets one run executes at the same time, a
+# whole number of 1 or more. 1 (the default) runs the targets one at a time, in
+# declaration order, with their output passed straight through. Above 1, a
+# waiting target starts in declaration order as soon as a place is free and no
+# running target names a shared resource it names; a target held back by a
+# resource does not hold back the targets after it. Every line a target writes
+# is then shown with `[<target name>] ` in front of it, and no target reads
+# stdin. A target's own runner owns the parallelism inside that target.
+# Concurrency is off by default because targets that share something no
+# `resources` declaration names, such as a database, would corrupt each other's
+# runs. A target writing outside its own folder while another runs (a cache, a
+# coverage file in the repository root) changes that target's inputs; put such
+# paths in the global [scanning] skip list or narrow the target's `inputs`.
+# `--concurrency N` on `elspais test` and `elspais checks --run-tests` replaces
+# this setting for that run alone, for example on a larger CI machine, or 1 to
+# read a run's output one target at a time. A value below 1 is refused, here
+# and on the command line.
+concurrency = 1
 
 # Configured test targets - result ingestion and coverage attribution.
 # See `elspais docs test-targets` for full documentation.
@@ -306,16 +333,26 @@ output_root = ".results"
 # results (`elspais docs test-targets`, Expected results). `elspais test
 # --targets NAME ...` executes targets and records their results without
 # evaluating checks, so parallel jobs can each run part of the suite and one
-# `checks --expect` gate judges them all. NAMESPACE:NAME
+# `checks --expect` gate judges them all. `--stale-only` on `checks
+# --run-tests` and on `test` executes only the selected targets whose results
+# are not fresh and carries the results of the rest; a later `summary` or
+# `trace --targets last-run` marks fresh what that run executed. `--concurrency
+# N` on the same two commands sets how many targets run at once. NAMESPACE:NAME
 # names a target or group another federation member declares, resolved by
 # that member's own configuration.
 
 # Test groups - which targets a run is about. Declared as a keyword and a
 # description; a target then claims the groups it belongs to via `groups`.
-# `default` (what a run selects nothing executes), `all` (every target) and
-# `none` (no target) are reserved. A project cannot declare them.
+# `default` (what a run selects nothing executes), `all` (every target),
+# `none` (no target) and `last-run` (the targets the last executing run
+# recorded) are reserved. A project cannot declare them.
 # `--targets none` renders every result as carried.
-# No target may be named `none` or claim it.
+# `--targets last-run` on `summary`/`trace` marks fresh what the last run of
+# `test` or `checks --run-tests` executed; a record listing no target means
+# `none`. It is refused with no readable record, with a record naming a target
+# the configuration no longer holds, on a run that executes targets, and on
+# `--expect`.
+# No target may be named `none` or `last-run`, or claim either.
 # The tool refuses a `--targets` selection standing for no target.
 # The exception is `none` on `summary`/`trace`.
 # `checks --run-tests` and `test` refuse `none` too. They have nothing to run.
@@ -329,6 +366,17 @@ output_root = ".results"
 # federation member's namespace from a name that member declares.
 # [scanning.test.groups]
 # uat = "End-to-end journeys needing a live stack"
+
+# Shared resources - what targets that must never overlap have in common.
+# Declared as a name and a description of what the resource is: a database, a
+# network port, a device, a local service stack. A target then names the
+# resources it uses via `resources`. Two targets naming a common resource
+# never run at the same time; this matters only where concurrency is above 1.
+# The description is required. Names are matched without regard to case, so
+# two names differing only in case are refused, and a target naming a
+# resource not declared here is refused when the configuration is read.
+# [scanning.test.resources]
+# db = "The local Postgres instance the backend suites share"
 
 [[scanning.test.targets]]
 name     = "app"
@@ -354,6 +402,8 @@ coverage = "lcov.info"  # optional; relative to the target's
 # results  = "*.xml"  # glob relative to the target's folder
 # match    = "source"
 # groups   = ["uat"]                # default: the `default` group
+# resources = ["db"]                # declared shared resources it uses;
+#                                   # default: none
 # classname = "source-file"         # how the results name their test:
 #                                   # "python-module" (pytest) | "source-file"
 #                                   # (a spec basename, e.g. Playwright).

@@ -161,10 +161,22 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
     # Implements: REQ-d00295-A
     app = create_app(state, base_path=base_path)
 
-    port = getattr(args, "port", None) or 5001
+    requested_port = getattr(args, "port", None)
+    port = 5001 if requested_port is None else requested_port
     quiet = getattr(args, "quiet", False)
 
-    if _is_port_in_use(port) and not getattr(args, "port", None):
+    # Implements: REQ-o00076-E, REQ-o00076-N, REQ-o00076-O
+    # Port 0 asks for any free port. The socket is bound here, before the
+    # record below is written, so the record names the port this server
+    # answers on and nothing can take it in between.
+    listener = None
+    if port == 0:
+        import socket
+
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.bind(("127.0.0.1", 0))
+        port = int(listener.getsockname()[1])
+    elif _is_port_in_use(port) and requested_port is None:
         # The occupant is probed where it answers. When this working
         # tree's record names the port, the record says where that is; a
         # server for some other tree is asked at the root, and one mounted
@@ -405,7 +417,7 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
 
         _signal.signal(_signal.SIGTERM, _absorb_stop_signal)
 
-        anyio.run(server.serve)
+        anyio.run(server.serve, [listener] if listener is not None else None)
     except KeyboardInterrupt:
         if not quiet:
             print("\nServer stopped.", file=sys.stderr)

@@ -1,4 +1,3 @@
-# Verifies: REQ-d00249-A, REQ-d00249-C
 """Argument-parsing tests for `elspais checks --run-tests/--fail-fast`."""
 
 from __future__ import annotations
@@ -6,30 +5,51 @@ from __future__ import annotations
 import pytest
 import tyro
 
+from elspais.commands import args as cli_args
 from elspais.commands._scope import flag_values
 from elspais.commands.args import ChecksArgs
 
 
+# Verifies: REQ-d00249-G
 def test_run_tests_flag_present_and_defaults_false():
     args = tyro.cli(ChecksArgs, args=[])
     assert hasattr(args, "run_tests")
     assert args.run_tests is False
 
 
+# Verifies: REQ-d00249-C
 def test_fail_fast_flag_present_and_defaults_false():
     args = tyro.cli(ChecksArgs, args=[])
     assert hasattr(args, "fail_fast")
     assert args.fail_fast is False
 
 
+# Verifies: REQ-d00249-G
 def test_run_tests_flag_parses():
     args = tyro.cli(ChecksArgs, args=["--run-tests"])
     assert args.run_tests is True
 
 
+# Verifies: REQ-d00249-C
 def test_fail_fast_flag_parses():
     args = tyro.cli(ChecksArgs, args=["--run-tests", "--fail-fast"])
     assert args.fail_fast is True
+
+
+# Verifies: REQ-d00315-A
+def test_stale_only_flag_defaults_false_and_parses():
+    assert tyro.cli(ChecksArgs, args=[]).stale_only is False
+    assert tyro.cli(ChecksArgs, args=["--run-tests", "--stale-only"]).stale_only is True
+
+
+# Verifies: REQ-d00314-O
+@pytest.mark.parametrize(
+    "cls,leading", [(ChecksArgs, ["--run-tests"]), (cli_args.TestArgs, [])], ids=["checks", "test"]
+)
+def test_concurrency_flag_defaults_unset_and_parses(cls, leading):
+    """Unset leaves the project's maximum in force; a value replaces it."""
+    assert tyro.cli(cls, args=[]).concurrency is None
+    assert tyro.cli(cls, args=[*leading, "--concurrency", "2"]).concurrency == 2
 
 
 # Verifies: REQ-d00254-H

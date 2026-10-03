@@ -128,11 +128,24 @@ To see malformed references, use: `elspais malformed`
                    The run then records a fingerprint of its inputs there.
                    Exits 2 if no target has a command.
   `--fail-fast`    Stop at the first target failure and skip the checks pass.
+                   With `concurrency` above 1, no further target starts and
+                   the targets already running finish.
                    Requires `--run-tests`; refused without it (exit 2).
   `--targets T...` Run and ingest only these test targets rather than the
                    `default` group. The command refuses a selection
-                   standing for no target, `none` included (exit 2). It also
+                   standing for no target, `none` included (exit 2), and
+                   `last-run`, which names an earlier run's targets. It also
                    refuses a bare run if `default` holds no target.
+                   Requires `--run-tests`; refused without it (exit 2).
+  `--stale-only`   Execute only the selected targets whose results are not
+                   fresh (stale, missing, or left by a run that never
+                   finished) and carry the results of the rest. Every
+                   selected target stays expected, and a carried failure
+                   still fails. A selection that is all fresh executes nothing.
+                   Requires `--run-tests`; refused without it (exit 2).
+  `--concurrency N` The most targets this run executes at the same time, in
+                   place of `[scanning.test] concurrency`. 1 runs them one at
+                   a time, in declaration order. Below 1 is refused (exit 2).
                    Requires `--run-tests`; refused without it (exit 2).
   `--expect T...`  Require the results of these test targets (or groups)
                    without executing them, e.g. results an earlier job left.
@@ -140,9 +153,9 @@ To see malformed references, use: `elspais malformed`
                    `tests.ingestion_fault`; a target neither executed nor
                    expected with no results is `tests.not_run` (info).
                    Accepted with and without `--run-tests`; `none` expects
-                   nothing beyond what runs. NAMESPACE:NAME names a
-                   target or group another federation member declares.
-                   Unknown names and namespaces exit 2.
+                   nothing beyond what runs, and `last-run` is refused.
+                   NAMESPACE:NAME names a target or group another federation
+                   member declares. Unknown names and namespaces exit 2.
   `-o, --output PATH`  Write output to file instead of stdout
 
 `-v, --verbose` and `-q, --quiet` are global options (see Global Options
@@ -156,15 +169,28 @@ Execute test targets and record their results. Evaluate no check.
 
   $ elspais test                       # the `default` group
   $ elspais test --targets unit        # a target or a group
+  $ elspais test --stale-only          # only targets whose results are not fresh
   $ elspais checks --expect unit       # later, once: judge every result
 
 The exit code reflects only the targets: 1 if any target failed, 0 if all
 passed. Each run empties the target's folder and records a fingerprint, as
-`checks --run-tests` does.
+`checks --run-tests` does. Each run also records the targets it executed in
+`<output_root>/.elspais-last-run.json`, which `summary` and `trace` read as
+`--targets last-run`.
 
   `--targets T...` Execute only these targets or groups. The selection and its
                    refusals are those of `checks --run-tests` (exit 2).
-  `--fail-fast`    Stop at the first target that fails.
+  `--fail-fast`    Stop at the first target that fails. With `concurrency`
+                   above 1, no further target starts and the targets already
+                   running finish.
+  `--stale-only`   Execute only the selected targets whose results are not
+                   fresh (stale, missing, or left by a run that never
+                   finished) and leave the fresh results of the rest in
+                   place. A selection that is all fresh executes nothing and
+                   exits 0.
+  `--concurrency N` The most targets this run executes at the same time, in
+                   place of `[scanning.test] concurrency`. 1 runs them one at
+                   a time, in declaration order. Below 1 is refused (exit 2).
 
 Every executed target whose reporter reads test results must declare a
 `results` pattern, because this command reads nothing while a command runs. A
@@ -514,6 +540,11 @@ Generate traceability matrix and reports.
   `--assertions`         Show individual assertions
   `--tests`              Show test references
   `--output PATH`        Output file path
+  `--targets T...`       Mark these test targets or groups fresh and render
+                         every other result carried. `none` marks no target
+                         fresh; `last-run` marks the targets the last run of
+                         `elspais test` or `checks --run-tests` executed (see
+                         `elspais docs test-targets`)
 
 **Scoping the report** (see `elspais docs scoping`):
 
@@ -579,7 +610,8 @@ also serves MCP tools at `/mcp` for AI agent integration.
 
   `--static`             Generate static HTML file instead of live server
   `--server`             Start server without opening browser
-  `--port PORT`          Server port (default: 5001)
+  `--port PORT`          Server port (default: 5001; 0 picks any free
+                         port, which `.elspais/daemon.json` records)
   `--base-path PATH`     URL prefix the server sits under (default: none)
   `--embed-content`      Embed requirement content and every traced source
                          file, highlighted and compressed, for offline
@@ -741,6 +773,11 @@ Generate coverage summary reports.
   bit), nor the line-coverage ones (a level has no line figure). A table
   states a figure as one cell; `--format json` states it as an object of its
   numbers, in the same row shape `trace` uses. See `elspais docs scoping`.
+  `--targets T...`       Mark these test targets or groups fresh and render
+                         every other result carried. `none` marks no target
+                         fresh; `last-run` marks the targets the last run of
+                         `elspais test` or `checks --run-tests` executed (see
+                         `elspais docs test-targets`)
 
 When `Integrates:` references are present, `summary` adds an "External
 integrations (by associate)" section listing inherited coverage grouped by the

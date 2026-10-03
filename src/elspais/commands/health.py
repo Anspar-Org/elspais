@@ -3777,15 +3777,6 @@ def run_checks(graph: FederatedGraph, config: dict[str, Any] | None = None) -> l
 # =============================================================================
 
 
-def _read_run_meta(config: dict | None) -> dict:
-    """Return test-run metadata defaults.
-
-    The run-metadata sidecar config source was removed in the greenfield
-    target-driven rework; this now always returns the defaults.
-    """
-    return {"deselected_count": 0, "runner": ""}
-
-
 # Implements: REQ-d00275-C
 def _configured_test_targets(graph: FederatedGraph, config: dict | None) -> list[tuple[str, Any]]:
     """``(repo name, target)`` for every federation member configuring one.
@@ -3837,8 +3828,6 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     from elspais.graph import NodeKind
 
     result_nodes = list(graph.nodes_by_kind(NodeKind.RESULT))
-    run_meta = _read_run_meta(config)
-    deselected = run_meta["deselected_count"]
 
     if not result_nodes:
         targets = _configured_test_targets(graph, config)
@@ -3890,7 +3879,6 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
 
     total = passed + failed + skipped
     pass_rate = (passed / total * 100) if total > 0 else 0
-    deselected_suffix = f", {deselected} deselected" if deselected else ""
 
     if failed > 0:
         # Implements: REQ-d00294-F
@@ -3929,7 +3917,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
             passed=False,
             message=(
                 f"Result failures: {failed} of {total} results failed "
-                f"({passed} passed, {skipped} skipped{deselected_suffix}, "
+                f"({passed} passed, {skipped} skipped, "
                 f"{pass_rate:.1f}% pass rate)"
             ),
             category="tests",
@@ -3938,7 +3926,6 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
                 "passed": passed,
                 "failed": failed,
                 "skipped": skipped,
-                "deselected": deselected,
                 "pass_rate": round(pass_rate, 1),
             },
             findings=findings,
@@ -3947,14 +3934,13 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     return HealthCheck(
         name="tests.results",
         passed=True,
-        message=f"All results passing: {passed} passed, {skipped} skipped{deselected_suffix}",
+        message=f"All results passing: {passed} passed, {skipped} skipped",
         category="tests",
         severity="info",
         details={
             "passed": passed,
             "failed": failed,
             "skipped": skipped,
-            "deselected": deselected,
             "pass_rate": round(pass_rate, 1),
         },
     )
@@ -5468,7 +5454,7 @@ def _report_from_dict(data: dict[str, Any]) -> HealthReport:
     return report
 
 
-# Implements: REQ-d00249-A+F+G, REQ-d00285-H
+# Implements: REQ-d00249-F+G, REQ-d00285-H
 # Implements: REQ-d00283-D+E+H+I
 def run(args: argparse.Namespace) -> int:
     """Run the health command.
@@ -5505,8 +5491,14 @@ def run(args: argparse.Namespace) -> int:
             inert.append("--targets")
         if fail_fast:
             inert.append("--fail-fast")
+        # Implements: REQ-d00315-I
+        if getattr(args, "stale_only", False):
+            inert.append("--stale-only")
+        # Implements: REQ-d00314-O
+        if getattr(args, "concurrency", None) is not None:
+            inert.append("--concurrency")
         if inert:
-            named = " and ".join(inert)
+            named = ", ".join(inert[:-1]) + " and " + inert[-1] if len(inert) > 1 else inert[0]
             verb = "choose" if len(inert) > 1 else "chooses"
             print(
                 f"error: {named} {verb} what --run-tests executes, and this run does "
@@ -5550,7 +5542,17 @@ def run(args: argparse.Namespace) -> int:
         from elspais.commands._scope import flag_values
 
         selected = list(flag_values(args, "targets"))
-        from elspais.commands.test_runner import SelectionRefused, executable_selection
+        from elspais.commands.test_runner import (
+            SelectionRefused,
+            concurrency_refusal,
+            executable_selection,
+        )
+
+        # Implements: REQ-d00314-P
+        concurrency = getattr(args, "concurrency", None)
+        if concurrency is not None and concurrency < 1:
+            print(f"error: {concurrency_refusal(concurrency)}", file=sys.stderr)
+            return 2
 
         try:
             only = executable_selection(cfg, selected)
@@ -5561,8 +5563,21 @@ def run(args: argparse.Namespace) -> int:
             t for t in cfg.scanning.test.targets if t.command and (only is None or t.name in only)
         ]
         repo_root = find_git_root() or Path.cwd()
+        # Implements: REQ-d00315-B+F+G+H
+        # Every selected target stays expected; a stale-only run executes the
+        # ones whose results are not fresh and carries the rest.
+        if getattr(args, "stale_only", False):
+            from elspais.commands.test_runner import describe_stale_only, not_fresh_targets
+
+            execute, carry = not_fresh_targets(cfg, repo_root, only)
+            print(describe_stale_only(execute, carry), file=sys.stderr)
+            # The selection less what it carries, so a target with no command
+            # reads as it reads in the same run without --stale-only.
+            configured = {t.name for t in cfg.scanning.test.targets}
+            fresh = (configured if only is None else only) - carry
+            only = None if fresh == configured else fresh
         results, captured_map = run_configured_targets(
-            cfg, repo_root, fail_fast=fail_fast, only=only
+            cfg, repo_root, fail_fast=fail_fast, only=only, concurrency=concurrency
         )
         runner_failed = any(r.returncode != 0 for r in results)
         # Implements: REQ-d00283-Q

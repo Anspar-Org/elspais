@@ -139,15 +139,13 @@ if [ -z "$ELSPAIS_E2E_FORCE" ] && [ -f "$E2E_CACHE" ]; then
     fi
 fi
 
-# The path and the junit family the `elspais-e2e` target declares in
-# .elspais.toml. .elspais.toml sets the location of the e2e results. This hook
-# writes the results to that location, in the output area of the target. This
-# hook also records the fingerprint of the run. `elspais checks` opens no other
-# path. Consequently, if the results go to another path, then `elspais checks`
-# reports the tier as not run. `junit_family=xunit1` keeps the file and line
-# attributes of each test case. The source matcher binds results with these
-# attributes. The pretty-print below keeps those links.
-E2E_RESULTS="$CACHE_DIR/elspais-e2e/junit.xml"
+# The output area of the `elspais-e2e` target in .elspais.toml. This hook
+# writes the results there and records the fingerprint of the run, because
+# `elspais checks` opens no other path: results written anywhere else read as
+# a tier that never ran. run-e2e-tier writes `junit.xml` there with
+# `junit_family=xunit1`, which keeps the file and line attributes the source
+# matcher binds results with.
+E2E_OUT="$CACHE_DIR/elspais-e2e"
 
 # The tier runs detached, so a push whose client times out — or a hook killed
 # for any other reason — loses the connection and not the run. The verdict,
@@ -159,15 +157,7 @@ mkdir -p "$E2E_RUN_DIR"
 
 {
     printf '#!/bin/bash\n'
-    printf '# Records the e2e verdict, and formats the artifact it was read from.\n'
-    printf 'if ! python3 -c "\n'
-    printf 'import xml.etree.ElementTree as ET\n'
-    printf "tree = ET.parse('%s')\n" "$E2E_RESULTS"
-    printf "ET.indent(tree, space='  ')\n"
-    printf "tree.write('%s', encoding='unicode', xml_declaration=True)\n" "$E2E_RESULTS"
-    printf '" 2>/dev/null; then\n'
-    printf '    echo "::warning::junit pretty-print failed (tolerated: artifact formatting only)"\n'
-    printf 'fi\n'
+    printf '# Records the e2e verdict.\n'
     # 137 is the library's "ended without recording one", which is not a
     # verdict about the code and must never be cached as one.
     printf 'if [ "$1" -eq 137 ]; then exit 0; fi\n'
@@ -181,8 +171,7 @@ mkdir -p "$E2E_RUN_DIR"
 E2E_RC=$(tier_execute "$E2E_RUN_DIR" "$CONTENT_HASH $E2E_ENV_SRC" "$REPO_ROOT" "e2e" \
     "$E2E_RUN_DIR/finish.sh" \
     "$REPO_ROOT/.githooks/with-fingerprint" elspais-e2e \
-    pytest tests/ -m "e2e" --tb=short -q \
-    --junitxml="$E2E_RESULTS" -o junit_family=xunit1)
+    "$REPO_ROOT/.githooks/run-e2e-tier" "$E2E_OUT")
 
 if [ "$E2E_RC" = "137" ]; then
     echo -e "${RED}The e2e run ended without recording a verdict.${NC}"

@@ -43,6 +43,12 @@ OUTPUT_ENV = "ELSPAIS_TARGET_OUTPUT"
 
 _RECORD_VERSION = 2
 
+#: The name of the record of the last run's executed targets, in the output root.
+#: A target name cannot start with ``.``, so no output area can take this name.
+LAST_RUN_NAME = ".elspais-last-run.json"
+
+_LAST_RUN_VERSION = 1
+
 
 @dataclass(frozen=True)
 class Freshness:
@@ -131,13 +137,28 @@ def _digest_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def compute_manifest(repo_root: Path, config: Any, target: Any) -> dict[str, str]:
-    """Map the repo-relative path of each input of *target* to its content digest."""
+def compute_manifest(
+    repo_root: Path,
+    config: Any,
+    target: Any,
+    digest_cache: dict[Path, str] | None = None,
+) -> dict[str, str]:
+    """Map the repo-relative path of each input of *target* to its content digest.
+
+    *digest_cache* maps a path to its digest. Targets often share inputs, so a
+    caller judging several targets against one tree passes one cache to
+    every call and each file is read once. A cache is valid only while no file
+    changes, so a run never reads one.
+    """
     root = Path(repo_root).resolve()
     manifest: dict[str, str] = {}
     for path in input_files(root, config, target):
         try:
-            manifest[path.relative_to(root).as_posix()] = _digest_file(path)
+            if digest_cache is None:
+                digest = _digest_file(path)
+            elif (digest := digest_cache.get(path)) is None:
+                digest = digest_cache[path] = _digest_file(path)
+            manifest[path.relative_to(root).as_posix()] = digest
         except OSError:
             # A file that disappears after the walk is not an input.
             continue
@@ -328,10 +349,17 @@ def results_present(repo_root: Path, config: Any, target: Any) -> bool:
     return any(Path(f).is_file() for f in glob(str(folder / target.results), recursive=True))
 
 
-def judge(repo_root: Path, config: Any, target_name: str) -> Freshness:
+def judge(
+    repo_root: Path,
+    config: Any,
+    target_name: str,
+    *,
+    digest_cache: dict[Path, str] | None = None,
+) -> Freshness:
     """Return the freshness of a target's results on disk.
 
-    A stale verdict includes its reason.
+    A stale verdict includes its reason. *digest_cache* is passed to
+    :func:`compute_manifest`.
     """
     root = Path(repo_root).resolve()
     target = _find_target(config, target_name)
@@ -356,9 +384,51 @@ def judge(repo_root: Path, config: Any, target_name: str) -> Freshness:
             changed=during,
             record=record,
         )
-    changed = tuple(differences(record["manifest"], compute_manifest(root, config, target)))
+    current = compute_manifest(root, config, target, digest_cache)
+    changed = tuple(differences(record["manifest"], current))
     if changed:
         return Freshness(
             target=target_name, state="stale", reason="changed", changed=changed, record=record
         )
     return Freshness(target=target_name, state="fresh", record=record)
+
+
+def last_run_path(repo_root: Path, config: Any) -> Path:
+    """Return the path of the record of the last run's executed targets."""
+    return output_root(repo_root, config) / LAST_RUN_NAME
+
+
+# Implements: REQ-d00316-A+B+C+D
+def write_last_run(repo_root: Path, config: Any, executed: list[str]) -> Path:
+    """Record the targets a run executed, replacing the record of any earlier run.
+
+    The record is a JSON object: ``version`` (1), ``executed`` (the names of
+    the targets the run executed, sorted) and ``finished_at`` (an ISO 8601
+    time). It sits in the output root, beside the output areas, because a
+    target's own area is emptied whenever that target runs.
+    """
+    path = last_run_path(repo_root, config)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "version": _LAST_RUN_VERSION,
+        "executed": sorted(set(executed)),
+        "finished_at": _now(),
+    }
+    path.write_text(json.dumps(record, indent=1, sort_keys=True) + "\n")
+    return path
+
+
+# Implements: REQ-d00316-F
+def read_last_run(repo_root: Path, config: Any) -> list[str] | None:
+    """Return the targets the last recorded run executed, or ``None`` with no readable record."""
+    path = last_run_path(repo_root, config)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or data.get("version") != _LAST_RUN_VERSION:
+        return None
+    executed = data.get("executed")
+    if not isinstance(executed, list) or not all(isinstance(n, str) for n in executed):
+        return None
+    return executed

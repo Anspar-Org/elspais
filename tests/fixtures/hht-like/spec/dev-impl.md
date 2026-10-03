@@ -21,6 +21,10 @@ D. The module SHALL implement refresh token rotation.
 
 Security best practices require proven authentication mechanisms.
 
+## Changelog
+
+- 2026-01-01 | 343879f1 | - | Fixture Author (<fixture@example.com>) | Initial version
+
 *End* *Authentication Module* | **Hash**: 343879f1
 ---
 
@@ -41,6 +45,10 @@ D. The module SHALL implement a data deletion workflow.
 
 Implementation of data privacy features.
 
+## Changelog
+
+- 2026-01-01 | 48edab8c | - | Fixture Author (<fixture@example.com>) | Initial version
+
 *End* *Privacy Controls* | **Hash**: 48edab8c
 ---
 
@@ -60,6 +68,10 @@ D. The module SHALL provide a query API for auditors.
 ## Rationale
 
 FDA compliance requires verifiable audit trails.
+
+## Changelog
+
+- 2026-01-01 | 3329f7a0 | - | Fixture Author (<fixture@example.com>) | Initial version
 
 *End* *Audit Trail Implementation* | **Hash**: 3329f7a0
 ---

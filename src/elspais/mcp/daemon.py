@@ -82,6 +82,66 @@ def _session_leader_has_tty(sid: int) -> bool:
         return False
 
 
+# Implements: REQ-o00074-A, REQ-o00074-E, REQ-o00076-E
+def pid_alive(pid: int) -> bool:
+    """True while a process with this pid is still running.
+
+    The one answer to "is that process still there" for every client handle
+    and every daemon record. ``os.kill(pid, 0)`` alone answers a different
+    question -- whether the number can be signalled -- and a process that
+    has exited but has not been collected by its parent still can. Inside a
+    container whose first process never collects orphans (a CI job or a
+    development container running ``tail -f /dev/null``), every daemon is
+    such an orphan, so a process that ended stays signallable for as long
+    as the container runs. A zombie is therefore reported as gone. EPERM
+    means a process of another user holds the number, which is alive.
+    """
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return not _proc_is_zombie(pid)
+    except OSError:
+        return False
+    return not _proc_is_zombie(pid)
+
+
+def _reap_if_our_child(pid: int) -> bool:
+    """Collect ``pid`` if it is our own child that has already exited.
+
+    ``waitpid(pid, WNOHANG)`` only succeeds for a direct child; for any
+    other pid it raises, which is exactly the "not ours to reap" case and
+    is swallowed. True means the child was collected (or was already
+    gone); the caller still needs its own liveness check to know which.
+    """
+    try:
+        collected_pid, _status = os.waitpid(pid, os.WNOHANG)
+        return collected_pid == pid
+    except (ChildProcessError, OSError):
+        return False
+
+
+def _proc_is_zombie(pid: int) -> bool:
+    """True if ``/proc/<pid>`` reports process state ``Z`` (zombie).
+
+    Best effort, matching ``_session_leader_has_tty``'s read-and-tolerate
+    style: unreadable or malformed /proc content (missing, permission
+    denied, non-Linux) reports False rather than raising, leaving the
+    caller to fall back to its own liveness check.
+    """
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+        # comm may contain spaces/parens; fields after the last ')' are
+        # position-stable. State is the first field after that.
+        state = stat.rsplit(")", 1)[1].split()[0]
+        return state == "Z"
+    except (OSError, ValueError, IndexError):
+        return False
+
+
 # Implements: REQ-o00074-D
 def _declared_client_pid() -> int | str | None:
     """Read the caller's declared client handle.
@@ -105,11 +165,7 @@ def _declared_client_pid() -> int | str | None:
             pid = int(raw)
         except ValueError:
             return _UNUSABLE
-        if pid <= 1:
-            return _UNUSABLE
-        try:
-            os.kill(pid, 0)
-        except OSError:
+        if pid <= 1 or not pid_alive(pid):
             return _UNUSABLE
         return pid
     return None
@@ -894,8 +950,8 @@ def get_daemon_info(repo_root: Path) -> dict | None:
     is deleted here. That deletion is why this is not a pure read, and callers
     that only want to look must read the record instead of calling this.
 
-    What it checks is LIVENESS, not identity: ``os.kill(pid, 0)`` says a
-    process holds that number, never that the process is a daemon. Pids are
+    What it checks is LIVENESS, not identity: ``pid_alive`` says a
+    process is running under that number, never that the process is a daemon. Pids are
     reused, and a record can be written by something that is not a daemon, so
     a caller about to SIGNAL the pid must ask ``process_is_daemon`` as well --
     this function's answer is not grounds for killing anything.
@@ -915,10 +971,10 @@ def get_daemon_info(repo_root: Path) -> dict | None:
         return None
     try:
         info = json.loads(path.read_text())
-        pid = info["pid"]
-        os.kill(pid, 0)  # check alive
+        if not pid_alive(info["pid"]):
+            raise ProcessLookupError(info["pid"])
         return info
-    except (json.JSONDecodeError, KeyError, OSError):
+    except (json.JSONDecodeError, KeyError, TypeError, OSError):
         path.unlink(missing_ok=True)
         return None
 
@@ -1470,53 +1526,15 @@ def request_daemon_stop(info: dict, discard_changes: bool = False) -> dict:
         return {"success": False, "error": str(e)}
 
 
-def _reap_if_our_child(pid: int) -> bool:
-    """Collect ``pid`` if it is our own child that has already exited.
-
-    ``waitpid(pid, WNOHANG)`` only succeeds for a direct child; for any
-    other pid it raises, which is exactly the "not ours to reap" case and
-    is swallowed. True means the child was collected (or was already
-    gone); the caller still needs its own liveness check to know which.
-    """
-    try:
-        collected_pid, _status = os.waitpid(pid, os.WNOHANG)
-        return collected_pid == pid
-    except (ChildProcessError, OSError):
-        return False
-
-
-def _proc_is_zombie(pid: int) -> bool:
-    """True if ``/proc/<pid>`` reports process state ``Z`` (zombie).
-
-    Best effort, matching ``_session_leader_has_tty``'s read-and-tolerate
-    style: unreadable or malformed /proc content (missing, permission
-    denied, non-Linux) reports False rather than raising, leaving the
-    caller to fall back to its own liveness check.
-    """
-    try:
-        stat = Path(f"/proc/{pid}/stat").read_text()
-        # comm may contain spaces/parens; fields after the last ')' are
-        # position-stable. State is the first field after that.
-        state = stat.rsplit(")", 1)[1].split()[0]
-        return state == "Z"
-    except (OSError, ValueError, IndexError):
-        return False
-
-
 # Implements: REQ-o00075-B
 def wait_for_daemon_exit(info: dict, timeout: float = 20.0) -> bool:
     """Block until the daemon process is gone. True if it went.
 
-    ``kill(pid, 0)`` alone is not enough: it asks the kernel only whether
-    the pid could be signalled, and a process that has exited but not yet
-    been reaped by its parent -- a zombie -- still answers yes. Every test
-    that spawns a daemon directly is that daemon's parent, and so is any
-    other caller that does the same, so this is not a corner case: without
-    accounting for it, a daemon that died immediately is reported as still
-    serving for the full timeout. Each poll therefore also reaps the pid
-    if it is our own child (harmless if it is not, or if nothing is
-    waiting to be collected) and checks /proc for zombie state, so a
-    reaped-or-reapable exit is seen at once rather than at the deadline.
+    Each poll first collects the pid if it is this process's own child that
+    has exited, then asks ``pid_alive``, which reports a process that has
+    exited but has not been collected as gone. A caller that spawned the
+    daemon directly is its parent, so without that a daemon that died at
+    once would read as serving until the deadline.
     """
     pid = info.get("pid")
     if not pid:
@@ -1524,11 +1542,7 @@ def wait_for_daemon_exit(info: dict, timeout: float = 20.0) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         _reap_if_our_child(pid)
-        if _proc_is_zombie(pid):
-            return True
-        try:
-            os.kill(pid, 0)
-        except OSError:
+        if not pid_alive(pid):
             return True
         time.sleep(0.2)
     return False

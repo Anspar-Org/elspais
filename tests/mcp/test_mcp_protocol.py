@@ -10,6 +10,7 @@ import subprocess
 
 import pytest
 
+from tests.e2e.conftest import private_tree
 from tests.e2e.helpers import resolve_elspais
 
 pytest.importorskip("mcp")
@@ -24,10 +25,11 @@ pytestmark = [
 ]
 
 
-# Allowance for the server's first response: startup includes a full graph
-# build (~10s on this repo), so the handshake needs far more headroom than
-# per-request calls against an already-running server.
-STARTUP_TIMEOUT = 30.0
+# Allowance for the server's first response, which follows a cold full graph
+# build of this repository's estate. It covers that build on the slowest
+# machine that runs this tier, beside another worker building its own copy.
+# The tests ask whether the server answers; this is not a performance budget.
+STARTUP_TIMEOUT = 120.0
 
 
 def _send(proc, obj: dict) -> None:
@@ -71,11 +73,18 @@ def _initialize(proc) -> dict:
     return response
 
 
+@pytest.fixture(scope="module")
+def protocol_tree(tmp_path_factory):
+    """A private copy of this repository for the module's servers to serve."""
+    return private_tree(tmp_path_factory.mktemp("repo-tree"))
+
+
 @pytest.fixture
-def mcp_server():
-    """Start MCP server as subprocess with stdio transport."""
+def mcp_server(protocol_tree):
+    """Start MCP server as subprocess with stdio transport, over the private copy."""
     proc = subprocess.Popen(
         [_ELSPAIS, "mcp", "serve"],
+        cwd=protocol_tree,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

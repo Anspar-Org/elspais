@@ -74,7 +74,7 @@ def test_unknown_target_name_errors(capsys, monkeypatch, tmp_path):
     # Both vocabularies, because `--targets` reads from both: a reader who
     # mistyped a group name learns the group names, not only the target ones.
     assert "Configured targets: a" in err
-    assert "Known groups: all, default, none." in err
+    assert "Known groups: all, default, last-run, none." in err
 
 
 # Verifies: REQ-d00283-H
@@ -93,7 +93,7 @@ def test_unknown_name_error_names_the_declared_groups_too(capsys, monkeypatch, t
 
     err = capsys.readouterr().err
     assert rc == 2
-    assert "Known groups: all, default, none, slow, uat" in err
+    assert "Known groups: all, default, last-run, none, slow, uat" in err
 
 
 # Verifies: REQ-d00283-H

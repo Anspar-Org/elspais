@@ -13,6 +13,10 @@ The system shall authenticate users securely.
 - OAuth support
 - MFA option
 
+## Changelog
+
+- 2026-01-01 | 153ca958 | - | Fixture Author (<fixture@example.com>) | Initial version
+
 *End* *User Authentication* | **Hash**: 153ca958
 ---
 
@@ -27,6 +31,10 @@ Users can export their data.
 - CSV format
 - PDF format
 
+## Changelog
+
+- 2026-01-01 | f972feda | - | Fixture Author (<fixture@example.com>) | Initial version
+
 *End* *Data Export* | **Hash**: f972feda
 ---
 
@@ -40,6 +48,10 @@ All actions are logged for audit.
 - Action type recorded
 - Timestamp recorded
 - User ID recorded
+
+## Changelog
+
+- 2026-01-01 | 7dea4909 | - | Fixture Author (<fixture@example.com>) | Initial version
 
 *End* *Audit Logging* | **Hash**: 7dea4909
 ---

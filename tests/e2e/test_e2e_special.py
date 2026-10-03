@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from elspais.mcp.daemon import pid_alive, wait_for_daemon_exit
 from tests.e2e.conftest import run_elspais
 
 from .helpers import resolve_elspais, trace_rows
@@ -145,13 +146,17 @@ class TestTraceFormatConsistency:
     """Validates REQ-d00085-A: trace JSON and CSV both produce valid output."""
 
     # Verifies: REQ-d00085-A
-    def test_REQ_d00085_A_trace_json_csv_same_count(self, tmp_path):
+    def test_REQ_d00085_A_trace_json_csv_same_count(self, repo_tree, tmp_path):
         json_out = tmp_path / "trace_json"
-        result_json = run_elspais("trace", "--format", "json", "--output", str(json_out))
+        result_json = run_elspais(
+            "trace", "--format", "json", "--output", str(json_out), cwd=repo_tree
+        )
         assert result_json.returncode == 0, f"trace json failed: {result_json.stderr}"
 
         csv_out = tmp_path / "trace_csv"
-        result_csv = run_elspais("trace", "--format", "csv", "--output", str(csv_out))
+        result_csv = run_elspais(
+            "trace", "--format", "csv", "--output", str(csv_out), cwd=repo_tree
+        )
         assert result_csv.returncode == 0, f"trace csv failed: {result_csv.stderr}"
 
         # Find the JSON output file
@@ -672,7 +677,6 @@ class TestDaemonClientLiveness:
     def test_REQ_o00074_A_daemon_exits_after_client_dies(self, tmp_path):
         import os
         import sys
-        import time
 
         from tests.e2e.helpers import Requirement, base_config, build_project
 
@@ -715,21 +719,14 @@ class TestDaemonClientLiveness:
             # is what an operator reads to ask why the daemon is still up.
             assert _recorded_pids(info) == [client.pid]
             daemon_pid = info["pid"]
-            os.kill(daemon_pid, 0)  # daemon alive while client alive
+            assert pid_alive(daemon_pid), "the daemon stopped while its client was alive"
 
             # Kill the session; the daemon must notice and exit cleanly
             # (no unsaved mutations -> no grace period).
             client.kill()
             client.wait()
 
-            deadline = time.time() + 20
-            while time.time() < deadline:
-                try:
-                    os.kill(daemon_pid, 0)
-                except ProcessLookupError:
-                    break  # daemon exited
-                time.sleep(0.3)
-            else:
+            if not wait_for_daemon_exit({"pid": daemon_pid}, timeout=20):
                 raise AssertionError(
                     "daemon survived its client's death: "
                     + (tmp_path / ".elspais" / "daemon.log").read_text()[-1000:]
@@ -785,7 +782,7 @@ class TestDaemonClientLiveness:
             )
             # And it stays up: no watchdog is running.
             time.sleep(1.5)
-            os.kill(info["pid"], 0)
+            assert pid_alive(info["pid"]), "the explicitly started daemon stopped"
         finally:
             if daemon_json.exists():
                 try:
@@ -851,9 +848,7 @@ class TestDaemonClientLiveness:
 
             deadline = time.time() + 20
             while time.time() < deadline:
-                try:
-                    os.kill(daemon_pid, 0)
-                except ProcessLookupError:
+                if not pid_alive(daemon_pid):
                     break  # daemon exited
                 # A client that keeps talking to the daemon must not keep it
                 # alive: read traffic is not evidence a writer is present.
@@ -951,19 +946,12 @@ class TestDaemonClientLiveness:
             starter.kill()
             starter.wait()
             time.sleep(3)
-            os.kill(daemon_pid, 0)  # raises ProcessLookupError if it stopped
+            assert pid_alive(daemon_pid), "the daemon stopped under its adopted client"
 
             # Now the adopter goes. Nobody is left.
             adopter.kill()
             adopter.wait()
-            deadline = time.time() + 20
-            while time.time() < deadline:
-                try:
-                    os.kill(daemon_pid, 0)
-                except ProcessLookupError:
-                    break
-                time.sleep(0.3)
-            else:
+            if not wait_for_daemon_exit({"pid": daemon_pid}, timeout=20):
                 raise AssertionError(
                     "daemon kept serving with every recorded client gone: "
                     + (tmp_path / ".elspais" / "daemon.log").read_text()[-1500:]
@@ -987,7 +975,6 @@ class TestDaemonClientLiveness:
         """
         import os
         import sys
-        import time
         import urllib.request
 
         from tests.e2e.helpers import Requirement, base_config, build_project
@@ -1053,14 +1040,7 @@ class TestDaemonClientLiveness:
             client.kill()
             client.wait()
 
-            deadline = time.time() + 30
-            while time.time() < deadline:
-                try:
-                    os.kill(daemon_pid, 0)
-                except ProcessLookupError:
-                    break
-                time.sleep(0.3)
-            else:
+            if not wait_for_daemon_exit({"pid": daemon_pid}, timeout=30):
                 raise AssertionError(
                     "daemon holding unsaved work never terminated: "
                     + (tmp_path / ".elspais" / "daemon.log").read_text()[-1500:]
@@ -1212,20 +1192,6 @@ def _apply_pending_title(info: dict, title: str) -> None:
         assert json.loads(resp.read().decode())["success"] is True
 
 
-def _await_exit(pid: int, seconds: float = 30.0) -> bool:
-    import os
-    import time
-
-    deadline = time.time() + seconds
-    while time.time() < deadline:
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            return True
-        time.sleep(0.2)
-    return False
-
-
 class TestStoppingALiveDaemonAccountsForItsWork:
     """Validates REQ-p00083-A and REQ-p00083-B: a live daemon told to discard the
     work it holds drops it, and one stopped by any other route writes it. Only a
@@ -1260,7 +1226,9 @@ class TestStoppingALiveDaemonAccountsForItsWork:
             result = run_elspais("daemon", "--discard-changes", cwd=tmp_path)
 
             assert result.returncode == 0, result.stderr + result.stdout
-            assert _await_exit(daemon_pid), "the daemon told to discard never stopped"
+            assert wait_for_daemon_exit({"pid": daemon_pid}, timeout=30.0), (
+                "the daemon told to discard never stopped"
+            )
             assert title not in spec.read_text(), (
                 "the work the operator said to throw away was written anyway"
             )
@@ -1307,7 +1275,9 @@ class TestStoppingALiveDaemonAccountsForItsWork:
             assert payload["saved"] is True, payload
             assert payload["discarded"] is False
 
-            assert _await_exit(daemon_pid), "the daemon asked to stop never stopped"
+            assert wait_for_daemon_exit({"pid": daemon_pid}, timeout=30.0), (
+                "the daemon asked to stop never stopped"
+            )
             assert title in spec.read_text(), (
                 "a stop nobody qualified destroyed the work the daemon held"
             )
@@ -1344,7 +1314,9 @@ class TestStoppingALiveDaemonAccountsForItsWork:
 
             os.kill(daemon_pid, signal.SIGTERM)
 
-            assert _await_exit(daemon_pid), "the signalled daemon never stopped"
+            assert wait_for_daemon_exit({"pid": daemon_pid}, timeout=30.0), (
+                "the signalled daemon never stopped"
+            )
             log_tail = (tmp_path / ".elspais" / "daemon.log").read_text()[-1500:]
             assert title in spec.read_text(), (
                 "a signalled daemon destroyed the work it was holding: " + log_tail
@@ -1396,7 +1368,7 @@ class TestStoppingALiveDaemonAccountsForItsWork:
             )
 
             os.kill(daemon_pid, signal.SIGKILL)
-            assert _await_exit(daemon_pid)
+            assert wait_for_daemon_exit({"pid": daemon_pid}, timeout=30.0)
             assert sentinel.exists(), "the only surviving account of the loss went with the process"
             assert title not in spec.read_text(), "the work reached disk, so nothing was lost"
 
@@ -1480,14 +1452,6 @@ class TestTheRestartSurfaceOffersTheTwoAnswers:
 # ---------------------------------------------------------------------------
 
 
-def _free_port() -> int:
-    import socket
-
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return int(s.getsockname()[1])
-
-
 # The session-lifetime viewer's grace and check interval. The grace is the
 # window a client has to connect after the viewer starts, and the window a
 # lost stream has to come back: it is counted from the viewer's start, so it
@@ -1498,7 +1462,7 @@ _SESSION_GRACE_SECONDS = 8.0
 _SESSION_CHECK_SECONDS = 0.5
 
 
-def _spawn_session_viewer(tmp_path: Path) -> tuple[subprocess.Popen, Path, str]:
+def _spawn_session_viewer(tmp_path: Path) -> tuple[subprocess.Popen, Path]:
     """Start `elspais viewer --server --session-lifetime` on a fresh project.
 
     Checked twice a second with a grace of a few seconds, so the test
@@ -1511,7 +1475,6 @@ def _spawn_session_viewer(tmp_path: Path) -> tuple[subprocess.Popen, Path, str]:
     if elspais_bin is None:
         pytest.skip("elspais CLI not found on PATH")
     _daemon_project(tmp_path, "session-lifetime-project")
-    port = _free_port()
     log_path = tmp_path / "viewer.log"
     with open(log_path, "wb") as sink:
         proc = subprocess.Popen(
@@ -1521,7 +1484,7 @@ def _spawn_session_viewer(tmp_path: Path) -> tuple[subprocess.Popen, Path, str]:
                 "--server",
                 "--session-lifetime",
                 "--port",
-                str(port),
+                "0",
                 "--path",
                 str(tmp_path),
             ],
@@ -1535,23 +1498,35 @@ def _spawn_session_viewer(tmp_path: Path) -> tuple[subprocess.Popen, Path, str]:
                 "_ELSPAIS_CLIENT_GRACE": str(_SESSION_GRACE_SECONDS),
             },
         )
-    return proc, log_path, f"http://127.0.0.1:{port}"
+    return proc, log_path
 
 
-def _wait_for_viewer(proc: subprocess.Popen, base_url: str, log_path: Path) -> None:
+def _wait_for_viewer(proc: subprocess.Popen, root: Path, log_path: Path) -> str:
+    """Wait for a viewer started with ``--port 0`` to serve; return its URL.
+
+    The port is the one the viewer's record under ``root`` names, accepted
+    only when the record names the spawned process.
+    """
     import time
     import urllib.request
 
+    record = root / ".elspais" / "daemon.json"
     deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
         if proc.poll() is not None:
             pytest.fail(f"viewer exited before serving:\n{log_path.read_text(errors='replace')}")
         try:
-            with urllib.request.urlopen(f"{base_url}/api/status", timeout=2) as resp:
-                if resp.status == 200:
-                    return
-        except OSError:
-            pass
+            info = json.loads(record.read_text())
+        except (OSError, ValueError):
+            info = None
+        if isinstance(info, dict) and info.get("pid") == proc.pid:
+            base_url = f"http://127.0.0.1:{info['port']}"
+            try:
+                with urllib.request.urlopen(f"{base_url}/api/status", timeout=2) as resp:
+                    if resp.status == 200:
+                        return base_url
+            except OSError:
+                pass
         time.sleep(0.2)
     pytest.fail(f"viewer never became ready:\n{log_path.read_text(errors='replace')}")
 
@@ -1594,9 +1569,9 @@ class TestViewerSessionBoundLifetime:
         grace has passed, rather than serving nobody until something else
         stops it. While it waits it discloses that nothing is pending and
         when it will stop (REQ-o00074-M)."""
-        proc, log_path, base_url = _spawn_session_viewer(tmp_path)
+        proc, log_path = _spawn_session_viewer(tmp_path)
         try:
-            _wait_for_viewer(proc, base_url, log_path)
+            _wait_for_viewer(proc, tmp_path, log_path)
             # Several checks find nothing held, and none of them is the
             # cause of an ending: the grace has not passed.
             assert not _exited(proc, _SESSION_CHECK_SECONDS * 3), (
@@ -1628,9 +1603,9 @@ class TestViewerSessionBoundLifetime:
         import http.client
         import time
 
-        proc, log_path, base_url = _spawn_session_viewer(tmp_path)
+        proc, log_path = _spawn_session_viewer(tmp_path)
         try:
-            _wait_for_viewer(proc, base_url, log_path)
+            base_url = _wait_for_viewer(proc, tmp_path, log_path)
             host, port = base_url[len("http://") :].split(":")
             conn = http.client.HTTPConnection(host, int(port), timeout=10)
             conn.request("GET", "/api/events")
@@ -1665,5 +1640,42 @@ class TestViewerSessionBoundLifetime:
                 f"{log_path.read_text(errors='replace')}"
             )
             assert proc.returncode == 0
+        finally:
+            _end(proc)
+
+
+class TestViewerBindsAnyFreePort:
+    """Validates REQ-o00076-N, REQ-o00076-O and REQ-o00076-E: a viewer asked
+    for port 0 serves on a free port, and its record names the port it
+    answers on."""
+
+    # Verifies: REQ-o00076-E, REQ-o00076-N, REQ-o00076-O
+    def test_REQ_o00076_E_port_zero_is_recorded_as_the_bound_port(self, tmp_path):
+        import os
+        import urllib.request
+
+        elspais_bin = resolve_elspais()
+        _daemon_project(tmp_path, "any-free-port-project")
+        log_path = tmp_path / "viewer.log"
+        with open(log_path, "wb") as sink:
+            proc = subprocess.Popen(
+                [elspais_bin, "viewer", "--server", "--port", "0", "--path", str(tmp_path)],
+                cwd=tmp_path,
+                stdout=sink,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+                env=dict(os.environ),
+            )
+        try:
+            base_url = _wait_for_viewer(proc, tmp_path, log_path)
+            port = int(base_url.rsplit(":", 1)[1])
+            assert port != 0
+            assert f"Starting trace-edit server at {base_url}" in log_path.read_text(
+                errors="replace"
+            )
+            info = json.loads((tmp_path / ".elspais" / "daemon.json").read_text())
+            assert info["port"] == port, info
+            with urllib.request.urlopen(f"{base_url}/api/status", timeout=5) as resp:
+                assert resp.status == 200
         finally:
             _end(proc)

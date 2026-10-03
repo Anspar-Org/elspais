@@ -1,0 +1,24 @@
+#!/bin/bash
+# test-workers
+#
+# Prints the number of pytest-xdist workers a test tier runs with: half the
+# processors this process may run on, and at least one. Every tier that runs
+# in parallel asks here, so the unit and e2e tiers together never take the
+# whole machine, and the count follows whatever machine or CI runner they are
+# on. ELSPAIS_TEST_WORKERS overrides it.
+
+if [ -n "$ELSPAIS_TEST_WORKERS" ]; then
+    echo "$ELSPAIS_TEST_WORKERS"
+    exit 0
+fi
+python3 - <<'PY'
+import os
+
+# The processors this process may run on, which a container or a CPU
+# affinity mask can make fewer than the machine has.
+if hasattr(os, "sched_getaffinity"):
+    available = len(os.sched_getaffinity(0))
+else:
+    available = os.cpu_count() or 1
+print(max(1, available // 2))
+PY

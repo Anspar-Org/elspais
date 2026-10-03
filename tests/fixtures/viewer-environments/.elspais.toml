@@ -31,6 +31,9 @@ directories = ["spec"]
 [scanning.journey]
 directories = ["spec"]
 
+[scanning.code]
+directories = ["src"]
+
 [scanning.test]
 enabled = true
 directories = ["tests"]

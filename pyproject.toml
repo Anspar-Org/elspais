@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "elspais"
-version = "0.125.45"
+version = "0.125.48"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,6 +32,8 @@ dependencies = ["tomlkit>=0.12", "pydantic>=2.0", "tyro>=0.9", "lark>=1.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
+    # The e2e tier's parallel pass (.githooks/run-e2e-tier).
+    "pytest-xdist>=3.0",
     # Pinned exactly, because ruff is the FORMATTER as well as the linter and
     # its formatting decisions change between releases. A range lets CI and a
     # developer's hook disagree about the same file -- and lets a release
@@ -97,6 +99,7 @@ addopts = "--tb=short --ignore=tests/_obsolete --ignore=tests/fixtures --cov=src
 markers = [
     "e2e: end-to-end tests requiring external tools or subprocess invocation (deselected by default, run with: pytest -m e2e)",
     "browser: browser-based tests requiring Playwright (deselected by default, run with: pytest -m browser)",
+    "serial: shares state no xdist worker owns (the live worktree, its daemon, the user's home, fixed ports); refused in a parallel session and run in the e2e tier's serial pass",
     "stress: concurrency stress battery racing live daemon surfaces (deselected by default, run with: pytest -m stress; scale with ELSPAIS_STRESS_SCALE)",
 ]
 

@@ -174,7 +174,22 @@ class ChecksArgs:
     """
 
     fail_fast: bool = False
-    """Stop at the first target failure and skip the checks pass. Requires --run-tests."""
+    """Stop at the first target failure and skip the checks pass. Requires --run-tests.
+    With `concurrency` above 1, no further target starts and the targets
+    already running finish."""
+
+    # Implements: REQ-d00315-A
+    stale_only: bool = False
+    """Execute only the selected targets whose results are not fresh -- stale,
+    missing, or left by a run that never finished -- and carry the fresh
+    results of the rest. The selection is --targets, or `default`. Every
+    selected target stays expected. Requires --run-tests."""
+
+    # Implements: REQ-d00314-O
+    concurrency: int | None = None
+    """The most targets this run executes at the same time, in place of
+    [scanning.test] concurrency. 1 runs them one at a time, in declaration
+    order. Requires --run-tests."""
 
     targets: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
         default_factory=list
@@ -183,11 +198,13 @@ class ChecksArgs:
     name of a group they claim (space-separated, repeatable). A group is an
     alias for the targets in it, so both are named here. Default: the targets of
     the `default` group. With --run-tests, executes only this subset; on
-    summary/trace, marks the rest as carried baselines; checks refuses it
+    summary/trace, marks the rest as carried baselines, and `last-run` stands
+    for the targets the last recorded run executed; checks refuses it
     without --run-tests. A selection standing
     for no target is refused; `none` is refused here too: it selects nothing to
-    run. A run naming nothing selects `default`, refused where that group holds
-    no target."""
+    run, and so is `last-run`, which names an earlier run's targets. A run
+    naming nothing selects `default`, refused where that group holds no
+    target."""
 
     expect: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
         default_factory=list
@@ -457,8 +474,10 @@ class TraceArgs(ScopeOptions):
     """Mark only these [[scanning.test.targets]] as freshly-run, by target name
     or by the name of a group they claim; render the rest as carried
     baselines. `none` marks no target fresh, rendering every result as a
-    carried baseline. A run naming nothing selects `default`, and is refused
-    where that group holds no target."""
+    carried baseline. `last-run` stands for the targets the last run of
+    `elspais test` or `checks --run-tests` recorded as executed. A run naming
+    nothing selects `default`, and is refused where that group holds no
+    target."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -481,7 +500,7 @@ class ViewerArgs:
     """Embed requirement content and every traced source file, compressed, for offline viewing."""
 
     port: int | None = None
-    """Port number for the server (default: 5001)."""
+    """Port number for the server (default: 5001; 0 picks any free port)."""
 
     base_path: str = ""
     """URL prefix the server and page sit under (e.g. /w/abc); empty is the root. Server only."""
@@ -600,8 +619,10 @@ class SummaryArgs(ScopeOptions):
     """Mark only these [[scanning.test.targets]] as freshly-run, by target name
     or by the name of a group they claim; render the rest as carried
     baselines. `none` marks no target fresh, rendering every result as a
-    carried baseline. A run naming nothing selects `default`, and is refused
-    where that group holds no target."""
+    carried baseline. `last-run` stands for the targets the last run of
+    `elspais test` or `checks --run-tests` recorded as executed. A run naming
+    nothing selects `default`, and is refused where that group holds no
+    target."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -1190,7 +1211,22 @@ class TestArgs:
     --targets` selects, and refuses the same selections."""
 
     fail_fast: bool = False
-    """Stop at the first target that fails."""
+    """Stop at the first target that fails. With `concurrency` above 1, no
+    further target starts and the targets already running finish."""
+
+    # Implements: REQ-d00315-A
+    stale_only: bool = False
+    """Execute only the selected targets whose results are not fresh -- stale,
+    missing, or left by a run that never finished -- and leave the fresh
+    results of the rest in place. The selection is --targets, or `default`.
+    A run in which every selected target is fresh executes nothing and
+    passes."""
+
+    # Implements: REQ-d00314-O
+    concurrency: int | None = None
+    """The most targets this run executes at the same time, in place of
+    [scanning.test] concurrency. 1 runs them one at a time, in declaration
+    order."""
 
 
 @dataclasses.dataclass

@@ -34,6 +34,7 @@ from elspais.config import (
 from elspais.config.schema import (
     GROUP_ALL,
     GROUP_DEFAULT,
+    GROUP_LAST_RUN,
     GROUP_NONE,
     RESERVED_GROUPS,
     ElspaisConfig,
@@ -178,7 +179,7 @@ def test_target_may_claim_any_declared_group():
 
 
 # Verifies: REQ-d00283-F
-@pytest.mark.parametrize("reserved", sorted(RESERVED_GROUPS - {GROUP_NONE}))
+@pytest.mark.parametrize("reserved", sorted(RESERVED_GROUPS - {GROUP_NONE, GROUP_LAST_RUN}))
 def test_target_may_claim_a_reserved_name(reserved):
     """A reservation defines a name just as a declaration does."""
     cfg = TestScanningConfig(targets=[TestTargetConfig(name="a", groups=[reserved])])

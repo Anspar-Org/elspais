@@ -1,7 +1,5 @@
 """Validates REQ-p00005: Legacy sponsor/YAML system removed, new system intact."""
 
-import importlib
-
 import pytest
 
 import elspais.associates as associates_mod
@@ -28,9 +26,10 @@ class TestLegacySymbolsRemoved:
         ],
     )
     def test_REQ_p00005_legacy_symbol_not_in_module(self, symbol: str):
-        # Reload to pick up any changes made during the test session
-        mod = importlib.reload(associates_mod)
-        assert not hasattr(mod, symbol), (
+        # The module as imported, never reloaded: a reload replaces its class
+        # objects, and every test holding the ones imported earlier then
+        # fails to match what the code raises or returns.
+        assert not hasattr(associates_mod, symbol), (
             f"{symbol} should have been removed from elspais.associates"
         )
 

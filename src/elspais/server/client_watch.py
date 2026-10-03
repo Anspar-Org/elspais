@@ -73,6 +73,8 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
 from typing import Any
 
+from elspais.mcp.daemon import pid_alive
+
 DEFAULT_CHECK_INTERVAL_SECONDS = 60.0
 # A client that reasons between mutations routinely goes quiet for far
 # longer than a few minutes, and going quiet is not the same as going
@@ -101,26 +103,6 @@ def pending_snapshot(graph: Any) -> tuple[int, object]:
     """
     log = graph.mutation_log
     return len(log.tail(0)), log.revision
-
-
-# Implements: REQ-o00074-A
-def pid_alive(pid: int) -> bool:
-    """Return True if a process with this PID exists.
-
-    Uses ``os.kill(pid, 0)``: EPERM means the process exists but belongs
-    to another user (treated as alive); ESRCH means it is gone.
-    """
-    if pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    except OSError:
-        return False
-    return True
 
 
 class Decision(enum.Enum):

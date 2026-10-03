@@ -8770,7 +8770,9 @@ def run_server(
                 s.bind(("127.0.0.1", 0))
                 return int(s.getsockname()[1])
 
-        # Resolve ephemeral port if port=0
+        # Implements: REQ-o00076-N, REQ-o00076-O
+        # Port 0 asks for any free port; the record written below names the
+        # one taken.
         if port == 0:
             port = _free_port()
         else:

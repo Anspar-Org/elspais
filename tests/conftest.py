@@ -114,28 +114,6 @@ def pytest_configure(config):
 # Fixtures directory
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
-# Test run metadata sidecar for elspais health visibility.
-# Any test runner can produce this format; this is the pytest implementation.
-_REPO_ROOT = Path(__file__).parent.parent
-_RUN_META_PATH = _REPO_ROOT / ".results" / "test-run-meta.json"
-
-
-def pytest_deselected(items):
-    """Write deselected test metadata to sidecar JSON for elspais."""
-    import json
-
-    _RUN_META_PATH.parent.mkdir(exist_ok=True)
-    _RUN_META_PATH.write_text(
-        json.dumps(
-            {
-                "runner": "pytest",
-                "deselected_count": len(items),
-                "deselected": [item.nodeid for item in items],
-            },
-            indent=2,
-        )
-    )
-
 
 def pytest_runtest_makereport(item, call):
     """Track failures in incremental test classes."""
@@ -143,108 +121,57 @@ def pytest_runtest_makereport(item, call):
         item.parent._previous_failed = item.name
 
 
+_IDENTITY_UNSET = object()
+_identity_refusal: object = _IDENTITY_UNSET
+
+
+def _build_identity_refusal() -> str | None:
+    """Whether the program e2e and browser tests spawn is this checkout's build.
+
+    Asked once per process, at the first such test, so a session that runs
+    none of them never asks.
+    """
+    global _identity_refusal
+    if _identity_refusal is _IDENTITY_UNSET:
+        from tests.e2e.helpers import build_identity_refusal
+
+        _identity_refusal = build_identity_refusal()
+    return _identity_refusal  # type: ignore[return-value]
+
+
+@pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
-    """Skip subsequent tests in incremental class if a prior step failed."""
+    """Fail a `serial` test on an xdist worker, and an e2e or browser test
+    when the program it would spawn is not this checkout's build; xfail
+    after an incremental failure.
+
+    A `serial` test shares state that no worker owns: the live worktree and
+    its daemon, the user's home directory, fixed ports. Run beside other tests
+    it can corrupt them or be corrupted by them, and the failure looks like a
+    flaky test rather than a wrong invocation. `tryfirst` fails it before any
+    of its fixtures start. Only a worker sets `PYTEST_XDIST_WORKER`, so a
+    session without `-n` never fails here. A worker cannot refuse at
+    collection instead: xdist reports that as an internal error and drops the
+    message.
+
+    The build check fails the test rather than the session for the same
+    reason, and asks where the spawned program's interpreter imports elspais
+    from, because two checkouts at one version print the same version.
+    """
+    if os.environ.get("PYTEST_XDIST_WORKER") and item.get_closest_marker("serial") is not None:
+        pytest.fail(
+            "this test is marked `serial` and was run by an xdist worker. "
+            "Run it without -n, or exclude it with -m 'not serial'; "
+            ".githooks/run-e2e-tier runs the e2e tier in both passes.",
+            pytrace=False,
+        )
+    if item.get_closest_marker("e2e") is not None or item.get_closest_marker("browser") is not None:
+        refusal = _build_identity_refusal()
+        if refusal is not None:
+            pytest.fail(f"refusing to run: {refusal}", pytrace=False)
     previous = getattr(item.parent, "_previous_failed", None)
     if previous and "incremental" in item.keywords:
         pytest.xfail(f"previous step failed: {previous}")
-
-
-def pytest_sessionfinish(session, exitstatus):
-    """Prime the pre-commit/pre-push test-result cache when a manual pytest
-    run passes, so a follow-up `git add . && git commit` skips re-running.
-
-    The hooks key their cache on `git write-tree` (the staged index tree).
-    We mirror that by computing the tree that `git add -A` would produce
-    via a throwaway index (no side effects on the real index) and write
-    it to the same file the hook checks. After `git add .`, the hook's
-    write-tree matches and the cache hits.
-
-    Only writes for full runs matching the hook's invocation (no -k, no
-    positional path filter, marker expression equals the hook's).
-    """
-    if exitstatus != 0:
-        return
-    if getattr(session.config, "workerinput", None) is not None:
-        return
-    if session.config.getoption("keyword"):
-        return
-    # Collection-only / setup-only modes don't execute tests, so a 0
-    # exit status doesn't mean tests passed — don't prime the cache.
-    for opt in ("collectonly", "setuponly", "setupplan"):
-        if session.config.getoption(opt, default=False):
-            return
-
-    markexpr = session.config.getoption("markexpr") or ""
-    if markexpr == "not e2e and not browser":
-        cache_name = ".test-cache-unit"
-    elif markexpr == "e2e":
-        cache_name = ".test-cache-e2e"
-    else:
-        return
-
-    testpaths = session.config.getini("testpaths") or []
-    try:
-        arg_paths = {Path(a).resolve() for a in session.config.args}
-        tp_paths = {(_REPO_ROOT / p).resolve() for p in testpaths}
-    except OSError:
-        return
-    if arg_paths != tp_paths:
-        return
-
-    import subprocess
-    import tempfile
-
-    try:
-        git_dir = Path(
-            subprocess.check_output(
-                ["git", "rev-parse", "--git-dir"],
-                cwd=str(_REPO_ROOT),
-                text=True,
-                stderr=subprocess.DEVNULL,
-            ).strip()
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
-        return
-    if not git_dir.is_absolute():
-        git_dir = (_REPO_ROOT / git_dir).resolve()
-    real_index = git_dir / "index"
-    if not real_index.is_file():
-        return
-
-    tmp_fd, tmp_path = tempfile.mkstemp(prefix=".elspais-idx-", dir=str(git_dir))
-    os.close(tmp_fd)
-    try:
-        Path(tmp_path).write_bytes(real_index.read_bytes())
-        env = {**os.environ, "GIT_INDEX_FILE": tmp_path}
-        subprocess.check_call(
-            ["git", "add", "-A"],
-            cwd=str(_REPO_ROOT),
-            env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        tree_hash = subprocess.check_output(
-            ["git", "write-tree"],
-            cwd=str(_REPO_ROOT),
-            env=env,
-            text=True,
-            stderr=subprocess.DEVNULL,
-        ).strip()
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
-        return
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-
-    cache_dir = _REPO_ROOT / ".results"
-    try:
-        cache_dir.mkdir(exist_ok=True)
-        (cache_dir / cache_name).write_text(tree_hash)
-    except OSError:
-        pass
 
 
 @pytest.fixture

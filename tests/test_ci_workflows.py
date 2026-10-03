@@ -5,6 +5,8 @@ required by the CI/CD Pipeline Enforcement specification. Uses YAML parsing
 to verify workflow structure without executing the pipelines.
 """
 
+import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -46,23 +48,74 @@ def _step_run_containing(job: dict, needle: str) -> str:
     return matches[0]
 
 
-# --- Assertion A: full test suite across Python versions on push/PR ---
+# The e2e job's matrix is a GitHub expression choosing one JSON array for a
+# pull request and another for every other event. Its exact shape is asserted,
+# so a reshaped expression fails here rather than evaluating to nothing.
+_EVENT_MATRIX = re.compile(
+    r"\$\{\{\s*fromJSON\(\s*github\.event_name\s*==\s*'pull_request'\s*&&\s*"
+    r"'(?P<pr>\[[^']*\])'\s*\|\|\s*'(?P<other>\[[^']*\])'\s*\)\s*\}\}"
+)
+
+
+def _e2e_versions(ci_config, event: str) -> list[str]:
+    """Evaluate the e2e job's python-version matrix for one triggering event."""
+    expression = ci_config["jobs"]["e2e-test"]["strategy"]["matrix"]["python-version"]
+    assert isinstance(expression, str), f"expected an event expression, got {expression!r}"
+    match = _EVENT_MATRIX.fullmatch(expression.strip())
+    assert match, f"e2e matrix expression has an unexpected shape: {expression!r}"
+    pr_versions = json.loads(match["pr"])
+    other_versions = json.loads(match["other"])
+    for versions in (pr_versions, other_versions):
+        assert isinstance(versions, list)
+        assert all(isinstance(v, str) for v in versions)
+    # `A && B || C` yields B when A holds and B is a non-empty string.
+    return pr_versions if event == "pull_request" else other_versions
+
+
+def _unit_versions(ci_config) -> list[str]:
+    return ci_config["jobs"]["test"]["strategy"]["matrix"]["python-version"]
+
+
+# --- Assertions I, J, K: which tiers run on which Python versions ---
 
 
 class TestCITestSuite:
-    # Verifies: REQ-o00066-A
-    def test_REQ_o00066_A_test_job_exists(self, ci_config):
+    # Verifies: REQ-o00066-J
+    def test_REQ_o00066_J_pull_request_runs_e2e_on_a_supported_version(self, ci_config):
+        """A pull request runs the e2e tier on at least one version, and only
+        on versions the unit job supports."""
+        versions = _e2e_versions(ci_config, "pull_request")
+        assert versions, "a pull request must run the e2e tier on some version"
+        assert set(versions) <= set(_unit_versions(ci_config))
+
+    # Verifies: REQ-o00066-K
+    def test_REQ_o00066_K_push_to_main_runs_e2e_on_every_version(self, ci_config):
+        """A push to main runs the e2e tier on every supported version."""
+        versions = _e2e_versions(ci_config, "push")
+        assert sorted(versions) == sorted(_unit_versions(ci_config))
+        assert len(versions) == len(set(versions))
+
+    # Verifies: REQ-o00066-J+K
+    def test_REQ_o00066_J_e2e_job_runs_the_tier_on_every_change(self, ci_config):
+        """The e2e job runs the tier through the hook's runner and sits behind
+        no path filter, so every pull request and push reaches it."""
+        job = ci_config["jobs"]["e2e-test"]
+        assert ".githooks/run-e2e-tier" in _step_run_containing(job, "run-e2e-tier")
+        assert not any("paths-filter" in s.get("uses", "") for s in job["steps"])
+
+    # Verifies: REQ-o00066-I
+    def test_REQ_o00066_I_test_job_exists(self, ci_config):
         assert "test" in ci_config["jobs"]
 
-    # Verifies: REQ-o00066-A
-    def test_REQ_o00066_A_test_job_has_python_matrix(self, ci_config):
+    # Verifies: REQ-o00066-I
+    def test_REQ_o00066_I_test_job_has_python_matrix(self, ci_config):
         matrix = ci_config["jobs"]["test"]["strategy"]["matrix"]
         versions = matrix["python-version"]
         assert len(versions) >= 2, "Should test multiple Python versions"
         assert "3.10" in versions
 
-    # Verifies: REQ-o00066-A
-    def test_REQ_o00066_A_triggers_on_push_and_pr(self, ci_config):
+    # Verifies: REQ-o00066-I+K
+    def test_REQ_o00066_I_triggers_on_push_and_pr(self, ci_config):
         # PyYAML converts the YAML key `on` to boolean True
         triggers = ci_config[True]
         assert "push" in triggers
@@ -70,10 +123,13 @@ class TestCITestSuite:
         assert "main" in triggers["push"]["branches"]
         assert "main" in triggers["pull_request"]["branches"]
 
-    # Verifies: REQ-o00066-A
-    def test_REQ_o00066_A_test_job_runs_pytest(self, ci_config):
-        run_text = _step_runs(ci_config["jobs"]["test"])
-        assert "pytest" in run_text
+    # Verifies: REQ-o00066-I+K
+    def test_REQ_o00066_I_test_job_runs_pytest(self, ci_config):
+        """The unit job runs the tier through the runner the pre-commit hook
+        calls, so CI and the hook run the same tests the same way."""
+        assert ".githooks/run-unit-tier" in _step_run_containing(
+            ci_config["jobs"]["test"], "run-unit-tier"
+        )
 
 
 # --- Assertion B: static analysis (linting) ---
@@ -195,8 +251,8 @@ class TestCIFormatting:
     reason="act not installed",
 )
 class TestActValidation:
-    # Verifies: REQ-o00066-A
-    def test_REQ_o00066_A_ci_workflow_valid(self):
+    # Verifies: REQ-o00066-K
+    def test_REQ_o00066_K_ci_workflow_valid(self):
         """Verify ci.yml is syntactically valid via act -l."""
         result = subprocess.run(
             ["act", "-l", "-W", str(CI_WORKFLOW)],

@@ -444,7 +444,7 @@ def test_an_unknown_expected_name_is_refused_naming_the_option_and_the_vocabular
     message = str(caught.value)
     assert message.startswith("unknown --expect: bogus.")
     assert "Configured targets: journeys, unit." in message
-    assert "Known groups: all, default, device, none, uat." in message
+    assert "Known groups: all, default, device, last-run, none, uat." in message
 
 
 # Verifies: REQ-d00283-H+P
@@ -475,7 +475,7 @@ def test_the_command_refuses_an_unknown_expected_name(tmp_path, monkeypatch, cap
     assert main(["checks", "--expect", "bogus"]) == 2
     err = capsys.readouterr().err
     assert "unknown --expect: bogus" in err
-    assert "Known groups: all, default, device, none, uat." in err
+    assert "Known groups: all, default, device, last-run, none, uat." in err
 
 
 def _args(**overrides) -> argparse.Namespace:

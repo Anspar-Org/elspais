@@ -1,17 +1,19 @@
 # Verifies: REQ-p00002
 """E2E health check validation on test fixtures.
 
-Invokes `elspais health` as a subprocess on each fixture project directory,
-verifying the CLI produces correct JSON output and exit codes.
+Invokes `elspais checks` as a subprocess on each fixture project, verifying
+the CLI produces correct JSON output and exit codes, and that every fixture
+passes its own health checks.
 """
 
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
-from .conftest import FIXTURES_DIR, requires_elspais, run_elspais
+from .conftest import FIXTURES_DIR, load_fixture, requires_elspais, run_elspais
 
 # Fixtures that have their own .elspais.toml and spec/ directory
 FIXTURE_DIRS = sorted(
@@ -23,13 +25,30 @@ FIXTURE_DIRS = sorted(
 pytestmark = [pytest.mark.e2e, requires_elspais]
 
 
-@pytest.mark.parametrize(
-    "fixture_dir",
-    FIXTURE_DIRS,
-    ids=[d.name for d in FIXTURE_DIRS],
-)
+@pytest.fixture(scope="module", params=FIXTURE_DIRS, ids=[d.name for d in FIXTURE_DIRS])
+def fixture_dir(request, tmp_path_factory) -> Path:
+    """A copy of one fixture that is its own git repository.
+
+    The CLI runs from the git root of the directory it is started in. Inside
+    the checkout that root is the checkout, so a check started in
+    ``tests/fixtures/<name>`` would judge the checkout instead. The copy is
+    a repository of its own, so the CLI's root is the fixture.
+    """
+    dest = tmp_path_factory.mktemp(f"fixture-health-{request.param.name}")
+    return load_fixture(request.param.name, dest)
+
+
 class TestFixtureHealthE2E:
     """Validates REQ-p00002: elspais health CLI works on fixture projects."""
+
+    def test_REQ_p00002_checks_read_the_fixture(self, fixture_dir) -> None:
+        """The configuration the CLI reads is the fixture's own."""
+        result = run_elspais("config", "path", cwd=fixture_dir)
+
+        assert result.returncode == 0, result.stderr
+        assert Path(result.stdout.strip()).resolve().parent == fixture_dir.resolve(), (
+            f"expected {fixture_dir}/.elspais.toml, the CLI read {result.stdout.strip()}"
+        )
 
     def test_REQ_p00002_health_json_no_errors(self, fixture_dir) -> None:
         """elspais health --format json exits cleanly with no error-level failures."""
