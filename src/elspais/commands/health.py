@@ -2505,7 +2505,7 @@ def check_unmatched_file_pattern(
             # of them being skipped is what a class is for.
             if any(ch in pattern for ch in "*?["):
                 continue
-            # Implements: REQ-d00212-Z
+            # Implements: REQ-d00326-A
             # A named file sits under a scanned directory, and a skip pattern
             # is read against the path from the repository root, so the
             # question is asked of that path.

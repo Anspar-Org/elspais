@@ -71,7 +71,7 @@ def within_skipped_dir(relative_path: str, skip_dirs: Iterable[str]) -> bool:
     return any(dir_is_skipped("/".join(parts[:i]), skip_dirs) for i in range(1, len(parts)))
 
 
-# Implements: REQ-d00212-Z
+# Implements: REQ-d00326-A
 def file_is_skipped(relative_path: str, skip_files: Iterable[str]) -> bool:
     """Whether a repo-relative file is one the configuration skips.
 

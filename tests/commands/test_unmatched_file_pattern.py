@@ -37,7 +37,7 @@ def _skip_kwargs(where: str, skip: str) -> dict:
     return {"code_skip_files": [skip]}
 
 
-# Verifies: REQ-d00212-Z
+# Verifies: REQ-d00326-A
 @pytest.mark.parametrize("where", ["global", "skip_files"])
 def test_root_anchored_skip_naming_the_file_is_reported(where: str) -> None:
     """A skip pattern holding ``/`` names the file by its path from the root.
@@ -58,7 +58,7 @@ def test_root_anchored_skip_naming_the_file_is_reported(where: str) -> None:
     assert "'src/gen/out.py'" in message
 
 
-# Verifies: REQ-d00212-Z
+# Verifies: REQ-d00326-A
 @pytest.mark.parametrize("where", ["global", "skip_files"])
 @pytest.mark.parametrize(
     ("file_pattern", "skip", "reported"),

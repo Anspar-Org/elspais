@@ -194,8 +194,6 @@ X. A configuration carrying a setting this version does not read SHALL be refuse
 
 Y. A configuration SHALL be admitted only where every setting it carries is one this version's schema defines.
 
-Z. Where a skip pattern holds a path separator, the system SHALL match the pattern against the path from the repository root of each file and each directory alike.
-
 ### Rationale
 
 This requirement holds the invariants a configuration schema must satisfy, whatever shape it takes: what an identifier configuration may admit, which concern a rule setting sits under, how severity and file selection are expressed, and what becomes of a setting the schema does not define.
@@ -214,12 +212,8 @@ Reporting is deliberately absent from R. Once an inadmissible spelling resolves 
 
 R is a condition on resolving, never on writing, which is what keeps a reference authored ahead of its target legitimate. A requirement may be named before the repository owning it is declared, or before that requirement exists; the reference simply finds nothing yet, and how loudly that is reported is the project's decision. R also judges a spelling against the configuration of the repository owning the named requirement, not the one doing the writing — otherwise no reference could ever cross a repository boundary, since a neighbour's identifiers are foreign to the local grammar by construction. Rule settings have drifted into a layout where a setting's location no longer predicts what it governs, some check severities are configurable while others are hardcoded with no stated principle distinguishing them, and "why was this file (not) scanned" can have more than one configuration answer (per-kind skip lists alongside a global skip list, plus pattern lists). O–Q close those gaps as invariants only: candidate mechanisms discussed during design — splitting rules into concern sections such as `[rules.changelog]` and `[rules.status]`, or collapsing file selection into a unified `patterns` list — are proposals, not obligations, and deliberately absent from the assertions. Which existing semantics survive is decided at implementation. A current schema shape that contradicts O–Q is a conformance defect to be corrected, not a reading of the invariant.
 
-Z gives a skip pattern that spells a path one meaning, whichever kind of path it reaches. A project writes `**/name` to mean a name at any depth, and that spelling then skips a generated file as surely as a generated directory. A pattern of a single name keeps its two readings, a file name at any depth and a directory at the repository root, and the documentation states both.
-
 ### Changelog
 
-- 2026-10-03 | 80edfef3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
-- 2026-10-03 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-127: a skip pattern holding a path separator names one path from the repository root for a file and a directory alike (Z)
 - 2026-09-12 | 492083b5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-12 | 1816c146 | - | Michael Lewis (<michael@anspar.org>) | Retire the model inventory rather than delete it, so every label stays allocated
 - 2026-09-12 | dfcf9d49 | - | Michael Lewis (<michael@anspar.org>) | Retitled; model inventory replaced by the invariants the schema holds
@@ -253,7 +247,7 @@ Z gives a skip pattern that spells a path one meaning, whichever kind of path it
 - 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
-*End* *Configuration Schema* | **Hash**: 80edfef3
+*End* *Configuration Schema* | **Hash**: 492083b5
 ---
 
 ## REQ-d00324: Refusal of a Retired Configuration Value
@@ -276,6 +270,29 @@ A is the counterpart for a value of REQ-d00212-X, which refuses a setting this v
 - 2026-10-03 | - | - | Michael Lewis (<michael@anspar.org>) | Author A: a value this version no longer admits is refused, naming the setting and what replacing it changes on disk
 
 *End* *Refusal of a Retired Configuration Value* | **Hash**: 530fb06a
+---
+
+## REQ-d00326: Path-Shaped Skip Patterns
+
+**Level**: dev | **Status**: Active | **Implements**: -
+**Refines**: REQ-d00212-W
+
+A skip pattern that spells a path names that one path from the repository root, whether the path reaches a file or a directory, so one spelling excludes generated files and generated directories alike.
+
+### Assertions
+
+A. Where a skip pattern holds a path separator, the system SHALL match the pattern against the path from the repository root of each file and each directory alike.
+
+### Rationale
+
+A gives a skip pattern that spells a path one meaning, whichever kind of path it reaches. A project writes `**/name` to mean a name at any depth, and that spelling then skips a generated file as surely as a generated directory. A pattern of a single name keeps its two readings, a file name at any depth and a directory at the repository root, and the documentation states both.
+
+### Changelog
+
+- 2026-10-03 | 797c3fe4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-03 | - | - | Michael Lewis (<michael@anspar.org>) | Author A: a skip pattern holding a path separator names one path from the repository root for a file and a directory alike
+
+*End* *Path-Shaped Skip Patterns* | **Hash**: 797c3fe4
 ---
 
 ## REQ-d00251: A Repository's Identifier Grammar

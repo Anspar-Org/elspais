@@ -244,7 +244,7 @@ class TestAFilePatternIsAGlobOverTheName:
         selection = select_files(repo, ["spec"], ["README.md"], [], ["*.md"])
         assert "spec/README.md" in _relative(repo, selection.selected)
 
-    # Verifies: REQ-d00212-Z
+    # Verifies: REQ-d00326-A
     @pytest.mark.parametrize(
         ("relative_path", "skip_files", "skipped"),
         [
@@ -490,7 +490,7 @@ class TestASkipPatternHoldingASlashIsAPathFromTheRoot:
         found = input_files(root, typed, typed.scanning.test.targets[0])
         return {p.relative_to(root).as_posix() for p in found}
 
-    # Verifies: REQ-d00212-Z
+    # Verifies: REQ-d00326-A
     def test_select_files_skips_a_nested_directory_and_a_nested_file(self, tmp_path: Path) -> None:
         """The same patterns, in both lists, reach both kinds of entry."""
         root = self._tree(tmp_path)
@@ -503,7 +503,7 @@ class TestASkipPatternHoldingASlashIsAPathFromTheRoot:
         assert ".coverage" not in answered
         assert {"pkg/mod.py", "pkg/sub/keep.py"} <= answered
 
-    # Verifies: REQ-d00212-Z
+    # Verifies: REQ-d00326-A
     def test_target_inputs_exclude_a_nested_cache_directory_and_coverage_file(
         self, tmp_path: Path
     ) -> None:
@@ -517,7 +517,7 @@ class TestASkipPatternHoldingASlashIsAPathFromTheRoot:
         assert ".coverage" not in inputs
         assert {"pkg/mod.py", "pkg/sub/keep.py"} <= inputs
 
-    # Verifies: REQ-d00212-Z
+    # Verifies: REQ-d00326-A
     def test_a_path_pattern_names_only_the_file_at_that_path(self, tmp_path: Path) -> None:
         """`gen/out.json` is read from the root, not matched at any depth."""
         root = self._tree(tmp_path)
@@ -527,7 +527,7 @@ class TestASkipPatternHoldingASlashIsAPathFromTheRoot:
         assert "gen/out.json" not in inputs
         assert "other/gen/out.json" in inputs
 
-    # Verifies: REQ-d00212-Z
+    # Verifies: REQ-d00326-A
     def test_a_bare_name_glob_still_matches_at_any_depth(self, tmp_path: Path) -> None:
         """`*.pyc` holds no `/`, so it is a glob over the name wherever it sits."""
         root = self._tree(tmp_path)
@@ -537,7 +537,7 @@ class TestASkipPatternHoldingASlashIsAPathFromTheRoot:
         assert "a/b/x.pyc" not in inputs
         assert "pkg/mod.py" in inputs
 
-    # Verifies: REQ-d00212-Z
+    # Verifies: REQ-d00326-A
     def test_a_bare_directory_name_names_only_the_root_directory(self, tmp_path: Path) -> None:
         """`.pytest_cache` without `**/` skips the root cache and keeps the nested one."""
         root = self._tree(tmp_path)
