@@ -14,6 +14,11 @@ results are fresh while the manifest matches the inputs on disk. The manifest
 holds one digest for each input. Consequently, a stale finding can name the
 input that changed.
 
+The file lists the manifest as ``inputs``: a list of objects, each with a
+``path`` field and a ``digest`` field. No path is ever a JSON key.
+Consequently, a secret scanner that looks for a secret-like key beside a long
+hex value finds nothing in the file.
+
 :func:`elspais.graph.file_selection.select_files` selects the inputs. Scans use
 the same function. Consequently, a pattern has one meaning in every context.
 """
@@ -36,7 +41,7 @@ RECORD_NAME = ".elspais-run.json"
 #: The environment variable that holds the path of the output area for the command.
 OUTPUT_ENV = "ELSPAIS_TARGET_OUTPUT"
 
-_RECORD_VERSION = 1
+_RECORD_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -201,14 +206,32 @@ def read_record(folder: Path) -> dict[str, Any] | None:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    if not isinstance(data, dict) or not isinstance(data.get("manifest"), dict):
+    # A record of another format version reads as no record. Consequently,
+    # its results read as stale, never as fresh.
+    if not isinstance(data, dict) or data.get("version") != _RECORD_VERSION:
         return None
+    inputs = data.pop("inputs", None)
+    if not isinstance(inputs, list):
+        return None
+    manifest: dict[str, str] = {}
+    for entry in inputs:
+        if not isinstance(entry, dict):
+            return None
+        path, digest = entry.get("path"), entry.get("digest")
+        if not isinstance(path, str) or not isinstance(digest, str):
+            return None
+        manifest[path] = digest
+    data["manifest"] = manifest
     return data
 
 
 def _write_record(folder: Path, record: dict[str, Any]) -> None:
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / RECORD_NAME).write_text(json.dumps(record, indent=1, sort_keys=True) + "\n")
+    on_disk = {k: v for k, v in record.items() if k != "manifest"}
+    on_disk["inputs"] = [
+        {"path": rel, "digest": record["manifest"][rel]} for rel in sorted(record["manifest"])
+    ]
+    (folder / RECORD_NAME).write_text(json.dumps(on_disk, indent=1, sort_keys=True) + "\n")
 
 
 def empty_folder(folder: Path) -> None:
