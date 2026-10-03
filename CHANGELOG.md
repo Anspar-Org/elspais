@@ -12,6 +12,10 @@ All notable changes to elspais will be documented in this file.
 
 - **Retiring a template Assertion reaches its `Satisfies:` copies (REQ-p00017-H, REQ-p00014-B)** -- a copy of the Assertion made by a `Satisfies:` kept its former text until a rebuild, so it stayed in coverage. It now takes the retired text at once. A copy that a `Satisfies:` naming the Assertion itself made is withdrawn, and that `Satisfies:` is reported as unresolved. Undo restores every copy.
 
+- **Giving a retired template Assertion its text back makes its `Satisfies:` copy again (REQ-p00017-H, REQ-p00014-B)** -- a `Satisfies:` naming the Assertion gets the copy a build gives it. Every `Satisfies:` copy, made by a build or by a mutation, is now made in one place.
+
+- **An unbound test citation of another repository's identifier credits nothing (REQ-d00274-H)** -- a test citation that binds to no test was linked as a real relationship when its target lived in another repository of a federation, so the Assertion read as Tested on evidence no test produced. It now links nothing, as in the citation's own repository; `elspais checks` still reports it as unbound, and it is reported as unresolved only where its target is missing or retired.
+
 - **Deleting a requirement that is not Active reports its citations (REQ-p00017-H, REQ-o00062-P)** -- the requirement is removed, and every citation of it or of one of its Assertions, in any member of a federation, is now reported as unresolved at once, as a build of the saved text reports it. A citing requirement left without a parent is a root, not an orphan. The requirement's sections and its `Satisfies:` copies leave with it, and so do the copies other requirements made of it. Undo restores all of it.
 
 ### TOOL-134

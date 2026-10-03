@@ -72,11 +72,8 @@ from elspais.graph.reference_faults import (
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.graph.render import format_definition_block, render_end_marker
 from elspais.graph.template_subtree import (
-    UNCLONED_FIELDS as _UNCLONED_FIELDS,
-)
-from elspais.graph.template_subtree import (
     copy_name_diagnostic,
-    recreate_subtree_edges,
+    instantiate_subtree,
     satisfies_target_fault,
     stereotype_matrix_fault,
     subtree_nodes,
@@ -2899,7 +2896,7 @@ class TraceGraph:
                 )
                 record.update(self._withdraw_citation(citer, fault))
             severed.append(record)
-        severed.extend(self._withdraw_unbound_citations(node))
+        severed.extend(self._withdraw_unbound_citations({node.id}))
         severed.extend(self._withdraw_satisfies_copies(node))
         return severed
 
@@ -3005,16 +3002,25 @@ class TraceGraph:
                     member.set_label(apply_directive(member, e.target.get_label()))
 
     # Implements: REQ-p00017-H, REQ-d00274-H
-    def _withdraw_unbound_citations(self, *nodes: GraphNode) -> list[dict[str, Any]]:
+    def _withdraw_unbound_citations(
+        self,
+        withdrawn: set[str],
+        resolver: Any | None = None,
+        classify: Any | None = None,
+    ) -> list[dict[str, Any]]:
         """Report each test citation this graph holds that binds to no test
-        and names one of *nodes*, none of which a reference may now name.
+        and names one of the nodes *withdrawn* names, none of which a
+        reference may now name.
 
         Such a citation produced no edge, so it is found through the record
         of unbound citations. A build reports each item the citation names,
         except an item its reader refused, which already carries its own
-        fault.
+        fault. An item names a node in the grammar of the repository owning
+        it, *resolver*, which is this graph's own unless a federation says
+        otherwise; *classify* gives the fault the class reading reached,
+        this graph's resolution class unless a federation says otherwise.
         """
-        withdrawn = {node.id for node in nodes}
+        resolver = resolver if resolver is not None else self.resolver
         records: list[dict[str, Any]] = []
         for citation in self._unbound_citations:
             citer = self._index.get(citation.node_id)
@@ -3024,11 +3030,11 @@ class TraceGraph:
             for item in citation.targets:
                 if item in citation.refused:
                     continue
-                for target in _expand_multi_assertion(self.resolver, item):
+                for target in _expand_multi_assertion(resolver, item):
                     if target in citation.refused:
                         continue
-                    parsed = self.resolver.parse(target)
-                    if parsed is not None and self.resolver.render_canonical(parsed) in withdrawn:
+                    parsed = resolver.parse(target)
+                    if parsed is not None and resolver.render_canonical(parsed) in withdrawn:
                         named.append(target)
             for target in named:
                 fault = ReferenceFault(
@@ -3037,6 +3043,8 @@ class TraceGraph:
                     edge_kind=EdgeKind.VERIFIES.value,
                     fault_class=self._resolution_class(target),
                 )
+                if classify is not None:
+                    fault = classify(fault)
                 record: dict[str, Any] = {"source_id": citer.id, "unbound": True}
                 record.update(self._withdraw_citation(citer, fault))
                 records.append(record)
@@ -3083,7 +3091,7 @@ class TraceGraph:
                     record.update(self._withdraw_citation(citer, fault))
                 records.append(record)
         assertions = [c for c in structured if c.kind == NodeKind.ASSERTION]
-        records.extend(self._withdraw_unbound_citations(node, *assertions))
+        records.extend(self._withdraw_unbound_citations({node.id, *(a.id for a in assertions)}))
         return records
 
     # Implements: REQ-o00062-G
@@ -3150,23 +3158,94 @@ class TraceGraph:
         Returns one record per citation, which undo reads.
         """
         resolved: list[dict[str, Any]] = []
+        project_name = self._project_name()
         for fault in list(self._unresolved_references):
-            if not self._names_assertion(fault, node):
-                continue
             citer = self._index.get(fault.source_id)
             if citer is None:
                 continue
-            resolved.append(self._bind_citation(citer, node, fault))
+            if self._names_assertion(fault, node):
+                resolved.append(self._bind_citation(citer, node, fault))
+            elif self._names_assertion(fault, node, EdgeKind.SATISFIES):
+                resolved.append(
+                    self._make_satisfies_copy(citer, node, fault, lambda _o: (project_name, True))
+                )
         return resolved
 
-    def _names_assertion(self, fault: ReferenceFault, node: GraphNode) -> bool:
-        """Whether *fault* is an unknown-*Assertion* reference to *node*."""
+    def _names_assertion(
+        self, fault: ReferenceFault, node: GraphNode, kind: EdgeKind | None = None
+    ) -> bool:
+        """Whether *fault* is an unknown-*Assertion* reference to *node*.
+
+        With *kind*, only a reference by that keyword; without it, a
+        citation of the kind that becomes an edge to the *Assertion*.
+        """
         if fault.fault_class is not FaultClass.UNKNOWN_ASSERTION:
             return False
-        if EdgeKind(fault.edge_kind) not in _ASSERTION_CITATION_EDGE_KINDS:
+        if kind is not None:
+            if fault.edge_kind != kind.value:
+                return False
+        elif EdgeKind(fault.edge_kind) not in _ASSERTION_CITATION_EDGE_KINDS:
             return False
         parsed = self.resolver.parse(fault.target_id)
         return parsed is not None and self.resolver.render_canonical(parsed) == node.id
+
+    def _project_name(self) -> str:
+        """The name this repository's configuration gives the project."""
+        from elspais.graph.held_config import config_from_nodes, iter_config_nodes
+
+        documents = iter_config_nodes(self)
+        if not documents:
+            return ""
+        return (config_from_nodes(documents).get("project") or {}).get("name") or ""
+
+    # Implements: REQ-p00017-H, REQ-p00014-B, REQ-p00014-G
+    def _make_satisfies_copy(
+        self, declaring: GraphNode, original: GraphNode, fault: ReferenceFault, owning_repo: Any
+    ) -> dict[str, Any]:
+        """Replace *fault*, a ``Satisfies:`` of *original*, with what a build makes.
+
+        A target the validation matrix refuses is reported under that
+        refusal; any other is copied, through the one copy builder, into
+        this graph, which holds *declaring*. *owning_repo* answers the
+        repository owning each original, as the copy builder asks.
+        """
+        record: dict[str, Any] = {
+            "satisfies_made": True,
+            "source_id": declaring.id,
+            "fault": _fault_record(fault),
+        }
+        self._unresolved_references.remove(fault)
+        refusal = satisfies_target_fault(original, declaring.id, fault.target_id)
+        if refusal is not None:
+            self._unresolved_references.append(refusal)
+            record["refusal"] = _fault_record(refusal)
+            return record
+        copies = instantiate_subtree(
+            original,
+            declaring,
+            lambda orig_id: self.resolver.build_instance_id(declaring.id, orig_id),
+            owning_repo,
+            self._index,
+        )
+        record["member_ids"] = [copy.id for copy in copies.values()]
+        return record
+
+    # Implements: REQ-o00062-G
+    def _unmake_satisfies_copy(self, record: dict[str, Any]) -> None:
+        """Undo ``_make_satisfies_copy``."""
+        if "refusal" in record:
+            refusal = _fault_from_record(record["refusal"])
+            if refusal in self._unresolved_references:
+                self._unresolved_references.remove(refusal)
+        for member_id in record.get("member_ids", []):
+            member = self._index.pop(member_id, None)
+            if member is None:
+                continue
+            for e in list(member.iter_incoming_edges()):
+                e.source.remove_edge(e)
+            for e in list(member.iter_outgoing_edges()):
+                member.remove_edge(e)
+        self._unresolved_references.append(_fault_from_record(record["fault"]))
 
     # Implements: REQ-p00017-H, REQ-p00014-G, REQ-d00274-H
     def _bind_citation(
@@ -3208,6 +3287,9 @@ class TraceGraph:
         """Undo ``_resolve_citations`` for the citations this graph holds."""
         for record in reversed(resolved):
             if "member" in record:
+                continue
+            if record.get("satisfies_made"):
+                self._unmake_satisfies_copy(record)
                 continue
             citer = self._index.get(record["source_id"])
             if citer is not None:
@@ -6644,67 +6726,18 @@ class GraphBuilder:
             # The clone is the subtree rooted at the target: the target with
             # its *Assertions*, plus every template that refines a member,
             # recursively, with theirs. Declaring against an interior member
-            # is simply a narrower declaration.
-            template_nodes = subtree_nodes(template_node)
-
-            # Map original IDs to cloned nodes
-            clone_map: dict[str, GraphNode] = {}
-
-            for orig in template_nodes:
-                clone_id = self._resolver.build_instance_id(declaring_id, orig.id)
-                clone = GraphNode(
-                    id=clone_id,
-                    kind=orig.kind,
-                    label=orig.get_label(),
-                )
-                # Copy content fields and set INSTANCE stereotype. A clone's
-                # relationships are the edges recreated among the clones, so
-                # the reference text the original declared is not copied:
-                # left in place it would read as a reference the clone
-                # declared and never resolved.
-                for key, value in orig.get_all_content().items():
-                    if key not in _UNCLONED_FIELDS:
-                        clone.set_field(key, value)
-                clone.set_field("stereotype", Stereotype.INSTANCE)
-                # CUR-1353 Phase 11: tag in-repo clones with the current
-                # repo's project name so the viewer's provenance row fires
-                # uniformly for all INSTANCE nodes (cross-repo and in-repo
-                # alike). The cross-repo path sets this in
-                # FederatedGraph._instantiate_cross_repo_satisfies; without
-                # this branch the viewer would silently skip the row for
-                # in-repo Satisfies clones.
-                if self._project_name:
-                    clone.set_field("template_repo", self._project_name)
-                # Implements: REQ-d00129-C
-                # Copy parse_line fields from the original.
-                if orig.get_field("parse_line") is not None:
-                    clone.set_field("parse_line", orig.get_field("parse_line"))
-                if orig.get_field("parse_end_line") is not None:
-                    clone.set_field("parse_end_line", orig.get_field("parse_end_line"))
-
-                self._nodes[clone_id] = clone
-                clone_map[orig.id] = clone
-
-                # INSTANCE edge from clone to original
-                clone.link(orig, EdgeKind.INSTANCE)
-
-            # Implements: REQ-d00128-K, REQ-p00014-M
-            # Recreate the subtree's own edges among the clones, once each:
-            # STRUCTURES to the cloned *Assertions* and the intra-subtree
-            # REFINES edges, with the *Assertion* labels a refinement named.
-            recreate_subtree_edges(template_nodes, clone_map)
-
-            # SATISFIES edge from declaring REQ to cloned root
-            cloned_root = clone_map.get(template_id)
-            if cloned_root:
-                declaring_node.link(cloned_root, EdgeKind.SATISFIES)
-
-            # Implements: REQ-d00128-J
-            # DEFINES edges run from the declaring FILE to the INSTANCE nodes.
-            declaring_file = declaring_node.file_node()
-            if declaring_file:
-                for clone in clone_map.values():
-                    declaring_file.link(clone, EdgeKind.DEFINES)
+            # is simply a narrower declaration. Every original lives in this
+            # repository, which the copies name.
+            # Implements: REQ-d00129-C, REQ-d00128-J, REQ-d00128-K, REQ-p00014-M
+            instantiate_subtree(
+                template_node,
+                declaring_node,
+                lambda orig_id, declaring_id=declaring_id: self._resolver.build_instance_id(
+                    declaring_id, orig_id
+                ),
+                lambda _orig: (self._project_name, True),
+                self._nodes,
+            )
 
         # Implements: REQ-d00272-K+T
         # Reported once every copy exists, so an item naming a copy made in

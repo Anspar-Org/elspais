@@ -11,7 +11,7 @@ reads it over the clones, whose REFINES edges mirror the originals'.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.reference_faults import FaultClass, ReferenceFault
@@ -74,6 +74,64 @@ def subtree_nodes(root: GraphNode) -> list[GraphNode]:
             if child.kind == NodeKind.ASSERTION:
                 nodes.append(child)
     return nodes
+
+
+# Implements: REQ-p00014-B, REQ-p00014-H, REQ-p00014-M, REQ-p00014-O, REQ-d00128-J
+def instantiate_subtree(
+    template_node: GraphNode,
+    declaring_node: GraphNode,
+    instance_id: Callable[[str], str],
+    owning_repo: Callable[[GraphNode], tuple[str, bool]],
+    index: dict[str, GraphNode],
+) -> dict[str, GraphNode]:
+    """Copy the subtree at ``template_node`` for ``declaring_node``'s ``Satisfies:``.
+
+    This is the one place a ``Satisfies:`` copy is made: by the builder, by
+    the federation for a template another repository owns, and by a
+    mutation that brings an *Assertion* back. Each original gets a copy
+    under the identifier ``instance_id`` composes, holding the original's
+    content, the INSTANCE stereotype, an INSTANCE edge back to the original
+    and the name of the repository owning the original. ``owning_repo``
+    answers that name, and whether the original lives in the repository
+    making the copy: only then does the copy keep the original's lines,
+    since a line in another repository's file locates nothing here. Each
+    copy enters ``index``. The subtree's own edges are recreated among the
+    copies, the declaring requirement satisfies the copied root, and the
+    declaring requirement's file defines every copy.
+
+    Returns the copies keyed by the identifier of the original.
+    """
+    template_nodes = subtree_nodes(template_node)
+    clone_map: dict[str, GraphNode] = {}
+    for orig in template_nodes:
+        clone = GraphNode(id=instance_id(orig.id), kind=orig.kind, label=orig.get_label())
+        # A clone's relationships are the edges recreated among the clones,
+        # so the reference text the original declared is not copied: left in
+        # place it would read as a reference the clone declared and never
+        # resolved.
+        for key, value in orig.get_all_content().items():
+            if key not in UNCLONED_FIELDS:
+                clone.set_field(key, value)
+        clone.set_field("stereotype", Stereotype.INSTANCE)
+        repo_name, local = owning_repo(orig)
+        if repo_name:
+            clone.set_field("template_repo", repo_name)
+        for line_field in ("parse_line", "parse_end_line"):
+            line = orig.get_field(line_field) if local else None
+            if line is not None or not local:
+                clone.set_field(line_field, line)
+        index[clone.id] = clone
+        clone_map[orig.id] = clone
+        clone.link(orig, EdgeKind.INSTANCE)
+    recreate_subtree_edges(template_nodes, clone_map)
+    cloned_root = clone_map.get(template_node.id)
+    if cloned_root is not None:
+        declaring_node.link(cloned_root, EdgeKind.SATISFIES)
+    declaring_file = declaring_node.file_node()
+    if declaring_file is not None:
+        for clone in clone_map.values():
+            declaring_file.link(clone, EdgeKind.DEFINES)
+    return clone_map
 
 
 # Implements: REQ-p00014-M, REQ-p00014-H

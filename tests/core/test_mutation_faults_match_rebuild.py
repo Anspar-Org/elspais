@@ -6,7 +6,10 @@ citation as an unresolved reference and binds nothing to it (REQ-p00017-H).
 The graph held in memory has to agree with that build at once, wherever the
 citation is written: in a test file where it binds to no test, under a
 spelling the reader normalizes, inside a `Satisfies:` copy of a template, or
-in another member of a federation. Undo restores the prior state exactly.
+in another member of a federation. Bringing a retired template _Assertion_
+back makes the `Satisfies:` copy of it a build makes, and a test citation
+in another member that binds to no test credits nothing whatever its
+target. Undo restores the prior state exactly.
 
 Each case compares one state function over the graph held after the mutation
 with the same function over a rebuild of the text the mutation saved. Every
@@ -27,8 +30,8 @@ import pytest
 
 from elspais.graph.GraphNode import NodeKind
 from elspais.graph.reference_faults import FaultClass
-from elspais.graph.relations import Stereotype
-from elspais.graph.render import render_save
+from elspais.graph.relations import EdgeKind, Stereotype
+from elspais.graph.render import compute_hash_for_node, render_end_marker, render_save
 from tests.core.test_retired_citation_unresolved import FIXTURES_DIR, _build, _replace_once
 
 # ---------------------------------------------------------------------------
@@ -752,3 +755,365 @@ class TestDeletingARequirementThatIsNotActive:
         self, tmp_path, setup, undo
     ):
         _assert_undo_restores(tmp_path, _delete_case(setup), undo)
+
+
+# ---------------------------------------------------------------------------
+# 5. Bringing a template Assertion back
+# ---------------------------------------------------------------------------
+
+XREPO_LIVE = (
+    "The dispatch flow SHALL include parsing, validation, authorization, and recording stages."
+)
+IN_REPO_LIVE = "The system SHALL record who made each change."
+
+# (project, the spec file holding the template, the template Assertion, the
+# text it says while live, the copies of it a build makes, an unrelated
+# requirement to retitle)
+RESTORE_SETUPS = {
+    "xrepo-tenant-assertion": (
+        _xrepo_project("tenant", assertion_satisfies=True),
+        "library/spec/prd-library.md",
+        "LIB-p00001-A",
+        XREPO_LIVE,
+        ("TEN-p00001::LIB-p00001-A",),
+        "TEN-p00001",
+    ),
+    "xrepo-tenant": (
+        _xrepo_project("tenant"),
+        "library/spec/prd-library.md",
+        "LIB-p00001-A",
+        XREPO_LIVE,
+        ("TEN-p00001::LIB-p00001-A",),
+        "TEN-p00001",
+    ),
+    "in-repo": (
+        _in_repo_project,
+        "spec/prd-template.md",
+        "REQ-p00010-A",
+        IN_REPO_LIVE,
+        ("REQ-p00011::REQ-p00010-A", "REQ-p00012::REQ-p00010-A"),
+        "REQ-p00011",
+    ),
+}
+
+RESTORE_CASES = pytest.mark.parametrize("setup", list(RESTORE_SETUPS))
+
+
+def _record_hashes(root: Path, template: str) -> None:
+    """Write the current hash of *template*, and of each requirement found stale.
+
+    A save of a mutation records the hash of each requirement it writes, and
+    a build of a recorded hash that disagrees with the text marks the
+    requirement, and each copy of it, as needing a rewrite, which that save
+    then clears. Recording the hashes first keeps both out of a comparison
+    of what the mutation did.
+    """
+    graph = _build(root)
+    for _ns, member in graph._live_graphs():
+        for node in member.iter_by_kind(NodeKind.REQUIREMENT):
+            if node.get_field("stereotype") == Stereotype.INSTANCE:
+                continue
+            stale = "stale_hash" in (node.get_field("parse_dirty_reasons") or ())
+            if not stale and node.id != template:
+                continue
+            stored, current = node.get_field("hash"), compute_hash_for_node(node)
+            if stored == current:
+                continue
+            path = Path(node.file_node().get_field("absolute_path"))
+            title = node.get_label()
+            _replace_once(path, render_end_marker(title, stored), render_end_marker(title, current))
+    rebuilt = _build(root)
+    assert not [
+        node.id
+        for _ns, member in rebuilt._live_graphs()
+        for node in member.iter_by_kind(NodeKind.REQUIREMENT)
+        if node.get_field("parse_dirty")
+    ], "premise: the starting text is in canonical form"
+
+
+def _canonical_project(setup: str, *, retired: bool) -> Callable[[Path], tuple[Path, Path]]:
+    """The setup's project, its template Assertion retired in the text if *retired*."""
+    make, spec, assertion, live, _copies, _unrelated = RESTORE_SETUPS[setup]
+
+    def canonical(tmp_path: Path) -> tuple[Path, Path]:
+        base, root = make(tmp_path)
+        if retired:
+            _replace_once(base / spec, f"A. {live}", "A. <RETIRED>")
+        _record_hashes(root, assertion.rsplit("-", 1)[0])
+        return base, root
+
+    return canonical
+
+
+def _restore_case(setup: str) -> Case:
+    _make, _spec, assertion, live, _copies, unrelated = RESTORE_SETUPS[setup]
+    return Case(
+        _canonical_project(setup, retired=True),
+        lambda g: g.update_assertion(assertion, live),
+        _retitle(unrelated),
+    )
+
+
+def _template_repo(setup: str) -> str:
+    """The name of the repository a copy of the setup's template records."""
+    return "in-repo-template" if setup == "in-repo" else "library"
+
+
+class TestBringingATemplateAssertionBack:
+    """Validates REQ-p00017-H, REQ-p00014-B, REQ-o00062-G."""
+
+    @RESTORE_CASES
+    # Verifies: REQ-p00017-H, REQ-p00014-B
+    def test_REQ_p00014_B_bringing_back_makes_the_copy_a_build_makes(self, tmp_path, setup):
+        _make, _spec, assertion, live, copies, _unrelated = RESTORE_SETUPS[setup]
+        pristine_base, pristine_root = _canonical_project(setup, retired=False)(
+            tmp_path / "pristine"
+        )
+        pristine = _state(_build(pristine_root), pristine_base)
+
+        def observe(graph, _base):
+            # The label each copy holds before, or None where none exists.
+            return {
+                copy: (node.get_label() if (node := graph.find_by_id(copy)) else None)
+                for copy in copies
+            }
+
+        graph, base, before = _assert_memory_equals_rebuild(
+            tmp_path / "work", _restore_case(setup), observe
+        )
+
+        # The mutation brought the text back to what a pristine build reads.
+        assert _diff(_state(graph, base), pristine) == {}
+        assert _state(graph, base) == pristine
+        original = graph.find_by_id(assertion)
+        for copy_id in copies:
+            copy = graph.find_by_id(copy_id)
+            assert copy is not None
+            assert copy.get_label() == live
+            assert copy.get_label() == original.get_label()
+            assert not copy.get_field("retired")
+            assert copy.get_field("stereotype") == Stereotype.INSTANCE
+            assert copy.get_field("template_repo") == _template_repo(setup)
+            # Before, the copy did not exist (a Satisfies: naming the
+            # Assertion alone) or said what the retired original said.
+            assert before[copy_id] in (None, "<RETIRED>")
+        # No Satisfies: naming the Assertion is left unresolved.
+        assert not [
+            f
+            for _ns, member in graph._live_graphs()
+            for f in member.unresolved_references()
+            if f.edge_kind == "satisfies"
+        ]
+
+    @RESTORE_CASES
+    @UNDO
+    # Verifies: REQ-o00062-G
+    def test_REQ_o00062_G_undo_of_bringing_back_returns_to_the_retired_state(
+        self, tmp_path, setup, undo
+    ):
+        _assert_undo_restores(tmp_path, _restore_case(setup), undo)
+
+    @RESTORE_CASES
+    @pytest.mark.parametrize("how", RETIREMENTS)
+    # Verifies: REQ-p00017-H, REQ-p00014-B, REQ-o00062-G
+    def test_REQ_p00017_H_retiring_then_bringing_back_restores_the_build(
+        self, tmp_path, setup, how
+    ):
+        _make, _spec, assertion, live, _copies, _unrelated = RESTORE_SETUPS[setup]
+        base, root = _canonical_project(setup, retired=False)(tmp_path)
+        graph = _build(root)
+        pristine = _state(graph, base)
+
+        _retire(assertion, how)(graph)
+        retired = _state(graph, base)
+        assert retired != pristine
+        graph.update_assertion(assertion, live)
+        assert _diff(_state(graph, base), pristine) == {}
+        assert _state(graph, base) == pristine
+
+        graph.undo_last()
+        assert _diff(_state(graph, base), retired) == {}
+        assert _state(graph, base) == retired
+        graph.undo_last()
+        assert _diff(_state(graph, base), pristine) == {}
+        assert _state(graph, base) == pristine
+
+
+class TestABuildMakesEachCopyAlike:
+    """Validates REQ-p00014-B, REQ-p00014-O, REQ-d00128-J, REQ-d00129-C."""
+
+    @RESTORE_CASES
+    # Verifies: REQ-p00014-B, REQ-p00014-O, REQ-d00128-J, REQ-d00129-C
+    def test_REQ_p00014_B_each_copy_has_the_shape_its_repository_gives_it(self, tmp_path, setup):
+        make, _spec, assertion, _live, copies, _unrelated = RESTORE_SETUPS[setup]
+        _base, root = make(tmp_path)
+        graph = _build(root)
+        original = graph.find_by_id(assertion)
+        in_repo = setup == "in-repo"
+
+        for copy_id in copies:
+            copy = graph.find_by_id(copy_id)
+            declaring = graph.find_by_id(copy_id.split("::", 1)[0])
+            assert copy.get_field("stereotype") == Stereotype.INSTANCE
+            assert copy.get_field("template_repo") == _template_repo(setup)
+            # A line locates the original only in the repository holding it.
+            for line_field in ("parse_line", "parse_end_line"):
+                expected = original.get_field(line_field) if in_repo else None
+                assert copy.get_field(line_field) == expected
+            assert isinstance(copy.get_field("parse_line"), int) is in_repo
+            assert {e.target.id for e in copy.iter_edges_by_kind(EdgeKind.INSTANCE)} == {assertion}
+            # The declaring requirement satisfies the copied root -- the copy
+            # itself where Satisfies: names the Assertion -- and its file
+            # defines every copy.
+            parents = [
+                e.source for e in copy.iter_incoming_edges() if e.kind == EdgeKind.STRUCTURES
+            ]
+            copied_root = parents[0] if parents else copy
+            satisfied = {e.target.id for e in declaring.iter_edges_by_kind(EdgeKind.SATISFIES)}
+            assert copied_root.id in satisfied
+            defined = {
+                e.target.id for e in declaring.file_node().iter_edges_by_kind(EdgeKind.DEFINES)
+            }
+            assert {copy.id, copied_root.id} <= defined
+
+
+# ---------------------------------------------------------------------------
+# 6. A test citation in another member that binds to no test
+# ---------------------------------------------------------------------------
+
+ALPHA_TEST_SCANNING = """\
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py"]
+
+[scanning.spec]"""
+
+ALPHA_TEST_FILE = "alpha/tests/test_alpha.py"
+# The citation either opens the test it binds to, or follows the last test
+# in the file and binds to nothing.
+ALPHA_TESTS = {
+    "bound": "# Verifies: REQ-p00001-A\ndef test_x():\n    pass\n",
+    "unbound": "def test_x():\n    pass\n\n\n# Verifies: REQ-p00001-A\n",
+}
+
+
+def _foreign_citation_project(variant: str, *, draft: bool = False):
+    """e2e-associated with an alpha test citing core's REQ-p00001-A."""
+
+    def make(tmp_path: Path) -> tuple[Path, Path]:
+        base = _copy(tmp_path, "e2e-associated", ("core", "alpha", "beta"))
+        _replace_once(base / "alpha" / ".elspais.toml", "[scanning.spec]", ALPHA_TEST_SCANNING)
+        _write(base / ALPHA_TEST_FILE, ALPHA_TESTS[variant])
+        if draft:
+            _replace_once(
+                base / "core" / "spec" / "prd-core.md",
+                "# REQ-p00001: Core Auth\n\n**Level**: PRD | **Status**: Active",
+                "# REQ-p00001: Core Auth\n\n**Level**: PRD | **Status**: Draft",
+            )
+        return base, base / "core"
+
+    return make
+
+
+def _alpha_unbound(graph, base: Path) -> list[tuple[str, tuple[str, ...]]]:
+    """(citing node, targets) of each unbound citation alpha records."""
+    prefix = f"{base}/"
+    member = dict(graph._live_graphs())["REQ-ALP"]
+    return [(c.node_id.replace(prefix, ""), tuple(c.targets)) for c in member.unbound_citations()]
+
+
+def _alpha_verifiers(graph, base: Path) -> set[tuple[str, tuple[str, ...]]]:
+    """(test node, labels) of each VERIFIES edge from REQ-p00001 to an alpha test."""
+    prefix = f"{base}/"
+    return {
+        (e.target.id.replace(prefix, ""), tuple(e.assertion_targets))
+        for e in graph.find_by_id("REQ-p00001").iter_edges_by_kind(EdgeKind.VERIFIES)
+        if e.target.id.startswith("test:")
+    }
+
+
+UNBOUND_CITER = f"test:{ALPHA_TEST_FILE}:5"
+
+
+class TestAnUnboundCitationInAnotherMember:
+    """Validates REQ-d00274-H, REQ-p00017-H, REQ-o00062-G."""
+
+    @pytest.mark.parametrize("variant", list(ALPHA_TESTS))
+    # Verifies: REQ-d00274-H
+    def test_REQ_d00274_H_an_unbound_citation_binds_nothing_and_credits_nothing(
+        self, tmp_path, variant
+    ):
+        base, root = _foreign_citation_project(variant)(tmp_path)
+        graph = _build(root)
+
+        tested = graph.find_by_id("REQ-p00001").get_metric("rollup_metrics").tested
+        faults = [f for _ns, m in graph._live_graphs() for f in m.unresolved_references()]
+        assert faults == []
+        if variant == "bound":
+            # The control: the same citation opening a test verifies it.
+            assert _alpha_verifiers(graph, base) == {("test:tests/test_alpha.py::test_x", ("A",))}
+            assert tested.total_by_label.get("A") == 1.0
+            assert _alpha_unbound(graph, base) == []
+        else:
+            assert _alpha_verifiers(graph, base) == set()
+            assert tested.total_by_label.get("A", 0.0) == 0.0
+            assert tested.covered == 0.0
+            assert _alpha_unbound(graph, base) == [(UNBOUND_CITER, ("REQ-p00001-A",))]
+
+    @pytest.mark.parametrize("how", RETIREMENTS)
+    # Verifies: REQ-d00274-H, REQ-p00017-H
+    def test_REQ_d00274_H_retiring_the_target_reports_it_in_the_citing_member(self, tmp_path, how):
+        case = Case(
+            _foreign_citation_project("unbound"),
+            _retire("REQ-p00001-A", how),
+            _retitle("REQ-p00002"),
+        )
+
+        graph, base, before = _assert_memory_equals_rebuild(
+            tmp_path, case, lambda g, b: _faults(g, b, "REQ-p00001")
+        )
+
+        assert before == set()
+        assert _faults(graph, base, "REQ-p00001") == {
+            ("REQ-ALP", UNBOUND_CITER, "verifies", FaultClass.UNKNOWN_ASSERTION)
+        }
+        (fault,) = dict(graph._live_graphs())["REQ-ALP"].unresolved_references()
+        assert "holds no such Assertion" in fault.diagnostic
+        assert _alpha_verifiers(graph, base) == set()
+        assert _alpha_unbound(graph, base) == [(UNBOUND_CITER, ("REQ-p00001-A",))]
+
+    # Verifies: REQ-d00274-H, REQ-p00017-H, REQ-o00062-P
+    def test_REQ_d00274_H_deleting_a_draft_target_reports_it_in_the_citing_member(self, tmp_path):
+        case = Case(
+            _foreign_citation_project("unbound", draft=True),
+            lambda g: g.delete_requirement("REQ-p00001"),
+            _retitle("REQ-p00002"),
+        )
+
+        graph, base, _ = _assert_memory_equals_rebuild(tmp_path, case)
+
+        reported = {f for f in _faults(graph, base, "REQ-p00001") if f[1] == UNBOUND_CITER}
+        assert reported == {("REQ-ALP", UNBOUND_CITER, "verifies", FaultClass.UNKNOWN_REQUIREMENT)}
+        assert _alpha_unbound(graph, base) == [(UNBOUND_CITER, ("REQ-p00001-A",))]
+
+    @pytest.mark.parametrize(
+        "mutation",
+        ["delete", "update", "delete-draft"],
+    )
+    @UNDO
+    # Verifies: REQ-o00062-G, REQ-d00274-H
+    def test_REQ_o00062_G_undo_withdraws_the_other_members_fault(self, tmp_path, mutation, undo):
+        if mutation == "delete-draft":
+            case = Case(
+                _foreign_citation_project("unbound", draft=True),
+                lambda g: g.delete_requirement("REQ-p00001"),
+                _retitle("REQ-p00002"),
+            )
+        else:
+            case = Case(
+                _foreign_citation_project("unbound"),
+                _retire("REQ-p00001-A", mutation),
+                _retitle("REQ-p00002"),
+            )
+        _assert_undo_restores(tmp_path, case, undo)
