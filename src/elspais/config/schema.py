@@ -524,7 +524,7 @@ class KeywordsSearchConfig(_StrictModel):
     min_length: int = 3
 
 
-# Implements: REQ-d00212-Z
+# Implements: REQ-d00324-A
 def _retired_hash_mode_message(value: str) -> str:
     """Build the refusal for a hash mode the tool no longer offers."""
     return (

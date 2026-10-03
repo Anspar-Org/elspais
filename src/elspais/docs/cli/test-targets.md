@@ -77,7 +77,17 @@ paths that the global `[scanning] skip` list names. The per-kind
 `skip_dirs`/`skip_files` of `[scanning.spec]`, `[scanning.code]` and the rest
 do not apply here. Put anything that changes during every run in that global
 list. Examples are `.git`, `.elspais/`, and caches that a test tool writes
-while it runs, such as `.pytest_cache`. `elspais init` writes the common ones.
+while it runs, such as `**/.pytest_cache` and `.coverage`. `elspais init`
+writes the common ones.
+
+Write a skip entry so that it reaches every place the file or directory can
+appear. An entry holding a `/` is a path from the repository root, for a file
+and a directory alike, so `**/.pytest_cache` skips that directory at any depth
+and `**/.coverage` skips that file at any depth. An entry of a single name
+skips a file of that name at any depth, but a directory of that name only at
+the repository root: a bare `.pytest_cache` leaves `pkg/.pytest_cache` among
+the inputs, and every run that writes it reads as stale. See
+`elspais docs ignore` for the full rule.
 A target narrows its inputs with `inputs`. `inputs` has exactly the same form
 as a scanning kind's file selection:
 
@@ -897,7 +907,7 @@ target, or have a target claim them:
   not, so naming `all` names everything.
 - **`none`** — no target. A run naming it marks no target fresh.
   Consequently, `summary` and `trace` render every result read from disk as
-  carried from an earlier run.
+  carried from an earlier run, an associate's results included.
 - **`last-run`** — the targets that the last run of `elspais test` or
   `elspais checks --run-tests` executed, read from its record (see
   [The record of the last run](#the-record-of-the-last-run)). It is read by
@@ -1021,7 +1031,9 @@ The flag means something slightly different depending on the command:
   earlier run. `--targets none` marks no target fresh. Consequently, every
   result read from disk renders as carried. `--targets last-run` marks fresh
   the targets the last executing run recorded, so the names need not be
-  repeated.
+  repeated. The names are the invoking repository's targets. A run of those
+  executes no target of an associate, so wherever `--targets` is given, every
+  result an associate holds renders as carried.
 
 On `trace`, the complement (non-named) targets render one of two ways in the
 per-requirement `verified` value, depending on whether prior result data
@@ -1029,7 +1041,10 @@ exists for them:
 
 - **`(baseline)`** — carried. The target has existing RESULT data from a
   previous run; that verdict is reused and rendered with a `(baseline)`
-  suffix (e.g. `4/4 100% (baseline)`). A carried **failing** target still
+  suffix (e.g. `4/4 100% (baseline)`). A requirement credited through the
+  requirements that refine it carries the suffix when every result behind
+  its figure, its own and those conducted to it, was carried, and loses it
+  as soon as one fresh result contributes. A carried **failing** target still
   fails/gates — carrying only skips re-execution, it never launders a
   failure into a pass. The same provenance is selectable on its own as
   `verified.carried`, which states `baseline` or `fresh` in a cell and a
@@ -1058,8 +1073,9 @@ appended:
 * 1/2 test results from previous runs
 ```
 
-The `N/M` counts are distinct RESULT target names: `M` targets have any
-result data at all, `N` of those were carried (not freshly produced this
+The `N/M` counts are distinct RESULT targets, a target of each federation
+member counted separately even where two members use one name: `M` targets
+have any result data at all, `N` of those were carried (not freshly produced this
 invocation). A full run (no `--targets`, or `--targets` covering every
 result-bearing target) has zero carried targets, so neither the `*` nor the
 footnote appears — output is unchanged from before this flag existed. The

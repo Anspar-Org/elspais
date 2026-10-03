@@ -16,11 +16,20 @@ Three lists make up the ignore configuration:
 every kind; a kind's `skip_files`/`skip_dirs` are checked only when scanning
 that kind.
 
-`skip_files` and `skip_dirs` are **not** interchangeable. They name different
-things and are matched by different rules:
+Every skip pattern is matched by two rules, which agree everywhere except
+for a pattern of a single name:
 
-- a **directory** pattern is a path from the **repository root**
-- a **file** pattern is a glob over a file's **name**
+- a pattern holding a `/` is a **path from the repository root**, for a file
+  and a directory alike: `**/.coverage` names a file called `.coverage` at any
+  depth as surely as `**/.pytest_cache` names that directory at any depth, and
+  `gen/out.json` names that one file
+- a pattern of a **single name** is read two ways: against a file it is a glob
+  over the file's **name**, at any depth (`*.pyc`, `README.md`); against a
+  directory it names that directory at the **repository root** only
+
+So write `**/` in front of a name to mean "at any depth" for a file or a
+directory, and a path from the root to mean one place. A bare name means "at
+any depth" for a file and "at the root" for a directory.
 
 ## Ignoring and selecting are different questions
 
@@ -82,17 +91,27 @@ report on any of it.
 
 A directory that is both scanned and skipped contributes nothing.
 
-### File patterns (`skip_files`, `file_patterns`)
+### File patterns (`skip_files`, and `[scanning].skip` where it names a file)
 
-A file pattern is a glob over a file's **name**, so it applies at any depth. It
-says nothing about where the file sits -- the directory rules say that.
-`file_patterns` additionally matches the path *within* the directory being
-scanned, so `api/*.py` selects inside a subdirectory of a scanned directory.
+A skip pattern of a single name is a glob over a file's **name**, so it applies
+at any depth. A skip pattern holding a `/` is a path from the repository root,
+read by the directory rules above:
+
+| pattern | skips |
+|---------|-------|
+| `*.pyc` | every `.pyc` file, at any depth |
+| `**/.coverage` | a file called `.coverage` at any depth, the root included |
+| `.coverage` | the same: a single name matches a file at any depth |
+| `gen/out.json` | that one file, and no `out.json` anywhere else |
+
+`file_patterns` selects rather than skips, and is matched differently: against
+the file's name and against its path *within* the directory being scanned, so
+`api/*.py` selects inside a subdirectory of a scanned directory.
 
 ## Pattern Characters
 
 - `*` matches any characters within a path component
-- `**` matches zero or more directories (directory patterns)
+- `**` matches zero or more directories (in any skip pattern holding a `/`)
 - `?` matches a single character
 
 ## Common Patterns
@@ -100,6 +119,8 @@ scanned, so `api/*.py` selects inside a subdirectory of a scanned directory.
 | Goal | Where | Pattern | Example Match |
 |------|-------|---------|---------------|
 | Skip a file everywhere | `[scanning].skip` | `*.pyc` | `src/__pycache__/foo.pyc` |
+| Skip a generated file at any depth | `[scanning].skip` | `**/.coverage` | `pkg/sub/.coverage` |
+| Skip one file exactly | `[scanning].skip` | `build/report.json` | `build/report.json` |
 | Skip a directory at any depth | `[scanning.<kind>].skip_dirs` | `**/roadmap` | `spec/roadmap/plan.md` |
 | Skip one directory exactly | `[scanning.<kind>].skip_dirs` | `spec/archive` | `spec/archive/old.md` |
 | Skip a file by name | `[scanning.<kind>].skip_files` | `README.md` | `spec/README.md` |
@@ -140,8 +161,8 @@ If you're used to gitignore patterns, note these differences:
 
 | gitignore | elspais pattern | Notes |
 |-----------|-----------------|-------|
-| `roadmap/` | `roadmap` (in `skip_dirs`) | Matches the path component at any depth |
-| `/roadmap/` | `roadmap/**` | Leading `/` not needed (already anchored) |
+| `roadmap/` | `**/roadmap` (in `skip_dirs`) | A bare `roadmap` names only the one at the root |
+| `/roadmap/` | `roadmap` (in `skip_dirs`) | Leading `/` not needed (already anchored) |
 | `*.md` | `*.md` | Same behavior for extensions |
 
 See `elspais docs config` for the full `[scanning]` reference.

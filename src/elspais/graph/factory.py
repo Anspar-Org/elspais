@@ -1161,7 +1161,8 @@ def build_graph(
             text, bypassing the on-disk results glob for that target.
         fresh_targets: Optional set of [[scanning.test.targets]] names considered
             "freshly run" (e.g. via ``--targets``). When set, every RESULT node
-            ingested for a target NOT in this set is tagged ``carried=True``.
+            ingested for a target NOT in this set is tagged ``carried=True``,
+            and so is every RESULT node of another member of the federation.
             When None (the default), no target is considered carried. Stashed
             on the returned FederatedGraph as ``render_fresh_targets``.
         evidence_only: Read every target's results from the *Evidence
@@ -1243,11 +1244,17 @@ def build_graph(
             # recomputes coverage over every member once the
             # cross-repository edges exist, so a member is not annotated
             # here.
+            # Implements: REQ-d00323-D
+            # A selection of fresh targets names the invoking repository's
+            # targets, and a run of those executes no target of another
+            # member. So where a run names what ran fresh, every result a
+            # member holds is carried; where it names nothing, none is.
             member_graph, _ = _build_repository(
                 member.config,
                 member.repo_root,
                 scan_code=scan_code,
                 scan_tests=scan_tests,
+                fresh_targets=None if fresh_targets is None else set(),
                 federation_resolvers=federation_resolvers,
                 evidence_only=evidence_only,
             )

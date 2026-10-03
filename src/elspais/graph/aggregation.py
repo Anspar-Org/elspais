@@ -1436,15 +1436,21 @@ def collect_coverage(
     # otherwise, so a full run stays byte-identical to the pre-selectivity
     # output in every format (JSON keys and the CSV row included).
     if getattr(graph, "render_fresh_targets", None) is not None:
-        all_result_targets: set[str] = set()
-        carried_result_targets_set: set[str] = set()
+        from elspais.graph.GraphNode import parse_structural_id
+
+        # Implements: REQ-d00323-E
+        # A target is named within its member: two members may each declare
+        # a target of one name, and those are two targets.
+        all_result_targets: set[tuple[str, str]] = set()
+        carried_result_targets_set: set[tuple[str, str]] = set()
         for result_node in graph.iter_by_kind(NodeKind.RESULT):
             tgt = result_node.get_field("target")
             if not tgt:
                 continue
-            all_result_targets.add(tgt)
+            member = (parse_structural_id(result_node.id)[1], tgt)
+            all_result_targets.add(member)
             if result_node.get_field("carried"):
-                carried_result_targets_set.add(tgt)
+                carried_result_targets_set.add(member)
         result["total_result_targets"] = len(all_result_targets)
         result["carried_result_targets"] = len(carried_result_targets_set)
 

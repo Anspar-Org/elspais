@@ -524,8 +524,8 @@ class TestRetiredHashMode:
         assert "elspais fix" in message, message
         assert "rewrites the stored hash of every" in message, message
 
-    # Verifies: REQ-d00212-Z
-    def test_REQ_d00212_Z_full_text_in_a_file_is_refused(self, tmp_path):
+    # Verifies: REQ-d00324-A
+    def test_REQ_d00324_A_full_text_in_a_file_is_refused(self, tmp_path):
         from elspais.config import load_config
 
         path = self._write(tmp_path, '[validation]\nhash_mode = "full-text"\n')
@@ -533,33 +533,33 @@ class TestRetiredHashMode:
             load_config(path)
         self._assert_names_the_remedy(str(excinfo.value))
 
-    # Verifies: REQ-d00212-Z
-    def test_REQ_d00212_Z_full_text_refused_by_the_model(self):
+    # Verifies: REQ-d00324-A
+    def test_REQ_d00324_A_full_text_refused_by_the_model(self):
         with pytest.raises(ValidationError) as excinfo:
             ValidationConfig(hash_mode="full-text")
         self._assert_names_the_remedy(str(excinfo.value))
 
-    # Verifies: REQ-d00212-Z
-    def test_REQ_d00212_Z_unknown_hash_mode_refused(self):
+    # Verifies: REQ-d00324-A
+    def test_REQ_d00324_A_unknown_hash_mode_refused(self):
         """A value that was never offered is refused too, not passed through."""
         with pytest.raises(ValidationError, match="normalized-text"):
             ValidationConfig(hash_mode="sha-of-everything")
 
-    # Verifies: REQ-d00212-Z
+    # Verifies: REQ-d00324-A
     @pytest.mark.parametrize(
         "validation",
         ['[validation]\nhash_mode = "normalized-text"\n', "[validation]\nhash_length = 8\n", ""],
         ids=["explicit-normalized", "absent-in-table", "no-table"],
     )
-    def test_REQ_d00212_Z_normalized_or_absent_loads(self, tmp_path, validation):
+    def test_REQ_d00324_A_normalized_or_absent_loads(self, tmp_path, validation):
         from elspais.config import load_config
 
         config = load_config(self._write(tmp_path, validation))
         assert config["validation"]["hash_mode"] == "normalized-text"
 
-    # Verifies: REQ-d00212-Z
+    # Verifies: REQ-d00324-A
     @pytest.mark.parametrize("command", ["checks", "fix"])
-    def test_REQ_d00212_Z_cli_refuses_with_the_message(
+    def test_REQ_d00324_A_cli_refuses_with_the_message(
         self, tmp_path, monkeypatch, capsys, command
     ):
         """A subcommand run in such a project exits non-zero and prints the refusal."""
