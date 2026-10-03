@@ -200,7 +200,7 @@
 | REQ-d00278 | Report Scope Selection Vocabulary                             | dev-cli.md              | ef2221cc |
 | REQ-d00279 | One Authority for Report Scope Membership                     | dev-cli.md              | 2b755b50 |
 | REQ-d00280 | Named Report Declarations                                     | dev-cli.md              | 321c6f4f |
-| REQ-d00281 | Level Vocabulary of a Reported Graph                          | dev-graph-core.md       | 4bde246d |
+| REQ-d00281 | Level Vocabulary of a Reported Graph                          | dev-graph-core.md       | f1b33fc4 |
 | REQ-d00282 | Report Value Selection                                        | dev-cli.md              | bf98248c |
 | REQ-d00283 | Test Target Groups                                            | dev-graph-core.md       | 2e819a81 |
 | REQ-d00284 | How a Result Names Its Test                                   | dev-graph-core.md       | 7baae0b0 |

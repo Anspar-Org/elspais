@@ -1457,7 +1457,7 @@ E settles an ordering that would otherwise be decided independently by each surf
 
 F and G separate two conditions that a single judgment would merge. The levels a configuration defines each declare which levels they may implement, so a relationship between two defined levels is judged against a rule the project wrote. A relationship involving an undefined level has no such rule: nothing the project declared permits it or forbids it, and reporting it as a forbidden relationship would claim a decision the project never made. G keeps that judgment to the relationships a rule speaks to. F reports the rest as what it is, a relationship the configuration cannot speak to, and names where levels are declared because that is where an author resolves it, by declaring the level or correcting the one the requirement carries. The two are distinct conditions, so a project that accepts every deviation it declared rules about has not thereby accepted a level it never declared.
 
-*End* *Level Vocabulary of a Reported Graph* | **Hash**: 4bde246d
+*End* *Level Vocabulary of a Reported Graph* | **Hash**: f1b33fc4
 
 ## REQ-d00311: Test Result Freshness
 
