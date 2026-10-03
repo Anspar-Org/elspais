@@ -116,7 +116,7 @@
 | REQ-d00128 | FILE Node Creation in Build Pipeline                          | dev-graph-file-nodes.md | 926ddd2b |
 | REQ-d00129 | SourceLocation Removal and Consumer Migration                 | dev-graph-file-nodes.md | 6d11df36 |
 | REQ-d00130 | Parameterized Root Iteration and Kind-Based Index Query       | dev-graph-file-nodes.md | 5733741e |
-| REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | c81d018a |
+| REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | 21b9a92c |
 | REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | b7f05ffb |
 | REQ-d00133 | MCP FILE Node Integration                                     | dev-mcp-tools.md        | 08e2973f |
 | REQ-d00134 | Mutation Round-Trip Fidelity                                  | dev-graph-file-nodes.md | 19cb065b |
@@ -132,7 +132,7 @@
 | REQ-d00209 | Schema-Driven Init Template Generation                        | dev-graph-config.md     | b25e4468 |
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | 59023724 |
 | REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | 6b90f87f |
-| REQ-d00212 | Configuration Schema                                          | dev-graph-config.md     | 492083b5 |
+| REQ-d00212 | Configuration Schema                                          | dev-graph-config.md     | aa617698 |
 | REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | cedd398b |
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | 5f372b62 |
 | REQ-d00215 | Keyword Extraction Annotator                                  | dev-graph-core.md       | db477d99 |

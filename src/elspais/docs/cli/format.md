@@ -66,8 +66,12 @@ B. The system SHALL NOT do something prohibited.
 
 ## Hash
 
-The 8-character hash is computed from the requirement body content.
-When content changes, the hash changes, triggering review.
+The 8-character hash is computed from the requirement's assertions
+alone. Each assertion is normalized (lines joined, runs of spaces
+collapsed, trailing whitespace stripped) and hashed on its own, and
+the sorted results are hashed together, so reordering assertions does
+not move the hash. Prose, rationale and changelog are not hashed.
+When an assertion changes, the hash changes, triggering review.
 
   $ elspais fix            # Recompute all hashes
   $ elspais checks         # Check for stale hashes

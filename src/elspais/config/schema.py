@@ -524,11 +524,34 @@ class KeywordsSearchConfig(_StrictModel):
     min_length: int = 3
 
 
+# Implements: REQ-d00212-Z
+def _retired_hash_mode_message(value: str) -> str:
+    """Build the refusal for a hash mode the tool no longer offers."""
+    return (
+        f'[validation] hash_mode = "{value}" is no longer supported.\n\n'
+        "A requirement's hash covers its Assertions alone, normalized as the\n"
+        "Hash section of `elspais docs format` describes. No setting selects\n"
+        "another digest.\n\n"
+        "Remove the hash_mode line from [validation], or write:\n"
+        '  hash_mode = "normalized-text"\n\n'
+        "The next `elspais fix` then rewrites the stored hash of every\n"
+        "requirement to the normalized digest. Commit that change on its own,\n"
+        "so reviewers can tell it from an edit to what a requirement says."
+    )
+
+
 class ValidationConfig(_StrictModel):
-    hash_mode: str = "normalized-text"
+    hash_mode: Literal["normalized-text"] = "normalized-text"
     hash_algorithm: str = "sha256"
     hash_length: int = 8
     strict_hierarchy: bool = False
+
+    @field_validator("hash_mode", mode="before")
+    @classmethod
+    def _refuse_retired_hash_mode(cls, value):
+        if value == "full-text":
+            raise ValueError(_retired_hash_mode_message(value))
+        return value
 
 
 # Implements: REQ-d00212-Y

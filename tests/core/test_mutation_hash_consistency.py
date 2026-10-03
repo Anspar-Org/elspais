@@ -1,11 +1,8 @@
-"""Tests for hash consistency after assertion mutations (full-text mode).
+"""Tests for hash consistency after assertion mutations.
 
-These tests verify that after each mutation type (add_assertion, update_assertion,
-delete_assertion, rename_assertion), the hash is recomputed consistently from the
-structured graph content via reconstruct_body_text().
-
-Uses explicit hash_mode="full-text" since these tests verify the invariant that
-hash == calculate_hash(reconstruct_body_text(node)), which only holds in full-text mode.
+After each mutation type (add_assertion, update_assertion, delete_assertion,
+rename_assertion) the stored hash equals the normalized digest of the
+requirement's Assertions as they now stand, each spelled out explicitly here.
 """
 
 from __future__ import annotations
@@ -13,7 +10,7 @@ from __future__ import annotations
 from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.render import reconstruct_body_text
-from elspais.utilities.hasher import calculate_hash
+from elspais.utilities.hasher import compute_normalized_hash
 from tests.core.graph_test_helpers import grammar_for
 
 
@@ -44,7 +41,7 @@ def make_req(
 
 def build_graph_for_hash() -> TraceGraph:
     """Build a graph with a requirement containing assertions for hash testing."""
-    builder = GraphBuilder(hash_mode="full-text", namespace="REQ", resolver=grammar_for("REQ"))
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
     builder.add_parsed_content(
         make_req(
             "REQ-p00001",
@@ -58,12 +55,22 @@ def build_graph_for_hash() -> TraceGraph:
     return builder.build()
 
 
+A_TEXT = "The system SHALL validate input."
+B_TEXT = "The system SHALL log errors."
+RETIRED = "<RETIRED>"
+
+
+def expected_hash(*assertions: tuple[str, str]) -> str:
+    """The normalized digest of exactly these (label, text) Assertions."""
+    return compute_normalized_hash(list(assertions))
+
+
 class TestAddAssertionHashConsistency:
     """Tests verifying hash consistency after add_assertion."""
 
     # Verifies: REQ-o00062-B
     def test_add_assertion_updates_hash(self):
-        """After add_assertion, hash matches reconstruct_body_text().
+        """After add_assertion, the stored hash is the digest of its Assertions.
 
         REQ-o00062-B: Add assertion recomputes hash consistently.
         """
@@ -75,10 +82,12 @@ class TestAddAssertionHashConsistency:
         # Perform mutation
         graph.add_assertion("REQ-p00001", "The system SHALL notify users.")
 
-        # Verify hash matches what we'd compute from reconstructed body_text
+        # The stored hash is the digest of the Assertions now held
         new_hash = parent.get_field("hash")
-        expected_hash = calculate_hash(reconstruct_body_text(parent))
-        assert new_hash == expected_hash
+        expected = expected_hash(
+            ("A", A_TEXT), ("B", B_TEXT), ("C", "The system SHALL notify users.")
+        )
+        assert new_hash == expected
 
         # Verify hash actually changed
         assert new_hash != old_hash
@@ -102,7 +111,7 @@ class TestUpdateAssertionHashConsistency:
 
     # Verifies: REQ-o00062-B
     def test_update_assertion_updates_hash(self):
-        """After update_assertion, hash matches reconstruct_body_text().
+        """After update_assertion, the stored hash is the digest of its Assertions.
 
         REQ-o00062-B: Update assertion recomputes hash consistently.
         """
@@ -114,10 +123,12 @@ class TestUpdateAssertionHashConsistency:
         # Perform mutation
         graph.update_assertion("REQ-p00001-A", "The system SHALL strictly validate all user input.")
 
-        # Verify hash matches reconstructed body_text
+        # The stored hash is the digest of the Assertions now held
         new_hash = parent.get_field("hash")
-        expected_hash = calculate_hash(reconstruct_body_text(parent))
-        assert new_hash == expected_hash
+        expected = expected_hash(
+            ("A", "The system SHALL strictly validate all user input."), ("B", B_TEXT)
+        )
+        assert new_hash == expected
 
         # Verify hash actually changed
         assert new_hash != old_hash
@@ -140,7 +151,7 @@ class TestDeleteAssertionHashConsistency:
 
     # Verifies: REQ-o00062-B
     def test_delete_assertion_updates_hash(self):
-        """After delete_assertion, hash matches reconstruct_body_text().
+        """After delete_assertion, the stored hash is the digest of its Assertions.
 
         REQ-o00062-B: Delete assertion recomputes hash consistently.
         """
@@ -151,10 +162,10 @@ class TestDeleteAssertionHashConsistency:
 
         graph.delete_assertion("REQ-p00001-A")
 
-        # Verify hash matches reconstructed body_text
+        # The stored hash is the digest of the Assertions now held
         new_hash = parent.get_field("hash")
-        expected_hash = calculate_hash(reconstruct_body_text(parent))
-        assert new_hash == expected_hash
+        expected = expected_hash(("A", RETIRED), ("B", B_TEXT))
+        assert new_hash == expected
 
         # Verify hash actually changed
         assert new_hash != old_hash
@@ -179,7 +190,7 @@ class TestRenameAssertionHashConsistency:
 
     # Verifies: REQ-o00062-B
     def test_rename_assertion_updates_hash(self):
-        """After rename_assertion, hash matches reconstruct_body_text().
+        """After rename_assertion, the stored hash is the digest of its Assertions.
 
         REQ-o00062-B: Rename assertion recomputes hash consistently.
         """
@@ -191,10 +202,10 @@ class TestRenameAssertionHashConsistency:
         # Perform mutation (rename A to X)
         graph.rename_assertion("REQ-p00001-A", "X")
 
-        # Verify hash matches reconstructed body_text
+        # The stored hash is the digest of the Assertions now held
         new_hash = parent.get_field("hash")
-        expected_hash = calculate_hash(reconstruct_body_text(parent))
-        assert new_hash == expected_hash
+        expected = expected_hash(("X", A_TEXT), ("B", B_TEXT))
+        assert new_hash == expected
 
         # Verify hash actually changed
         assert new_hash != old_hash
@@ -217,7 +228,7 @@ class TestHashConsistencyAfterMultipleMutations:
 
     # Verifies: REQ-o00062-B
     def test_multiple_add_assertions_maintain_hash_consistency(self):
-        """After multiple add_assertion calls, hash still matches reconstruct_body_text()."""
+        """After multiple add_assertion calls, the stored hash is the digest of its Assertions."""
         graph = build_graph_for_hash()
         parent = graph.find_by_id("REQ-p00001")
 
@@ -227,8 +238,10 @@ class TestHashConsistencyAfterMultipleMutations:
 
         # Verify hash consistency
         stored_hash = parent.get_field("hash")
-        expected_hash = calculate_hash(reconstruct_body_text(parent))
-        assert stored_hash == expected_hash
+        expected = expected_hash(
+            ("A", A_TEXT), ("B", B_TEXT), ("C", "Third assertion."), ("D", "Fourth assertion.")
+        )
+        assert stored_hash == expected
 
         # Verify assertions are in reconstructed body
         body = reconstruct_body_text(parent)
@@ -237,7 +250,7 @@ class TestHashConsistencyAfterMultipleMutations:
 
     # Verifies: REQ-o00062-B
     def test_mixed_mutations_maintain_hash_consistency(self):
-        """After mixed mutation types, hash still matches reconstruct_body_text()."""
+        """After mixed mutation types, the stored hash is the digest of its Assertions."""
         graph = build_graph_for_hash()
         parent = graph.find_by_id("REQ-p00001")
 
@@ -248,12 +261,14 @@ class TestHashConsistencyAfterMultipleMutations:
 
         # Verify hash consistency
         stored_hash = parent.get_field("hash")
-        expected_hash = calculate_hash(reconstruct_body_text(parent))
-        assert stored_hash == expected_hash
+        expected = expected_hash(
+            ("A", "Updated first assertion."), ("X", B_TEXT), ("C", "Third assertion.")
+        )
+        assert stored_hash == expected
 
     # Verifies: REQ-o00062-B
     def test_delete_then_add_maintains_hash_consistency(self):
-        """After delete then add, hash still matches reconstruct_body_text()."""
+        """After delete then add, the stored hash is the digest of its Assertions."""
         graph = build_graph_for_hash()
         parent = graph.find_by_id("REQ-p00001")
 
@@ -263,13 +278,13 @@ class TestHashConsistencyAfterMultipleMutations:
 
         # Verify hash consistency
         stored_hash = parent.get_field("hash")
-        expected_hash = calculate_hash(reconstruct_body_text(parent))
-        assert stored_hash == expected_hash
+        expected = expected_hash(("A", RETIRED), ("B", B_TEXT), ("C", "New C assertion."))
+        assert stored_hash == expected
         assert "C. New C assertion." in reconstruct_body_text(parent)
 
     # Verifies: REQ-o00062-B
     def test_update_all_assertions_maintains_hash_consistency(self):
-        """After updating all assertions, hash still matches reconstruct_body_text()."""
+        """After updating all assertions, the stored hash is the digest of its Assertions."""
         graph = build_graph_for_hash()
         parent = graph.find_by_id("REQ-p00001")
 
@@ -279,5 +294,5 @@ class TestHashConsistencyAfterMultipleMutations:
 
         # Verify hash consistency
         stored_hash = parent.get_field("hash")
-        expected_hash = calculate_hash(reconstruct_body_text(parent))
-        assert stored_hash == expected_hash
+        expected = expected_hash(("A", "Completely rewritten A."), ("B", "Completely rewritten B."))
+        assert stored_hash == expected

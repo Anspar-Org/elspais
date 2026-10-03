@@ -176,7 +176,7 @@ def _scan_and_report_unfixable(graph) -> int:  # noqa: ANN001
 
 
 # Implements: REQ-p00004-A, REQ-p00002-C
-def _detect_fixable(node, hash_mode: str, changelog_enforce: bool) -> list[str]:  # noqa: ANN001
+def _detect_fixable(node, changelog_enforce: bool) -> list[str]:  # noqa: ANN001
     """Detect all fixable conditions on a requirement node.
 
     Returns a list of reason strings describing what needs fixing.
@@ -204,7 +204,7 @@ def _detect_fixable(node, hash_mode: str, changelog_enforce: bool) -> list[str]:
     #    footing as one whose hash went stale. Content with nothing to hash
     #    acquires the reserved sentinel instead (REQ-d00131-P).
     stored = node.hash or ""
-    computed = compute_hash_for_node(node, hash_mode)
+    computed = compute_hash_for_node(node)
     effective = computed or "N/A"
     if stored != effective:
         reasons.append("hash_mismatch")
@@ -308,7 +308,6 @@ def _add_autofix_changelog_entries(
 
     from elspais.graph.render import compute_hash_for_node
 
-    hash_mode = getattr(graph, "hash_mode", "full-text")
     added = 0
 
     for node, reasons in node_reasons:
@@ -333,7 +332,7 @@ def _add_autofix_changelog_entries(
             parts = ["update hash"]
         reason = "Auto-fix: " + ", ".join(parts)
 
-        computed = compute_hash_for_node(node, hash_mode) or "N/A"
+        computed = compute_hash_for_node(node) or "N/A"
         entry = _make_changelog_entry(computed, reason, author)
         graph.add_changelog_entry(node.id, entry)
         added += 1
@@ -409,8 +408,6 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
 
     typed_config = _validate_config(config)
     changelog_enforce = typed_config.changelog.hash_current
-    hash_mode = getattr(graph, "hash_mode", "full-text")
-
     # Detect all fixable issues using the unified detection function.
     # Skip nodes that have unfixable reasons — they will be reported via
     # _scan_and_report_unfixable() and must not be touched by render_save.
@@ -418,7 +415,7 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if node.get_field("parse_unfixable_reasons"):
             continue
-        reasons = _detect_fixable(node, hash_mode, changelog_enforce)
+        reasons = _detect_fixable(node, changelog_enforce)
         if reasons:
             fixable_nodes.append((node, reasons))
 
@@ -493,7 +490,7 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
             elif r == "hash_mismatch":
                 # Name the value, not just the condition: a dry run is the
                 # author's chance to see what will be written before it is.
-                will_write = compute_hash_for_node(node, hash_mode) or "N/A"
+                will_write = compute_hash_for_node(node) or "N/A"
                 detail = f"hash {node.hash or '(none)'} -> {will_write}"
                 print(line.format(prefix=prefix, node_id=node.id, detail=detail))
             else:
@@ -599,8 +596,6 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     if rc:
         return rc
 
-    hash_mode = getattr(graph, "hash_mode", "full-text")
-
     # Find the target node
     node = None
     for n in graph.nodes_by_kind(NodeKind.REQUIREMENT):
@@ -617,7 +612,7 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
 
     mark_terms_in_hashed_text(graph, [node])
 
-    computed = compute_hash_for_node(node, hash_mode)
+    computed = compute_hash_for_node(node)
     stored = node.hash
 
     _fn = node.file_node()

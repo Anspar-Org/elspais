@@ -87,7 +87,7 @@ def _make_project(
 
 
 def _build_and_find(project: Path, req_id: str = "REQ-d00001"):
-    """Build graph and return the graph, target node, and hash_mode."""
+    """Build graph and return the graph and target node."""
     from elspais.graph import NodeKind
     from elspais.graph.factory import build_graph
 
@@ -99,8 +99,6 @@ def _build_and_find(project: Path, req_id: str = "REQ-d00001"):
         scan_tests=False,
     )
 
-    hash_mode = getattr(graph, "hash_mode", "full-text")
-
     node = None
     for n in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if n.id == req_id:
@@ -108,15 +106,15 @@ def _build_and_find(project: Path, req_id: str = "REQ-d00001"):
             break
 
     assert node is not None, f"{req_id} not found in graph"
-    return graph, node, hash_mode
+    return graph, node
 
 
 def _compute_correct_hash(project: Path, req_id: str = "REQ-d00001") -> str:
     """Build graph and compute the correct hash for a requirement."""
     from elspais.graph.render import compute_hash_for_node
 
-    _graph, node, hash_mode = _build_and_find(project, req_id)
-    return compute_hash_for_node(node, hash_mode) or "N/A"
+    _graph, node = _build_and_find(project, req_id)
+    return compute_hash_for_node(node) or "N/A"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -127,6 +125,7 @@ def _compute_correct_hash(project: Path, req_id: str = "REQ-d00001") -> str:
 class TestREQ_p00004_A_detect_fixable:
     """Validates REQ-p00004-A: unified fix detection."""
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_clean_node_returns_empty(self, tmp_path):
         """Active requirement with correct hash returns empty list."""
         from elspais.commands.fix_cmd import _detect_fixable
@@ -146,12 +145,13 @@ class TestREQ_p00004_A_detect_fixable:
         )
         (project / "spec" / "requirements.md").write_text(clean_content)
 
-        _graph, node, hash_mode = _build_and_find(project)
+        _graph, node = _build_and_find(project)
         # changelog_enforce=False so missing changelog isn't flagged
-        reasons = _detect_fixable(node, hash_mode, changelog_enforce=False)
+        reasons = _detect_fixable(node, changelog_enforce=False)
 
         assert reasons == [], f"Clean node should have no fixable reasons, got {reasons}"
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_parse_dirty_returns_reasons(self, tmp_path):
         """Node with parse_dirty=True and parse_dirty_reasons returns
         those reasons in the list.
@@ -167,18 +167,19 @@ class TestREQ_p00004_A_detect_fixable:
         old_cwd = os.getcwd()
         os.chdir(project)
         try:
-            _graph, node, hash_mode = _build_and_find(project)
+            _graph, node = _build_and_find(project)
 
             # Simulate parse-dirty state
             node._content["parse_dirty"] = True
             node._content["parse_dirty_reasons"] = ["duplicate_refs"]
 
-            reasons = _detect_fixable(node, hash_mode, changelog_enforce=False)
+            reasons = _detect_fixable(node, changelog_enforce=False)
         finally:
             os.chdir(old_cwd)
 
         assert "duplicate_refs" in reasons, f"Expected 'duplicate_refs' in {reasons}"
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_hash_mismatch_detected(self, tmp_path):
         """Node where computed hash differs from stored hash returns
         'hash_mismatch' in the reasons list.
@@ -194,13 +195,14 @@ class TestREQ_p00004_A_detect_fixable:
         old_cwd = os.getcwd()
         os.chdir(project)
         try:
-            _graph, node, hash_mode = _build_and_find(project)
-            reasons = _detect_fixable(node, hash_mode, changelog_enforce=False)
+            _graph, node = _build_and_find(project)
+            reasons = _detect_fixable(node, changelog_enforce=False)
         finally:
             os.chdir(old_cwd)
 
         assert "hash_mismatch" in reasons, f"Expected 'hash_mismatch' in {reasons}"
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_changelog_drift_detected(self, tmp_path):
         """Active node where latest changelog hash differs from stored
         hash returns 'changelog_drift'.
@@ -226,13 +228,14 @@ class TestREQ_p00004_A_detect_fixable:
         old_cwd = os.getcwd()
         os.chdir(project)
         try:
-            _graph, node, hash_mode = _build_and_find(project)
-            reasons = _detect_fixable(node, hash_mode, changelog_enforce=True)
+            _graph, node = _build_and_find(project)
+            reasons = _detect_fixable(node, changelog_enforce=True)
         finally:
             os.chdir(old_cwd)
 
         assert "changelog_drift" in reasons, f"Expected 'changelog_drift' in {reasons}"
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_missing_changelog_detected(self, tmp_path):
         """Active node with changelog_enforce=True but no changelog
         entries returns 'missing_changelog'.
@@ -256,8 +259,8 @@ class TestREQ_p00004_A_detect_fixable:
         old_cwd = os.getcwd()
         os.chdir(project)
         try:
-            _graph, node, hash_mode = _build_and_find(project)
-            reasons = _detect_fixable(node, hash_mode, changelog_enforce=True)
+            _graph, node = _build_and_find(project)
+            reasons = _detect_fixable(node, changelog_enforce=True)
         finally:
             os.chdir(old_cwd)
 

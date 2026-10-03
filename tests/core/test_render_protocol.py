@@ -249,7 +249,6 @@ class TestRequirementRender:
         req._content = {
             "level": "dev",
             "status": "Active",
-            "hash_mode": "normalized-text",
             "implements_refs": [],
         }
 
@@ -1256,28 +1255,24 @@ class TestReconstructBodyText:
         assert body == "A. Do X"
 
 
-class TestFulltextHashFromStructuredChildren:
-    """Full-text hash mode should compute from structured children, not body_text."""
+class TestEndMarkerHashCoversAssertionsOnly:
+    """The End marker's hash is the digest of the Assertions alone."""
 
-    # Verifies: REQ-d00131-B
-    def test_fulltext_hash_from_structured_children(self):
-        """Full-text hash mode should compute from structured children, not body_text."""
-        from elspais.graph.render import _render_requirement
+    # Verifies: REQ-d00131-S, REQ-d00131-J
+    @pytest.mark.parametrize(
+        "rationale",
+        ["Original reason.", "An entirely rewritten reason, much longer than before."],
+    )
+    def test_end_marker_hash_ignores_sections(self, rationale):
+        """Rewriting a Rationale section leaves the rendered hash unmoved."""
+        from elspais.graph.render import compute_hash_for_node, render_node
+        from elspais.utilities.hasher import compute_normalized_hash
 
-        req = GraphNode(id="REQ-t00001", kind=NodeKind.REQUIREMENT, label="Test")
-        req._content = {
-            "level": "dev",
-            "status": "Active",
-            "hash_mode": "full-text",
-            # NO body_text field
-        }
+        node = _make_requirement_node(
+            assertions=[("A", "SHALL do X."), ("B", "SHALL do Y.")],
+            sections=[("Rationale", rationale)],
+        )
+        expected = compute_normalized_hash([("A", "SHALL do X."), ("B", "SHALL do Y.")])
 
-        a_node = GraphNode(id="REQ-t00001-A", kind=NodeKind.ASSERTION, label="Must do X")
-        a_node._content = {"label": "A"}
-        edge_a = req.link(a_node, EdgeKind.STRUCTURES)
-        edge_a.metadata = {"render_order": 1.0}
-
-        output = _render_requirement(req)
-        assert "*End*" in output
-        # Hash of empty string is "e3b0c442" — we should NOT get that
-        assert "e3b0c442" not in output
+        assert compute_hash_for_node(node) == expected
+        assert f"**Hash**: {expected}" in render_node(node)

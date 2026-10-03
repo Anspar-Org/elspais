@@ -79,7 +79,7 @@ def _resolve(graph, ref: str):
 
 def _content_hash(node) -> str | None:
     """The requirement content hash, for contrast with the node version."""
-    return compute_hash_for_node(node, node.get_field("hash_mode") or "normalized-text")
+    return compute_hash_for_node(node)
 
 
 def _versions_by_id(graph, kind: NodeKind) -> dict[str, str]:
@@ -97,6 +97,7 @@ def rebuilt_graph():
 class TestNodeVersionRebuildStability:
     """Validates REQ-d00131-L: a rebuild from unchanged content preserves versions."""
 
+    # Verifies: REQ-d00131-L
     @pytest.mark.parametrize(
         "kind",
         [
@@ -116,6 +117,7 @@ class TestNodeVersionRebuildStability:
         assert original, f"fixture has no {kind.name} nodes to compare"
         assert _versions_by_id(rebuilt_graph, kind) == original
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_distinct_requirements_have_distinct_versions(self, canonical_graph):
         """Versions discriminate between nodes -- a constant would satisfy stability."""
         versions = _versions_by_id(canonical_graph, NodeKind.REQUIREMENT)
@@ -125,6 +127,7 @@ class TestNodeVersionRebuildStability:
 class TestNodeVersionDeterminism:
     """Validates REQ-d00131-L: the version is a pure function of node state."""
 
+    # Verifies: REQ-d00131-L
     @pytest.mark.parametrize(
         "node_id", [REQ_WITH_CODE_AND_TESTS, CODE_NODE, TEST_NODE, SPEC_FILE, "JNY-001"]
     )
@@ -133,6 +136,7 @@ class TestNodeVersionDeterminism:
         node = _resolve(canonical_graph, node_id)
         assert node_version(node) == node_version(node)
 
+    # Verifies: REQ-d00131-L
     @pytest.mark.parametrize(
         "node_id", [REQ_WITH_CODE_AND_TESTS, CODE_NODE, TEST_NODE, SPEC_FILE, "JNY-001"]
     )
@@ -140,6 +144,7 @@ class TestNodeVersionDeterminism:
         """Every kind yields the same 16-char hex digest shape."""
         assert _HEX16.match(node_version(_resolve(canonical_graph, node_id)))
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_edge_storage_order_does_not_change_version(self):
         """Outgoing edges are canonically sorted, so insertion order is immaterial."""
         parent = {
@@ -179,6 +184,7 @@ class TestNodeVersionBumpsOnContentMutation:
     hash cannot see, so each step also asserts the content hash stays put.
     """
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_version_changes_on_title_edit(self, mutable_graph):
         """A retitled requirement renders differently and so versions differently."""
         node = mutable_graph.find_by_id("REQ-d00001")
@@ -189,6 +195,7 @@ class TestNodeVersionBumpsOnContentMutation:
         assert node_version(node) != before
         assert _content_hash(node) == before_hash
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_version_changes_on_status_change(self, mutable_graph):
         """The status appears on the metadata line, so it participates."""
         node = mutable_graph.find_by_id("REQ-d00002")
@@ -199,6 +206,7 @@ class TestNodeVersionBumpsOnContentMutation:
         assert node_version(node) != before
         assert _content_hash(node) == before_hash
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_version_changes_on_assertion_text_edit(self, mutable_graph):
         """Editing assertion text bumps the requirement and the assertion alike."""
         req = mutable_graph.find_by_id("REQ-d00003")
@@ -210,6 +218,7 @@ class TestNodeVersionBumpsOnContentMutation:
         assert node_version(req) != req_before
         assert node_version(assertion) != assertion_before
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_version_changes_on_remainder_text_edit(self, mutable_graph):
         """Prose outside the assertions is still rendered, so it counts."""
         req = mutable_graph.find_by_id("REQ-o00001")
@@ -223,6 +232,7 @@ class TestNodeVersionBumpsOnContentMutation:
         assert node_version(req) != req_before
         assert node_version(remainder) != remainder_before
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_version_changes_on_node_rename(self, mutable_graph):
         """The id is rendered in the header line, so renaming changes the version."""
         node = mutable_graph.find_by_id("REQ-o00002")
@@ -243,6 +253,7 @@ class TestNodeVersionBumpsOnEdgeMutation:
     deletes it. None of these touch the requirement's content hash.
     """
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_version_changes_on_edge_add(self, mutable_graph):
         """Adding an outgoing IMPLEMENTS edge bumps the source requirement."""
         node = mutable_graph.find_by_id("REQ-d00002")
@@ -258,6 +269,7 @@ class TestNodeVersionBumpsOnEdgeMutation:
         assert node_version(node) != before
         assert _content_hash(node) == before_hash
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_version_changes_on_edge_target_change(self, mutable_graph):
         """Narrowing the edge to a single assertion is a different reference."""
         node = mutable_graph.find_by_id("REQ-d00002")
@@ -271,6 +283,7 @@ class TestNodeVersionBumpsOnEdgeMutation:
 
         assert node_version(node) != before
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_version_changes_on_edge_kind_change(self, mutable_graph):
         """IMPLEMENTS -> VERIFIES is a different reference kind."""
         node = mutable_graph.find_by_id("REQ-d00002")
@@ -284,6 +297,7 @@ class TestNodeVersionBumpsOnEdgeMutation:
 
         assert node_version(node) != before
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_version_changes_on_edge_delete(self, mutable_graph):
         """Deleting the last chain edge restores the pre-chain version.
 
@@ -304,6 +318,7 @@ class TestNodeVersionBumpsOnEdgeMutation:
 class TestNodeVersionPerKindResolution:
     """Validates REQ-d00131-L: each kind resolves its version by its render role."""
 
+    # Verifies: REQ-d00131-L
     @pytest.mark.parametrize(
         "child_id, owner_id",
         [
@@ -322,6 +337,7 @@ class TestNodeVersionPerKindResolution:
         owner = canonical_graph.find_by_id(owner_id)
         assert node_version(child) == node_version(owner)
 
+    # Verifies: REQ-d00131-L
     @pytest.mark.parametrize(
         "content, kind, original, edited",
         [
@@ -358,6 +374,7 @@ class TestNodeVersionPerKindResolution:
         node.set_field("raw_text", original)
         assert node_version(node) == first
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_file_version_tracks_path(self):
         """A file's identity is its path, so the same contents at a new path differ."""
         here = build_graph(make_requirement("REQ-p00001", "One", source_path="spec/a.md"))
@@ -367,6 +384,7 @@ class TestNodeVersionPerKindResolution:
             there.find_by_id(make_file_id(NAMESPACE, "spec/b.md"))
         )
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_file_version_tracks_child_order(self):
         """Reordering CONTAINS children rewrites the file, so the version moves."""
         first_then_second = build_graph(
@@ -383,6 +401,7 @@ class TestNodeVersionPerKindResolution:
             second_then_first.find_by_id(make_file_id(NAMESPACE, "spec/a.md"))
         )
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_file_version_ignores_child_content(self):
         """Same path, same child ids in the same order -- same file version."""
         plain = build_graph(
@@ -417,6 +436,7 @@ class TestNodeVersionPerKindResolution:
 class TestFileVersionIsCompositionOnly:
     """Validates REQ-d00131-L: file versions track identity and composition only."""
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_file_version_stable_when_child_prose_edited(self, mutable_graph):
         """Editing prose inside a contained requirement leaves the file version alone."""
         spec_file = mutable_graph.find_by_id(SPEC_FILE)
@@ -430,6 +450,7 @@ class TestFileVersionIsCompositionOnly:
         assert node_version(req) != req_before
         assert node_version(spec_file) == file_before
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_file_version_changes_when_child_moves_between_files(self, mutable_graph):
         """Moving a requirement out changes the composition of both files."""
         source_file = mutable_graph.find_by_id(SPEC_FILE)
@@ -441,6 +462,7 @@ class TestFileVersionIsCompositionOnly:
         assert node_version(source_file) != source_before
         assert node_version(target_file) != target_before
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_file_version_changes_on_file_rename(self, mutable_graph):
         """The path is part of the file's identity."""
         before = node_version(mutable_graph.find_by_id(make_file_id(NAMESPACE, "spec/glossary.md")))
@@ -482,6 +504,7 @@ class TestUndoRestoresRenderedText:
     the graph looks reverted while the file it would write does not match.
     """
 
+    # Verifies: REQ-d00131-L
     @pytest.mark.parametrize(
         "delete, target",
         [
@@ -505,6 +528,7 @@ class TestUndoRestoresRenderedText:
         assert render.render_node(restored) == before_text
         assert node_version(restored) == before_version
 
+    # Verifies: REQ-d00131-L
     def test_REQ_d00131_L_delete_contains_edge_then_undo_restores_file(self, private_graph):
         """A CONTAINS edge carries the position its target renders at."""
         spec_file = private_graph.find_by_id(SPEC_FILE)

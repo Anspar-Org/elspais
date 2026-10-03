@@ -194,6 +194,8 @@ X. A configuration carrying a setting this version does not read SHALL be refuse
 
 Y. A configuration SHALL be admitted only where every setting it carries is one this version's schema defines.
 
+Z. A configuration that selects a value this version no longer admits SHALL be refused when the configuration is read, with a message naming the setting, what to write instead, and each change the replacement makes to content the tool has stored.
+
 ### Rationale
 
 This requirement holds the invariants a configuration schema must satisfy, whatever shape it takes: what an identifier configuration may admit, which concern a rule setting sits under, how severity and file selection are expressed, and what becomes of a setting the schema does not define.
@@ -212,8 +214,12 @@ Reporting is deliberately absent from R. Once an inadmissible spelling resolves 
 
 R is a condition on resolving, never on writing, which is what keeps a reference authored ahead of its target legitimate. A requirement may be named before the repository owning it is declared, or before that requirement exists; the reference simply finds nothing yet, and how loudly that is reported is the project's decision. R also judges a spelling against the configuration of the repository owning the named requirement, not the one doing the writing — otherwise no reference could ever cross a repository boundary, since a neighbour's identifiers are foreign to the local grammar by construction. Rule settings have drifted into a layout where a setting's location no longer predicts what it governs, some check severities are configurable while others are hardcoded with no stated principle distinguishing them, and "why was this file (not) scanned" can have more than one configuration answer (per-kind skip lists alongside a global skip list, plus pattern lists). O–Q close those gaps as invariants only: candidate mechanisms discussed during design — splitting rules into concern sections such as `[rules.changelog]` and `[rules.status]`, or collapsing file selection into a unified `patterns` list — are proposals, not obligations, and deliberately absent from the assertions. Which existing semantics survive is decided at implementation. A current schema shape that contradicts O–Q is a conformance defect to be corrected, not a reading of the invariant.
 
+Z is X's counterpart for a value. A setting the schema still defines can lose one of the values it admitted, and a configuration selecting that value is refused for the same reason a retired setting is: reading it as something else would change what the tool does without telling anyone. A retired value can also have shaped what the tool wrote to disk, such as the hash in each requirement's footer, so the message says what the replacement will change there before anyone runs the operation that changes it.
+
 ### Changelog
 
+- 2026-10-03 | aa617698 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-03 | - | - | Michael Lewis (<michael@anspar.org>) | Author Z: a value this version no longer admits is refused, naming the setting and what replacing it changes on disk
 - 2026-09-12 | 492083b5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-12 | 1816c146 | - | Michael Lewis (<michael@anspar.org>) | Retire the model inventory rather than delete it, so every label stays allocated
 - 2026-09-12 | dfcf9d49 | - | Michael Lewis (<michael@anspar.org>) | Retitled; model inventory replaced by the invariants the schema holds
@@ -247,7 +253,7 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 - 2026-03-30 | db4ad28c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 - 2026-03-29 | c75b87f8 | - | Michael Lewis (<michael@anspar.org>) | Add assertion N for config migration v3 to v4
 
-*End* *Configuration Schema* | **Hash**: 492083b5
+*End* *Configuration Schema* | **Hash**: aa617698
 ---
 
 ## REQ-d00251: A Repository's Identifier Grammar

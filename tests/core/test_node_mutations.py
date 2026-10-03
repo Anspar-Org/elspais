@@ -468,9 +468,13 @@ class TestAddRequirement:
         node = graph.find_by_id("REQ-p00099")
         assert node.get_field("status") == "Active"
 
-    # Verifies: REQ-o00062-A
-    def test_add_requirement_computes_hash(self):
-        """Add computes an initial hash."""
+    # Verifies: REQ-o00062-A, REQ-d00131-P
+    def test_add_requirement_stores_the_reserved_hash(self):
+        """A new requirement has no Assertion, so it stores the reserved value
+        ``N/A``; the render and `elspais fix` agree, so it is not stale."""
+        from elspais.commands.fix_cmd import _detect_fixable
+        from elspais.graph.render import compute_hash_for_node, render_node
+
         graph = build_simple_graph()
 
         graph.add_requirement(
@@ -480,8 +484,10 @@ class TestAddRequirement:
         )
 
         node = graph.find_by_id("REQ-p00099")
-        assert node.get_field("hash") is not None
-        assert len(node.get_field("hash")) == 8  # 8-char hash
+        assert node.get_field("hash") == "N/A"
+        assert compute_hash_for_node(node) is None
+        assert "**Hash**: N/A" in render_node(node)
+        assert "hash_mismatch" not in _detect_fixable(node, changelog_enforce=False)
 
     # Verifies: REQ-o00062-A
     def test_add_requirement_duplicate_raises(self):

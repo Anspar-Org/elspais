@@ -341,7 +341,7 @@ retired = ["Deprecated", "Superseded"]  # Excluded from everything
 
 ```toml
 [validation]
-hash_mode = "normalized-text"       # "full-text" | "normalized-text"
+hash_mode = "normalized-text"       # The only value; the hash covers Assertions alone
 # hash_algorithm = "sha256"         # Hash algorithm
 # hash_length = 8                   # Hash truncation length
 # strict_hierarchy = false          # Strict hierarchy validation

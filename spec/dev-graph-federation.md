@@ -188,7 +188,7 @@ E. The root repo and all valid associates SHALL be combined into a single `Feder
 
 ### Rationale
 
-Per-repo building ensures config isolation: each repo's hierarchy rules, format rules, and hash mode apply only to its own nodes. A declared repository that cannot be read stops the build, so a federation that exists holds only members that were read.
+Per-repo building ensures config isolation: each repo's hierarchy rules and format rules apply only to its own nodes. A declared repository that cannot be read stops the build, so a federation that exists holds only members that were read.
 
 A federation is the corpus every later answer is computed over, so a member missing from it is not a smaller corpus but a different question. C and D are retired together because the choice they offered was between answering that different question silently and refusing: a repository that cannot be read declares no namespace, and a member is its namespace, so there was never a member there to carry. The fault is reported once, naming the declaration that reaches nothing, and no answer is computed until it is fixed.
 

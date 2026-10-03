@@ -106,11 +106,10 @@ def _make_clean_project(tmp_path: Path) -> Path:
     _write_reqs(tmp_path, placeholder, empty_cl)
 
     graph = _build_federated_graph(tmp_path)
-    hash_mode = getattr(graph, "hash_mode", "full-text")
 
     hashes: dict[str, str] = {}
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        hashes[node.id] = compute_hash_for_node(node, hash_mode) or "N/A"
+        hashes[node.id] = compute_hash_for_node(node) or "N/A"
 
     changelogs = {
         req_id: (
@@ -134,6 +133,7 @@ def _make_clean_project(tmp_path: Path) -> Path:
 class TestChecksFixConsistency:
     """Validates REQ-p00004-A: clean fixture -> checks pass AND fix is a no-op."""
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_clean_fixture_checks_pass(self, tmp_path: Path):
         """On a clean fixture, run_spec_checks reports no failing spec checks."""
         from elspais.commands.health import run_spec_checks
@@ -156,6 +156,7 @@ class TestChecksFixConsistency:
             f"{c.name}: {c.message}" for c in warnings
         )
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_fix_index_dry_run_prints_nothing(self, tmp_path: Path):
         """On a clean fixture, _fix_index(dry_run=True) emits no "Would" lines."""
         from elspais.commands.fix_cmd import _fix_index
@@ -178,6 +179,7 @@ class TestChecksFixConsistency:
             f"fixture, got stdout: {out!r}"
         )
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_detect_fixable_empty_for_every_req(self, tmp_path: Path):
         """On a clean fixture, _detect_fixable returns [] for every REQUIREMENT."""
         from elspais.commands.fix_cmd import _detect_fixable
@@ -186,19 +188,19 @@ class TestChecksFixConsistency:
         project = _make_clean_project(tmp_path)
 
         graph = _build_federated_graph(project)
-        hash_mode = getattr(graph, "hash_mode", "full-text")
 
         offenders: dict[str, list[str]] = {}
         total = 0
         for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
             total += 1
-            reasons = _detect_fixable(node, hash_mode, changelog_enforce=True)
+            reasons = _detect_fixable(node, changelog_enforce=True)
             if reasons:
                 offenders[node.id] = reasons
 
         assert total >= 1, "Fixture must contain at least one REQUIREMENT"
         assert not offenders, f"Clean fixture should have no fixable requirements, got: {offenders}"
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_checks_cwd_independent(self, tmp_path: Path, monkeypatch):
         """Classification + checks must work when CWD is unrelated to the project.
 

@@ -959,7 +959,7 @@ def _add_changelog_for_active_mutations(
         _fn = node.file_node()
         if _fn is None:
             continue
-        computed = compute_hash_for_node(node, graph.hash_mode)
+        computed = compute_hash_for_node(node)
         file_path = repo_root / _fn.get_field("relative_path")
         entry = {
             "date": date.today().isoformat(),
