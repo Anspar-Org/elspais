@@ -121,9 +121,29 @@ def pytest_runtest_makereport(item, call):
         item.parent._previous_failed = item.name
 
 
+_IDENTITY_UNSET = object()
+_identity_refusal: object = _IDENTITY_UNSET
+
+
+def _build_identity_refusal() -> str | None:
+    """Whether the program e2e and browser tests spawn is this checkout's build.
+
+    Asked once per process, at the first such test, so a session that runs
+    none of them never asks.
+    """
+    global _identity_refusal
+    if _identity_refusal is _IDENTITY_UNSET:
+        from tests.e2e.helpers import build_identity_refusal
+
+        _identity_refusal = build_identity_refusal()
+    return _identity_refusal  # type: ignore[return-value]
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
-    """Fail a `serial` test on an xdist worker; xfail after an incremental failure.
+    """Fail a `serial` test on an xdist worker, and an e2e or browser test
+    when the program it would spawn is not this checkout's build; xfail
+    after an incremental failure.
 
     A `serial` test shares state that no worker owns: the live worktree and
     its daemon, the user's home directory, fixed ports. Run beside other tests
@@ -133,6 +153,10 @@ def pytest_runtest_setup(item):
     session without `-n` never fails here. A worker cannot refuse at
     collection instead: xdist reports that as an internal error and drops the
     message.
+
+    The build check fails the test rather than the session for the same
+    reason, and asks where the spawned program's interpreter imports elspais
+    from, because two checkouts at one version print the same version.
     """
     if os.environ.get("PYTEST_XDIST_WORKER") and item.get_closest_marker("serial") is not None:
         pytest.fail(
@@ -141,6 +165,10 @@ def pytest_runtest_setup(item):
             ".githooks/run-e2e-tier runs the e2e tier in both passes.",
             pytrace=False,
         )
+    if item.get_closest_marker("e2e") is not None or item.get_closest_marker("browser") is not None:
+        refusal = _build_identity_refusal()
+        if refusal is not None:
+            pytest.fail(f"refusing to run: {refusal}", pytrace=False)
     previous = getattr(item.parent, "_previous_failed", None)
     if previous and "incremental" in item.keywords:
         pytest.xfail(f"previous step failed: {previous}")

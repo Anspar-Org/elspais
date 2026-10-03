@@ -9,11 +9,11 @@
 # order: a module's ordered mutation classes share the project and the daemon
 # its module fixture built.
 #
-# A module marked `serial` shares something no worker owns -- the live
-# worktree and its daemon, the user's home directory, fixed ports. The second
-# pass runs those modules with no other test process alive. tests/conftest.py
-# refuses a parallel session that collects a `serial` test, so a selection
-# mistake cannot move one into the first pass.
+# A test marked `serial` shares something no worker owns. The second pass
+# runs those tests with no other test process alive; none is marked today,
+# and a pass that collects nothing is not a failure. tests/conftest.py fails
+# a `serial` test an xdist worker runs, so a selection mistake cannot move
+# one into the first pass.
 #
 # Coverage is off in both passes. The unit tier alone measures line coverage,
 # and a measured run writes `.coverage` in the repository root, where it
@@ -48,6 +48,11 @@ _rc_serial=0
 pytest tests/ -m "e2e and serial" \
     --no-cov --tb=short -q \
     --junitxml="$_serial" -o junit_family=xunit1 || _rc_serial=$?
+# 5 is pytest's "no tests collected": no test is marked `serial`.
+if [ "$_rc_serial" -eq 5 ]; then
+    echo "e2e serial pass: no test is marked serial"
+    _rc_serial=0
+fi
 
 # One artifact for the target, because `elspais-e2e` declares `junit.xml` and
 # a result is bound to the file it was read from.
