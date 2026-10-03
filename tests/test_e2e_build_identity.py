@@ -7,6 +7,7 @@ suite spawns, so this file cites none.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from tests.e2e.helpers import REPO_ROOT, build_identity_refusal, program_source
@@ -25,8 +26,10 @@ def _interpreter_reporting(path: Path, source: str) -> Path:
     return path
 
 
-def test_this_checkouts_launcher_is_accepted():
-    launcher = REPO_ROOT / ".venv" / "bin" / "elspais"
+def test_this_checkouts_launcher_is_accepted(tmp_path):
+    # pytest's own interpreter imports elspais from this checkout, in a venv
+    # and in an install into the system interpreter alike.
+    launcher = _launcher(tmp_path / "elspais", sys.executable)
     assert program_source(str(launcher)) == os.path.realpath(REPO_ROOT / "src" / "elspais")
     assert build_identity_refusal(str(launcher)) is None
 
