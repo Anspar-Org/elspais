@@ -19,6 +19,7 @@ from typing import Any
 from elspais.graph.citation_respelling import (
     apply_respellings,
     citers_of,
+    journey_successor,
     plan_respellings,
     restore_respellings,
 )
@@ -1000,6 +1001,7 @@ class TraceGraph:
         # puts their text back. A citation in another member's file is
         # restored by the federation, which can find that file.
         restore_respellings(entry.before_state.get("respelled_citations"), self._index.get)
+        self.follow_unbound_citations(entry.before_state.get("respelled_citations"))
 
     # Implements: REQ-p00017-B, REQ-d00132-G
     def _retarget_broken_refs(self, old_id: str, new_id: str) -> None:
@@ -1635,6 +1637,7 @@ class TraceGraph:
         *,
         citation_reader: Any | None = None,
         foreign_citers: tuple[GraphNode, ...] = (),
+        foreign_references: tuple[tuple[ReferenceFault, GraphNode | None], ...] = (),
     ) -> MutationEntry:
         """Rename a node (e.g., REQ-p00001 -> REQ-p00002).
 
@@ -1651,13 +1654,16 @@ class TraceGraph:
                 repository's own grammar.
             foreign_citers: Test nodes another member holds whose citation
                 binds to no test, which no relationship reaches.
+            foreign_references: The unresolved references other members of
+                a federation hold, each with the node that holds it.
 
         Returns:
             MutationEntry recording the operation.
 
         Raises:
             KeyError: If old_id is not found.
-            ValueError: If new_id already exists.
+            ValueError: If new_id already exists, or an unresolved reference
+                names it (REQ-p00017-P).
         """
         self._refuse_retired(old_id)
         if old_id not in self._index:
@@ -1667,7 +1673,31 @@ class TraceGraph:
 
         renamed = self._index[old_id]
         respellings = []
+        if renamed.kind == NodeKind.USER_JOURNEY:
+            successor = journey_successor(old_id, new_id)
+            self._refuse_unresolved_naming(
+                lambda target: journey_successor(new_id, new_id)(target) is not None,
+                new_id,
+                foreign_references,
+            )
+            respellings = self._plan_citation_respelling(
+                citers_of([(renamed, None)])
+                + citers_of(
+                    (child, None)
+                    for child in renamed.iter_children(edge_kinds={EdgeKind.STRUCTURES})
+                    if child.kind == NodeKind.STEP
+                ),
+                lambda _resolver: successor,
+                old_id,
+                citation_reader,
+                foreign_citers,
+            )
         if renamed.kind == NodeKind.REQUIREMENT:
+            self._refuse_unresolved_naming(
+                lambda target: self._names_requirement(target, new_id),
+                new_id,
+                foreign_references,
+            )
             respellings = self._plan_citation_respelling(
                 citers_of([(renamed, None)])
                 + citers_of(
@@ -1810,7 +1840,7 @@ class TraceGraph:
             citation_reader if citation_reader is not None else FederatedIdReader(self.resolver)
         )
         candidates = [(node, True) for node in joined] + [(node, False) for node in unbound]
-        return plan_respellings(candidates, successor_for(self.resolver), reader, designated)
+        return plan_respellings(candidates, successor_for(reader.own), reader, designated)
 
     @staticmethod
     def _successor_for_rename(resolver: Any, old_id: str, new_id: str) -> Any:
@@ -1842,14 +1872,102 @@ class TraceGraph:
 
         return successor
 
-    @staticmethod
-    def _record_respellings(entry: MutationEntry, respellings: list[Any]) -> None:
+    def _record_respellings(self, entry: MutationEntry, respellings: list[Any]) -> None:
         """Apply *respellings* and record them on *entry* for undo and save."""
         if not respellings:
             return
         before, after = apply_respellings(respellings)
         entry.before_state["respelled_citations"] = before
         entry.after_state["respelled_citations"] = after
+        self.follow_unbound_citations(after)
+
+    # Implements: REQ-p00017-B
+    def follow_unbound_citations(self, records: list[dict] | None) -> None:
+        """Bring each unbound citation this graph lists into line with its text.
+
+        A test citation that binds to no test is listed with the references
+        it names (REQ-d00274-G). Where a mutation respelled one, the list
+        names what the respelled text reads as, which is what a rebuild
+        would list. Idempotent, so a member and its federation may both
+        apply it.
+        """
+        for record in records or ():
+            file_node = self._index.get(record["file_id"])
+            if file_node is None:
+                continue
+            path = file_node.get_field("relative_path")
+            for index, listed in enumerate(self._unbound_citations):
+                if listed.path == path and listed.line == record["line"]:
+                    self._unbound_citations[index] = replace(
+                        listed, targets=tuple(record.get("refs") or ())
+                    )
+
+    def _names_requirement(self, target: str, requirement_id: str) -> bool:
+        """Whether *target*, as written, names *requirement_id* or one of its assertions."""
+        resolver = self._resolver
+        if resolver is None:
+            return target == requirement_id
+        parsed = resolver.parse(resolver.normalize_ref(target))
+        return parsed is not None and parsed.fqn == requirement_id
+
+    def _names_assertion(self, target: str, requirement_id: str, label: str) -> bool:
+        """Whether *target*, as written, names that *Assertion* of *requirement_id*."""
+        resolver = self.resolver
+        parsed = resolver.parse(resolver.normalize_ref(target))
+        return parsed is not None and parsed.fqn == requirement_id and label in parsed.assertions
+
+    # Implements: REQ-p00017-P
+    def _refuse_unresolved_naming(
+        self,
+        names: Any,
+        new_id: str,
+        foreign_references: tuple[tuple[ReferenceFault, GraphNode | None], ...] = (),
+    ) -> None:
+        """Refuse a rename onto an identifier an unresolved reference already names.
+
+        Such a reference designates nothing now. Renaming something to the
+        identifier it names would make it designate that thing, which nobody
+        chose. Only a reference that failed for want of its target counts:
+        one refused for its keyword or its spelling stays refused whatever
+        exists.
+        """
+        waiting = (FaultClass.UNKNOWN_REQUIREMENT, FaultClass.UNKNOWN_ASSERTION)
+        held = [(fault, self._index.get(fault.source_id)) for fault in self._unresolved_references]
+        found = [
+            f"{fault.source_id} ({self._held_at(citer, fault)}) names {fault.target_id}"
+            for fault, citer in (*held, *foreign_references)
+            if fault.fault_class in waiting and names(fault.target_id)
+        ]
+        if found:
+            raise ValueError(
+                f"Cannot rename to {new_id}: these unresolved references name it, and "
+                f"the rename would make them designate it: {'; '.join(found)}. Remove or "
+                f"correct them first, or choose another identifier."
+            )
+
+    @staticmethod
+    def _held_at(citer: GraphNode | None, fault: ReferenceFault | None = None) -> str:
+        """Where a reference is held: the file and line of its citation.
+
+        The file's CONTAINS edge records where a node's text starts, which
+        for a test is its citation comment rather than its function
+        definition. A citing requirement is located at its own line.
+        """
+        if citer is None:
+            return "location unknown"
+        file_node = citer.file_node()
+        path = file_node.get_field("relative_path") if file_node else None
+        line = getattr(fault, "line", None) if fault is not None else None
+        if line is None:
+            for edge in citer.iter_incoming_edges():
+                if edge.kind == EdgeKind.CONTAINS:
+                    line = edge.metadata.get("start_line")
+                    break
+        if line is None:
+            line = citer.get_field("parse_line")
+        if path and line:
+            return f"{path}:{line}"
+        return path or "location unknown"
 
     # Implements: REQ-p00017-B
     @staticmethod
@@ -2397,6 +2515,7 @@ class TraceGraph:
         *,
         citation_reader: Any | None = None,
         foreign_citers: tuple[GraphNode, ...] = (),
+        foreign_references: tuple[tuple[ReferenceFault, GraphNode | None], ...] = (),
     ) -> MutationEntry:
         """Rename assertion label (e.g., REQ-p00001-A -> REQ-p00001-D).
 
@@ -2435,6 +2554,11 @@ class TraceGraph:
         if new_id in self._index:
             raise ValueError(f"Assertion '{new_id}' already exists")
 
+        self._refuse_unresolved_naming(
+            lambda target: self._names_assertion(target, parent.id, new_label),
+            new_id,
+            foreign_references,
+        )
         respellings = self._plan_citation_respelling(
             citers_of([(parent, {old_label}), (node, None)]),
             lambda resolver: self._successor_for_relabel(
@@ -2925,24 +3049,7 @@ class TraceGraph:
         carried = (NodeKind.REQUIREMENT, NodeKind.USER_JOURNEY, NodeKind.CODE, NodeKind.TEST)
         found: list[str] = []
 
-        def _place(citer: GraphNode | None) -> str:
-            if citer is None:
-                return "location unknown"
-            file_node = citer.file_node()
-            path = file_node.get_field("relative_path") if file_node else None
-            # The file's CONTAINS edge records where the node's text starts,
-            # which for a test is its citation comment rather than its
-            # function definition.
-            line = None
-            for edge in citer.iter_incoming_edges():
-                if edge.kind == EdgeKind.CONTAINS:
-                    line = edge.metadata.get("start_line")
-                    break
-            if line is None:
-                line = citer.get_field("parse_line")
-            if path and line:
-                return f"{path}:{line}"
-            return path or "location unknown"
+        _place = self._held_at
 
         def _report(citer: GraphNode | None, citer_id: str, assertion: GraphNode) -> None:
             found.append(f"{citer_id} ({_place(citer)}) cites {assertion.id}")

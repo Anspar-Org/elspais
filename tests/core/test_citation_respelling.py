@@ -352,8 +352,13 @@ class TestRefusedCitationsAreLeftAlone:
 
 
 def _join_without_text(graph) -> None:
-    """Join the code node to REQ-d00002 in memory; its comment never names it."""
-    graph.add_edge(_citing_node(graph, NodeKind.CODE).id, "REQ-d00002", EdgeKind.IMPLEMENTS)
+    """Join the code node to REQ-d00002 in memory; its comment never names it.
+
+    The federation refuses a relationship change from code, so the join is
+    made on the member graph, the one way this state is reachable.
+    """
+    member = graph.repo_for("REQ-d00002").graph
+    member.add_edge(_citing_node(graph, NodeKind.CODE).id, "REQ-d00002", EdgeKind.IMPLEMENTS)
 
 
 def _misspell_respelling(monkeypatch) -> Callable:
@@ -642,27 +647,54 @@ class TestSaveChangesOnlyRespelledLines:
         assert len(graph.mutation_log) == logged
 
     @pytest.mark.parametrize(
-        "text",
+        "before,after",
         [
-            pytest.param("# Implements: REQ-d00001-C\ndef f():\n    pass", id="no-final-newline"),
             pytest.param(
-                "# Implements: REQ-d00001-C\r\ndef f():\r\n    pass\r\n", id="crlf-line-endings"
+                b"# Implements: REQ-d00001-C\ndef f():\n    pass",
+                b"# Implements: REQ-d00009-C\ndef f():\n    pass",
+                id="no-final-newline",
+            ),
+            pytest.param(
+                b"# Implements: REQ-d00001-C\r\ndef f():\r\n    pass\r\n",
+                b"# Implements: REQ-d00009-C\r\ndef f():\r\n    pass\r\n",
+                id="crlf-line-endings",
+            ),
+            pytest.param(
+                b"\r\n# Verifies: REQ-d00001-C\r\ndef test_f():\r\n    pass",
+                b"\r\n# Verifies: REQ-d00009-C\r\ndef test_f():\r\n    pass",
+                id="crlf-and-no-final-newline",
             ),
         ],
     )
     # Verifies: REQ-d00132-M
-    def test_file_the_tool_cannot_reproduce_is_not_rewritten(self, tmp_path: Path, text: str):
-        root = _project(tmp_path, {CODE: text})
+    def test_line_endings_and_final_newline_save_back_byte_for_byte(
+        self, tmp_path: Path, before: bytes, after: bytes
+    ):
+        relative = TEST if b"Verifies" in before else CODE
+        root = _project(tmp_path, {relative: before.decode("utf-8")})
+        graph = build_graph(repo_root=root)
+
+        graph.rename_node("REQ-d00001", "REQ-d00009")
+        result = render_save(graph, repo_root=root)
+
+        assert result["success"] is True, result.get("errors")
+        assert (root / relative).read_bytes() == after
+
+    # Verifies: REQ-d00132-M
+    def test_file_mixing_line_endings_is_not_rewritten(self, tmp_path: Path):
+        root = _project(tmp_path, {CODE: "# Implements: REQ-d00001-C\r\ndef f():\n    pass\r\n"})
         graph = build_graph(repo_root=root)
         on_disk = _snapshot(root)
 
         graph.rename_node("REQ-d00001", "REQ-d00009")
+        logged = len(graph.mutation_log)
         result = render_save(graph, repo_root=root)
 
         assert result["success"] is False
         assert result["files_modified"] == []
         assert _snapshot(root) == on_disk
         assert any(error.startswith(f"{CODE}:") for error in result["errors"]), result["errors"]
+        assert len(graph.mutation_log) == logged
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -763,3 +795,426 @@ class TestDeletedAssertionCitedFromCodeStillRefuses:
         assert graph.find_by_id("REQ-p00001-D") is not None
         assert len(graph.mutation_log) == 0
         assert _snapshot(root) == on_disk
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Renaming a journey respells the test citations of it and its steps
+# (REQ-p00017-B)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_JOURNEY_SCANNING = '\n[scanning.journey]\ndirectories = ["spec"]\n'
+
+_JOURNEYS = """# User Journeys
+
+---
+
+### JNY-Flow-01: Flow
+
+**Actor**: User
+**Goal**: Finish the flow
+Validates: REQ-d00001-A
+
+## Steps
+
+1. Open the page
+2. Submit the form
+
+*End* *JNY-Flow-01*
+---
+"""
+
+_JOURNEY_TEST = """
+# Verifies: JNY-Flow-01
+def test_whole():
+    pass
+
+# Verifies: JNY-Flow-01/2
+def test_step():
+    pass
+"""
+
+
+def _journey_project(tmp_path: Path, test_text: str = _JOURNEY_TEST) -> Path:
+    return _write_repo(
+        tmp_path / "repo",
+        {"spec/journeys.md": _JOURNEYS, TEST: test_text},
+        extra_config=_JOURNEY_SCANNING,
+    )
+
+
+def _tests_under(node) -> set[str]:
+    return {
+        edge.target.get_label()
+        for edge in node.iter_outgoing_edges()
+        if edge.target.kind == NodeKind.TEST
+    }
+
+
+class TestRenamingAJourneyRespellsItsTestCitations:
+    """Validates REQ-p00017-B for citations of a journey and its steps."""
+
+    # Verifies: REQ-p00017-B
+    def test_journey_and_step_citations_follow_the_rename(self, tmp_path: Path):
+        root = _journey_project(tmp_path)
+        graph = build_graph(repo_root=root)
+
+        graph.rename_node("JNY-Flow-01", "JNY-Flow-02")
+        result = render_save(graph, repo_root=root)
+
+        assert result["success"] is True, result.get("errors")
+        saved = (root / TEST).read_text(encoding="utf-8")
+        assert saved == _JOURNEY_TEST.replace("JNY-Flow-01", "JNY-Flow-02")
+        assert _changed_lines(_JOURNEY_TEST, saved) == [2, 6]
+        rebuilt = build_graph(repo_root=root)
+        assert rebuilt.unresolved_references() == []
+        assert _tests_under(rebuilt.find_by_id("JNY-Flow-02")) == {"test_whole"}
+        assert _tests_under(rebuilt.find_by_id("JNY-Flow-02/2")) == {"test_step"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The list of unbound citations follows a rename (REQ-p00017-B)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_UNBOUND_TEST = """# Verifies: REQ-d00001-B
+VALUE = 1
+
+# Verifies: REQ-d00001-A
+def test_a():
+    pass
+"""
+
+
+def _unbound(graph) -> list[tuple[str, int, tuple[str, ...]]]:
+    return [(u.path, u.line, tuple(u.targets)) for u in graph.unbound_citations()]
+
+
+class TestUnboundCitationsFollowARename:
+    """Validates REQ-p00017-B for a citation that binds to no test."""
+
+    # Verifies: REQ-p00017-B
+    def test_unbound_list_follows_rename_save_and_undo(self, tmp_path: Path):
+        root = _project(tmp_path, {TEST: _UNBOUND_TEST})
+        graph = build_graph(repo_root=root)
+        assert _unbound(graph) == [(TEST, 1, ("REQ-d00001-B",))]
+
+        graph.rename_node("REQ-d00001", "REQ-d00009")
+
+        assert _unbound(graph) == [(TEST, 1, ("REQ-d00009-B",))]
+        for _name, member in graph._live_graphs():
+            assert [tuple(u.targets) for u in member.unbound_citations()] == [("REQ-d00009-B",)]
+        graph.undo_last()
+        assert _unbound(graph) == [(TEST, 1, ("REQ-d00001-B",))]
+
+        graph.rename_node("REQ-d00001", "REQ-d00009")
+        in_memory = _unbound(graph)
+        assert render_save(graph, repo_root=root)["success"] is True
+        assert _unbound(build_graph(repo_root=root)) == in_memory
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# A rename onto an identifier an unresolved reference names (REQ-p00017-P)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SPEC_CITING_MISSING = """# REQ-d00003: Extra
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00077
+
+## Assertions
+
+A. The tool SHALL do extra.
+
+*End* *Extra* | **Hash**: 00000000
+---
+"""
+
+# Each case: the files, the extra configuration, the rename, the identifier
+# renamed and the identifier taken, and the place the refusal must name.
+NAMED_BY_UNRESOLVED_CASES = [
+    pytest.param(
+        {CODE: _code("# Implements: REQ-d00077-A")},
+        "",
+        _rename_requirement("REQ-d00002", "REQ-d00077"),
+        ("REQ-d00002", "REQ-d00077"),
+        f"({CODE}:3) names REQ-d00077-A",
+        id="requirement-named-by-code",
+    ),
+    pytest.param(
+        {CODE: _code("# Implements: REQ-d00001-E")},
+        "",
+        _rename_assertion("REQ-d00001-C", "E"),
+        ("REQ-d00001-C", "REQ-d00001-E"),
+        f"({CODE}:3) names REQ-d00001-E",
+        id="assertion-named-by-code",
+    ),
+    pytest.param(
+        {"spec/extra.md": _SPEC_CITING_MISSING},
+        "",
+        _rename_requirement("REQ-p00001", "REQ-p00077"),
+        ("REQ-p00001", "REQ-p00077"),
+        "REQ-d00003 (spec/extra.md:1) names REQ-p00077",
+        id="requirement-named-by-a-requirement",
+    ),
+    pytest.param(
+        {"spec/journeys.md": _JOURNEYS, TEST: _test("# Verifies: JNY-Flow-09")},
+        _JOURNEY_SCANNING,
+        _rename_requirement("JNY-Flow-01", "JNY-Flow-09"),
+        ("JNY-Flow-01", "JNY-Flow-09"),
+        f"({TEST}:2) names JNY-Flow-09",
+        id="journey-named-by-test",
+    ),
+]
+
+
+class TestRenameOntoAnUnresolvedReferenceIsRefused:
+    """Validates REQ-p00017-P."""
+
+    @pytest.mark.parametrize("files,extra,mutate,ids,named", NAMED_BY_UNRESOLVED_CASES)
+    # Verifies: REQ-p00017-P
+    def test_refusal_names_each_reference_and_changes_nothing(
+        self,
+        tmp_path: Path,
+        files: dict[str, str],
+        extra: str,
+        mutate: Callable,
+        ids: tuple[str, str],
+        named: str,
+    ):
+        root = _write_repo(tmp_path / "repo", files, extra_config=extra)
+        graph = build_graph(repo_root=root)
+        old, new = ids
+        renamed = graph.find_by_id(old)
+        logged = len(graph.mutation_log)
+
+        with pytest.raises(ValueError) as refused:
+            mutate(graph)
+
+        assert f"Cannot rename to {new}" in str(refused.value)
+        assert named in str(refused.value), str(refused.value)
+        assert graph.find_by_id(old) is renamed
+        assert graph.find_by_id(new) is None
+        assert len(graph.mutation_log) == logged
+
+    # Verifies: REQ-p00017-P
+    def test_fault_that_is_not_a_missing_target_does_not_block(self, tmp_path: Path):
+        """A citation under a keyword the file refuses designates nothing, so
+        the identifier it spells is free to take."""
+        root = _project(tmp_path, {TEST: _test("# Implements: REQ-d00077")})
+        graph = build_graph(repo_root=root)
+
+        graph.rename_node("REQ-d00002", "REQ-d00077")
+
+        assert graph.find_by_id("REQ-d00077") is not None
+        assert graph.find_by_id("REQ-d00002") is None
+
+    # Verifies: REQ-p00017-P
+    def test_unresolved_reference_in_an_associate_refuses_a_root_rename(self, tmp_path: Path):
+        associate = _write_repo(
+            tmp_path / "lib",
+            {CODE: _code("# Implements: REQ-d00077-A")},
+            namespace="LIB",
+            with_spec=False,
+        )
+        root = _write_repo(
+            tmp_path / "core",
+            {},
+            extra_config=f'\n[associates.lib]\npath = "{associate}"\nnamespace = "LIB"\n',
+        )
+        graph = build_graph(repo_root=root)
+        logged = len(graph.mutation_log)
+
+        with pytest.raises(ValueError) as refused:
+            graph.rename_node("REQ-d00002", "REQ-d00077")
+
+        assert f"({CODE}:3) names REQ-d00077-A" in str(refused.value), str(refused.value)
+        assert graph.find_by_id("REQ-d00002") is not None
+        assert graph.find_by_id("REQ-d00077") is None
+        assert len(graph.mutation_log) == logged
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# A relationship from code or a test changes only in its comment (REQ-o00062-U)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _edges_of(node) -> set[tuple]:
+    return {
+        (edge.source.id, edge.target.id, edge.kind, tuple(edge.assertion_targets or ()))
+        for edge in (*node.iter_incoming_edges(), *node.iter_outgoing_edges())
+    }
+
+
+EDGE_CHANGES = [
+    pytest.param(
+        lambda graph, source: graph.add_edge(source, "REQ-d00002", EdgeKind.IMPLEMENTS),
+        id="add_edge",
+    ),
+    pytest.param(lambda graph, source: graph.delete_edge(source, "REQ-d00001"), id="delete_edge"),
+    pytest.param(
+        lambda graph, source: graph.change_edge_kind(source, "REQ-d00001", EdgeKind.REFINES),
+        id="change_edge_kind",
+    ),
+    pytest.param(
+        lambda graph, source: graph.change_edge_targets(source, "REQ-d00001", ["B"]),
+        id="change_edge_targets",
+    ),
+]
+
+CITING_KINDS = [
+    pytest.param(NodeKind.CODE, "Implements:", id="code"),
+    pytest.param(NodeKind.TEST, "Verifies:", id="test"),
+]
+
+
+def _citing_project(tmp_path: Path) -> Path:
+    return _project(
+        tmp_path,
+        {CODE: _code("# Implements: REQ-d00001-A"), TEST: _test("# Verifies: REQ-d00001-A")},
+    )
+
+
+class TestRelationshipFromACitationIsRefused:
+    """Validates REQ-o00062-U."""
+
+    @pytest.mark.parametrize("kind,keyword", CITING_KINDS)
+    @pytest.mark.parametrize("change", EDGE_CHANGES)
+    # Verifies: REQ-o00062-U
+    def test_change_is_refused_pointing_at_the_comment(
+        self, tmp_path: Path, kind: NodeKind, keyword: str, change: Callable
+    ):
+        graph = build_graph(repo_root=_citing_project(tmp_path))
+        source = _citing_node(graph, kind)
+        edges_before = _edges_of(source)
+        logged = len(graph.mutation_log)
+
+        with pytest.raises(ValueError) as refused:
+            change(graph, source.id)
+
+        assert f"Edit the `{keyword}` comment in the file" in str(refused.value)
+        assert _edges_of(source) == edges_before
+        assert len(graph.mutation_log) == logged
+
+    # Verifies: REQ-o00062-U
+    def test_relationship_from_a_requirement_is_still_changed(self, tmp_path: Path):
+        graph = build_graph(repo_root=_citing_project(tmp_path))
+        logged = len(graph.mutation_log)
+
+        graph.add_edge("REQ-d00002", "REQ-d00001", EdgeKind.IMPLEMENTS)
+
+        assert len(graph.mutation_log) == logged + 1
+        assert any(
+            edge.target.id == "REQ-d00002" and edge.kind == EdgeKind.IMPLEMENTS
+            for edge in graph.find_by_id("REQ-d00001").iter_outgoing_edges()
+        )
+
+    @pytest.mark.parametrize("kind,keyword", CITING_KINDS)
+    @pytest.mark.parametrize(
+        "call",
+        [
+            pytest.param(
+                lambda server, graph, source: server._mutate_add_edge(
+                    graph, source, "REQ-d00002", "IMPLEMENTS"
+                ),
+                id="add_edge",
+            ),
+            pytest.param(
+                lambda server, graph, source: server._mutate_delete_edge(
+                    graph, source, "REQ-d00001", confirm=True
+                ),
+                id="delete_edge",
+            ),
+            pytest.param(
+                lambda server, graph, source: server._mutate_change_edge_kind(
+                    graph, source, "REQ-d00001", "REFINES"
+                ),
+                id="change_edge_kind",
+            ),
+            pytest.param(
+                lambda server, graph, source: server._mutate_change_edge_targets(
+                    graph, source, "REQ-d00001", ["B"]
+                ),
+                id="change_edge_targets",
+            ),
+        ],
+    )
+    # Verifies: REQ-o00062-U
+    def test_tool_surface_reports_the_refusal(
+        self, tmp_path: Path, kind: NodeKind, keyword: str, call: Callable
+    ):
+        server = pytest.importorskip("elspais.mcp.server")
+        graph = build_graph(repo_root=_citing_project(tmp_path))
+        source = _citing_node(graph, kind)
+        logged = len(graph.mutation_log)
+
+        result = call(server, graph, source.id)
+
+        assert result["success"] is False
+        assert f"Edit the `{keyword}` comment in the file" in result["error"]
+        assert len(graph.mutation_log) == logged
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# A definition block after a section's prose renders after one blank line
+# (REQ-d00131-B)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_DEFINING = """# REQ-d00004: Defining
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00001
+
+## Assertions
+
+A. The tool SHALL do defining.
+
+## Rationale
+
+Why it matters.
+
+Requirement Location
+: The file and line where a requirement is declared.
+
+*End* *Defining* | **Hash**: 00000000
+---
+"""
+
+
+def _requirement_block(text: str, header: str) -> list[str]:
+    lines = text.split("\n")
+    start = next(i for i, line in enumerate(lines) if line.startswith(header))
+    end = next(i for i in range(start, len(lines)) if lines[i].startswith("*End*"))
+    return lines[start : end + 1]
+
+
+class TestDefinitionBlockAfterSectionProse:
+    """Validates REQ-d00131-B for a headingless block within a requirement."""
+
+    @pytest.mark.parametrize(
+        "mutate",
+        [
+            pytest.param(lambda g: g.update_title("REQ-d00004", "Defined"), id="update_title"),
+            pytest.param(
+                lambda g: g.update_assertion("REQ-d00004-A", "The tool SHALL do more."),
+                id="update_assertion",
+            ),
+        ],
+    )
+    # Verifies: REQ-d00131-B
+    def test_rerendered_requirement_keeps_one_blank_line_before_the_term(
+        self, tmp_path: Path, mutate: Callable
+    ):
+        root = _project(tmp_path, {"spec/defining.md": _DEFINING})
+        graph = build_graph(repo_root=root)
+
+        mutate(graph)
+        result = render_save(graph, repo_root=root)
+
+        assert result["success"] is True, result.get("errors")
+        saved = (root / "spec" / "defining.md").read_text(encoding="utf-8")
+        block = _requirement_block(saved, "# REQ-d00004:")
+        term = block.index("Requirement Location")
+        assert block[term - 2 : term + 2] == [
+            "Why it matters.",
+            "",
+            "Requirement Location",
+            ": The file and line where a requirement is declared.",
+        ]
+        assert not any(a == b == "" for a, b in zip(block, block[1:], strict=False)), block

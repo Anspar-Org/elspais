@@ -7664,6 +7664,9 @@ def create_server(
 
         source_id is the child (the requirement doing the implementing/refining).
         target_id is the parent (the requirement being implemented/refined).
+        A source that is a citation in a code or test file is refused: its
+        relationships are the comment written in that file, so edit the
+        comment instead. The same holds for every edge mutation.
 
         Args:
             edge_kind: 'IMPLEMENTS' or 'REFINES'.

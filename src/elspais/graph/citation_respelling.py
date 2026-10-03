@@ -60,6 +60,8 @@ class Respelling:
         line: The line the comment starts on.
         former: The comment as it was.
         respelled: The comment as the mutation leaves it.
+        former_refs: The references the former comment reads as.
+        respelled_refs: The references the respelled comment reads as.
     """
 
     node: GraphNode
@@ -67,6 +69,8 @@ class Respelling:
     line: int
     former: str
     respelled: str
+    former_refs: tuple[str, ...] = ()
+    respelled_refs: tuple[str, ...] = ()
 
 
 def containing_file(node: GraphNode) -> GraphNode | None:
@@ -316,7 +320,9 @@ def plan_respellings(
                     f"changed."
                 )
             found = True
-            plan.append(Respelling(node, file_node, line, text, new_text))
+            plan.append(
+                Respelling(node, file_node, line, text, new_text, tuple(before[0]), tuple(after[0]))
+            )
         if joined and not found:
             line = min(citation_texts(node), default=node.get_field("parse_line") or 0)
             raise CitationRespellingRefused(
@@ -324,6 +330,25 @@ def plan_respellings(
                 f"names it, so the citation cannot be respelled. Nothing was changed."
             )
     return plan
+
+
+# Implements: REQ-p00017-B
+def journey_successor(old_id: str, new_id: str) -> Successor:
+    """Map a reference to a renamed journey, or to one of its steps, to its new spelling.
+
+    A journey reference is read verbatim (it belongs to no repository's
+    identifier grammar), and a step is its journey's id, a slash and the
+    step's number.
+    """
+
+    def successor(ref: str) -> str | None:
+        if ref == old_id:
+            return new_id
+        if ref.startswith(old_id + "/"):
+            return new_id + ref[len(old_id) :]
+        return None
+
+    return successor
 
 
 def _set_citation_text(node: GraphNode, line: int, text: str) -> None:
@@ -349,8 +374,8 @@ def apply_respellings(plan: list[Respelling]) -> tuple[list[dict], list[dict]]:
     for item in plan:
         _set_citation_text(item.node, item.line, item.respelled)
         record = {"file_id": item.file_node.id, "node_id": item.node.id, "line": item.line}
-        before.append({**record, "text": item.former})
-        after.append({**record, "text": item.respelled})
+        before.append({**record, "text": item.former, "refs": list(item.former_refs)})
+        after.append({**record, "text": item.respelled, "refs": list(item.respelled_refs)})
     return before, after
 
 

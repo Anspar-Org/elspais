@@ -12,6 +12,12 @@ All notable changes to elspais will be documented in this file.
 - **A save never changes a line of a code or test file outside the citations it respelled (REQ-d00132-M)** -- a code or test file is now held line for line, empty lines included, and a test cited from more than one comment keeps each one; formerly writing such a file dropped every empty line and repeated a test's first citation over its later ones. A save that would change any other line, for instance because the file changed on disk after it was read, writes nothing and names the file and line.
 - **Deleting a Draft requirement no longer rewrites the files of the requirements it cited (REQ-d00132-I)** -- only the file that held it is written.
 - A citing file in an associate repository is part of the save like any other: with `federation.write_associates` false the save declines whole and keeps the work pending (REQ-d00253-G).
+- **Renaming a journey respells the `Verifies: JNY-...` items naming it or its steps (REQ-p00017-B)**, through the same read-back check.
+- **The list of test citations attached to no test follows a rename at once (REQ-p00017-B)** -- it names what the respelled comment reads as, the same answer a rebuild gives, and undo puts it back.
+- **A rename onto an identifier that an unresolved reference names is refused (REQ-p00017-P)** -- the refusal lists each such reference with its file and line; the rename would otherwise make it designate the renamed entity without anybody choosing that.
+- **An edge mutation whose source is a citation in a code or test file is refused (REQ-o00062-U)** -- `mutate_add_edge`, `mutate_delete_edge`, `mutate_change_edge_kind` and `mutate_change_edge_targets` changed the graph but never the file, so the next build read the old relationship back. The refusal says to edit the comment in the file instead.
+- **A code or test file with CRLF line endings, or with no final newline, saves back byte for byte (REQ-d00132-M)** -- the file's own line-ending convention and final-newline state are kept. A file mixing line endings is still refused rather than normalised.
+- A requirement whose text a save or `elspais fix` rewrites no longer gains a second blank line before a definition block written after one of its sections (markdownlint MD012).
 
 ### TOOL-134
 

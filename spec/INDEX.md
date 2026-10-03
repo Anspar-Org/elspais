@@ -20,7 +20,7 @@
 | REQ-p00014 | Satisfies Relationship                           | prd-features.md | ca4892c1 |
 | REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 0871b750 |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
-| REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | 2523a47c |
+| REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | e4e7f863 |
 | REQ-p00018 | Compiled Risk Register                           | prd-core.md     | 0f0438e9 |
 | REQ-p00019 | Truthful Reporting and Error Discipline          | prd-core.md     | 946a0e4c |
 | REQ-p00050 | Unified Graph Architecture                       | prd-features.md | 3a0fb899 |

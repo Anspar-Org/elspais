@@ -114,7 +114,7 @@ def test_render_save_associate_file_filter(monkeypatch, write_associates, expect
     monkeypatch.setattr(
         pathlib.Path,
         "write_text",
-        lambda self, content, encoding="utf-8": written.append(str(self)),
+        lambda self, content, encoding="utf-8", newline=None: written.append(str(self)),
     )
 
     g = FakeGraph(nodes)
@@ -166,7 +166,7 @@ def test_render_save_ownership_map_path(monkeypatch, write_associates, expect_as
     monkeypatch.setattr(
         pathlib.Path,
         "write_text",
-        lambda self, content, encoding="utf-8": written.append(str(self)),
+        lambda self, content, encoding="utf-8", newline=None: written.append(str(self)),
     )
 
     g = FakeGraphWithOwnership(nodes, ownership)

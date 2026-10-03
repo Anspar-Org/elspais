@@ -502,7 +502,10 @@ def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
             if heading == "preamble":
                 in_assertions = False
                 if content:
-                    lines.append("")
+                    # One blank line separates it from what precedes it; a
+                    # section already ends on one (markdownlint MD012).
+                    if not lines or lines[-1] != "":
+                        lines.append("")
                     lines.append(content)
             elif heading_style:
                 # Assertion sub-heading. Two flavors:
@@ -745,10 +748,19 @@ def _render_source_file(node: GraphNode, resolver: Any | None = None) -> str:
     """Render a code or test file from the nodes it holds.
 
     Every line of such a file is held by exactly one part, an empty line
-    included, so the file is its parts' lines each ended by a newline.
+    included, so the file is its parts' lines, each ended the way the file
+    ends its lines, the last one only where the file's last line was.
     """
     parts = _composed_parts(node, resolver)
-    return "\n".join(parts) + "\n" if parts else ""
+    if not parts:
+        return ""
+    text = "\n".join(parts)
+    if node.get_field("final_newline", True):
+        text += "\n"
+    ending = node.get_field("line_ending", "\n")
+    if ending and ending != "\n":
+        text = text.replace("\n", ending)
+    return text
 
 
 # Implements: REQ-d00299-A
@@ -1694,8 +1706,10 @@ def render_save(
             if file_resolver is None:
                 file_resolver = resolver
             content = render_file(file_node, resolver=file_resolver)
-            # Ensure file ends with newline
-            if content and not content.endswith("\n"):
+            source_file = _file_type_of(file_node) in (FileType.CODE, FileType.TEST)
+            # Ensure file ends with newline. A code or test file ends as its
+            # author ended it (REQ-d00132-M).
+            if content and not content.endswith("\n") and not source_file:
                 content += "\n"
             if abs_path.is_file():
                 changed_beyond_edits.extend(
@@ -1706,7 +1720,9 @@ def render_save(
                         file_resolver,
                     )
                 )
-            abs_path.write_text(content, encoding="utf-8")
+            # A code or test file's own line endings are already in the
+            # content, so they are written without translation.
+            abs_path.write_text(content, encoding="utf-8", newline="" if source_file else None)
             files_modified.add(str(abs_path))
             saved_count += 1
         except Exception as e:
