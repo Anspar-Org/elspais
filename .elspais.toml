@@ -379,8 +379,6 @@ hash_mode = "normalized-text"
 hash_algorithm = "sha256"
 # Hash truncation length in chars
 hash_length = 8
-# Strict hierarchy validation mode
-strict_hierarchy = false
 
 # Defined terms: glossary, index, and health checks
 [terms]

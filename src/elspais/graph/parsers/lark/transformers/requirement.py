@@ -40,6 +40,11 @@ from elspais.graph.reference_faults import (
 from elspais.graph.render import parse_end_marker
 from elspais.utilities.markdown import strip_emphasis
 
+# The level a requirement is stored with where it declares none. A reader of
+# the graph tells "declared no level" from "declared a level the
+# configuration does not define" by comparing against this value.
+NO_DECLARED_LEVEL = "Unknown"
+
 if TYPE_CHECKING:
     from elspais.utilities.patterns import IdResolver
 
@@ -208,7 +213,7 @@ class RequirementTransformer:
         heading_level = len(header_match.group("hashes"))
 
         # Walk children to extract structured data
-        level = "Unknown"
+        level = NO_DECLARED_LEVEL
         status = "Unknown"
         implements: list[str] = []
         refines: list[str] = []

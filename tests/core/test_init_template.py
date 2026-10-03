@@ -297,7 +297,6 @@ class TestGeneratedComments:
         assert config.id_patterns.assertions.zero_pad is False
         assert config.validation.hash_algorithm == "sha256"
         assert config.validation.hash_length == 8
-        assert config.validation.strict_hierarchy is False
 
     # Verifies: REQ-d00209-D
     def test_REQ_d00209_D_section_comments_present(self) -> None:

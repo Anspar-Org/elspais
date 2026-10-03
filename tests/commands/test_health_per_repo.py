@@ -158,7 +158,7 @@ class TestPerRepoHierarchyCheck:
         )
         alpha_config = _make_config(
             hierarchy_rules={"dev": ["ops"]},
-            **{"validation.strict_hierarchy": True},
+            rules={"severity": {"spec.hierarchy_levels": "warning"}},
         )
 
         # Beta: DEV implements PRD (allowed by beta's rules: dev -> [prd])
@@ -178,7 +178,7 @@ class TestPerRepoHierarchyCheck:
         )
         beta_config = _make_config(
             hierarchy_rules={"dev": ["prd"]},
-            **{"validation.strict_hierarchy": True},
+            rules={"severity": {"spec.hierarchy_levels": "warning"}},
         )
 
         fed = _build_two_repo_federation(alpha_graph, alpha_config, beta_graph, beta_config)
@@ -288,11 +288,11 @@ class TestNonConfigChecksRunOnFullFederation:
 
         alpha_config = _make_config(
             hierarchy_rules={"dev": ["prd"]},
-            **{"validation.strict_hierarchy": True},
+            rules={"severity": {"spec.hierarchy_levels": "warning"}},
         )
         beta_config = _make_config(
             hierarchy_rules={"dev": ["ops"]},
-            **{"validation.strict_hierarchy": True},
+            rules={"severity": {"spec.hierarchy_levels": "warning"}},
         )
 
         fed = _build_two_repo_federation(alpha_graph, alpha_config, beta_graph, beta_config)
@@ -341,7 +341,7 @@ class TestPerRepoFindingsAttribution:
         )
         alpha_config = _make_config(
             hierarchy_rules={"dev": ["ops"]},  # dev -> prd NOT allowed
-            **{"validation.strict_hierarchy": True},
+            rules={"severity": {"spec.hierarchy_levels": "warning"}},
         )
 
         beta_graph = build_graph(
@@ -517,7 +517,7 @@ class TestRunSpecChecksIteratesRepos:
         )
         alpha_config = _make_config(
             hierarchy_rules={"dev": ["ops"]},
-            **{"validation.strict_hierarchy": True},
+            rules={"severity": {"spec.hierarchy_levels": "warning"}},
         )
 
         # Beta: dev -> prd only
@@ -537,7 +537,7 @@ class TestRunSpecChecksIteratesRepos:
         )
         beta_config = _make_config(
             hierarchy_rules={"dev": ["prd"]},
-            **{"validation.strict_hierarchy": True},
+            rules={"severity": {"spec.hierarchy_levels": "warning"}},
         )
 
         fed = _build_two_repo_federation(alpha_graph, alpha_config, beta_graph, beta_config)
