@@ -786,7 +786,9 @@ undeclared = "warning"
 #──────────────────────────────────────────────────────────────────────────────
 
 [changelog]
-# Check current hashes against recorded changelog entries
+# Check current hashes against recorded changelog entries. While on, a save
+# that changes an Active requirement needs a reason, which the save records as
+# that requirement's changelog entry (the viewer asks for it).
 hash_current = true
 
 # Require changelog section to be present in spec files

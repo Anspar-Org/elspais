@@ -756,7 +756,11 @@ class ExampleArgs:
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
 class EditArgs:
-    """Edit requirements in-place (implements, status, move)."""
+    """Edit requirements in-place (implements, status, move).
+
+    An edit that changes an Active requirement needs a reason (-m), which is
+    recorded in its changelog.
+    """
 
     req_id: tyro.conf.Positional[str | None] = None
     """Requirement ID to edit."""
@@ -778,6 +782,9 @@ class EditArgs:
 
     validate_refs: bool = False
     """Validate that implements references exist."""
+
+    message: Annotated[str | None, tyro.conf.arg(aliases=["-m"])] = None
+    """Changelog reason, required when the edit changes an Active requirement."""
 
 
 # ---------------------------------------------------------------------------

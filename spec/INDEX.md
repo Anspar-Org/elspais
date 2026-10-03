@@ -231,6 +231,7 @@
 | REQ-d00322 | Evidence Snapshot                                             | dev-graph-core.md       | 5885653b |
 | REQ-d00323 | Carried Result Provenance                                     | dev-graph-core.md       | 67d6d8ea |
 | REQ-d00324 | Refusal of a Retired Configuration Value                      | dev-graph-config.md     | 530fb06a |
+| REQ-d00325 | Changelog Reason for a Saved Change                           | dev-graph-file-nodes.md | 4ebffc32 |
 
 ## User Journeys
 

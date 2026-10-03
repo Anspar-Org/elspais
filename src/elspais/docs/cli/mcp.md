@@ -488,6 +488,17 @@ marks terms in the requirements its changes reach and leaves every other
 requirement's hashed text as it is on disk; `spec.needs_rewrite` and
 `terms.unmarked` keep reporting the unmarked term until `elspais fix` marks it.
 
+Where `[changelog] hash_current` is on, a save that changes a requirement
+whose status is Active before or after it -- its text, title, status,
+identifier, assertions, sections or references -- needs a reason:
+`save_mutations(message=...)`. Each such requirement gains one changelog
+entry carrying that reason and its hash after the save. Without a reason,
+or with a blank one, the save writes nothing, keeps every pending change and
+returns `changelog_message_required`, listing the requirements in
+`requirement_ids`. The viewer asks the reader for the reason and saves again
+with it. A save the daemon makes with no client present records that no
+client asked for it and why it happened.
+
 A stale tip is not the only way a save comes back unsuccessful, and the
 `code` says which it was: `save_mutations` reports `write_scope_declined`
 where the save held back a file it was asked to write -- one an associate

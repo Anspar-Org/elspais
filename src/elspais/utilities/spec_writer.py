@@ -33,7 +33,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from elspais.graph.parsers.patterns import CHANGELOG_HEADER_PATTERN
+from elspais.graph.parsers.patterns import CHANGELOG_SECTION_PATTERN
 from elspais.graph.render import (
     EndMarker,
     format_changelog_entry,
@@ -936,8 +936,9 @@ def add_changelog_entry(
 ) -> str | None:
     """Add a changelog entry to a requirement in a spec file.
 
-    If a ## Changelog section exists, inserts the new entry at the top.
-    If no ## Changelog section exists, creates one before the End marker.
+    If the requirement has a Changelog section, at whatever heading depth,
+    inserts the new entry at its top. Otherwise creates one before the End
+    marker, one level below the requirement's own heading.
 
     Args:
         file_path: Path to the spec file.
@@ -964,9 +965,10 @@ def add_changelog_entry(
 
     entry_line = format_changelog_entry(entry)
 
-    # Look for existing ## Changelog section between header and end marker
+    # Implements: REQ-d00325-A
+    # Look for the existing Changelog section between header and end marker
     req_block = content[start_pos:end_line_start]
-    changelog_match = CHANGELOG_HEADER_PATTERN.search(req_block)
+    changelog_match = CHANGELOG_SECTION_PATTERN.search(req_block)
 
     if changelog_match:
         # Insert after the ## Changelog heading (+ blank line)
@@ -979,10 +981,11 @@ def add_changelog_entry(
         insert_pos += skip
         new_content = content[:insert_pos] + entry_line + "\n" + content[insert_pos:]
     else:
-        # Create ## Changelog section before End marker
+        # Create the Changelog section before the End marker
         insert_pos = end_line_start
-        # Ensure proper spacing
-        section = f"\n## Changelog\n\n{entry_line}\n\n"
+        header_depth = len(header_match.group(1)) - len(header_match.group(1).lstrip("#"))
+        hashes = "#" * min(header_depth + 1, 6)
+        section = f"\n{hashes} Changelog\n\n{entry_line}\n\n"
         new_content = content[:insert_pos] + section + content[insert_pos:]
 
     file_path.write_text(new_content, encoding="utf-8")

@@ -74,6 +74,12 @@ KEYWORD_PATTERN = re.compile(
 # Depth-2 ATX. MULTILINE is baked in so callers can simply `.search(text)`.
 CHANGELOG_HEADER_PATTERN = re.compile(r"^## Changelog\s*$", re.MULTILINE)
 
+# A requirement's changelog heading at whatever depth the file uses. The
+# grammar reads a changelog section at any depth, and a rendered requirement
+# puts it one level below its own heading, so a writer adding an entry has to
+# find it at any depth or it opens a second section the parser does not join.
+CHANGELOG_SECTION_PATTERN = re.compile(r"^#{1,6}[ \t]+Changelog[ \t]*$", re.MULTILINE)
+
 
 # --- Comment patterns ------------------------------------------------------ #
 #

@@ -1641,10 +1641,10 @@ def _worktree_env() -> dict:
     return env
 
 
-def _write_edit_controls_project(dest: Path) -> None:
+def _write_edit_controls_project(dest: Path, extra_config: str = "") -> None:
     """A project holding one relationship, as a git repository on a working branch."""
     (dest / "spec").mkdir()
-    (dest / ".elspais.toml").write_text(_EDIT_CONTROLS_TOML, encoding="utf-8")
+    (dest / ".elspais.toml").write_text(_EDIT_CONTROLS_TOML + extra_config, encoding="utf-8")
     (dest / "spec" / "prd.md").write_text(_EDIT_CONTROLS_PRD, encoding="utf-8")
     (dest / "spec" / "dev.md").write_text(_EDIT_CONTROLS_DEV, encoding="utf-8")
     _commit_on_working_branch(dest, "edit-controls")
@@ -1669,8 +1669,12 @@ def _commit_on_working_branch(dest: Path, branch: str) -> None:
 
 
 @contextlib.contextmanager
-def _served_viewer(dest: Path):
-    """Serve ``dest`` with a viewer run from this worktree's source; yield its URL."""
+def _served_viewer(dest: Path, env: dict | None = None):
+    """Serve ``dest`` with a viewer run from this worktree's source; yield its URL.
+
+    ``env`` replaces the environment the viewer runs in; it defaults to
+    ``_worktree_env()``.
+    """
     base_url = ""
     proc, log_path = _spawn_viewer(
         [
@@ -1685,7 +1689,7 @@ def _served_viewer(dest: Path):
             str(dest),
         ],
         cwd=str(dest),
-        env=_worktree_env(),
+        env=env if env is not None else _worktree_env(),
     )
     try:
         base_url = _await_viewer(proc, log_path, dest)
@@ -1789,15 +1793,31 @@ def page_save_disclosure(save_disclosure_viewer_url):
 
 @pytest.fixture(scope="module")
 def refused_save_viewer(tmp_path_factory):
-    """A viewer over a project whose Active requirement a page save cannot write.
+    """A viewer whose save of a change to an Active requirement the server refuses.
 
-    The page's save sends no changelog reason, which a change to an Active
-    requirement needs. Private because the test edits the graph. Yields the
-    viewer's URL and the project directory.
+    The project reads the changelog author from git alone, and the viewer runs
+    where git knows no author: no author variables, a home directory holding
+    no git configuration, and no system configuration. A save that answers the
+    reason prompt then owes a changelog row nobody can sign, which the server
+    refuses before writing anything. Private because the test edits the graph.
+    Yields the viewer's URL and the project directory.
     """
     dest = tmp_path_factory.mktemp("viewer-refused-save")
-    _write_edit_controls_project(dest)
-    with _served_viewer(dest) as base_url:
+    _write_edit_controls_project(dest, extra_config='\n[changelog]\nid_source = "git"\n')
+    home = tmp_path_factory.mktemp("viewer-refused-save-home")
+    env = _worktree_env()
+    for name in (
+        "GIT_AUTHOR_NAME",
+        "GIT_AUTHOR_EMAIL",
+        "GIT_COMMITTER_NAME",
+        "GIT_COMMITTER_EMAIL",
+    ):
+        env.pop(name, None)
+    env["HOME"] = str(home)
+    env["XDG_CONFIG_HOME"] = str(home / ".config")
+    env["GIT_CONFIG_NOSYSTEM"] = "1"
+    env.pop("GIT_CONFIG_GLOBAL", None)
+    with _served_viewer(dest, env=env) as base_url:
         yield base_url, dest
 
 

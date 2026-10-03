@@ -354,6 +354,48 @@ Canonical form applies whenever elspais writes a requirement, and a change that 
 *End* *Render-Based Save Operation* | **Hash**: b7f05ffb
 ---
 
+## REQ-d00325: Changelog Reason for a Saved Change
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00004-N
+
+Where a project records a changelog for each Active requirement, a save that changes an Active requirement records why, in the words of whoever asked for the save.
+
+### Assertions
+
+A. Where changelog tracking is enabled, when a save changes a requirement whose status is Active before or after the save, the save SHALL add to the changelog of that requirement one entry that carries the reason supplied with the save and the hash that the requirement has after the save.
+
+B. If a save that a client requests changes a requirement whose status is Active before or after the save, and the client supplies no reason or a blank reason, then the save SHALL leave every file unwritten and every pending change in hand.
+
+C. A save refused for want of a reason SHALL name each requirement that needs the reason and the way to supply the reason.
+
+D. When a save from the viewer needs a reason, the viewer SHALL complete the save only with a reason that the reader who saves enters.
+
+E. A save that the tool performs when no client requested it SHALL record as its reason that no client requested the save, together with the condition that caused the save.
+
+F. A save requested through the viewer and a save requested through the agent interface SHALL need a reason under the same conditions and give the same refusal where the reason is absent.
+
+G. Where changelog tracking is enabled, when the edit command changes a requirement whose status is Active before or after the edit, the command SHALL add to the changelog of that requirement one entry that carries the reason given with the command and the hash that the requirement has after the edit.
+
+H. If the edit command would change a requirement whose status is Active before or after the edit, and no reason or a blank reason is given for that change, then the command SHALL leave every file unchanged and name each such requirement and the way to supply the reason.
+
+### Rationale
+
+A changelog entry answers why an Active requirement changed. Only the person who made the change knows why, so a save asks that person and refuses to guess. The tool cannot ask when it saves on its own, for example when a server stops while it holds changes, so it records that nobody asked for the save and what caused it.
+
+A change counts whatever part of the requirement it reaches: its title, status, identifier, assertions, sections or references. A change from Active to another status, and a retirement, are changes to an Active requirement, so they need a reason too.
+
+The edit command writes its change to the file at once rather than through a save, so it asks for the reason itself, under the same rule.
+
+---
+
+### Changelog
+
+- 2026-10-03 | 4ebffc32 | - | Michael Lewis (<michael@anspar.org>) | Require a reason for an edit command change to an Active requirement
+- 2026-10-03 | 1e1d0185 | - | Michael Lewis (<michael@anspar.org>) | State each assertion of the saved-change reason with one SHALL
+- 2026-10-03 | 1cc0ddbf | - | Michael Lewis (<michael@anspar.org>) | Require a reason for a saved change to an Active requirement
+
+*End* *Changelog Reason for a Saved Change* | **Hash**: 4ebffc32
+
 ## REQ-d00134: Mutation Round-Trip Fidelity
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-d00132

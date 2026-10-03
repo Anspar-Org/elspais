@@ -281,11 +281,13 @@ def _make_changelog_entry(
     }
 
 
+# Implements: REQ-p00004-N
 def _add_autofix_changelog_entries(
     graph,  # noqa: ANN001 — FederatedGraph
     node_reasons: list[tuple[Any, list[str]]],
     config: dict[str, Any],
     author: dict[str, str],
+    message: str | None = None,
 ) -> int:
     """Add changelog entries for auto-fixed requirements.
 
@@ -298,7 +300,9 @@ def _add_autofix_changelog_entries(
     reflected in the graph builder's parse-time flags.
 
     The caller is responsible for resolving ``author`` up-front (so a
-    missing identity aborts before any file write).
+    missing identity aborts before any file write). ``message`` is the
+    operator's reason; where given it is the entry's reason, since only the
+    operator knows why the requirement changed.
 
     Returns the number of entries added.
     """
@@ -330,7 +334,7 @@ def _add_autofix_changelog_entries(
         parts = [_REASON_LABELS.get(r, r) for r in non_drift if r != "stale_hash"]
         if not parts:
             parts = ["update hash"]
-        reason = "Auto-fix: " + ", ".join(parts)
+        reason = message or "Auto-fix: " + ", ".join(parts)
 
         computed = compute_hash_for_node(node) or "N/A"
         entry = _make_changelog_entry(computed, reason, author)
@@ -340,24 +344,27 @@ def _add_autofix_changelog_entries(
     return added
 
 
+# Implements: REQ-p00004-N
 def _add_drift_changelog_entries(
     graph,  # noqa: ANN001 — FederatedGraph
     drift_nodes: list,
     config: dict[str, Any],
     author: dict[str, str],
+    message: str | None = None,
 ) -> int:
     """Add changelog entries for requirements with stale changelog hashes.
 
     When a requirement's most recent changelog hash doesn't match the
     stored End marker hash (e.g. after a format migration), adds a new
     changelog entry with the current hash.  The caller resolves
-    ``author`` up-front. Returns the count added.
+    ``author`` up-front. ``message``, where given, is the entry's reason.
+    Returns the count added.
     """
     del config  # author is resolved by caller; signature kept for symmetry
     added = 0
     for node in drift_nodes:
         stored = node.hash or ""
-        entry = _make_changelog_entry(stored, "Auto-fix: sync changelog hash", author)
+        entry = _make_changelog_entry(stored, message or "Auto-fix: sync changelog hash", author)
         graph.add_changelog_entry(node.id, entry)
         # Mark dirty so render_save picks up the file
         node.mark_parse_dirty("changelog_drift")
@@ -540,8 +547,9 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
         for r in reasons:
             node.mark_parse_dirty(r)
 
-    _add_autofix_changelog_entries(graph, autofix_items, config, author)
-    _add_drift_changelog_entries(graph, drift_only_nodes, config, author)
+    message = (getattr(args, "message", None) or "").strip() or None
+    _add_autofix_changelog_entries(graph, autofix_items, config, author, message)
+    _add_drift_changelog_entries(graph, drift_only_nodes, config, author, message)
 
     result = render_save(
         graph,
@@ -748,9 +756,9 @@ def _ensure_changelog_section(
     line_start, _line_end, _parsed = end_marker
 
     block = content[start_pos:line_start]
-    from elspais.graph.parsers.patterns import CHANGELOG_HEADER_PATTERN
+    from elspais.graph.parsers.patterns import CHANGELOG_SECTION_PATTERN
 
-    if CHANGELOG_HEADER_PATTERN.search(block):
+    if CHANGELOG_SECTION_PATTERN.search(block):
         print(f"{req_id} hash is already up to date")
         return 0
 
