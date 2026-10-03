@@ -2484,6 +2484,8 @@ def check_unmatched_file_pattern(
     if severity == Severity.OFF:
         return skipped_check(check, "A named file pattern that selected nothing")
 
+    import posixpath
+
     from elspais.config import scan_exclusions
     from elspais.graph.file_selection import file_is_skipped
 
@@ -2496,19 +2498,28 @@ def check_unmatched_file_pattern(
         if not isinstance(kind_cfg, dict):
             continue
         patterns = [p for p in (kind_cfg.get("file_patterns") or []) if isinstance(p, str)]
+        directories = [d for d in (kind_cfg.get("directories") or []) if isinstance(d, str)]
         _, skip_files = scan_exclusions(cfg, kind)
         for pattern in patterns:
             # A wildcard means the entry describes a class of files, and some
             # of them being skipped is what a class is for.
             if any(ch in pattern for ch in "*?["):
                 continue
-            if file_is_skipped(pattern, skip_files):
+            # Implements: REQ-d00212-Z
+            # A named file sits under a scanned directory, and a skip pattern
+            # is read against the path from the repository root, so the
+            # question is asked of that path.
+            named = [posixpath.normpath(posixpath.join(d, pattern)) for d in directories]
+            excluding = [
+                skip for skip in skip_files if any(file_is_skipped(path, [skip]) for path in named)
+            ]
+            if excluding:
                 findings.append(
                     HealthFinding(
                         message=(
-                            f"[scanning.{kind}] file_patterns names '{pattern}', and a skip "
-                            f"pattern excludes it. The file is not read. Remove it from one "
-                            f"of the two lists."
+                            f"[scanning.{kind}] file_patterns names '{pattern}', and the skip "
+                            f"pattern '{excluding[0]}' excludes it. The file is not read. "
+                            f"Remove it from one of the two lists."
                         ),
                     )
                 )
