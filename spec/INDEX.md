@@ -20,7 +20,7 @@
 | REQ-p00014 | Satisfies Relationship                           | prd-features.md | ca4892c1 |
 | REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 0871b750 |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
-| REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | bc9e593e |
+| REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | 2523a47c |
 | REQ-p00018 | Compiled Risk Register                           | prd-core.md     | 0f0438e9 |
 | REQ-p00019 | Truthful Reporting and Error Discipline          | prd-core.md     | 946a0e4c |
 | REQ-p00050 | Unified Graph Architecture                       | prd-features.md | 3a0fb899 |
@@ -117,7 +117,7 @@
 | REQ-d00129 | SourceLocation Removal and Consumer Migration                 | dev-graph-file-nodes.md | 6d11df36 |
 | REQ-d00130 | Parameterized Root Iteration and Kind-Based Index Query       | dev-graph-file-nodes.md | 5733741e |
 | REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | 21b9a92c |
-| REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | b7f05ffb |
+| REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | 16a9564a |
 | REQ-d00133 | MCP FILE Node Integration                                     | dev-mcp-tools.md        | 08e2973f |
 | REQ-d00134 | Mutation Round-Trip Fidelity                                  | dev-graph-file-nodes.md | 19cb065b |
 | REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | 67a9ca83 |

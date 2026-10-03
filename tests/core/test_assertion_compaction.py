@@ -398,22 +398,22 @@ REFUSED_CASES = [
         id="deleted-cited-by-code",
     ),
     pytest.param(
-        {"code_cites": f"{PARENT}-C"},
+        {"test_cites": f"{PARENT}-B"},
         "B",
-        [("<code>", "src/m.py:1", "C")],
-        id="moved-cited-by-code",
-    ),
-    pytest.param(
-        {"test_cites": f"{PARENT}-D"},
-        "B",
-        [("<test>", "tests/test_m.py:2", "D")],
-        id="moved-cited-by-test",
+        [("<test>", "tests/test_m.py:2", "B")],
+        id="deleted-cited-by-test",
     ),
     pytest.param(
         {"dev_cites": f"{PARENT}-B", "code_cites": f"{PARENT}-C"},
         "B",
-        [("REQ-d00001", "spec/dev.md:1", "B"), ("<code>", "src/m.py:1", "C")],
+        [("REQ-d00001", "spec/dev.md:1", "B")],
         id="each-reference-named",
+    ),
+    pytest.param(
+        {"dev_cites": f"{PARENT}-B", "code_cites": f"{PARENT}-B"},
+        "B",
+        [("REQ-d00001", "spec/dev.md:1", "B"), ("<code>", "src/m.py:1", "B")],
+        id="each-reference-named-with-code",
     ),
 ]
 
@@ -500,6 +500,45 @@ class TestDeletionThatWouldRepointIsRefused:
         citer, labels = cited_after
         assert _cited_labels(graph, citer) == labels
         assert graph.find_by_id(f"{PARENT}-B").get_label() == _LETTER_TEXTS["C"]
+
+    @pytest.mark.parametrize(
+        "citations,relative,saved",
+        [
+            pytest.param(
+                {"code_cites": f"{PARENT}-C"},
+                "src/m.py",
+                f"# Implements: {PARENT}-B\ndef f():\n    pass\n",
+                id="code",
+            ),
+            pytest.param(
+                {"test_cites": f"{PARENT}-D"},
+                "tests/test_m.py",
+                f"\n# Verifies: {PARENT}-C\ndef test_f():\n    pass\n",
+                id="test",
+            ),
+        ],
+    )
+    # Verifies: REQ-p00017-M, REQ-p00017-B
+    def test_REQ_p00017_M_a_moved_assertion_cited_from_code_or_a_test_follows_it(
+        self, tmp_path: Path, citations: dict, relative: str, saved: str
+    ):
+        """A citation in code or a test of a moving *Assertion* does not stop
+        the deletion; the saved file names the label the *Assertion* moved
+        to, and a rebuild resolves it to the text it designated before."""
+        root = _write_project(tmp_path, **citations)
+        graph = build_graph(repo_root=root)
+        (cited,) = citations.values()
+        text_before = graph.find_by_id(cited).get_label()
+
+        graph.delete_assertion(f"{PARENT}-B")
+        result = render_save(graph, repo_root=root)
+
+        assert result["success"] is True, result.get("errors")
+        assert (root / relative).read_text(encoding="utf-8") == saved
+        rebuilt = build_graph(repo_root=root)
+        moved_to = saved.split(": ", 1)[1].split("\n", 1)[0]
+        assert rebuilt.find_by_id(moved_to).get_label() == text_before
+        assert rebuilt.unresolved_references() == []
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -16,6 +16,12 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from elspais.graph.citation_respelling import (
+    apply_respellings,
+    citers_of,
+    plan_respellings,
+    restore_respellings,
+)
 from elspais.graph.comment_store import update_anchors_on_rename
 from elspais.graph.comments import CommentIndex, CommentThread
 from elspais.graph.declarations import (
@@ -989,6 +995,12 @@ class TraceGraph:
             self._undo_declaration_mutation(entry)
         # Unknown operations are silently ignored (forward compatibility)
 
+        # Implements: REQ-p00017-B, REQ-o00062-G
+        # A rename respelled citations in code and test files; undoing it
+        # puts their text back. A citation in another member's file is
+        # restored by the federation, which can find that file.
+        restore_respellings(entry.before_state.get("respelled_citations"), self._index.get)
+
     # Implements: REQ-p00017-B, REQ-d00132-G
     def _retarget_broken_refs(self, old_id: str, new_id: str) -> None:
         """Rewrite broken references (and their leftovers) after a rename.
@@ -1616,15 +1628,29 @@ class TraceGraph:
     # ─────────────────────────────────────────────────────────────────────────
 
     # Verifies: REQ-d00256
-    def rename_node(self, old_id: str, new_id: str) -> MutationEntry:
+    def rename_node(
+        self,
+        old_id: str,
+        new_id: str,
+        *,
+        citation_reader: Any | None = None,
+        foreign_citers: tuple[GraphNode, ...] = (),
+    ) -> MutationEntry:
         """Rename a node (e.g., REQ-p00001 -> REQ-p00002).
 
         Updates the node's ID, all edges pointing to/from this node,
-        and assertion IDs if the node is a requirement.
+        and assertion IDs if the node is a requirement. Each citation in a
+        code or test file that designates the requirement or one of its
+        assertions is respelled under the new identifier.
 
         Args:
             old_id: Current node ID.
             new_id: New node ID.
+            citation_reader: The federation's identifier reader, which
+                reads every member's citations. Defaults to this
+                repository's own grammar.
+            foreign_citers: Test nodes another member holds whose citation
+                binds to no test, which no relationship reaches.
 
         Returns:
             MutationEntry recording the operation.
@@ -1638,6 +1664,22 @@ class TraceGraph:
             raise KeyError(f"Node '{old_id}' not found")
         if new_id in self._index:
             raise ValueError(f"Node '{new_id}' already exists")
+
+        renamed = self._index[old_id]
+        respellings = []
+        if renamed.kind == NodeKind.REQUIREMENT:
+            respellings = self._plan_citation_respelling(
+                citers_of([(renamed, None)])
+                + citers_of(
+                    (child, None)
+                    for child in renamed.iter_children(edge_kinds={EdgeKind.STRUCTURES})
+                    if child.kind == NodeKind.ASSERTION
+                ),
+                lambda resolver: self._successor_for_rename(resolver, old_id, new_id),
+                old_id,
+                citation_reader,
+                foreign_citers,
+            )
 
         node = self._index.pop(old_id)
         old_title = node.get_label()
@@ -1730,9 +1772,84 @@ class TraceGraph:
         # holds the old identifier, which is the state B forbids.
         if cited_by:
             entry.after_state["journeys_reconciled"] = [j.id for j in cited_by]
+        self._record_respellings(entry, respellings)
 
         self._mutation_log.append(entry)
         return entry
+
+    # Implements: REQ-p00017-B, REQ-p00017-O
+    def _plan_citation_respelling(
+        self,
+        joined: list[GraphNode],
+        successor_for: Any,
+        designated: str,
+        citation_reader: Any | None,
+        foreign_citers: tuple[GraphNode, ...],
+    ) -> list[Any]:
+        """The citations in code and test files a rename respells, each checked.
+
+        *joined* are the nodes a relationship joins to the renamed entity.
+        A test citation that binds to no test is joined to nothing, so every
+        such test this graph holds is considered too, with *foreign_citers*
+        from the other members of a federation.
+
+        Raises:
+            CitationRespellingRefused: A citation would not read as intended
+                after respelling (REQ-p00017-O). Nothing has changed.
+        """
+        unbound = [
+            test
+            for test in (*self.iter_by_kind(NodeKind.TEST), *foreign_citers)
+            if test.get_field("binds_to_test") is False
+        ]
+        if not joined and not unbound:
+            return []
+        from elspais.utilities.patterns import FederatedIdReader
+
+        reader = (
+            citation_reader if citation_reader is not None else FederatedIdReader(self.resolver)
+        )
+        candidates = [(node, True) for node in joined] + [(node, False) for node in unbound]
+        return plan_respellings(candidates, successor_for(self.resolver), reader, designated)
+
+    @staticmethod
+    def _successor_for_rename(resolver: Any, old_id: str, new_id: str) -> Any:
+        """Map a reference to the renamed requirement to its new spelling."""
+
+        def successor(ref: str) -> str | None:
+            parsed = resolver.parse(ref)
+            if parsed is None or parsed.fqn != old_id:
+                return None
+            if parsed.assertions:
+                return resolver.make_assertion_ref(new_id, list(parsed.assertions))
+            return new_id
+
+        return successor
+
+    @staticmethod
+    def _successor_for_relabel(resolver: Any, requirement_id: str, labels: dict[str, str]) -> Any:
+        """Map a reference to a relabelled *Assertion* to its new spelling."""
+
+        def successor(ref: str) -> str | None:
+            parsed = resolver.parse(ref)
+            if parsed is None or parsed.fqn != requirement_id:
+                return None
+            if not any(label in labels for label in parsed.assertions):
+                return None
+            return resolver.make_assertion_ref(
+                requirement_id, [labels.get(label, label) for label in parsed.assertions]
+            )
+
+        return successor
+
+    @staticmethod
+    def _record_respellings(entry: MutationEntry, respellings: list[Any]) -> None:
+        """Apply *respellings* and record them on *entry* for undo and save."""
+        if not respellings:
+            return
+        before, after = apply_respellings(respellings)
+        entry.before_state["respelled_citations"] = before
+        entry.after_state["respelled_citations"] = after
 
     # Implements: REQ-p00017-B
     @staticmethod
@@ -2273,7 +2390,14 @@ class TraceGraph:
         return new_hash
 
     # Implements: REQ-d00230-C
-    def rename_assertion(self, old_id: str, new_label: str) -> MutationEntry:
+    def rename_assertion(
+        self,
+        old_id: str,
+        new_label: str,
+        *,
+        citation_reader: Any | None = None,
+        foreign_citers: tuple[GraphNode, ...] = (),
+    ) -> MutationEntry:
         """Rename assertion label (e.g., REQ-p00001-A -> REQ-p00001-D).
 
         Updates the assertion node ID, edges with assertion_targets,
@@ -2311,6 +2435,16 @@ class TraceGraph:
         if new_id in self._index:
             raise ValueError(f"Assertion '{new_id}' already exists")
 
+        respellings = self._plan_citation_respelling(
+            citers_of([(parent, {old_label}), (node, None)]),
+            lambda resolver: self._successor_for_relabel(
+                resolver, parent.id, {old_label: new_label}
+            ),
+            old_id,
+            citation_reader,
+            foreign_citers,
+        )
+
         # Record before state
         old_hash = parent.get_field("hash")
         entry = MutationEntry(
@@ -2341,6 +2475,7 @@ class TraceGraph:
         if cited_by:
             self._reconcile_journey_bodies(*cited_by)
             entry.after_state["journeys_reconciled"] = [j.id for j in cited_by]
+        self._record_respellings(entry, respellings)
 
         self._mutation_log.append(entry)
         return entry
@@ -2561,6 +2696,9 @@ class TraceGraph:
         self,
         assertion_id: str,
         foreign_references: tuple[tuple[ReferenceFault, GraphNode | None], ...] = (),
+        *,
+        citation_reader: Any | None = None,
+        foreign_citers: tuple[GraphNode, ...] = (),
     ) -> MutationEntry:
         """Delete an *Assertion* in the way its requirement's status role decides.
 
@@ -2606,7 +2744,9 @@ class TraceGraph:
 
         if self._status_role(parent) is StatusRole.ACTIVE:
             return self._retire_assertion(node, parent)
-        return self._remove_and_compact_assertion(node, parent, foreign_references)
+        return self._remove_and_compact_assertion(
+            node, parent, foreign_references, citation_reader, foreign_citers
+        )
 
     # Implements: REQ-p00017-K
     def _retire_assertion(self, node: GraphNode, parent: GraphNode) -> MutationEntry:
@@ -2647,6 +2787,8 @@ class TraceGraph:
         node: GraphNode,
         parent: GraphNode,
         foreign_references: tuple[tuple[ReferenceFault, GraphNode | None], ...] = (),
+        citation_reader: Any | None = None,
+        foreign_citers: tuple[GraphNode, ...] = (),
     ) -> MutationEntry:
         """Remove *node* and move each later label down one place in the series.
 
@@ -2684,6 +2826,25 @@ class TraceGraph:
                 f"or the whole requirement: {'; '.join(stranded)}. Remove or "
                 f"retarget them first."
             )
+
+        # Implements: REQ-p00017-B, REQ-p00017-O
+        # Each citation in code or a test of a moving *Assertion* is
+        # respelled under its new label, checked before anything moves.
+        relabels = {
+            child.get_field("label", ""): resolver.format_assertion_label(index - 1)
+            for index, child in moves
+        }
+        respellings = (
+            self._plan_citation_respelling(
+                citers_of([(parent, set(relabels))] + [(child, None) for _i, child in moves]),
+                lambda grammar: self._successor_for_relabel(grammar, parent.id, relabels),
+                ", ".join(child.id for _i, child in moves),
+                citation_reader,
+                foreign_citers,
+            )
+            if relabels
+            else []
+        )
 
         old_text = node.get_label()
         old_hash = parent.get_field("hash")
@@ -2736,6 +2897,7 @@ class TraceGraph:
         if renames and cited_by:
             self._reconcile_journey_bodies(*cited_by)
             entry.after_state["journeys_reconciled"] = [j.id for j in cited_by]
+        self._record_respellings(entry, respellings)
 
         self._mutation_log.append(entry)
         return entry
@@ -2758,7 +2920,9 @@ class TraceGraph:
         may be held by another member of a federation, which passes it in
         *foreign_references* with the node holding it.
         """
-        carried = (NodeKind.REQUIREMENT, NodeKind.USER_JOURNEY)
+        # A citation in code or a test is respelled and checked under
+        # REQ-p00017-O, so a moving *Assertion* carries it too.
+        carried = (NodeKind.REQUIREMENT, NodeKind.USER_JOURNEY, NodeKind.CODE, NodeKind.TEST)
         found: list[str] = []
 
         def _place(citer: GraphNode | None) -> str:
@@ -5561,6 +5725,15 @@ class GraphBuilder:
             if not binds_to_test:
                 node.set_field("binds_to_test", False)
             self._nodes[test_id] = node
+        elif content.raw_text:
+            # Implements: REQ-d00131-G
+            # A test cited from a second place in its file holds that comment
+            # too, under the line it starts on: the file is written back from
+            # what its nodes hold, so a comment held nowhere would be lost.
+            node = self._nodes[test_id]
+            further = dict(node.get_field("further_citations") or {})
+            further[content.start_line] = content.raw_text
+            node.set_field("further_citations", further)
 
         verdicts = data.get("reference_verdicts") or {}
         refs = data.get("verifies", [])

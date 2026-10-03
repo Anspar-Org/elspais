@@ -165,6 +165,7 @@ class ReferenceTransformer:
         reader: FederatedIdReader | None = None,
         quoted_lines: set[int] | None = None,
         comment_markers: Sequence[str] = (),
+        line_count: int | None = None,
     ) -> None:
         from elspais.utilities.patterns import FederatedIdReader as _Reader
 
@@ -176,6 +177,10 @@ class ReferenceTransformer:
         self.source_id = source_id
         self.quoted_lines = quoted_lines or set()
         self.comment_markers: tuple[str, ...] = tuple(comment_markers)
+        # How many lines the file holds. The grammar reads an empty line as
+        # nothing at all, so the lines no token accounts for are the empty
+        # ones, and knowing the count is what lets them be held.
+        self.line_count = line_count
         # One compiled matcher for this file's own marker, used everywhere
         # this transformer needs to find where a comment opens.
         self._comment_marker_re = re.compile(comment_style_fragment(self.comment_markers))
@@ -342,6 +347,15 @@ class ReferenceTransformer:
                             },
                         )
                     )
+
+        # Implements: REQ-d00132-M
+        # An empty line produces no token, so no node would hold it and the
+        # file could not be written back as it was read. Each one is held as
+        # ordinary text beside the lines around it.
+        if self.line_count:
+            held = {self._token_line(c) for c in children if isinstance(c, Tree)}
+            other_lines.extend((n, "") for n in range(1, self.line_count + 1) if n not in held)
+            other_lines.sort(key=lambda pair: pair[0])
 
         # Emit remainder blocks for unclaimed lines.
         # Fine-grained grouping ensures each remainder is contiguous, which

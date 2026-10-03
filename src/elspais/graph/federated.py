@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from elspais.graph.citation_respelling import restore_respellings
 from elspais.graph.GraphNode import (
     FileType,
     GraphNode,
@@ -1126,6 +1127,33 @@ class FederatedGraph:
             raise KeyError(f"Node '{node_id}' not found in any repo")
         return self._repos[repo_name].graph
 
+    # Implements: REQ-p00017-B, REQ-d00269-C
+    def _citation_context(self, repo_name: str) -> tuple[Any, tuple[GraphNode, ...]]:
+        """What a member needs to respell the citations other members hold.
+
+        The reader alternates every member's grammar with the owning
+        member's first, so a citation in any member's file reads as it read
+        when the federation was built. A test citation that binds to no test
+        is joined to nothing, so the other members' are handed over.
+        """
+        from elspais.utilities.patterns import FederatedIdReader
+
+        owner = self._repos[repo_name].graph
+        others = [graph for name, graph in self._live_graphs() if name != repo_name]
+        reader = None
+        if owner._resolver is not None:
+            reader = FederatedIdReader(
+                owner._resolver,
+                [graph._resolver for graph in others if graph._resolver is not None],
+            )
+        foreign = tuple(
+            test
+            for graph in others
+            for test in graph.iter_by_kind(NodeKind.TEST)
+            if test.get_field("binds_to_test") is False
+        )
+        return reader, foreign
+
     # Implements: REQ-d00201-B
     def _record_mutation(self, repo_name: str, entry: MutationEntry) -> None:
         """Record a mutation in the federated log."""
@@ -1143,7 +1171,8 @@ class FederatedGraph:
         """
         repo_name = self._ownership[old_id]
         graph = self._graph_for(old_id)
-        result = graph.rename_node(old_id, new_id)
+        reader, foreign = self._citation_context(repo_name)
+        result = graph.rename_node(old_id, new_id, citation_reader=reader, foreign_citers=foreign)
         # Update ownership: remove old, add new
         del self._ownership[old_id]
         self._ownership[new_id] = repo_name
@@ -1263,8 +1292,12 @@ class FederatedGraph:
             if name != repo_name
             for fault in graph._unresolved_references
         )
+        reader, foreign_citers = self._citation_context(repo_name)
         result = self._graph_for(assertion_id).delete_assertion(
-            assertion_id, foreign_references=foreign
+            assertion_id,
+            foreign_references=foreign,
+            citation_reader=reader,
+            foreign_citers=foreign_citers,
         )
         if result.before_state.get("disposition") == "removed":
             self._ownership.pop(assertion_id, None)
@@ -1292,7 +1325,10 @@ class FederatedGraph:
         # Strategy: by_id
         """
         repo_name = self._ownership[old_id]
-        result = self._graph_for(old_id).rename_assertion(old_id, new_label)
+        reader, foreign = self._citation_context(repo_name)
+        result = self._graph_for(old_id).rename_assertion(
+            old_id, new_label, citation_reader=reader, foreign_citers=foreign
+        )
         # Update ownership with new ID
         new_id = result.after_state.get("id", old_id)
         if new_id != old_id:
@@ -2654,6 +2690,10 @@ class FederatedGraph:
             if result:
                 # Reverse any ownership changes
                 self._rebuild_ownership()
+                # Implements: REQ-p00017-B, REQ-o00062-G
+                # A citation respelled in another member's file is put back
+                # here, where every member's files can be found.
+                restore_respellings(result.before_state.get("respelled_citations"), self.find_by_id)
             return result
         return None
 

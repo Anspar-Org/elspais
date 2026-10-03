@@ -436,9 +436,9 @@ text becomes `<RETIRED>`, the label stays allocated and is never given to
 another assertion, no other label moves, and a citation of it reads as
 unresolved. For the provisional and aspirational roles it removes the
 assertion and moves each later label down one place; citations from
-requirements and journeys follow their assertion and are written on save.
-That deletion is refused, naming the references, when the deleted assertion
-is cited or a moved assertion is cited from code, a test or an unresolved
+requirements, journeys, code and tests follow their assertion and are written
+on save. That deletion is refused, naming the references, when the deleted
+assertion is cited or a moved assertion is cited from an unresolved
 reference; remove or retarget them first. A requirement in the retired role
 is read-only: every mutation of its content or identifier is refused until
 its status changes. `mutate_delete_requirement` on a requirement in the
@@ -471,6 +471,19 @@ A save writes the files its pending changes reach and no other: the file
 holding each changed node, and, for a rename, each file whose citations name
 the renamed identifier. A file that only needs its formatting tidied stays as
 it is on disk until `elspais fix` tidies it.
+
+A rename -- of a requirement, of an assertion, or the relabelling a
+provisional deletion makes -- respells each `Implements:`/`Verifies:` comment
+in a code or test file that names the renamed identifier, in its canonical
+spelling, leaving the rest of the comment and of the file as written. Every
+respelled comment is read back the way a build reads it; where it would not
+read as the same references under their new identifiers, the mutation is
+refused naming the file and line, and nothing changes. A comment whose
+keyword the file kind does not admit, and an item that did not read, are
+left alone. A save that would change any other line of a code or test file
+-- because the file changed on disk after it was read, say -- writes nothing,
+names the file and line, and keeps the changes pending. Undo restores the
+respelled comments with the rest of the mutation.
 
 A file a save does write is written whole, in canonical form, so text in it
 that no change reached can change form too. The result's
