@@ -952,6 +952,17 @@ def _files_with_pending_mutations(graph: FederatedGraph) -> list[Any]:
     return files
 
 
+# Implements: REQ-d00325-A
+def requirements_changed(graph: FederatedGraph) -> list[GraphNode]:
+    """The requirements whose own text the pending mutations change.
+
+    A requirement reached only because it cites a renamed identifier is not
+    one of them: its citation is respelled and nothing else of it changes.
+    """
+    _files, _nodes, edited = _mutation_reach(graph)
+    return edited
+
+
 # Implements: REQ-d00132-A, REQ-d00132-H, REQ-d00132-J, REQ-d00132-L
 def _mutation_reach(
     graph: FederatedGraph,

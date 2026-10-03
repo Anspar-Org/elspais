@@ -1789,11 +1789,10 @@ def page_save_disclosure(save_disclosure_viewer_url):
 
 @pytest.fixture(scope="module")
 def refused_save_viewer(tmp_path_factory):
-    """A viewer over a project whose Active requirement a page save cannot write.
+    """A viewer over a project holding an Active requirement, for a refused save.
 
-    The page's save sends no changelog reason, which a change to an Active
-    requirement needs. Private because the test edits the graph. Yields the
-    viewer's URL and the project directory.
+    Private because the test edits the graph. Yields the viewer's URL and the
+    project directory.
     """
     dest = tmp_path_factory.mktemp("viewer-refused-save")
     _write_edit_controls_project(dest)

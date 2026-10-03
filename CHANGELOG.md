@@ -4,6 +4,14 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-88
+
+- **A save that changes an Active requirement records why, and the viewer asks for the reason (REQ-d00325)** -- where `[changelog] hash_current` is on, a save that changes a requirement whose status is Active before or after the save adds one changelog entry to it, carrying the reason supplied with the save and the hash it has afterwards. A change counts whatever part of the requirement it reaches: its text, title, status, identifier, assertions, sections or references. A status change away from Active, the retirement of an Active requirement, a rename, and an edit to one of its sections used to save with no entry; they now need a reason like any other change. A save requested without a reason, or with a blank one, writes nothing, keeps every pending change, and is refused as `changelog_message_required` with the requirements listed in `requirement_ids`, identically from MCP `save_mutations` and from the viewer's `/api/save` (400). The viewer used to show that refusal as a failed save that the reader could do nothing about; it now asks the reader for the reason, lists the requirements, and saves again with it, and a cancelled prompt saves nothing. A save the daemon performs with no client present records that no client requested it and what caused it.
+
+- **A changelog entry a save adds joins the requirement's changelog at any heading depth (REQ-d00325-A)** -- the entry a save adds was written under the `## Changelog` heading only; a requirement whose changelog heading sits deeper, as every rendered requirement below the top level has it, gained a second `## Changelog` section, and the earlier history dropped out of the requirement's changelog when the file was read back. The existing section is now found at whatever depth the file uses, and a new one is opened one level below the requirement's heading.
+
+- **`elspais fix -m` records its reason on a whole-repository fix (REQ-p00004-N)** -- the reason given with `-m` was used only when fixing one named requirement; a fix of every requirement ignored it and recorded `Auto-fix: ...` instead. It is now the reason on each changelog entry the fix adds, and `Auto-fix: ...` is recorded only where no reason is given.
+
 ### Added
 
 - **`elspais viewer --port 0` serves on any free port, and its record names that port (REQ-o00076-E)** -- the viewer binds the port before it writes `.elspais/daemon.json`, so the record a client reads names the port the server answers on and nothing can take it in between. `--port 0` previously read as no port given and served on 5001.

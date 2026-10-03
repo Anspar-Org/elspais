@@ -164,7 +164,9 @@ same helpers -- there is no softer path around the protocol:
 - 409 means a conflict and nothing else. A save that is refused for
   another reason says so with its own status and `code`: **400** with
   `changelog_message_required` when an Active requirement changed and no
-  changelog reason was given, **403** with `write_scope_declined` when
+  changelog reason was given (the body's `requirement_ids` names each one,
+  and the viewer asks the reader for the reason and saves again with it),
+  **403** with `write_scope_declined` when
   the save held back a file it was asked to write -- an associate's,
   with `write_associates` false -- in which case nothing at all was
   written and every pending change is still held, and **500** with

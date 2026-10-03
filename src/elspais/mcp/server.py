@@ -903,28 +903,34 @@ def _has_dirty_terms(graph: FederatedGraph) -> bool:
     return False
 
 
+# Implements: REQ-d00325-A, REQ-d00325-B
 def _get_active_mutated_reqs(graph: FederatedGraph) -> set[str]:
-    """Return IDs of Active requirements that have pending mutations."""
-    from elspais.graph import NodeKind
+    """The ids of the requirements a save owes a changelog row.
 
-    mutated_ids: set[str] = set()
+    Those are the requirements whose text the pending mutations change and
+    whose status is Active either now or before those mutations. The second
+    half is read from the log, because a status change or a retirement has
+    already moved the node off Active. An entry names a requirement by the
+    id it had then, so later renames are followed to the id it has now.
+    """
+    from elspais.graph.render import requirements_changed
+
+    was_active: set[str] = set()
     for entry in graph.mutation_log.iter_entries():
-        target = entry.target_id
-        # Check if target or its parent is an Active requirement
-        node = graph.find_by_id(target)
-        if node is None:
+        if entry.operation == "rename_node":
+            new_id = entry.after_state.get("id", "")
+            if entry.target_id in was_active and new_id:
+                was_active.discard(entry.target_id)
+                was_active.add(new_id)
             continue
-        if node.kind == NodeKind.REQUIREMENT:
-            if (node.status or "").lower() == "active":
-                mutated_ids.add(node.id)
-        elif node.kind == NodeKind.ASSERTION:
-            for parent in node.iter_parents():
-                if (
-                    parent.kind == NodeKind.REQUIREMENT
-                    and (parent.status or "").lower() == "active"
-                ):
-                    mutated_ids.add(parent.id)
-    return mutated_ids
+        if (entry.before_state.get("status") or "").lower() == "active":
+            was_active.add(entry.target_id)
+
+    return {
+        node.id
+        for node in requirements_changed(graph)
+        if (node.status or "").lower() == "active" or node.id in was_active
+    }
 
 
 # Implements: REQ-d00296-A
@@ -8395,7 +8401,7 @@ def create_server(
         """
         return _list_safety_branches_impl(_state["working_dir"])
 
-    # Implements: REQ-d00132-A, REQ-d00132-B
+    # Implements: REQ-d00132-A, REQ-d00132-B, REQ-d00325-F
     @mcp.tool()
     @_locked
     def save_mutations(
@@ -8421,9 +8427,13 @@ def create_server(
                 every writer's pending work, so you cannot commit a mutation
                 set you have never looked at.
             save_branch: If True, create a git safety branch before writing.
-            message: Changelog reason for Active requirement changes.
-                Required when mutations affect Active requirements
-                (when changelog enforcement is enabled).
+            message: Why the change was made. Where changelog tracking is
+                enabled and a pending change reaches a requirement that is
+                Active before or after the save -- its text, title, status,
+                identifier, assertions, sections or references -- the save
+                is refused without one (``changelog_message_required``,
+                naming those requirements in ``requirement_ids``), and the
+                reason is written to each such requirement's changelog.
         """
         graph = _state["graph"]
         if graph is None:

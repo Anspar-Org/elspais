@@ -402,24 +402,36 @@ def persist_pending(
 
     typed_config = _validate_config(config) if isinstance(config, dict) else config
     changelog_enforce = typed_config.changelog.hash_current
+    # A blank reason says nothing about why, so it is no reason.
+    message = (message or "").strip() or None
     if changelog_enforce and not message:
         if active_mutated:
             if not automatic:
-                ids = ", ".join(sorted(active_mutated))
+                # Implements: REQ-d00325-B, REQ-d00325-C, REQ-d00325-F
+                ids = sorted(active_mutated)
                 return {
                     "success": False,
                     # Not a conflict and not an infrastructure failure: the
                     # caller has to supply something before this can succeed.
                     "code": "changelog_message_required",
+                    "requirement_ids": ids,
                     "error": (
-                        f"Active requirement(s) modified: {ids}. "
-                        "Provide a 'message' parameter with the changelog reason."
+                        f"Active requirement(s) changed: {', '.join(ids)}. Each "
+                        "needs a changelog entry saying why it changed, so nothing "
+                        "was saved. Save again with the reason as the save's "
+                        "message: the viewer asks for it, the save_mutations tool "
+                        "takes it as 'message', and a daemon restart that persists "
+                        "takes it as --message."
                     ),
                 }
+            # Implements: REQ-d00325-E
             # A save the daemon performs has no client to prompt, and
             # leaving an Active requirement changed on disk with no
             # changelog row would leave the tree failing its own checks.
-            message = f"Saved automatically by the daemon ({trigger or 'no client present'})"
+            message = (
+                "Saved automatically; no client requested this save "
+                f"({trigger or 'no client present'})"
+            )
 
     # The rows those requirements are owed are written after the files,
     # but whoever signs them has to be known before: a successful write

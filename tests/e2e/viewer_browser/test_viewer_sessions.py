@@ -550,10 +550,31 @@ class TestBrowserSaveReportsRefusal:
                 {{node_id: '{_EDIT_CONTROLS_CITING}', new_title: 'Citing Renamed'}})"""
         )
         assert edited and edited.get("success"), edited
+        # The save the reader answers with a reason is refused by the write
+        # itself: the reason prompt is something the viewer can answer, a
+        # write that failed is not. The first, reasonless save reaches the
+        # server, which asks for the reason.
+        cause = "save failed: PermissionError(13, 'Permission denied')"
+
+        def _refuse_the_write(route):
+            body = route.request.post_data_json or {}
+            if body.get("message"):
+                route.fulfill(
+                    status=500,
+                    content_type="application/json",
+                    body=json.dumps({"success": False, "code": "save_failed", "error": cause}),
+                )
+            else:
+                route.continue_()
+
+        page.route("**/api/save", _refuse_the_write)
         page.wait_for_selector("#btn-save:not([disabled])", timeout=10_000)
         saves: list = []
         page.on("response", lambda r: saves.append(r) if r.url.endswith("/api/save") else None)
         page.click("#btn-save")
+        page.wait_for_selector("#changelog-reason-overlay", timeout=10_000)
+        page.fill("#changelog-reason-input", "a reason the write will not reach")
+        page.click("#changelog-reason-submit")
 
         try:
             overlay = page.wait_for_selector("#error-modal-overlay", timeout=10_000)
@@ -561,11 +582,10 @@ class TestBrowserSaveReportsRefusal:
             bodies = [(r.status, r.text()) for r in saves]
             pytest.fail(f"no error shown for a refused save; /api/save answered {bodies}")
         assert overlay.is_visible()
-        assert [r.status for r in saves] == [400]
+        assert [r.status for r in saves] == [400, 500]
         shown = page.locator("#error-modal-overlay").inner_text()
         assert "Save failed" in shown, shown
-        assert "changelog" in shown.lower(), shown
-        assert _EDIT_CONTROLS_CITING in shown, shown
+        assert cause in shown, shown
 
         dirty = page.request.get(f"{base_url}/api/dirty").json()
         assert dirty.get("mutation_count", 0) > 0, dirty
