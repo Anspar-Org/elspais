@@ -319,7 +319,7 @@ def test_the_parser_records_a_line_it_cannot_read(text, cause):
     assert cause in diagnostic.cause
 
 
-# Verifies: REQ-d00283-Z, REQ-d00311-N
+# Verifies: REQ-d00283-R, REQ-d00311-N
 def test_an_expected_target_whose_run_is_in_progress_is_not_supplied_by_the_snapshot(tmp_path):
     """A run in progress is missing results, even where the snapshot holds the target."""
     from elspais.commands.health import check_ingestion_faults

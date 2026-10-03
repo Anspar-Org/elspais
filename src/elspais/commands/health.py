@@ -4775,7 +4775,7 @@ def check_unbound_citations(
     )
 
 
-# Implements: REQ-d00283-Q+R+S+T+U+V+Z, REQ-d00311-N
+# Implements: REQ-d00283-Q+R+S+T+U+V, REQ-d00311-N
 @dataclass(frozen=True)
 class _TargetOutcomes:
     """The artifacts a build did not read, divided by what the run asked for.
@@ -4825,7 +4825,7 @@ def _target_outcomes(graph: FederatedGraph, expected_targets: tuple[str, ...]) -
                 running.setdefault((entry.name, item.target), item.started_at)
                 if item.target not in in_progress or item.artifact == "results":
                     in_progress[item.target] = item
-        # Implements: REQ-d00283-Z
+        # Implements: REQ-d00283-R
         # A run that has not ended left no results this run can read, so a
         # target the run expects is missing its results.
         for target_name, item in sorted(in_progress.items()):

@@ -126,7 +126,7 @@ Rationale paragraph: `L keeps a run inside the repository that asked for it unle
   - REQ-d00311 (Test Result Freshness), beside the assertion above; REQ-d00254 uses every letter its label style admits: `Where a results artifact records an absolute path under the root that the target's *Result Fingerprint* records, the system SHALL read that path relative to that root.` Rationale: a tree that moves after its tests ran keeps its results; reading such a path against the new root alone matches no test, and the results then read as fresh while crediting nothing.
   - REQ-d00283 (Test Target Groups): `The system SHALL report a target that the run expects, and whose run is in progress, as a target with missing results.` Rationale: a job that died leaves a *Result Fingerprint* with no end; its results are unread, so a gate that expects the target must fail rather than pass over it.
 
-  Record each assigned letter in this plan's Tasks 11 and 12 before moving on. Assigned: REQ-d00311-P (the root recorded), REQ-d00311-Q (a path read relative to that root), REQ-d00283-Z (an expected run in progress reads as missing results).
+  Record each assigned letter in this plan's Tasks 11 and 12 before moving on. Assigned: REQ-d00311-P (the root recorded), REQ-d00311-P (a path read relative to that root), REQ-d00283-R (an expected run in progress reads as missing results).
 
 - [x] **Step 4: Regenerate and check**
 
@@ -682,7 +682,7 @@ Wire the args/cli exactly like `FingerprintArgs` (nested `EvidenceAction = Annot
 
 - [x] **Step 1: Write failing tests** (sub-agent): run a stub `flutter-machine` target (absolute `file://` URLs and `suite.path` under the project), then copy the whole project, `.results/` included, to another `tmp_path` directory and build there. The results bind to their tests (`match_scope == "test"`), `tests.unmatched_results` passes, Passing is unchanged. A fingerprint without `root` (written by hand) keeps today's behaviour. A path under neither root stays absolute and unmatched.
 - [x] **Step 2: Run -- FAIL.**
-- [x] **Step 3: Implement.** In `start_run`, add `"root"` to the fingerprint (`# Implements: REQ-d00311-P`). In the factory's results branch, read `read_fingerprint(area)` once per target and pass `Path(fp["root"])` when present. In `_repo_relative_or_kept`, try the current root first, then the recorded root (`# Implements: REQ-d00311-Q`):
+- [x] **Step 3: Implement.** In `start_run`, add `"root"` to the fingerprint (`# Implements: REQ-d00311-P`). In the factory's results branch, read `read_fingerprint(area)` once per target and pass `Path(fp["root"])` when present. In `_repo_relative_or_kept`, try the current root first, then the recorded root (`# Implements: REQ-d00311-P`):
 
 ```python
     def _repo_relative_or_kept(raw: str | None) -> str | None:
@@ -709,7 +709,7 @@ Wire the args/cli exactly like `FingerprintArgs` (nested `EvidenceAction = Annot
 
 - [x] **Step 1: Write failing tests** (sub-agent): a target folder whose *Result Fingerprint* has no `finished_at`; `checks --expect <target>` reports `tests.ingestion_fault` failed, naming the target and saying its run is in progress; without `--expect` (and not executed) it stays `tests.run_in_progress` information as today.
 - [x] **Step 2: Run -- FAIL.**
-- [x] **Step 3: Implement.** Where the check walks expected and executed targets, treat an `UnreadArtifact` with `reason="running"` for an expected target as missing results (`# Implements: REQ-d00283-Z`), with the message `target <name>: results unread because its run is in progress (started <started_at>)`.
+- [x] **Step 3: Implement.** Where the check walks expected and executed targets, treat an `UnreadArtifact` with `reason="running"` for an expected target as missing results (`# Implements: REQ-d00283-R`), with the message `target <name>: results unread because its run is in progress (started <started_at>)`.
 - [x] **Step 4: Run -- PASS.**
 
 ### Task 10: Documentation, changelog, version

@@ -83,12 +83,11 @@
 **REQ:**
 
 - REQ-d00311-D
-- REQ-d00311-P
-- REQ-d00311-Q
 - REQ-d00313-B
 - REQ-d00313-D
 - REQ-d00283:section:1
 - REQ-d00322:section:1
+- REQ-d00311:section:1
 - REQ-d00313:section:1
 
 ## Result Record

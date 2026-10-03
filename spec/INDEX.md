@@ -202,7 +202,7 @@
 | REQ-d00280 | Named Report Declarations                                     | dev-cli.md              | 321c6f4f |
 | REQ-d00281 | Level Vocabulary of a Reported Graph                          | dev-graph-core.md       | 4bde246d |
 | REQ-d00282 | Report Value Selection                                        | dev-cli.md              | bf98248c |
-| REQ-d00283 | Test Target Groups                                            | dev-graph-core.md       | a4217e49 |
+| REQ-d00283 | Test Target Groups                                            | dev-graph-core.md       | 2e819a81 |
 | REQ-d00284 | How a Result Names Its Test                                   | dev-graph-core.md       | 7baae0b0 |
 | REQ-d00285 | The Shape of a Finding                                        | dev-cli.md              | bedec247 |
 | REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | 7cd5b049 |
@@ -220,7 +220,7 @@
 | REQ-d00298 | Report Export                                                 | dev-cli.md              | 8c1b78eb |
 | REQ-d00299 | Configuration as Graph Content                                | dev-graph-config.md     | 0577c0a5 |
 | REQ-d00300 | Viewer Remembered State                                       | dev-traceview-review.md | f794104b |
-| REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | c116fe70 |
+| REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | 97bd3f1c |
 | REQ-d00312 | Test Target Output Areas                                      | dev-graph-core.md       | a0788b2a |
 | REQ-d00313 | Served Graph Currency                                         | dev-traceview-review.md | 8822f2a7 |
 | REQ-d00320 | Viewer Edit Controls State What They Do                       | dev-traceview-review.md | e8010396 |

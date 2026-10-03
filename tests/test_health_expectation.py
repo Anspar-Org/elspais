@@ -1,4 +1,4 @@
-# Verifies: REQ-d00283-H+P+Q+R+S+T+U+V+W+Z, REQ-d00311-N+O
+# Verifies: REQ-d00283-H+P+Q+R+S+T+U+V+W, REQ-d00311-N+O
 """A target with no results is judged by what the run executed and expected.
 
 The build records each artifact it did not read as a fact. These tests hold
@@ -400,7 +400,7 @@ def test_a_run_in_progress_is_reported_with_its_start_and_judged_no_other_way(tm
     assert all("target unit" not in f.message for f in not_run.findings)
 
 
-# Verifies: REQ-d00283-Z
+# Verifies: REQ-d00283-R
 def test_an_expected_target_whose_run_is_in_progress_has_missing_results(tmp_path):
     from elspais.utilities.fingerprint import read_fingerprint, start_run
 
@@ -426,7 +426,7 @@ def test_an_expected_target_whose_run_is_in_progress_has_missing_results(tmp_pat
     assert any("target unit" in f.message for f in running.findings)
 
 
-# Verifies: REQ-d00283-Z
+# Verifies: REQ-d00283-R
 @pytest.mark.parametrize(
     "artifacts",
     [
@@ -460,7 +460,7 @@ def test_an_expected_run_in_progress_is_reported_once_as_missing_results(artifac
     assert "run is in progress (started 2026-10-01T09:00:00+00:00)" in finding.message
 
 
-# Verifies: REQ-d00283-Z
+# Verifies: REQ-d00283-R
 def test_an_expected_run_in_progress_reading_runner_output_names_the_target():
     running = UnreadArtifact(
         target="unit",

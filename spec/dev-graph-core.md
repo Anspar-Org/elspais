@@ -1228,8 +1228,6 @@ X. The system SHALL reject at configuration-validation time a test target name o
 
 Y. If a run that does not execute test targets is given a selection of targets to execute or a request to stop at the first failing target, then the system SHALL refuse the run.
 
-Z. The system SHALL report a target that the run expects, and whose run is in progress, as a target with missing results.
-
 ### Rationale
 
 The cost of a target is not something the tool can read off its configuration, and it is not the tool's judgement to make. What the tool can do is let the project say it once, in a place a reader of the configuration will find, and then honour it. A description is required with each declaration for that reason: a group called `slow` tells a newcomer nothing about whether their change should have run it, and the declaration is the only place that explanation has to live.
@@ -1246,19 +1244,17 @@ E and I are one idea stated from both ends, and the idea is that a group is an A
 
 P is not a second selector of the kind E rules out. E concerns which targets a run executes; P concerns which results a run requires to be there, and the two are separate questions. A tier can produce its results in an earlier job and leave them for a later run to read, and that later run has to be able to say it requires them without executing them again. A name in P stands for targets exactly as a name in E does, and a name that stands for nothing is refused as H refuses it. Q is the link between the two: a run that executes a target requires what that execution produces.
 
-R and S divide one fact, a target with no results, by the question the run asked. A target nobody executed or asked for has not run, which is information; a target the run executed or required that left nothing is a fault somebody must fix. Without the division the fault fires for every tier a run did not touch, so no project declaring tiers can treat it as a failure, and then it catches nothing. V applies the same division to coverage, and adds one case: a target whose results are present has run, so coverage it declares and did not leave is missing whatever the run expected. T keeps the division the same however a target delivers its results. U keeps a repository's run from failing on targets another repository declares for its own runs. W is how a run names one of those targets when it does require it: the member that declares a target is the only one that knows which targets a name of its stands for, so a group of that member expands by that member's declarations and never by the invoking repository's. X keeps such a name readable: `:` separates the parts of a node identifier and a namespace never holds one, so a run can write a member's namespace before the name it qualifies only while no target or group name can hold one either.
+R and S divide one fact, a target with no results, by the question the run asked. A target nobody executed or asked for has not run, which is information; a target the run executed or required that left nothing is a fault somebody must fix. Without the division the fault fires for every tier a run did not touch, so no project declaring tiers can treat it as a failure, and then it catches nothing. V applies the same division to coverage, and adds one case: a target whose results are present has run, so coverage it declares and did not leave is missing whatever the run expected. T keeps the division the same however a target delivers its results. U keeps a repository's run from failing on targets another repository declares for its own runs. W is how a run names one of those targets when it does require it: the member that declares a target is the only one that knows which targets a name of its stands for, so a group of that member expands by that member's declarations and never by the invoking repository's. X keeps such a name readable: `:` separates the parts of a node identifier and a namespace never holds one, so a run can write a member's namespace before the name it qualifies only while no target or group name can hold one either. A target whose run has not ended has no results a reader can rely on, so R reports an expected one as missing: a job that died leaves a *Result Fingerprint* with no end, and a gate that expects its target fails rather than passing over it.
 
 Y is H's discipline applied to a run that executes nothing. A selection of targets to execute and a request to stop at the first failing one are read only by a run that executes, so a run that does not execute would accept them and read nothing; refusing them is the only answer the reader cannot mistake for a selection that took effect. A run of that kind that needs to say which results it requires says so with P.
 
 G carries the cost of that aliasing, and it is the whole cost. One namespace means a name cannot be a target's and a group's at once, so a configuration holding both is refused when it is read rather than resolved by a precedence rule — a precedence rule being a thing every reader of that configuration would afterwards have to know. What makes the aliasing safe beyond that is that a run says which targets it executed, so what an invocation resolved to is answerable by looking at the run rather than by knowing any of this.
 
-Z applies R to a run that never ended. A job that died leaves a *Result Fingerprint* with no end, and its results are unread, so a gate that expects the target fails rather than passing over it.
-
 ### Changelog
 
-- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: an expected target whose run is in progress reports its results as missing (Z)
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a target whose run has not ended has no results, so an expected one reports them missing (R Rationale)
 
-*End* *Test Target Groups* | **Hash**: a4217e49
+*End* *Test Target Groups* | **Hash**: 2e819a81
 
 ## REQ-d00284: How a Result Names Its Test
 
@@ -1495,25 +1491,23 @@ N. While a run of a test target has started and has not recorded its end, the sy
 
 O. When the system reports a run of a test target as in progress, the system SHALL state when the run started.
 
-P. The *Result Fingerprint* SHALL record the root of the tree that its run executed in.
-
-Q. Where a results artifact records an absolute path under the root that the target's *Result Fingerprint* records, the system SHALL read that path relative to that root.
+P. A result SHALL keep binding to the test it names after the tree its run executed in moves to another directory.
 
 ### Rationale
 
 The inputs of a test target are the files whose content can change what its run reports, so results stay current exactly as long as those files are unchanged, and reuse of results from an earlier run is legitimate. The default takes every file because a missed dependency makes old results look current, which is worse than a needless run. What a run writes, and what tools keep for themselves while it runs, changes during every run, so the project names those paths in its global skip list.
 
-A run empties its output area when it starts and writes its results while it runs, so an area whose run has not finished holds results that are partial or not yet written. Judging their freshness would report a run that is still going as one that produced nothing, or as one that is complete. N reports the fact instead, and O gives the time it started so a reader can decide for themselves whether the run is still going. Whether a run that expects the target is owed those results is a separate question, which REQ-d00283-Z answers.
+A run empties its output area when it starts and writes its results while it runs, so an area whose run has not finished holds results that are partial or not yet written. Judging their freshness would report a run that is still going as one that produced nothing, or as one that is complete. N reports the fact instead, and O gives the time it started so a reader can decide for themselves whether the run is still going. Whether a run that expects the target is owed those results is a separate question, which REQ-d00283-R answers.
 
-A tree that moves after its tests ran keeps its results. A reporter often records absolute paths, and reading such a path against the new root alone matches no test, so the results read as fresh while crediting nothing. P records where the run executed, and Q reads each recorded path against that root.
+A tree that moves after its tests ran keeps its results. A reporter often records absolute paths, and reading such a path against the new root alone matches no test, so the results read as fresh while crediting nothing. P states that property. The *Result Fingerprint* records where its run executed, so a recorded path can be read against that place.
 
 ### Changelog
 
-- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a run in progress replaces the freshness judgement of its results, and leaves to REQ-d00283-Z whether an expected target is missing them (N)
-- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: the Result Fingerprint records the root its run executed in, and a recorded absolute path is read relative to that root (P, Q)
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a run in progress replaces the freshness judgement of its results, and leaves to REQ-d00283-R whether an expected target is missing them (N)
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a result keeps binding to its test after the tree its run executed in moves (P)
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the run fingerprint with the Defined Term Result Fingerprint (D)
 
-*End* *Test Result Freshness* | **Hash**: c116fe70
+*End* *Test Result Freshness* | **Hash**: 97bd3f1c
 
 ## REQ-d00312: Test Target Output Areas
 

@@ -701,7 +701,7 @@ def test_the_result_fingerprint_records_the_root_its_run_executed_in(tmp_path: P
     assert fingerprint["root"] == str(root.resolve())
 
 
-# Verifies: REQ-d00311-Q
+# Verifies: REQ-d00311-P
 @pytest.mark.parametrize("how", ["copy", "move"])
 def test_results_of_a_moved_tree_bind_to_their_tests(tmp_path: Path, how: str):
     from elspais.commands.health import check_unmatched_results
@@ -728,7 +728,7 @@ def test_results_of_a_moved_tree_bind_to_their_tests(tmp_path: Path, how: str):
     assert tested_and_passing(rollup).covered == passing_before
 
 
-# Verifies: REQ-d00311-Q
+# Verifies: REQ-d00311-P
 def test_a_fingerprint_recording_no_root_reads_paths_against_the_current_root(tmp_path: Path):
     """Without a recorded root, a path from the old tree is outside the repository."""
     from elspais.commands.health import check_unmatched_results
@@ -747,7 +747,7 @@ def test_a_fingerprint_recording_no_root_reads_paths_against_the_current_root(tm
     assert check_unmatched_results(graph, config).passed is False
 
 
-# Verifies: REQ-d00311-Q
+# Verifies: REQ-d00311-P
 def test_a_path_under_neither_root_stays_absolute_and_unmatched(tmp_path: Path):
     from elspais.commands.health import check_unmatched_results
 

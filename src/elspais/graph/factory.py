@@ -402,7 +402,7 @@ def _ingest_target_results(
 
     repo_root_resolved = Path(repo_root).resolve()
 
-    # Implements: REQ-d00311-Q
+    # Implements: REQ-d00311-P
     def _repo_relative_or_kept(raw: str | None) -> str | None:
         # An absolute path inside the repository, or inside the root the run
         # executed in, becomes repo-relative. A relative path, or one under
@@ -1687,7 +1687,7 @@ def _build_repository(
                         )
                     )
                     continue
-                # Implements: REQ-d00311-Q
+                # Implements: REQ-d00311-P
                 # The root the run executed in, read once for the target, so
                 # a path its reporter recorded under that root still names
                 # the same file after the tree moves.
