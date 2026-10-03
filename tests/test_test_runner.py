@@ -477,11 +477,17 @@ def test_both_runs_refuse_an_unknown_name_with_one_text(tmp_path, monkeypatch, c
 
 
 # Verifies: REQ-d00249-K
+@pytest.mark.parametrize(
+    "reporter",
+    ["flutter-machine", "junit"],
+    ids=["stdout-channel", "file-channel"],
+)
 def test_a_target_whose_results_would_not_be_recorded_refuses_the_run(
-    tmp_path, monkeypatch, capsys
+    tmp_path, monkeypatch, capsys, reporter
 ):
-    """The flutter target reads its command's output and declares no artifact.
-    The whole selection is refused before the other target runs."""
+    """A results target with no `results` pattern leaves nothing on disk,
+    whichever channel its reporter reads. The whole selection is refused
+    before the other target runs, and the refusal names no other command."""
     from elspais.cli import main
 
     marker = tmp_path / "ran.txt"
@@ -489,15 +495,33 @@ def test_a_target_whose_results_would_not_be_recorded_refuses_the_run(
         tmp_path,
         monkeypatch,
         _target_toml("unit", f"touch {marker}"),
-        _target_toml("widgets", "true", reporter="flutter-machine", results=None),
+        _target_toml("widgets", "true", reporter=reporter, results=None),
     )
 
     assert main(["test"]) == 2
 
     err = capsys.readouterr().err
     assert "widgets" in err
-    assert "results" in err
+    assert "declare the `results` pattern" in err
+    assert "--run-tests" not in err
     assert not marker.exists()
+
+
+# Verifies: REQ-d00249-K
+def test_a_coverage_target_with_no_results_pattern_is_executed(tmp_path, monkeypatch, capsys):
+    """The negative: a coverage reporter reads no test results, so the
+    refusal does not apply to it."""
+    from elspais.cli import main
+
+    marker = tmp_path / "ran.txt"
+    _cli_project(
+        tmp_path,
+        monkeypatch,
+        _target_toml("cov", f"touch {marker}", reporter="lcov", results=None),
+    )
+
+    assert main(["test"]) == 0
+    assert marker.exists()
 
 
 # Verifies: REQ-d00249-K

@@ -1176,8 +1176,9 @@ class TestArgs:
 
     The exit code reflects only the targets: 1 if any target failed, 0 if all
     passed. Evaluate the checks separately with `elspais checks --expect ...`,
-    once, over every recorded result. A target must declare a `results`
-    pattern, because nothing reads its output while it runs.
+    once, over every recorded result. A target whose reporter reads test
+    results must declare a `results` pattern, because nothing reads its output
+    while it runs.
     """
 
     targets: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(

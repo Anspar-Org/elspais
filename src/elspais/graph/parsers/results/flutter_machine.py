@@ -32,7 +32,8 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from urllib.parse import unquote
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 from elspais.graph.parsers.results.diagnostics import DiagnosticRecorder
 
@@ -40,11 +41,13 @@ from elspais.graph.parsers.results.diagnostics import DiagnosticRecorder
 def _file_url_path(url: Any) -> str | None:
     """The path a ``file:`` URL names, or ``None`` for any other URL.
 
-    Dart writes ``file:///abs/path``. A ``package:`` or ``dart:`` URL names
-    no file of the project.
+    Dart writes ``file:///abs/path``, and ``file:///C:/abs/path`` on Windows.
+    The platform's own conversion turns the URL path into a local path, so a
+    Windows drive letter is kept. A ``package:`` or ``dart:`` URL names no
+    file of the project.
     """
     if isinstance(url, str) and url.startswith("file://"):
-        return unquote(url[len("file://") :])
+        return url2pathname(urlparse(url).path)
     return None
 
 

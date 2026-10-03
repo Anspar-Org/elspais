@@ -179,3 +179,42 @@ def test_a_record_names_where_its_test_is_declared_and_what_ran_it(
     assert record["root_line"] == root_line
     # The suite is the file that executed the test, wherever it is declared.
     assert record["runner_path"] == _RUNNER
+
+
+# ---------------------------------------------------------------------------
+# How a file URL becomes a local path
+# ---------------------------------------------------------------------------
+
+
+# Verifies: REQ-d00254-E
+def test_a_windows_file_url_keeps_its_drive_letter(monkeypatch):
+    """The Windows URL-to-path conversion is put in place of the POSIX one, so
+    the Windows behaviour is exercised on any platform."""
+    import warnings
+
+    from elspais.graph.parsers.results import flutter_machine
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        import nturl2path
+
+    monkeypatch.setattr(flutter_machine, "url2pathname", nturl2path.url2pathname)
+
+    (record,) = FlutterMachineParser().parse(
+        _one_test_stream({"line": 3, "url": "file:///C:/proj/my%20app/test/a_test.dart"})
+    )
+
+    assert record["source_path"] == r"C:\proj\my app\test\a_test.dart"
+    assert record["line"] == 3
+
+
+# Verifies: REQ-d00254-E
+@pytest.mark.parametrize(
+    "url",
+    ["package:flutter_test/src/widget_tester.dart", "dart:async/zone.dart"],
+    ids=["package", "dart"],
+)
+def test_a_url_that_is_not_a_file_url_names_no_path(url):
+    from elspais.graph.parsers.results.flutter_machine import _file_url_path
+
+    assert _file_url_path(url) is None

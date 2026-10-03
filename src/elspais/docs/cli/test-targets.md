@@ -644,10 +644,11 @@ gate alone. `--expect` makes a missing result of a named target a fault, so
 the gate stays strict.
 
 `elspais test` reads nothing while a command runs. Consequently, every target
-it executes must declare a `results` pattern that matches what the command
-writes into `$ELSPAIS_TARGET_OUTPUT`. A stdout reporter's output is not
-recorded on its own. The command refuses (exit 2), before it runs anything,
-a selection that holds a target with no `results` pattern.
+it executes whose reporter reads test results must declare a `results` pattern
+that matches what the command writes into `$ELSPAIS_TARGET_OUTPUT`. A stdout
+reporter's output is not recorded on its own. The command refuses (exit 2),
+before it runs anything, a selection that holds such a target with no
+`results` pattern. A coverage target is not affected.
 
 ## Groups
 

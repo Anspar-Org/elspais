@@ -166,9 +166,10 @@ passed. Each run empties the target's folder and records a fingerprint, as
                    refusals are those of `checks --run-tests` (exit 2).
   `--fail-fast`    Stop at the first target that fails.
 
-Every executed target must declare a `results` pattern, because this command
-reads nothing while a command runs. A selection that holds a target with no
-`results` pattern is refused before anything runs (exit 2). See
+Every executed target whose reporter reads test results must declare a
+`results` pattern, because this command reads nothing while a command runs. A
+selection that holds such a target with no `results` pattern is refused before
+anything runs (exit 2). A coverage target is not affected. See
 `elspais docs test-targets`, *Parallel jobs and one gate*.
 
 ## fingerprint

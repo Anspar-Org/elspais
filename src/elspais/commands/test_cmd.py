@@ -46,12 +46,11 @@ def run(args: argparse.Namespace) -> int:
     lost = unrecorded_targets(config, only)
     if lost:
         print(
-            f"error: target(s) {', '.join(lost)} declare no `results` pattern, and "
-            f"their reporter reads the command's output. This command evaluates no "
-            f"check, so their results would reach nothing. Have each command write "
-            f"its results into $ELSPAIS_TARGET_OUTPUT and declare the `results` "
-            f"pattern that matches them, or run `elspais checks --run-tests`, which "
-            f"reads the output while the command runs.",
+            f"error: target(s) {', '.join(lost)} declare no `results` pattern. This "
+            f"command evaluates no check and reads no output while a command runs, so "
+            f"their results would reach nothing. Have each command write its results "
+            f"into $ELSPAIS_TARGET_OUTPUT and declare the `results` pattern that "
+            f"matches them.",
             file=sys.stderr,
         )
         return 2
