@@ -656,6 +656,52 @@ A. The system SHALL also exist.
         assert check.findings == [], "every level here is configured"
         assert "Every requirement" in check.message
 
+    # Verifies: REQ-d00281-D
+    def test_REQ_d00281_D_a_requirement_without_a_level_is_named_as_declaring_none(
+        self, tmp_path: Path
+    ) -> None:
+        config_path = _make_config(tmp_path)
+        spec_dir = tmp_path / "spec"
+        spec_dir.mkdir()
+        (spec_dir / "reqs.md").write_text(
+            """# REQ-p00001: Defined Level
+
+**Level**: PRD | **Status**: Active
+
+## Assertions
+
+A. The system SHALL exist.
+
+*End* *Defined Level* | **Hash**: eeee5555
+
+# REQ-p00002: Levelless Requirement
+
+**Status**: Active
+
+## Assertions
+
+A. The system SHALL also exist.
+
+*End* *Levelless Requirement* | **Hash**: ffff6666
+"""
+        )
+
+        graph = _build(tmp_path, config_path)
+        config = _load_config(config_path)
+        levelless = graph.find_by_id("REQ-p00002")
+        assert levelless is not None
+        assert levelless.level == NO_DECLARED_LEVEL, (
+            "the requirement was expected to declare no level"
+        )
+
+        check = check_spec_undefined_levels(graph, config)
+
+        named = [f for f in check.findings if f.node_id == "REQ-p00002"]
+        assert len(named) == 1
+        message = named[0].message
+        assert "REQ-p00002 declares no level" in message
+        assert "unknown" not in message.lower()
+
 
 class TestCheckBrokenReferencesFindings:
     """Findings should identify each broken reference."""

@@ -676,19 +676,21 @@ def check_spec_undefined_levels(
     typed_config = _validate_config(config)
     defined = {k.lower() for k in typed_config.levels}
 
+    from elspais.graph.parsers.lark.transformers.requirement import NO_DECLARED_LEVEL
+
     findings: list[HealthFinding] = []
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT, namespace=namespace):
         level = (node.level or "").strip()
         if level and level.lower() not in defined:
-            findings.append(
-                HealthFinding(
-                    message=(
-                        f"{node.id} carries level '{level}', "
-                        "which this configuration does not define"
-                    ),
-                    node_id=node.id,
+            # A requirement with no Level line is stored with a placeholder; it
+            # declares no level rather than a level called by that name.
+            if node.level == NO_DECLARED_LEVEL:
+                message = f"{node.id} declares no level"
+            else:
+                message = (
+                    f"{node.id} carries level '{level}', which this configuration does not define"
                 )
-            )
+            findings.append(HealthFinding(message=message, node_id=node.id))
 
     if findings:
         return HealthCheck(
