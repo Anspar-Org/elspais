@@ -111,7 +111,7 @@ this requires.
 ## trace Command Options
 
   `--format {text,markdown,html,json,csv}`  Output format (default: markdown)
-  `--preset {minimal,standard,full}`        Named default value set
+  `--preset {minimal,standard,full,evidence}` Named default value set; `evidence` adds each assertion's code and tests with outcomes
   `--values KEY,KEY,...`  State exactly these values, in this order
   `--body`                Show requirement body text
   `--assertions`          Show individual assertions

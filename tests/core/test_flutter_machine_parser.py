@@ -297,3 +297,40 @@ def test_a_result_node_carries_its_duration_and_printed_output(tmp_path):
 
     assert node.get_field("duration") == 1.5
     assert node.get_field("output") == "ratio 0.9x\npause 12ms"
+
+
+def _started(test_id: int, name: str) -> str:
+    return json.dumps(
+        {"type": "testStart", "test": {"id": test_id, "name": name, "suiteID": 1, "line": 9}}
+    )
+
+
+# Verifies: REQ-d00285-G, REQ-d00254-Q
+@pytest.mark.parametrize(
+    ("stream", "partial"),
+    [
+        # The stream ends inside the second test, after the first finished.
+        (_STREAM + "\n" + _started(3, "cut off"), True),
+        # The stream ends inside the only test it started.
+        (_STREAM.split("\n")[0] + "\n" + _started(3, "cut off"), False),
+    ],
+    ids=["after-a-result", "before-any-result"],
+)
+def test_a_test_that_started_and_reported_no_result_is_recorded(stream, partial):
+    parser = FlutterMachineParser()
+
+    parser.parse(stream, "machine.jsonl")
+
+    (diagnostic,) = parser.iter_diagnostics()
+    assert diagnostic.path == "machine.jsonl"
+    assert "'cut off' started and reported no result" in diagnostic.cause
+    assert diagnostic.partial is partial
+
+
+# Verifies: REQ-d00285-G
+def test_a_stream_whose_tests_all_ended_records_nothing():
+    parser = FlutterMachineParser()
+
+    parser.parse(_STREAM, "machine.jsonl")
+
+    assert list(parser.iter_diagnostics()) == []

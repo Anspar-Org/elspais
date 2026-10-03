@@ -3964,7 +3964,8 @@ def check_test_results_stale(
     if severity == Severity.OFF:
         return skipped_check(
             "tests.results_stale",
-            "Test results whose inputs changed since they ran, or that carry no fingerprint",
+            "Test results whose inputs changed since they ran, that carry no fingerprint, "
+            "or that an Evidence Snapshot of another tree holds",
         )
 
     from elspais.utilities.fingerprint import judge
@@ -3973,6 +3974,17 @@ def check_test_results_stale(
     judged = 0
     for entry in graph.iter_repos():
         member = _validate_config(entry.config)
+        # Implements: REQ-d00322-K+L
+        # A snapshot the build read is judged against the tree of the member
+        # that names it.
+        evidence = member.scanning.test.evidence
+        if evidence and _reads_snapshot(graph, entry.namespace, evidence):
+            judged += 1
+            finding = _snapshot_staleness(
+                entry, evidence, root=entry.namespace == graph.root_repo_namespace
+            )
+            if finding is not None:
+                findings.append(finding)
         for target in member.scanning.test.targets:
             verdict = judge(entry.repo_root, member, target.name)
             # Implements: REQ-d00311-N
@@ -4005,10 +4017,79 @@ def check_test_results_stale(
     return HealthCheck(
         name="tests.results_stale",
         passed=False,
-        message=f"Test results are stale for {len(findings)} target(s)",
+        message=f"Test results are stale: {len(findings)} finding(s)",
         category="tests",
         severity=severity,
         findings=findings,
+    )
+
+
+# Implements: REQ-d00322-K+L
+def _reads_snapshot(graph: FederatedGraph, namespace: str, evidence: str) -> bool:
+    """Whether the member *namespace* read a target from its *Evidence Snapshot*.
+
+    The build holds the snapshot's results file as a node once it reads any
+    target from it, whether or not that target's run produced a result. A
+    snapshot whose selected targets produced none is still the source of
+    those targets, so it is judged too.
+    """
+    from elspais.graph.GraphNode import make_file_id
+
+    results = f"{evidence.strip('/')}/results.jsonl"
+    return graph.find_by_id(make_file_id(namespace, results)) is not None
+
+
+# Implements: REQ-d00322-K+L
+def _snapshot_staleness(entry: Any, evidence: str, *, root: bool) -> HealthFinding | None:
+    """A finding where the member's *Evidence Snapshot* describes another tree.
+
+    The snapshot's tree digest is compared with the digest of the member's
+    own tree. A tree whose digest cannot be computed is reported with the
+    cause, because a snapshot that cannot be judged is not known to be fresh.
+    *root* says whether the member is the invoking repository. A bare
+    command reaches only that repository (REQ-d00249-L), so a member's
+    remedy names its targets by namespace.
+    """
+    import subprocess
+
+    from elspais.commands._targets import qualified_target
+    from elspais.utilities.evidence import SnapshotUnreadable, load_snapshot, tree_digest
+
+    directory = evidence.strip("/")
+    where = f"{directory}/snapshot.json"
+    try:
+        snapshot = load_snapshot(entry.repo_root / directory, require_report=False)
+        recorded = snapshot.tree
+        current = tree_digest(entry.repo_root, exclude=directory).digest
+    except SnapshotUnreadable as exc:
+        return HealthFinding(
+            message=f"Evidence Snapshot {directory} could not be judged: {exc}",
+            repo=entry.name,
+            file_path=where,
+        )
+    except (subprocess.CalledProcessError, OSError) as exc:
+        return HealthFinding(
+            message=(
+                f"Evidence Snapshot {directory} could not be judged: the digest of "
+                f"the tree could not be computed ({exc})"
+            ),
+            repo=entry.name,
+            file_path=where,
+        )
+    if recorded == current:
+        return None
+    command = "elspais evidence write"
+    if not root:
+        command += "".join(
+            f" --targets {qualified_target(entry.namespace, name)}" for name, _ in snapshot.targets
+        )
+    return HealthFinding(
+        message=(
+            f"Evidence Snapshot {directory} describes another tree; write it "
+            f"again from a run of this tree with `{command}`"
+        ),
+        repo=entry.name,
+        file_path=where,
     )
 
 
@@ -5561,10 +5642,14 @@ def run(args: argparse.Namespace) -> int:
         from elspais.commands._scope import flag_values
 
         selected = list(flag_values(args, "targets"))
+        from elspais.commands._targets import qualified_target
         from elspais.commands.test_runner import (
             SelectionRefused,
             concurrency_refusal,
-            executable_selection,
+            describe_stale_only,
+            not_fresh_targets,
+            plan_target_runs,
+            unrecorded_targets,
         )
 
         # Implements: REQ-d00314-P
@@ -5573,39 +5658,72 @@ def run(args: argparse.Namespace) -> int:
             print(f"error: {concurrency_refusal(concurrency)}", file=sys.stderr)
             return 2
 
+        repo_root = find_git_root() or Path.cwd()
         try:
-            only = executable_selection(cfg, selected)
+            runs = plan_target_runs(cfg, repo_root, selected, raw_config=cfg_dict)
         except SelectionRefused as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
-        commandful = [
-            t for t in cfg.scanning.test.targets if t.command and (only is None or t.name in only)
+        # Implements: REQ-d00249-N
+        # A runner's captured output reaches the invoking repository's build
+        # alone, so a member's target that leaves no results on disk would
+        # run and credit nothing. It is refused before anything executes.
+        lost = [
+            run.spell(name)
+            for run in runs
+            if not run.is_root
+            for name in unrecorded_targets(run.config, run.only)
         ]
-        repo_root = find_git_root() or Path.cwd()
-        # Implements: REQ-d00315-B+F+G+H
-        # Every selected target stays expected; a stale-only run executes the
-        # ones whose results are not fresh and carries the rest.
-        if getattr(args, "stale_only", False):
-            from elspais.commands.test_runner import describe_stale_only, not_fresh_targets
-
-            execute, carry = not_fresh_targets(cfg, repo_root, only)
-            print(describe_stale_only(execute, carry), file=sys.stderr)
-            # The selection less what it carries, so a target with no command
-            # reads as it reads in the same run without --stale-only.
-            configured = {t.name for t in cfg.scanning.test.targets}
-            fresh = (configured if only is None else only) - carry
-            only = None if fresh == configured else fresh
-        results, captured_map = run_configured_targets(
-            cfg, repo_root, fail_fast=fail_fast, only=only, concurrency=concurrency
-        )
-        runner_failed = any(r.returncode != 0 for r in results)
-        # Implements: REQ-d00283-Q
-        from elspais.commands._targets import qualified_target
-
-        expected |= {qualified_target(cfg.project.namespace, t.name) for t in commandful}
+        if lost:
+            print(
+                f"error: target(s) {', '.join(lost)} of another member declare no "
+                f"`results` pattern, so their results would reach nothing. Have each "
+                f"command write its results into $ELSPAIS_TARGET_OUTPUT and declare "
+                f"the `results` pattern that matches them.",
+                file=sys.stderr,
+            )
+            return 2
+        captured_map: dict[str, str] = {}
+        # Implements: REQ-d00254-I
+        # A run that executes no target of this repository ran none of its
+        # targets fresh.
+        fresh: set[str] | None = set()
+        for target_run in runs:
+            only = target_run.only
+            # Implements: REQ-d00315-B+F+G+H
+            # Every selected target stays expected; a stale-only run executes
+            # the ones whose results are not fresh and carries the rest.
+            if getattr(args, "stale_only", False):
+                execute, carry = not_fresh_targets(target_run.config, target_run.repo_root, only)
+                print(describe_stale_only(execute, carry), file=sys.stderr)
+                # The selection less what it carries, so a target with no
+                # command reads as it reads in the same run without --stale-only.
+                configured = {t.name for t in target_run.config.scanning.test.targets}
+                remaining = (configured if only is None else only) - carry
+                only = None if remaining == configured else remaining
+            # Implements: REQ-d00249-N
+            results, captured = run_configured_targets(
+                target_run.config,
+                target_run.repo_root,
+                fail_fast=fail_fast,
+                only=only,
+                concurrency=concurrency,
+            )
+            runner_failed = runner_failed or any(r.returncode != 0 for r in results)
+            # Implements: REQ-d00283-Q
+            expected |= {
+                qualified_target(target_run.namespace, t.name)
+                for t in target_run.config.scanning.test.targets
+                if t.command and (target_run.only is None or t.name in target_run.only)
+            }
+            if target_run.is_root:
+                captured_map = captured
+                fresh = only
+            if fail_fast and runner_failed:
+                break
         args._captured_results = captured_map
         # Implements: REQ-d00254-I
-        args._fresh_targets = only
+        args._fresh_targets = fresh
         if fail_fast and runner_failed:
             skip_due_to_fail_fast = True
 

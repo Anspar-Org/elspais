@@ -17,6 +17,7 @@ Complete reference for all elspais commands.
 | `search` | Reports | Search requirements by keyword |
 | `test` | Reports | Execute test targets and record their results, evaluating no check |
 | `fingerprint` | Reports | Record the fingerprint of a test run elspais did not execute |
+| `evidence` | Reports | Write or verify the Evidence Snapshot: one test run's results, bound to the tree |
 | `gaps` | Gaps & Issues | List which requirements fall short of each coverage dimension |
 | `uncovered` | Gaps & Issues | List requirements without code coverage |
 | `untested` | Gaps & Issues | List requirements without test coverage |
@@ -215,6 +216,48 @@ refuses a `finish` that no `start` began, with exit 1. The reason is that
 `start` empties the folder. Without `start`, the results that an earlier run
 left there would carry the fingerprint of this run. An unknown target name exits 2. See
 `elspais docs test-targets`, *Target Folders and Fresh Results*.
+
+## evidence
+
+Write or verify the *Evidence Snapshot*: the normalized results of one test
+run of one tree, stored in the repository with the traceability report
+derived from it. `[scanning.test] evidence` names its directory.
+
+  $ elspais test                                    # run the targets
+  $ elspais evidence write --fact backends=vm       # store their results
+  $ elspais evidence verify --run --fact backends=vm  # CI: run again, compare
+
+`write` derives the snapshot from the selected targets' own results and
+writes `results.jsonl`, `snapshot.json`, `timings.jsonl` and
+`TRACEABILITY.md` into that directory. The report is rendered from the
+snapshot and the specification alone. A target whose results are absent,
+stale or still being written is refused by name (exit 2). A tree that holds
+uncommitted or untracked changes is named on stderr, and the snapshot is
+still written, but it then matches no commit.
+
+`verify` derives the same snapshot in memory and compares it with the one
+in the directory. It lists each test whose outcome differs, each result on
+one side only, a tree that differs, a declared fact or a target that
+differs, and a report that differs. Durations and printed output are never
+compared.
+
+  `--targets T...`     The targets or groups to hold. The selection and its
+                       refusals are those of `checks --run-tests`. A target
+                       with no command is accepted when another job left
+                       its results in the target's folder. `NAMESPACE:NAME`
+                       selects a federation member's targets, and the
+                       command then writes or verifies that member's
+                       snapshot. A selection spans one repository.
+  `--fact NAME=VALUE`  A fact about the run, held in `snapshot.json`
+                       (repeatable).
+  `--run`              (`verify` only) Execute the selected targets first, as
+                       `elspais test` does. Every selected target then needs
+                       a command.
+
+Exit codes: 0 when written or when the two snapshots agree, 1 when they
+differ, 2 for a refusal or an unreadable snapshot. What the snapshot holds,
+how a build reads it back, and the CI workflow are in `elspais docs
+test-targets`, section Evidence Snapshot.
 
 ## errors
 
@@ -534,7 +577,7 @@ Generate traceability matrix and reports.
 **Options:**
 
   `--format {text,markdown,html,json,csv}`  Output format (default: markdown)
-  `--preset {minimal,standard,full}`        Named default value set
+  `--preset {minimal,standard,full,evidence}` Named default value set; `evidence` adds each assertion's code and tests with outcomes
   `--values KEY,KEY,...` State exactly these values, in this order. A coverage figure is also selectable as the numbers behind it -- `implemented.count`, `implemented.total`, `implemented.ratio` -- and `verified.carried` states whether the Passing verdict was carried from a baseline (see `elspais docs traceability`)
   `--body`               Show requirement body text
   `--assertions`         Show individual assertions

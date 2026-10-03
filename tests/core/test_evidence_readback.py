@@ -426,5 +426,7 @@ def test_a_build_reading_only_the_snapshot_reads_it_after_a_finished_empty_run(t
     graph = _build(root, evidence_only=True, fresh_targets={"flutter"})
 
     (result,) = _results(graph)
-    assert result.get_field("carried") is True
+    # The build reading only the snapshot renders the snapshot's own run, so a
+    # target it names as fresh is that run, not a carried baseline.
+    assert result.get_field("carried") is False
     assert _unread(graph) == []

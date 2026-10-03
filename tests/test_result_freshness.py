@@ -359,6 +359,20 @@ def test_the_output_root_and_the_global_skip_list_are_never_inputs(tmp_path):
 
 
 # Verifies: REQ-d00311-M
+def test_the_evidence_snapshot_directory_is_never_an_input(tmp_path):
+    """A snapshot written from a run's results leaves those results fresh."""
+    root = _project(tmp_path)
+    config = _config([_target()])
+    config["scanning"]["test"]["evidence"] = "test-evidence"
+    _run(root, config)
+
+    (root / "test-evidence").mkdir()
+    (root / "test-evidence" / "results.jsonl").write_text("{}\n", encoding="utf-8")
+
+    assert judge(root, config, "unit").state == "fresh"
+
+
+# Verifies: REQ-d00311-M
 def test_a_scanning_kind_skip_is_not_an_exclusion_of_inputs(tmp_path):
     """Only the global skip list removes inputs.
 

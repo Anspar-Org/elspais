@@ -1559,9 +1559,11 @@ def _build_repository(
                 )
 
             def _read_evidence(target, scanned: frozenset[str]) -> bool:
-                """Ingest *target*'s results from the Evidence Snapshot, tagged carried.
+                """Ingest *target*'s results from the Evidence Snapshot.
 
-                Returns whether the snapshot holds the target and was read.
+                They are tagged carried, except in a build reading only the
+                snapshot for a target it names as fresh. Returns whether the
+                snapshot holds the target and was read.
                 """
                 if evidence_path is None or target.name not in evidence_lines:
                     return False
@@ -1578,6 +1580,13 @@ def _build_repository(
                     if (area / FINGERPRINT_NAME).is_file():
                         return False
                 _get_or_create_file_node(evidence_path, FileType.RESULT)
+                # Implements: REQ-d00322-F+J
+                # A build reading only the snapshot renders that snapshot's
+                # own run: the targets it names as fresh are that run, and
+                # their results are not carried from anything.
+                carried_here = not (
+                    evidence_only and fresh_targets is not None and target.name in fresh_targets
+                )
                 _ingest_target_results(
                     builder,
                     target,
@@ -1585,7 +1594,7 @@ def _build_repository(
                     repo_root,
                     str(evidence_path),
                     namespace=typed_config.project.namespace,
-                    carried=True,
+                    carried=carried_here,
                     scanned_tests=scanned,
                     reporter="evidence-snapshot",
                 )

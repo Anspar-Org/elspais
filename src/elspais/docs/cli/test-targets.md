@@ -64,11 +64,16 @@ as good as new ones against the same inputs. `elspais checks` reports nothing
 about fresh results. The results are **stale** when an input changed or when
 no run recorded a fingerprint for them. If an input changed, then the finding
 names it. `tests.results_stale` states which reason applies. File timestamps
-play no part.
+play no part. Results read from an *Evidence Snapshot* are judged by the
+snapshot's tree digest instead: a snapshot whose digest differs from that of
+the tree of the repository naming it is stale, and the finding names the
+snapshot directory. A federation member's snapshot is judged against that
+member's tree.
 
 A target's **inputs** are every file in the repository by default, whether or
-not git tracks it. Two sets of paths are never inputs: the output root, and
-the paths that the global `[scanning] skip` list names. The per-kind
+not git tracks it. Three sets of paths are never inputs: the output root, the
+*Evidence Snapshot* directory that `[scanning.test] evidence` names, and the
+paths that the global `[scanning] skip` list names. The per-kind
 `skip_dirs`/`skip_files` of `[scanning.spec]`, `[scanning.code]` and the rest
 do not apply here. Put anything that changes during every run in that global
 list. Examples are `.git`, `.elspais/`, and caches that a test tool writes
@@ -968,6 +973,29 @@ configuration declaring a group with the same name as a test target is refused
 when it is read, rather than resolved by a precedence rule every reader of that
 configuration would then have to know.
 
+### Targets of a federation member
+
+A run that executes targets reaches another federation member only where it
+names that member's target or group as `NAMESPACE:NAME`. The name resolves by
+that member's own configuration. The target executes with that member's
+configuration and repository root, and writes into that member's output area.
+A bare name, a run naming nothing, and the `default` group select only the
+invoking repository's targets:
+
+```text
+elspais test --targets LIB:unit              # the member LIB's `unit` target, in LIB
+elspais checks --run-tests --targets unit LIB:unit   # one in each repository
+```
+
+A member's target executes a command that the member's configuration declares.
+Consequently, the reader names it explicitly. A namespace no member declares,
+and a name the member does not declare, are refused (exit 2) before anything
+runs. `checks --run-tests` reads a member's results from its output area, so it
+refuses a member's target whose reporter reads test results and that declares
+no `results` pattern. `summary` and `trace` execute no target. Their
+`--targets` names only the invoking repository's targets, and they refuse a
+`NAMESPACE:NAME` as an unknown name.
+
 ## Per-PR selectivity
 
 `--targets NAME ...` (accepted by `checks --run-tests`, `summary` and `trace`,
@@ -1014,10 +1042,11 @@ exists for them:
   `verified.ratio` and `verified.carried` each state `null` in json and
   `n/a` in a cell.
 
-A `> Legend: ...` line explaining both markers is appended to `trace`'s
-markdown output whenever at least one row actually used one (never shown on
-a full run, and never shown for `--dimension uat`, which does not state
-`verified`).
+A `> Legend: ...` line is appended to `trace`'s markdown table whenever at
+least one row actually used a marker, explaining only the markers used
+(never shown on a full run, and never shown for `--dimension uat`, which
+does not state `verified`). The report an Evidence Snapshot holds describes
+that snapshot's own run, so its results carry no `(baseline)` marker.
 
 `summary` is level-aggregated, not per-requirement, so it can't show
 `(baseline)`/`—` inline. Instead, when any RESULT target was carried, the
@@ -1168,6 +1197,137 @@ elspais checks --run-tests --targets unit --expect e2e lib:unit
 ```
 
 See also: `elspais docs checks`
+
+## Evidence Snapshot
+
+An *Evidence Snapshot* is the normalized results of one test run of one tree.
+It is bound to that tree by its digest, and it is stored in the repository
+with the traceability report derived from it. A project commits it with the
+change it describes. CI then confirms that the snapshot describes that
+change. A consumer that pins the commit can cite its report without running
+the suites.
+
+A target's folder and the snapshot have different roles:
+
+| | `<output_root>/<target>/` | *Evidence Snapshot* |
+| --- | --- | --- |
+| Holds | The raw output of the target's last run, its coverage and its fingerprint | The normalized results of every selected target, and the report |
+| Lifetime | Local; emptied when a run starts | Committed with the change it describes |
+| Valid while | Its fingerprint matches the current inputs | Its tree digest matches the current tree |
+
+Name the snapshot's directory, from the repository root:
+
+```toml
+[scanning.test]
+evidence = "test-evidence"
+```
+
+The directory is never an input of a target. Consequently, writing a
+snapshot does not make a target's results stale.
+
+### What the snapshot holds
+
+- `results.jsonl` holds one line for each result of the selected targets.
+  Each line names the target, the repo-relative file and line that declare
+  the test, the test name, the file that executed the test where that file
+  differs, the outcome (`passed`, `failed` or `skipped`), and the skip reason
+  where the test gives one. Two runs of one test with one outcome are two
+  lines.
+- `snapshot.json` holds the digest of the tree, each selected target with the
+  digest of its inputs, the facts declared about the run, and the elspais
+  version that wrote it. No name is a JSON key beside a digest.
+- `timings.jsonl` holds each result's duration and the output the test
+  printed. `flutter-machine` supplies the printed output.
+- `TRACEABILITY.md` is `elspais trace --format markdown --preset evidence`,
+  rendered from the snapshot and the specification alone. For each assertion
+  it names the code that implements it and the tests that verify it, with
+  each test's outcome, by repo-relative file and line.
+
+Every file except `timings.jsonl` holds no duration, timestamp, absolute
+path, machine name or failure message. Consequently, two runs of one tree
+with the same outcomes and the same facts write the same bytes.
+
+The tree digest covers every file git tracks or has staged, except the
+snapshot directory. The same digest results in a working tree before a
+commit and in a checkout of that commit in CI. A target's digest covers the
+same files: an input that git ignores, such as a build cache, exists only
+where the run executed, so it never reaches the snapshot.
+
+### Writing and verifying
+
+```text
+elspais test                                       # run the targets
+elspais evidence write --fact backends=vm,postgres # hold their results
+elspais evidence verify --fact backends=vm,postgres
+```
+
+`evidence write` holds the results that the selected targets left in their
+folders. It refuses (exit 2), naming the target, a selected target whose
+results are absent, stale or in a run that is still in progress: a snapshot
+describes a finished run of the tree. It also refuses a selected target
+whose results the build could not read in full: a reporter that no parser
+reads, a results file that does not parse, or a stream that ends inside a
+test. A snapshot of those results would hold a shorter run as a finished
+one. A member's target is named as `NAMESPACE:NAME`, as it was selected.
+Where the tree holds changes that no
+commit holds, `write` names them on stderr and still writes. That snapshot
+then matches no checkout of any commit.
+
+`evidence verify` derives the same snapshot in memory and compares it with
+the snapshot in the directory. It lists each test whose outcome differs,
+each result on one side only, a tree digest that differs, a fact or a target
+that differs, and a report that differs. Durations and printed output are
+never compared. It exits 0 when the two agree and 1 when they differ.
+`--run` first executes the selected targets, as `elspais test` does.
+
+`--targets` selects as `checks --run-tests` does. elspais takes the facts
+from `--fact NAME=VALUE`, because only the project knows which toolchain
+or backend a target's command used. Pass the same facts to `verify` that
+the snapshot holds.
+
+### Reading a snapshot back
+
+A target that has not run in this tree, and that the run does not execute,
+reads its results from the snapshot. These results are tagged carried.
+Consequently, `trace`, `summary` and `checks` report from a checkout that
+has run nothing. A target that has results of its own reads only those. A
+target that ran and left no results is missing them.
+
+A snapshot whose tree digest differs from the digest of the current tree
+describes another tree. Its results are still read, and
+`tests.results_stale` names the snapshot directory. A snapshot is judged
+whenever a target is read from it, also where that target's run produced no
+result. For a federation member's snapshot, the finding names
+`elspais evidence write --targets NAMESPACE:NAME`, because a bare `write`
+reaches only the invoking repository.
+
+### A federation member's snapshot
+
+A federation member that names a snapshot, and that holds no results of its
+own, reads its results from its snapshot. The snapshot is judged against
+the member's own tree. A consumer that integrates the member then credits
+the tests of the member's recorded run.
+
+`--targets NAMESPACE:NAME` writes or verifies the member's snapshot, in the
+member's repository, with the member's configuration. A snapshot describes
+one repository, so a selection that names targets of two repositories is
+refused (exit 2).
+
+### The consumer's workflow
+
+```text
+# developer
+elspais test --targets all
+elspais evidence write --targets all --fact backends=vm,postgres
+git add test-evidence && git commit
+
+# CI: jobs run the targets in parallel and the gate job collects their folders
+elspais evidence verify --targets all --fact backends=vm,postgres
+```
+
+CI passes the facts the snapshot claims, so CI runs every backend that the
+snapshot names. A gate job that collects no folders runs
+`elspais evidence verify --run` instead.
 
 ## The Environment a Result Was Recorded In
 

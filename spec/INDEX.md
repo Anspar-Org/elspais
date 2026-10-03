@@ -220,7 +220,7 @@
 | REQ-d00298 | Report Export                                                 | dev-cli.md              | 8c1b78eb |
 | REQ-d00299 | Configuration as Graph Content                                | dev-graph-config.md     | 0577c0a5 |
 | REQ-d00300 | Viewer Remembered State                                       | dev-traceview-review.md | f794104b |
-| REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | 97bd3f1c |
+| REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | 4a31d912 |
 | REQ-d00312 | Test Target Output Areas                                      | dev-graph-core.md       | a0788b2a |
 | REQ-d00313 | Served Graph Currency                                         | dev-traceview-review.md | 8822f2a7 |
 | REQ-d00320 | Viewer Edit Controls State What They Do                       | dev-traceview-review.md | e8010396 |

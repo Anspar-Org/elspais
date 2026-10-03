@@ -484,15 +484,15 @@ Docs: `docs/configuration.md` gets a commented `# evidence = "test-evidence"` wi
 **Interfaces:**
 - Produces: `iter_assertion_coverage(req_node, kind_filter, *, edge_kinds=None, direct_only=False)` in `graph/aggregation.py` (same body as today); `location_of(node) -> str` in `graph/aggregation.py` returning `"<repo-relative path>:<line>"` from `node.file_node().get_field("relative_path")` and `node.get_field("parse_line")`; `derive_snapshot(graph, repo_root: Path, config: ElspaisConfig, targets: list[str], facts, report: str) -> Snapshot`; trace preset `"evidence"`.
 
-- [ ] **Step 1: Write failing tests** (sub-agent):
+- [x] **Step 1: Write failing tests** (sub-agent):
   - `derive_snapshot` over a built tmp project yields one `ResultLine` per RESULT node of the selected targets (outcome from `status`: `passed|failed|skipped`; `error` maps to `failed`), `runner` only where `runner_file != source_file`, `skip_reason` from `message` for skipped results only, failure messages excluded; `targets` holds every selected target even with zero results (Review Focus 1), digest = `manifest_digest(compute_manifest(...))`;
   - `trace --format markdown --preset evidence` over a project whose test ids carry absolute paths prints no absolute path (assert `str(tmp_path)` not in output) and prints, per assertion, `Code:` lines `- path:line` and `Tests:` lines `- path:line name -- passed`;
   - two renders of the same graph are identical;
   - a selected result that binds to no test, or whose file lies outside the repository, makes `derive_snapshot` raise `SnapshotRefused` naming the target, file and line.
 
-- [ ] **Step 2: Run -- FAIL.**
+- [x] **Step 2: Run -- FAIL.**
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
 
 Move `_iter_assertion_coverage` verbatim to `graph/aggregation.py` as `iter_assertion_coverage` (keep its `# Implements: REQ-d00066-B, REQ-d00066-D`), and import it in `mcp/server.py` under the old private name's call sites. Add:
 
@@ -510,7 +510,7 @@ Trace: add preset `"evidence"` = `standard`'s values with `include_assertions=Tr
 
 `derive_snapshot` raises `SnapshotRefused(reasons: list[str])` where any selected RESULT has `match_scope` other than `test` or `step` (it names no test), or a `source_file` that is absolute or starts with `..` (it lies outside the repository). Each reason names the target, the file and the line. Such a result would carry a machine-specific path into the snapshot and break byte stability (REQ-d00322-E). `evidence write` and `evidence verify` print the reasons and exit 2. `derive_snapshot` walks `graph.nodes_by_kind(NodeKind.RESULT)` (federated: only the host repository's entry -- `graph.iter_repos()` first entry), keeps those whose `target` is selected, builds `ResultLine`/`Timing`, reads facts as given, `tree=tree_digest(repo_root, exclude=config.scanning.test.evidence).digest`, `elspais=elspais.__version__`, `targets` from `fingerprint.compute_manifest` per selected target.
 
-- [ ] **Step 4: Run -- PASS** (plus the MCP tests touching `_iter_assertion_coverage`: `grep -rln iter_assertion_coverage tests`).
+- [x] **Step 4: Run -- PASS** (plus the MCP tests touching `_iter_assertion_coverage`: `grep -rln iter_assertion_coverage tests`).
 
 ---
 
@@ -523,13 +523,13 @@ Trace: add preset `"evidence"` = `standard`'s values with `include_assertions=Tr
 **Interfaces:**
 - Produces: `@dataclass(frozen=True) class Difference: kind: str; detail: str` with kinds `outcome`, `only_committed`, `only_current`, `tree`, `fact`, `target`, `report`; `compare(committed: Snapshot, current: Snapshot) -> list[Difference]`.
 
-- [ ] **Step 1: Write failing tests** (sub-agent): equal snapshots -> `[]`; one test passed->failed -> one `outcome` difference naming `file:line name (runner)`; a duplicate line on one side only -> one `only_committed`/`only_current` (multiset, Review Focus 4); tree differs -> `tree`; a fact differs -> `fact`; a target's input digest differs -> `target`; report text differs -> `report`; timings differences -> nothing.
+- [x] **Step 1: Write failing tests** (sub-agent): equal snapshots -> `[]`; one test passed->failed -> one `outcome` difference naming `file:line name (runner)`; a duplicate line on one side only -> one `only_committed`/`only_current` (multiset, Review Focus 4); tree differs -> `tree`; a fact differs -> `fact`; a target's input digest differs -> `target`; report text differs -> `report`; timings differences -> nothing.
 
-- [ ] **Step 2: Run -- FAIL.**
+- [x] **Step 2: Run -- FAIL.**
 
-- [ ] **Step 3: Implement** with `collections.Counter` over `ResultLine` minus `outcome` as identity: identity = `(target, file, line, name, runner)`; for each identity compare the sorted outcome lists; equal counts with different outcomes -> `outcome`; extra items -> `only_*`. Order the returned list by kind then detail.
+- [x] **Step 3: Implement** with `collections.Counter` over `ResultLine` minus `outcome` as identity: identity = `(target, file, line, name, runner)`; for each identity compare the sorted outcome lists; equal counts with different outcomes -> `outcome`; extra items -> `only_*`. Order the returned list by kind then detail.
 
-- [ ] **Step 4: Run -- PASS.**
+- [x] **Step 4: Run -- PASS.**
 
 ---
 
@@ -572,7 +572,7 @@ class EvidenceVerifyArgs:
     """Execute the selected targets first, as `elspais test` does."""
 ```
 
-- [ ] **Step 1: Write failing tests** (sub-agent), through `main([...])` in a tmp git repo with a stub target whose command writes a `flutter-machine` stream into `$ELSPAIS_TARGET_OUTPUT`:
+- [x] **Step 1: Write failing tests** (sub-agent), through `main([...])` in a tmp git repo with a stub target whose command writes a `flutter-machine` stream into `$ELSPAIS_TARGET_OUTPUT`:
   - no `evidence` setting -> exit 2 naming `scanning.test.evidence`;
   - a target with no `command` whose fresh results were copied into its output area (with their *Result Fingerprint*) -> `evidence write` accepts it; `evidence verify --run` refuses it as having no command;
   - `evidence write` before any run -> exit 2 naming the target as absent; after a run that changed an input mid-way -> exit 2 naming it stale (REQ-d00322-B);
@@ -581,9 +581,9 @@ class EvidenceVerifyArgs:
   - commit, then `evidence verify --fact backends=vm` -> exit 0; change the stub to fail, `evidence verify --run --fact backends=vm` -> exit 1 and stdout names the test with `passed -> failed`; `--fact backends=other` -> exit 1 naming the fact (REQ-d00322-H+I);
   - edit a source file after commit -> verify reports `tree`.
 
-- [ ] **Step 2: Run -- FAIL.**
+- [x] **Step 2: Run -- FAIL.**
 
-- [ ] **Step 3: Implement** `evidence_cmd.run`:
+- [x] **Step 3: Implement** `evidence_cmd.run`:
 
 ```python
 # Implements: REQ-d00322-A+B+F+H+I
@@ -639,7 +639,7 @@ def run(args: argparse.Namespace) -> int:
 
 Wire the args/cli exactly like `FingerprintArgs` (nested `EvidenceAction = Annotated[EvidenceWriteArgs, tyro.conf.subcommand("write")] | Annotated[EvidenceVerifyArgs, tyro.conf.subcommand("verify")]`, `ns.evidence_action`). Add the `## evidence` section to `commands.md` (usage lines, both subcommands, exit codes), regenerate tables, update `test_cli_args.py` (add `EvidenceArgs`, count +1).
 
-- [ ] **Step 4: Run -- PASS** (plus `tests/core/test_cli_args.py tests/core/test_doc_tables.py`).
+- [x] **Step 4: Run -- PASS** (plus `tests/core/test_cli_args.py tests/core/test_doc_tables.py`).
 
 - [ ] **Step 5: Commit** (milestone 2: Tasks 6-8). Bump the patch version. Message `[TOOL-123] Write and verify an Evidence Snapshot, with an evidence trace report`.
 
@@ -657,16 +657,16 @@ Wire the args/cli exactly like `FingerprintArgs` (nested `EvidenceAction = Annot
 **Interfaces:**
 - Produces: `@dataclass(frozen=True) class TargetRun: namespace: str; config: ElspaisConfig; repo_root: Path; only: set[str]`; `plan_target_runs(config, repo_root, selected: list[str]) -> list[TargetRun]` (in `test_runner.py`; raises `SelectionRefused`). Bare names and groups resolve in the root as today (`executable_selection`); a `NS:NAME` (target or group) resolves through `plan_federation` against that member's validated config, keeping `PlannedRepo.repo_root`; an unknown namespace or name is refused with the same wording `resolve_expected_targets` uses.
 
-- [ ] **Step 1: Write failing tests** (sub-agent), with a root and one associate in `tmp_path` (`[associates.lib] path = "../lib", namespace = "LIB"` -- copy the setup in `tests/config/test_federation_config.py`):
+- [x] **Step 1: Write failing tests** (sub-agent), with a root and one associate in `tmp_path` (`[associates.lib] path = "../lib", namespace = "LIB"` -- copy the setup in `tests/config/test_federation_config.py`):
   - `elspais test --targets LIB:unit` runs the associate's command with `cwd` under the associate, writes `lib/.results/unit/`, and does not run any root target; `elspais test` (bare) never runs `LIB:unit` (REQ-d00249-L);
   - the associate has a committed snapshot and no `.results` -> the root's federated graph reads the associate's results from it, carried (REQ-d00322-L);
   - the associate's snapshot tree digest no longer matches the associate's tree -> `tests.results_stale` has a finding naming the associate and the snapshot directory (REQ-d00322-K); matching digest -> no finding.
 
-- [ ] **Step 2: Run -- FAIL.**
+- [x] **Step 2: Run -- FAIL.**
 
-- [ ] **Step 3: Implement.** In `check_test_results_stale`, for each `entry` in `graph.iter_repos()` whose validated config sets `scanning.test.evidence` and whose graph holds a RESULT with `result_file` under that directory, compute `tree_digest(entry.repo_root, exclude=...)` and compare with `load_snapshot(...).tree`; on a mismatch add `HealthFinding(message=f"Evidence Snapshot {directory} describes another tree", repo=entry.name, file_path=f"{directory}/snapshot.json")`. Implement `plan_target_runs` and make `test_cmd.run`, `health.run` (`--run-tests`) and `evidence verify --run` loop over its `TargetRun`s calling `run_configured_targets(run.config, run.repo_root, only=run.only)`. `unrecorded_targets` is checked per run.
+- [x] **Step 3: Implement.** In `check_test_results_stale`, for each `entry` in `graph.iter_repos()` whose validated config sets `scanning.test.evidence` and whose graph holds a RESULT with `result_file` under that directory, compute `tree_digest(entry.repo_root, exclude=...)` and compare with `load_snapshot(...).tree`; on a mismatch add `HealthFinding(message=f"Evidence Snapshot {directory} describes another tree", repo=entry.name, file_path=f"{directory}/snapshot.json")`. Implement `plan_target_runs` and make `test_cmd.run`, `health.run` (`--run-tests`) and `evidence verify --run` loop over its `TargetRun`s calling `run_configured_targets(run.config, run.repo_root, only=run.only)`. `unrecorded_targets` is checked per run.
 
-- [ ] **Step 4: Run -- PASS** (plus `tests/test_test_runner.py`, `tests/test_health_expectation.py`).
+- [x] **Step 4: Run -- PASS** (plus `tests/test_test_runner.py`, `tests/test_health_expectation.py`).
 
 ---
 
@@ -721,7 +721,7 @@ Wire the args/cli exactly like `FingerprintArgs` (nested `EvidenceAction = Annot
 - Modify: `pyproject.toml` (patch bump)
 - Modify: CLAUDE.md (one bullet under the "No Duplicate Library Functions" list: "Evidence Snapshot: only `utilities/evidence.py` (`tree_digest`, `derive_snapshot`, `render_files`, `load_snapshot`, `compare`) ... Do NOT read or write `test-evidence/` files anywhere else."; and note `iter_assertion_coverage` now lives in `graph/aggregation.py`)
 
-- [ ] **Step 1: Write the docs.** Deterministic Syntax style; no counts; present tense.
-- [ ] **Step 2: Check** `markdownlint --config .markdownlint.json <changed .md>`, `.venv/bin/python -m elspais.utilities.doc_tables`, `.venv/bin/ruff check src tests`, `.venv/bin/ruff format --check src tests`, `PATH="$PWD/.venv/bin:$PATH" elspais fix`, `elspais --spec-dir spec checks --spec`.
+- [x] **Step 1: Write the docs.** Deterministic Syntax style; no counts; present tense.
+- [x] **Step 2: Check** `markdownlint --config .markdownlint.json <changed .md>`, `.venv/bin/python -m elspais.utilities.doc_tables`, `.venv/bin/ruff check src tests`, `.venv/bin/ruff format --check src tests`, `PATH="$PWD/.venv/bin:$PATH" elspais fix`, `elspais --spec-dir spec checks --spec`.
 - [ ] **Step 3: Commit** (milestone 3: Tasks 9-10). Message `[TOOL-123] Read a member's Evidence Snapshot, run a named member's targets, and document the snapshot`.
 - [ ] **Step 4: e2e verdict and push** via the `push` skill; then open the PR against `TOOL-123-record-terms` with `/hht-devkit:pr-create`.

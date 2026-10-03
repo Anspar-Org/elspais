@@ -279,7 +279,7 @@ class TestCollectSubtree:
 
 
 class TestComputeCoverageSummary:
-    """Validates REQ-d00075-B: Coverage summary reuses _iter_assertion_coverage()."""
+    """Validates REQ-d00075-B: Coverage summary reuses iter_assertion_coverage()."""
 
     # Verifies: REQ-d00075-B
     def test_REQ_d00075_B_coverage_with_tests(self, subtree_graph):

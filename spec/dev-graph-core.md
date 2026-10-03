@@ -1409,7 +1409,7 @@ An *Evidence Snapshot* lets a reader cite a commit's test results without runnin
 
 C excludes durations, timestamps, absolute paths, invocation identifiers and failure messages because each varies between runs of an unchanged tree. E depends on that exclusion. M keeps the measurements a timing guard prints, so they are not lost, and keeps them out of the comparison, so a measurement never fails a verification.
 
-D binds the results to a tree. The digest covers every file git tracks or has staged, apart from the snapshot itself, so a snapshot written over uncommitted work does not match the commit CI checks out.
+D binds the results to a tree. The digest covers every file git tracks or has staged, apart from the snapshot itself, so a snapshot written over uncommitted work does not match the commit CI checks out. A target's digest covers the same files, because a file git ignores exists only where the run executed, and E would fail between a working tree and a clone.
 
 J and L make the snapshot the source of a member's results in a federation, where a member checkout has run nothing. A target that ran in the tree, or that the current run executes, has results of its own even where it left none, so the snapshot never stands in for a run that produced nothing. K stops a snapshot of another tree from reading as current.
 
@@ -1485,7 +1485,7 @@ K. Where a test target declares an include set, the system SHALL use as its inpu
 
 L. Where a test target declares an exclude set, the system SHALL exclude from its inputs every file that the exclude set selects.
 
-M. The system SHALL exclude from the inputs of every test target the test output location and every path that the global skip list of the project names.
+M. The system SHALL exclude from the inputs of every test target the test output location, the directory that holds the *Evidence Snapshot*, and every path that the global skip list of the project names.
 
 N. While a run of a test target has started and has not recorded its end, the system SHALL report the run of that target as in progress in place of any judgement of the freshness of its results or its coverage.
 
@@ -1495,7 +1495,7 @@ P. A result SHALL keep binding to the test it names after the tree its run execu
 
 ### Rationale
 
-The inputs of a test target are the files whose content can change what its run reports, so results stay current exactly as long as those files are unchanged, and reuse of results from an earlier run is legitimate. The default takes every file because a missed dependency makes old results look current, which is worse than a needless run. What a run writes, and what tools keep for themselves while it runs, changes during every run, so the project names those paths in its global skip list.
+The inputs of a test target are the files whose content can change what its run reports, so results stay current exactly as long as those files are unchanged, and reuse of results from an earlier run is legitimate. The default takes every file because a missed dependency makes old results look current, which is worse than a needless run. What a run writes, and what tools keep for themselves while it runs, changes during every run, so the project names those paths in its global skip list. An *Evidence Snapshot* is written from a run's results after the run ends, so it is never an input of that run.
 
 A run empties its output area when it starts and writes its results while it runs, so an area whose run has not finished holds results that are partial or not yet written. Judging their freshness would report a run that is still going as one that produced nothing, or as one that is complete. N reports the fact instead, and O gives the time it started so a reader can decide for themselves whether the run is still going. Whether a run that expects the target is owed those results is a separate question, which REQ-d00283-R answers.
 
@@ -1506,8 +1506,9 @@ A tree that moves after its tests ran keeps its results. A reporter often record
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a run in progress replaces the freshness judgement of its results, and leaves to REQ-d00283-R whether an expected target is missing them (N)
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a result keeps binding to its test after the tree its run executed in moves (P)
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the run fingerprint with the Defined Term Result Fingerprint (D)
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: the Evidence Snapshot directory is never an input of a test target (M)
 
-*End* *Test Result Freshness* | **Hash**: 97bd3f1c
+*End* *Test Result Freshness* | **Hash**: 4a31d912
 
 ## REQ-d00312: Test Target Output Areas
 

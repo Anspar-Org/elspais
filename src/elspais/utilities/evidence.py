@@ -1,8 +1,8 @@
 """The *Evidence Snapshot*: the normalized results of one test run of one tree.
 
 This module owns the tree digest that binds a snapshot to a tree, the
-snapshot's model, the byte form of the files it holds, and reading those
-files back.
+snapshot's model, its derivation from a built graph, the byte form of the
+files it holds, reading those files back, and comparing two snapshots.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -28,10 +29,15 @@ _LINE_JSON: dict[str, Any] = {
 
 @dataclass(frozen=True)
 class TreeDigest:
-    """The digest of a tree, and the changes it holds that no commit holds."""
+    """The digest of a tree, the files it covers, and the changes no commit holds.
+
+    *paths* names the repo-relative files the digest covers, so a target's
+    inputs can be read over the same files.
+    """
 
     digest: str
     uncommitted: tuple[str, ...]
+    paths: frozenset[str]
 
 
 def _under(path: str, prefix: str) -> bool:
@@ -52,7 +58,8 @@ def tree_digest(repo_root: Path, exclude: str) -> TreeDigest:
     """
     prefix = exclude.strip("/") + "/"
     h = hashlib.sha256()
-    for rel in sorted(p for p in list_index_files(repo_root) if not _under(p, prefix)):
+    paths = frozenset(p for p in list_index_files(repo_root) if not _under(p, prefix))
+    for rel in sorted(paths):
         file = repo_root / rel
         if file.is_symlink():
             content = os.readlink(file).encode("utf-8")
@@ -66,7 +73,7 @@ def tree_digest(repo_root: Path, exclude: str) -> TreeDigest:
     uncommitted = tuple(
         sorted({p for p in list_uncommitted_files(repo_root) if not _under(p, prefix)})
     )
-    return TreeDigest(digest=h.hexdigest(), uncommitted=uncommitted)
+    return TreeDigest(digest=h.hexdigest(), uncommitted=uncommitted, paths=paths)
 
 
 class SnapshotUnreadable(Exception):
@@ -368,3 +375,257 @@ def parse_facts(pairs: list[str]) -> tuple[tuple[str, str], ...]:
             raise ValueError(f"fact {name!r} is given twice")
         facts[name] = value
     return tuple(sorted(facts.items()))
+
+
+class SnapshotRefused(Exception):
+    """The selected results cannot be held in an *Evidence Snapshot*.
+
+    Each reason names the target, the file and the line it concerns.
+    """
+
+    def __init__(self, reasons: list[str]) -> None:
+        super().__init__("; ".join(reasons))
+        self.reasons = reasons
+
+
+# A status a reporter gives, as the outcome a snapshot holds.
+_OUTCOME_OF = {"passed": "passed", "failed": "failed", "error": "failed", "skipped": "skipped"}
+
+
+def _relative(path: str | None) -> bool:
+    return bool(path) and not os.path.isabs(path) and not path.startswith("..")
+
+
+def _declared_at(result: Any) -> tuple[str, int | None] | None:
+    """The repo-relative file and line of the test *result* names, or None.
+
+    A read-back binds a snapshot's result to its test by this place. So the
+    place is the bound test's own, not the line a reporter gave: a
+    `testWidgets` result names a framework line and binds by its root line.
+    A step-scope result binds by its step and its file, and keeps both.
+    """
+    from elspais.graph.annotators import result_names_no_test
+    from elspais.graph.GraphNode import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    if result_names_no_test(result):
+        return None
+    source_file = result.get_field("source_file")
+    if result.get_field("match_scope") == "step":
+        return source_file, result.get_field("line")
+    places: dict[tuple[str, int | None], Any] = {}
+    for test in result.iter_parents(edge_kinds={EdgeKind.YIELDS}):
+        if test.kind is not NodeKind.TEST:
+            continue
+        file = test.file_node()
+        rel = file.get_field("relative_path") if file else None
+        if rel:
+            places[(rel, test.get_field("parse_line"))] = test
+    for place in (
+        (source_file, result.get_field("line")),
+        (result.get_field("root_file") or source_file, result.get_field("root_line")),
+    ):
+        if place in places:
+            return place
+    # A group holding the test also yields it; one test alone is unambiguous.
+    return next(iter(places)) if len(places) == 1 else None
+
+
+# Implements: REQ-d00322-A+C+D+E+M
+def derive_snapshot(
+    graph: Any,
+    repo_root: Path,
+    config: Any,
+    targets: list[str],
+    facts: tuple[tuple[str, str], ...],
+    report: str,
+    *,
+    tree: TreeDigest | None = None,
+    spell: Callable[[str], str] = str,
+) -> Snapshot:
+    """Derive the *Evidence Snapshot* of the selected *targets* from *graph*.
+
+    Each RESULT of a selected target in this repository becomes one result
+    line and one timing. Every selected target is held with the digest of
+    its inputs, even where its run produced no result. A target's digest
+    covers only the inputs the tree digest covers: a file git does not
+    track is absent from a checkout, so it would make two runs of one tree
+    disagree (REQ-d00322-E). *tree* is the digest of the repository's tree
+    where the caller already has it. *spell* names a target as the reader
+    selects it.
+
+    Raises `SnapshotRefused` where a selected result names no test, or a
+    file outside the repository: the snapshot could not bind it back, or
+    would hold a path from one machine (REQ-d00322-E).
+    """
+    import elspais
+    from elspais.graph.GraphNode import NodeKind
+    from elspais.utilities.fingerprint import compute_manifest, manifest_digest
+
+    by_name = {t.name: t for t in config.scanning.test.targets}
+    unknown = sorted(set(targets) - set(by_name))
+    if unknown:
+        raise SnapshotRefused([f"no test target named {spell(name)!r}" for name in unknown])
+    selected = set(targets)
+
+    results: list[ResultLine] = []
+    timings: list[Timing] = []
+    reasons: list[str] = []
+    for node in graph.nodes_by_kind(NodeKind.RESULT, namespace=config.project.namespace):
+        target = node.get_field("target")
+        if target not in selected:
+            continue
+        name = node.get_field("name") or ""
+        where = f"target {spell(target)}: {node.get_field('source_file') or '?'}"
+        where += f":{node.get_field('line')} {name}" if node.get_field("line") else f" {name}"
+        status = node.get_field("status")
+        outcome = _OUTCOME_OF.get(status or "")
+        if outcome is None:
+            reasons.append(f"{where}: outcome {status!r} is not passed, failed or skipped")
+            continue
+        place = _declared_at(node)
+        if place is None:
+            reasons.append(f"{where}: the result binds to no single test")
+            continue
+        file, line = place
+        runner = node.get_field("runner_file")
+        runner = runner if runner and runner != file else None
+        if not file:
+            reasons.append(f"{where}: the result names no file")
+            continue
+        if not _relative(file) or (runner is not None and not _relative(runner)):
+            reasons.append(f"{where}: the test lies outside the repository")
+            continue
+        skip_reason = node.get_field("message") if outcome == "skipped" else None
+        results.append(
+            ResultLine(
+                target=target,
+                file=file,
+                line=line,
+                name=name,
+                runner=runner,
+                outcome=outcome,
+                skip_reason=skip_reason or None,
+            )
+        )
+        timings.append(
+            Timing(
+                target=target,
+                file=file,
+                line=line,
+                name=name,
+                runner=runner,
+                duration=float(node.get_field("duration") or 0.0),
+                output=node.get_field("output") or "",
+            )
+        )
+    if reasons:
+        raise SnapshotRefused(sorted(reasons))
+
+    if tree is None:
+        tree = tree_digest(repo_root, exclude=config.scanning.test.evidence)
+
+    def inputs_digest(name: str) -> str:
+        manifest = compute_manifest(repo_root, config, by_name[name])
+        return manifest_digest({p: d for p, d in manifest.items() if p in tree.paths})
+
+    return Snapshot(
+        results=tuple(sorted(results, key=ResultLine.key)),
+        tree=tree.digest,
+        targets=tuple((name, inputs_digest(name)) for name in sorted(selected)),
+        facts=tuple(sorted(facts)),
+        elspais=elspais.__version__,
+        timings=tuple(sorted(timings, key=Timing.key)),
+        report=report,
+    )
+
+
+@dataclass(frozen=True)
+class Difference:
+    """One way a committed *Evidence Snapshot* differs from a current one.
+
+    ``kind`` is ``outcome``, ``only_committed``, ``only_current``, ``tree``,
+    ``fact``, ``target`` or ``report``.
+    """
+
+    kind: str
+    detail: str
+
+
+def _test_named(
+    identity: tuple[str, str, int | None, str, str | None], spell: Callable[[str], str]
+) -> str:
+    target, file, line, name, runner = identity
+    place = f"{file}:{line}" if line is not None else file
+    ran_by = f" ({runner})" if runner else ""
+    return f"target {spell(target)}: {place} {name}{ran_by}"
+
+
+def _pairs_differ(
+    kind: str, committed: dict[str, str], current: dict[str, str]
+) -> list[Difference]:
+    out = []
+    for name in sorted(committed.keys() | current.keys()):
+        old, new = committed.get(name), current.get(name)
+        if old != new:
+            before = "absent" if old is None else repr(old)
+            after = "absent" if new is None else repr(new)
+            out.append(Difference(kind, f"{name}: {before} -> {after}"))
+    return out
+
+
+# Implements: REQ-d00322-H+M
+def compare(
+    committed: Snapshot, current: Snapshot, *, spell: Callable[[str], str] = str
+) -> list[Difference]:
+    """Each difference between a committed snapshot and a current one.
+
+    *spell* names a target as the reader selects it.
+
+    A test is identified by its target, file, line, name and runner. Each of
+    its runs is counted, so a run present on one side only is a difference
+    even where an identical run is on both. Outcomes held on both sides
+    cancel first; a remaining pair is an outcome that changed, and what is
+    left unpaired is a run on one side only. Durations and printed output
+    are never compared. The list is ordered by kind, then detail.
+    """
+    from collections import Counter
+
+    def runs(snapshot: Snapshot) -> dict[tuple, Counter]:
+        out: dict[tuple, Counter] = {}
+        for r in snapshot.results:
+            identity = (r.target, r.file, r.line, r.name, r.runner)
+            out.setdefault(identity, Counter())[r.outcome] += 1
+        return out
+
+    differences: list[Difference] = []
+    old_runs, new_runs = runs(committed), runs(current)
+    for identity in old_runs.keys() | new_runs.keys():
+        old = old_runs.get(identity, Counter())
+        new = new_runs.get(identity, Counter())
+        common = old & new
+        left = sorted((old - common).elements())
+        right = sorted((new - common).elements())
+        test = _test_named(identity, spell)
+        for before, after in zip(left, right, strict=False):
+            differences.append(Difference("outcome", f"{test}: {before} -> {after}"))
+        for outcome in left[len(right) :]:
+            differences.append(Difference("only_committed", f"{test}: {outcome}"))
+        for outcome in right[len(left) :]:
+            differences.append(Difference("only_current", f"{test}: {outcome}"))
+    if committed.tree != current.tree:
+        differences.append(
+            Difference("tree", f"the snapshot describes tree {committed.tree}, not {current.tree}")
+        )
+    differences += _pairs_differ("fact", dict(committed.facts), dict(current.facts))
+    differences += _pairs_differ(
+        "target",
+        {spell(n): d for n, d in committed.targets},
+        {spell(n): d for n, d in current.targets},
+    )
+    # The file always ends with one line feed, however the report was held.
+    if render_files(committed)["TRACEABILITY.md"] != render_files(current)["TRACEABILITY.md"]:
+        differences.append(
+            Difference("report", "TRACEABILITY.md differs from the report the snapshot renders")
+        )
+    return sorted(differences, key=lambda d: (d.kind, d.detail))

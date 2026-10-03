@@ -109,9 +109,10 @@ def input_files(repo_root: Path, config: Any, target: Any) -> list[Path]:
     (directories and file patterns) limits the inputs. The exclude set
     (skipped directories and files) removes inputs. The walk applies the skip
     patterns first. Consequently, an exclusion wins over an inclusion. Every
-    target excludes the output root and the global skip list. The skip lists
-    of each scanning kind do not apply. Those lists control what a scan reads.
-    They do not control what a run depends on.
+    target excludes the output root, the *Evidence Snapshot* directory and
+    the global skip list: a run writes the first two, so neither is an input
+    of it. The skip lists of each scanning kind do not apply. Those lists
+    control what a scan reads. They do not control what a run depends on.
     """
     from elspais.graph.file_selection import select_files
 
@@ -119,7 +120,10 @@ def input_files(repo_root: Path, config: Any, target: Any) -> list[Path]:
     root = Path(repo_root).resolve()
     inputs = target.inputs
     everywhere = list(typed.scanning.skip)
+    # Implements: REQ-d00311-M
     fixed_dirs = [typed.scanning.test.output_root.strip("/")]
+    if typed.scanning.test.evidence:
+        fixed_dirs.append(typed.scanning.test.evidence.strip("/"))
     selection = select_files(
         root,
         list(inputs.directories) or ["."],

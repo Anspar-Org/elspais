@@ -8,14 +8,19 @@ than which it is to execute. Both questions have one answer, so both reach
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 __all__ = [
     "MEMBER_SEPARATOR",
+    "FederationMember",
+    "federation_members",
     "qualified_target",
     "resolve_expected_targets",
     "resolve_fresh_targets",
+    "split_by_member",
+    "unknown_namespace_refusal",
 ]
 
 
@@ -128,33 +133,21 @@ def resolve_expected_targets(
     if refusal := last_run_refusal(wanted, flag="--expect"):
         raise ValueError(refusal)
     root_ns = root_cfg.project.namespace
-
-    by_member: dict[str, list[str]] = {}
-    for name in wanted:
-        namespace, sep, rest = name.partition(MEMBER_SEPARATOR)
-        if sep:
-            if not rest.strip():
-                raise ValueError(
-                    f"--expect {name} names no target or group after the namespace. "
-                    f"Write the member's namespace, `{MEMBER_SEPARATOR}`, and a target "
-                    f"or group that member declares."
-                )
-            by_member.setdefault(namespace.strip(), []).append(rest.strip())
-        else:
-            by_member.setdefault(root_ns, []).append(name)
+    by_member = split_by_member(wanted, root_ns, flag="--expect")
 
     members: dict[str, Any] = {root_ns: root_cfg}
     if set(by_member) - {root_ns}:
-        members = _federation_configs(config, root_cfg, repo_root)
+        members = {
+            ns: member.config
+            for ns, member in federation_members(
+                config, root_cfg, repo_root, flag="--expect"
+            ).items()
+        }
 
     expected: set[str] = set()
     for namespace, names in by_member.items():
         if namespace not in members:
-            raise ValueError(
-                f"unknown --expect namespace: {namespace} (in "
-                f"{', '.join(qualified_target(namespace, n) for n in names)}). "
-                f"Members of this federation: {', '.join(sorted(members))}."
-            )
+            raise ValueError(unknown_namespace_refusal(namespace, names, members, flag="--expect"))
         expected |= {
             qualified_target(namespace, t)
             for t in _member_expected(members[namespace], names, namespace, root_ns)
@@ -180,12 +173,66 @@ def _member_expected(cfg: Any, names: list[str], namespace: str, root_ns: str) -
     return set(configured) if chosen is None else set(chosen) & configured
 
 
-def _federation_configs(config: Any, root_cfg: Any, repo_root: Path | None) -> dict[str, Any]:
-    """Every federation member's validated configuration, keyed by its namespace.
+# Implements: REQ-d00283-W, REQ-d00249-L
+def split_by_member(names: list[str], root_ns: str, *, flag: str) -> dict[str, list[str]]:
+    """Group *names* by the member each one names, keyed by namespace.
+
+    A bare name belongs to the invoking repository, *root_ns*. A name written
+    after a namespace and :data:`MEMBER_SEPARATOR` belongs to that member.
+
+    Raises:
+        ValueError: A name holds a namespace and no target or group after it.
+    """
+    by_member: dict[str, list[str]] = {}
+    for name in names:
+        namespace, sep, rest = name.partition(MEMBER_SEPARATOR)
+        if sep:
+            if not rest.strip():
+                raise ValueError(
+                    f"{flag} {name} names no target or group after the namespace. "
+                    f"Write the member's namespace, `{MEMBER_SEPARATOR}`, and a target "
+                    f"or group that member declares."
+                )
+            by_member.setdefault(namespace.strip(), []).append(rest.strip())
+        else:
+            by_member.setdefault(root_ns, []).append(name)
+    return by_member
+
+
+def unknown_namespace_refusal(namespace: str, names: list[str], members: Any, *, flag: str) -> str:
+    """The one wording for a selection naming a namespace no member declares."""
+    return (
+        f"unknown {flag} namespace: {namespace} (in "
+        f"{', '.join(qualified_target(namespace, n) for n in names)}). "
+        f"Members of this federation: {', '.join(sorted(members))}."
+    )
+
+
+@dataclass(frozen=True)
+class FederationMember:
+    """One member of the federation, as a run that names it needs it."""
+
+    namespace: str
+    config: Any  # the validated ElspaisConfig
+    raw_config: dict[str, Any]
+    repo_root: Path
+
+
+# Implements: REQ-d00202-D, REQ-d00249-L
+def federation_members(
+    config: Any, root_cfg: Any, repo_root: Path | None, *, flag: str
+) -> dict[str, FederationMember]:
+    """Every federation member, keyed by its namespace.
 
     Membership is ``plan_federation``'s answer, never the root's associate
     table read here, so a member reached through another member's declarations
-    is a member too (REQ-d00202-D).
+    is a member too (REQ-d00202-D). Each member keeps its own configuration
+    and repository root, because a run of its targets executes there.
+    *flag* is the option that named a member, so a refusal names it.
+
+    Raises:
+        ValueError: The federation cannot be planned, or a member's
+            configuration cannot be read.
     """
     from elspais.config import find_git_root, validate_config
     from elspais.graph.federation_plan import FederationError, plan_federation
@@ -195,18 +242,21 @@ def _federation_configs(config: Any, root_cfg: Any, repo_root: Path | None) -> d
     try:
         plan = plan_federation(raw, root)
     except FederationError as exc:
-        raise ValueError(f"--expect names another member, and the federation: {exc}") from exc
-    members: dict[str, Any] = {}
+        raise ValueError(f"{flag} names another member, and the federation: {exc}") from exc
+    members: dict[str, FederationMember] = {}
     unreadable: dict[str, str] = {}
     for member in plan:
         if member.config is None:
             unreadable[member.name] = member.error or "its configuration could not be read"
             continue
         member_cfg = validate_config(member.config)
-        members[member_cfg.project.namespace] = member_cfg
+        members[member_cfg.project.namespace] = FederationMember(
+            namespace=member_cfg.project.namespace,
+            config=member_cfg,
+            raw_config=member.config,
+            repo_root=member.repo_root,
+        )
     if unreadable:
         reasons = "; ".join(f"{name}: {why}" for name, why in sorted(unreadable.items()))
-        raise ValueError(
-            f"--expect names another member, and a member could not be read: {reasons}"
-        )
+        raise ValueError(f"{flag} names another member, and a member could not be read: {reasons}")
     return members

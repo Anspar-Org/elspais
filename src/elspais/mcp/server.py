@@ -43,7 +43,7 @@ from __future__ import annotations
 
 import functools
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -68,6 +68,7 @@ from elspais.graph.aggregation import (
     covered_labels,
     dimension_measures,
     is_covered,
+    iter_assertion_coverage,
     measure_by_label,
     measure_total,
 )
@@ -143,70 +144,6 @@ def _relative_source_path(node: Any, graph: FederatedGraph | None) -> str:
         except ValueError:
             return raw  # outside repo, keep as-is
     return raw
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Shared coverage traversal iterator (REQ-d00066-B, REQ-d00066-D)
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-# Implements: REQ-d00066-B, REQ-d00066-D
-def _iter_assertion_coverage(
-    req_node: Any,
-    kind_filter: NodeKind,
-    *,
-    edge_kinds: set[EdgeKind] | None = None,
-    direct_only: bool = False,
-) -> Iterator[tuple[Any, list[str]]]:
-    """Yield ``(node, labels)`` for each TEST or CODE node covering *req_node*.
-
-    Two-phase edge traversal:
-
-    Phase 1 — ``req_node.iter_outgoing_edges()``:
-      * If ``assertion_targets`` is set → those labels
-      * If absent → ALL assertion labels (indirect / blanket coverage)
-
-    Phase 2 — For each ASSERTION child → ``iter_outgoing_edges()``:
-      * Yields ``(node, [that_label])``
-
-    The same node may be yielded more than once (e.g. via both phases).
-    Callers are responsible for deduplication.
-
-    Args:
-        edge_kinds: If set, only consider edges whose kind is in this set.
-        direct_only: If True, skip Phase 1 edges that have no
-            ``assertion_targets`` (blanket coverage).
-    """
-    # Collect all assertion labels for the indirect-coverage case
-    all_labels: list[str] = []
-    assertion_children: list[tuple[Any, str]] = []  # (assertion_node, label)
-    for child in req_node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            label = child.get_field("label", "")
-            all_labels.append(label)
-            assertion_children.append((child, label))
-
-    # Phase 1: REQ → kind_filter edges
-    for edge in req_node.iter_outgoing_edges():
-        if edge_kinds and edge.kind not in edge_kinds:
-            continue
-        target = edge.target
-        if target.kind != kind_filter:
-            continue
-        if edge.assertion_targets:
-            yield target, list(edge.assertion_targets)
-        elif not direct_only:
-            yield target, list(all_labels)
-
-    # Phase 2: ASSERTION → kind_filter edges
-    for assertion_node, label in assertion_children:
-        for edge in assertion_node.iter_outgoing_edges():
-            if edge_kinds and edge.kind not in edge_kinds:
-                continue
-            target = edge.target
-            if target.kind != kind_filter:
-                continue
-            yield target, [label]
 
 
 # Implements: REQ-d00064-C, REQ-d00064-D
@@ -4736,14 +4673,14 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     # whole-requirement test -- it is real evidence and the caller should see
     # it. The covered/uncovered verdict is strict: a blanket `Verifies:` names
     # no assertion, so it covers none of them.
-    for test_node, _labels in _iter_assertion_coverage(node, NodeKind.TEST):
+    for test_node, _labels in iter_assertion_coverage(node, NodeKind.TEST):
         if test_node.id in seen_test_ids:
             continue
         seen_test_ids.add(test_node.id)
 
         test_nodes.append(_serialize_test_info(test_node, graph))
 
-    for _test_node, labels in _iter_assertion_coverage(node, NodeKind.TEST, direct_only=True):
+    for _test_node, labels in iter_assertion_coverage(node, NodeKind.TEST, direct_only=True):
         for label in labels:
             if label in label_to_id:
                 covered_assertion_ids.add(label_to_id[label])
@@ -4795,7 +4732,7 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     jny_nodes: list[dict[str, Any]] = []
     covered_uat_assertion_ids: set[str] = set()
 
-    for jny_node, labels in _iter_assertion_coverage(node, NodeKind.USER_JOURNEY):
+    for jny_node, labels in iter_assertion_coverage(node, NodeKind.USER_JOURNEY):
         # Track covered assertions
         for label in labels:
             if label in label_to_id:
@@ -4924,7 +4861,7 @@ def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
     Returns a structure mapping each assertion label to its tests and their
     results, enabling the UI to show validation buttons per assertion.
 
-    Uses ``_iter_assertion_coverage`` for the shared two-phase traversal
+    Uses ``iter_assertion_coverage`` for the shared two-phase traversal
     and ``_serialize_test_info`` for the unified serializer.
 
     Args:
@@ -4953,7 +4890,7 @@ def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
 
     seen_per_assertion: dict[str, set[str]] = {label: set() for _, label in assertions}
 
-    for test_node, labels in _iter_assertion_coverage(node, NodeKind.TEST):
+    for test_node, labels in iter_assertion_coverage(node, NodeKind.TEST):
         info = _serialize_test_info(test_node, graph)
         for label in labels:
             if label not in assertion_tests:
@@ -4978,7 +4915,7 @@ def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]
     Returns a structure mapping each assertion label to its USER_JOURNEY nodes
     and their results, enabling the UI to show UAT Covered/UAT Passed buttons.
 
-    Uses ``_iter_assertion_coverage`` for the shared two-phase traversal
+    Uses ``iter_assertion_coverage`` for the shared two-phase traversal
     and ``_serialize_journey_info`` for the serializer (a journey's results
     hang off its step-verifying TESTs, not the JNY node itself).
 
@@ -5008,7 +4945,7 @@ def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]
 
     seen_per_assertion: dict[str, set[str]] = {label: set() for _, label in assertions}
 
-    for jny_node, labels in _iter_assertion_coverage(node, NodeKind.USER_JOURNEY):
+    for jny_node, labels in iter_assertion_coverage(node, NodeKind.USER_JOURNEY):
         info = _serialize_journey_info(jny_node, graph)
         for label in labels:
             if label not in assertion_journeys:
@@ -5035,7 +4972,7 @@ def _get_assertion_code_map(
     Returns a structure mapping each assertion label to its CODE nodes,
     enabling the UI to show "Implemented" buttons per assertion.
 
-    Uses ``_iter_assertion_coverage`` for the shared two-phase traversal
+    Uses ``iter_assertion_coverage`` for the shared two-phase traversal
     and ``_serialize_code_info`` for the unified serializer.
 
     Args:
@@ -5078,7 +5015,7 @@ def _get_assertion_code_map(
             iter_kwargs["edge_kinds"] = {ek}
             iter_kwargs["direct_only"] = True
 
-    for code_node, labels in _iter_assertion_coverage(node, NodeKind.CODE, **iter_kwargs):
+    for code_node, labels in iter_assertion_coverage(node, NodeKind.CODE, **iter_kwargs):
         info = _serialize_code_info(code_node, graph)
         for label in labels:
             if label not in assertion_code:
@@ -5169,7 +5106,7 @@ def _get_assertion_refines_map(graph: FederatedGraph, req_id: str) -> dict[str, 
 
     seen_per_assertion: dict[str, set[str]] = {label: set() for _, label in assertions}
 
-    for req_node, labels in _iter_assertion_coverage(
+    for req_node, labels in iter_assertion_coverage(
         node,
         NodeKind.REQUIREMENT,
         edge_kinds={EdgeKind.REFINES},
@@ -5219,7 +5156,7 @@ def _get_uncovered_assertions(
     REQ-d00067-F: SHALL limit results to prevent unbounded response sizes.
     REQ-d00069-A: SHALL accept source parameter ('test', 'uat', 'both') to filter coverage source.
 
-    Uses ``_iter_assertion_coverage`` to build the covered-labels set,
+    Uses ``iter_assertion_coverage`` to build the covered-labels set,
     which correctly handles whole-requirement evidence (tests with no
     ``assertion_targets`` covering ALL assertions).
 
@@ -5246,7 +5183,7 @@ def _get_uncovered_assertions(
         one stays a gap.
         """
         covered: set[str] = set()
-        for _node, labels in _iter_assertion_coverage(req_node, kind, direct_only=True):
+        for _node, labels in iter_assertion_coverage(req_node, kind, direct_only=True):
             covered.update(labels)
         rollup = req_node.get_metric("rollup_metrics")
         if rollup is not None:

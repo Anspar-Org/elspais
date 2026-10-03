@@ -74,6 +74,7 @@ class FlutterMachineParser(DiagnosticRecorder):
         results: list[dict[str, Any]] = []
         self._start_diagnostics()
         events = 0
+        done: set[Any] = set()
 
         for line in content.splitlines():
             line = line.strip()
@@ -117,6 +118,7 @@ class FlutterMachineParser(DiagnosticRecorder):
                 if meta is not None:
                     meta.setdefault("output", []).append(str(ev.get("message", "")))
             elif etype == "testDone":
+                done.add(ev.get("testID"))
                 if ev.get("hidden"):
                     continue
                 meta = tests.get(ev.get("testID"))
@@ -172,4 +174,17 @@ class FlutterMachineParser(DiagnosticRecorder):
                 source_path,
                 "flutter --machine output carried no JSON events",
             )
+        # Implements: REQ-d00285-G, REQ-d00254-Q
+        # A test that started and reported no result is a stream that ended
+        # inside it: the run was cut off, and what it reports is shorter than
+        # the run. Each such test is named, so the shorter stream never reads
+        # as the whole run.
+        for test_id, meta in tests.items():
+            if test_id not in done:
+                self._record_diagnostic(
+                    source_path,
+                    f"test {meta['name']!r} started and reported no result: "
+                    f"the stream ends before its testDone event",
+                    partial=bool(results),
+                )
         return results
