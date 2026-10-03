@@ -1266,6 +1266,7 @@ class FederatedGraph:
         result = self._graph_for(assertion_id).delete_assertion(
             assertion_id, foreign_references=foreign
         )
+        self._follow_retirement(repo_name, assertion_id, result)
         if result.before_state.get("disposition") == "removed":
             self._ownership.pop(assertion_id, None)
             for rename in result.before_state.get("renames", []):
@@ -1282,8 +1283,88 @@ class FederatedGraph:
         """
         repo_name = self._ownership[assertion_id]
         result = self._graph_for(assertion_id).update_assertion(assertion_id, new_text)
+        self._follow_retirement(repo_name, assertion_id, result)
         self._record_mutation(repo_name, result)
         return result
+
+    # Implements: REQ-p00017-H, REQ-d00269-B
+    def _follow_retirement(self, repo_name: str, assertion_id: str, entry: MutationEntry) -> None:
+        """Carry an *Assertion*'s retirement to the citations other members hold.
+
+        The owning member severs every citation edge and reports the ones it
+        holds. A citation another member holds is reported in that member,
+        where a build records it, under the class reading it reached across
+        the federation. Bringing an *Assertion* back binds the citations
+        other members hold, as the cross-graph wiring would. Each record
+        names the member that changed, which undo reads.
+        """
+        owner = self._repos[repo_name].graph
+        for record in entry.after_state.get("severed_citations", []):
+            if "fault" in record:
+                continue
+            member = self._ownership.get(record["source_id"])
+            if member is None:
+                continue
+            graph = self._repos[member].graph
+            citer = graph._index.get(record["source_id"])
+            if citer is None:
+                continue
+            fault = self._class_reached(
+                ReferenceFault(
+                    source_id=citer.id,
+                    target_id=assertion_id,
+                    edge_kind=record["edge_kind"],
+                    fault_class=FaultClass.UNKNOWN_REQUIREMENT,
+                ),
+                member,
+            )
+            record.update(graph._withdraw_citation(citer, fault))
+            record["member"] = member
+        if "resolved_citations" not in entry.after_state:
+            return
+        node = owner._index.get(assertion_id)
+        if node is None:
+            return
+        for member, graph in self._live_graphs():
+            if member == repo_name:
+                continue
+            for fault in list(graph._unresolved_references):
+                if not owner._names_assertion(fault, node):
+                    continue
+                citer = graph._index.get(fault.source_id)
+                if citer is None:
+                    continue
+                record = graph._bind_citation(citer, node, fault)
+                record["member"] = member
+                entry.after_state["resolved_citations"].append(record)
+
+    # Implements: REQ-o00062-G
+    def _undo_followed_retirement(self, owner: TraceGraph, entry: MutationEntry) -> None:
+        """Undo what ``_follow_retirement`` changed in other members."""
+        from elspais.graph.builder import _reattach_citation
+
+        node = owner._index.get(entry.target_id)
+        if node is None:
+            return
+        parent = next((p for p in node.iter_parents() if p.kind == NodeKind.REQUIREMENT), None)
+        for record in reversed(entry.after_state.get("severed_citations", [])):
+            member = record.get("member")
+            if member is None or member not in self._repos or parent is None:
+                continue
+            graph = self._repos[member].graph
+            citer = graph._index.get(record["source_id"])
+            if citer is None:
+                continue
+            graph._restore_citation(citer, record)
+            _reattach_citation(parent, citer, record)
+        for record in reversed(entry.after_state.get("resolved_citations", [])):
+            member = record.get("member")
+            if member is None or member not in self._repos:
+                continue
+            graph = self._repos[member].graph
+            citer = graph._index.get(record["source_id"])
+            if citer is not None:
+                graph._unbind_citation(citer, node, record)
 
     # Implements: REQ-d00201-A
     def rename_assertion(self, old_id: str, new_label: str) -> MutationEntry:
@@ -2652,6 +2733,8 @@ class FederatedGraph:
         if entry and entry.graph:
             result = entry.graph.undo_last()
             if result:
+                if result.operation in ("delete_assertion", "update_assertion"):
+                    self._undo_followed_retirement(entry.graph, result)
                 # Reverse any ownership changes
                 self._rebuild_ownership()
             return result

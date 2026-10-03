@@ -4,6 +4,10 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-139
+
+- **A citation of an Assertion is reported as unresolved as soon as the Assertion is retired (REQ-p00017-H)** -- retiring an Assertion through a mutation, by deleting it from an Active requirement or by giving it the `<RETIRED>` text, excluded it from coverage at once, but each citation of it stayed bound and was listed as unresolved only after the next rebuild. Coverage and the unresolved-reference listing disagreed in the meantime. The mutation now leaves the graph as a build of the saved text does: every citation of the Assertion, in a spec, journey, code or test file and in any member of a federation, is reported as unresolved by `unresolved`, `checks`, MCP `get_unresolved_references` and the viewer, and a citing requirement still renders it. Giving a retired Assertion its text back binds its citations again, and undo restores what each mutation changed.
+
 ### TOOL-134
 
 - **A spec or journey metadata line naming one target in another repository more than once reports every instance and creates no relationship (REQ-d00272-K, REQ-d00287-F)** -- an `Implements:` list in one federation member naming a requirement another member owns twice created one relationship and reported nothing, while the same list in a code or test file, and a repeated target in the declaring repository itself, were refused and reported. A repository read its spec metadata and journey `Validates:` lists in its own identifier grammar alone, so a target another member owns did not read as an identifier there and the repetition check, which compares identifiers, never saw it. Those lists are now read in every member's grammar, as code and test annotations already were, so each instance of a repeated foreign target is reported under the same class as a repeated local one. A requirement header is still read in its own repository's grammar alone, since a repository declares only the identifiers it owns.
