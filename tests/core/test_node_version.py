@@ -486,7 +486,7 @@ class TestUndoRestoresRenderedText:
         "delete, target",
         [
             pytest.param(_delete_assertion, "REQ-o00002-D", id="last-assertion"),
-            pytest.param(_delete_assertion, "REQ-o00002-B", id="middle-assertion-compacts"),
+            pytest.param(_delete_assertion, "REQ-o00002-B", id="middle-assertion"),
             pytest.param(_delete_remainder, "REQ-o00002:section:1", id="remainder-section"),
         ],
     )

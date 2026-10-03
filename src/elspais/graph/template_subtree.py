@@ -117,8 +117,8 @@ def stereotype_matrix_fault(
     reference into an associated repository alike — so the graph never
     holds an edge it also reports as a fault, and a target owned by another
     repository is judged by the rule a local one is. The Satisfies rows are
-    judged where a Satisfies: is instantiated, since there a refusal
-    withholds a clone rather than an edge.
+    ``satisfies_target_fault``'s, judged where a Satisfies: is instantiated,
+    since there a refusal withholds a clone rather than an edge.
     """
     target_stereotype = target.get_field("stereotype")
     source_is_template = (
@@ -196,3 +196,61 @@ def stereotype_matrix_fault(
             "assertion to your satisfier."
         )
     return None
+
+
+# Implements: REQ-p00014-G
+def satisfies_target_fault(
+    target: GraphNode, source_id: str, target_id: str
+) -> ReferenceFault | None:
+    """The fault a ``Satisfies:`` commits against the validation matrix, if any.
+
+    Returns the ``ReferenceFault`` for a target that is an instance clone
+    (chained instantiation) or that is not marked **Template**, or None where
+    the target may be instantiated. It is the one authority for the matrix's
+    Satisfies rows: the one-repository builder and the federation
+    instantiating a template owned by another repository both read it before
+    they clone, so a refused target produces no clone and the same report
+    wherever it lives.
+    """
+
+    def fault(diagnostic: str) -> ReferenceFault:
+        return ReferenceFault(
+            source_id=source_id,
+            target_id=target_id,
+            edge_kind=EdgeKind.SATISFIES.value,
+            fault_class=FaultClass.FORBIDDEN,
+            diagnostic=diagnostic,
+        )
+
+    stereotype = target.get_field("stereotype")
+    if stereotype == Stereotype.INSTANCE:
+        return fault(
+            "Chained instantiation is not supported. Satisfy the original template directly."
+        )
+    if stereotype != Stereotype.TEMPLATE:
+        return fault(
+            f"{target_id} is not marked **Template**; "
+            f"mark {target_id} with **Template** if it's "
+            f"intended to be satisfiable."
+        )
+    return None
+
+
+# Implements: REQ-d00272-T
+def copy_name_diagnostic(target_id: str, node: GraphNode | None) -> str:
+    """What to tell the author whose reference is the name of a copy.
+
+    *node* is what the graph holds under *target_id* exactly. Where it is a
+    copy a ``Satisfies:`` made, the answer names the original it was made
+    from; otherwise it is empty. The cause stays the one the reader found:
+    the text is not an identifier an author can write.
+    """
+    if node is None or node.get_field("stereotype") != Stereotype.INSTANCE:
+        return ""
+    for original in node.iter_children(edge_kinds={EdgeKind.INSTANCE}):
+        return (
+            f"{target_id} is the name the tool gives a copy of {original.id}, "
+            f"and a copy's name is not an identifier a reference can carry. "
+            f"Name {original.id} instead."
+        )
+    return ""

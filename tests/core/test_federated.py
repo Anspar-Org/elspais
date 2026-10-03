@@ -480,8 +480,13 @@ class TestFederatedGraphMutations:
     def test_REQ_d00201_A_delete_requirement_removes_ownership(
         self, fed_with_graph: FederatedGraph
     ) -> None:
-        """delete_requirement removes node from graph and ownership map."""
+        """delete_requirement removes a provisional node from graph and ownership map.
+
+        An active requirement would be retired in place (REQ-p00017-D), so
+        the requirement is made Draft first.
+        """
         fed = fed_with_graph
+        fed.change_status("REQ-d00001", "Draft")
         fed.delete_requirement("REQ-d00001")
 
         assert fed.find_by_id("REQ-d00001") is None

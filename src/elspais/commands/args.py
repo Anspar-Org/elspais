@@ -933,7 +933,7 @@ class AssociateArgs:
     """Auto-discover and link all associates in sibling directories."""
 
     list: bool = False
-    """Show current associate links and status."""
+    """Show current associate links and status, including declared associates not yet linked."""
 
     unlink: str | None = None
     """Retire an associate (matches entry key, namespace, or recorded directory)."""
@@ -1169,6 +1169,30 @@ FingerprintAction = (
 )
 
 
+# Implements: REQ-d00249-H
+@dataclasses.dataclass
+class TestArgs:
+    """Execute test targets and record their results, evaluating no check.
+
+    The exit code reflects only the targets: 1 if any target failed, 0 if all
+    passed. Evaluate the checks separately with `elspais checks --expect ...`,
+    once, over every recorded result. A target whose reporter reads test
+    results must declare a `results` pattern, because nothing reads its output
+    while it runs.
+    """
+
+    targets: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
+    """Execute only these [[scanning.test.targets]], by target name or by the
+    name of a group they claim (space-separated, repeatable). Default: the
+    targets of the `default` group. Selects exactly what `checks --run-tests
+    --targets` selects, and refuses the same selections."""
+
+    fail_fast: bool = False
+    """Stop at the first target that fails."""
+
+
 @dataclasses.dataclass
 class FingerprintArgs:
     """Record the fingerprint of a test run elspais did not execute.
@@ -1292,6 +1316,7 @@ Command = (
     | Annotated[UninstallArgs, tyro.conf.subcommand("uninstall")]
     | Annotated[McpArgs, tyro.conf.subcommand("mcp")]
     | Annotated[DaemonArgs, tyro.conf.subcommand("daemon")]
+    | Annotated[TestArgs, tyro.conf.subcommand("test")]
     | Annotated[FingerprintArgs, tyro.conf.subcommand("fingerprint")]
     | Annotated[LinkArgs, tyro.conf.subcommand("link")]
     | Annotated[CompletionArgs, tyro.conf.subcommand("completion")]
@@ -1364,6 +1389,7 @@ COMMAND_GROUPS: dict[str, str] = {
     "doctor": "Install",
     "mcp": "Install",
     "daemon": "Install",
+    "test": "Reports",
     "fingerprint": "Reports",
     "install": "Install",
     "uninstall": "Install",

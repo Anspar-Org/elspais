@@ -1192,7 +1192,7 @@ def validate_config(config: dict[str, Any]) -> Any:
     return ElspaisConfig.model_validate(config)
 
 
-# Implements: REQ-d00202-A, REQ-d00202-B, REQ-d00202-C
+# Implements: REQ-d00202-A, REQ-d00202-B, REQ-d00202-C, REQ-d00202-Q
 def get_associates_config(
     config: dict[str, Any],
     repo_root: Path | None = None,
@@ -1200,8 +1200,10 @@ def get_associates_config(
     """Read [associates] sections from config.
 
     Each associate is declared as ``[associates.<name>]`` and states:
-    - path (str, required): relative path to the associate repo
     - namespace (str, required): the namespace expected at that path
+    - path (str, optional): path to the associate repo. A declaration
+      without one names an associate the repository expects, and the
+      machine-local configuration supplies where it is.
     - git (str, optional): remote URL, for clone assistance only
 
     Args:
@@ -1210,13 +1212,14 @@ def get_associates_config(
             root without knowing whether resolution needs it.
 
     Returns:
-        Dict mapping associate name to {"path": str, "namespace": str}.
-        Empty dict if no [associates] section exists.
+        Dict mapping associate name to {"path": str | None, "namespace": str,
+        "git": str | None}. ``path`` is None where no path is supplied; an
+        empty path names no directory and reads the same. Empty dict if no
+        [associates] section exists.
 
     Raises:
-        ValueError: A declaration omits its path or its namespace. Both
-            are how a declaration says which repository it means, so a
-            declaration missing either names nothing in particular.
+        ValueError: A declaration omits its namespace, which is what
+            identifies the repository it means.
     """
     associates = config.get("associates", {})
     if not associates:
@@ -1226,10 +1229,9 @@ def get_associates_config(
         if not isinstance(entry, dict):
             raise ValueError(
                 f"Associate '{name}' is not a declaration table. Declare it as "
-                f"[associates.{name}] with a path and a namespace."
+                f"[associates.{name}] with a namespace, and a path where this "
+                f"file is the one that says where it is."
             )
-        if not entry.get("path"):
-            raise ValueError(f"Associate '{name}' declares no path.")
         if not entry.get("namespace"):
             raise ValueError(
                 f"Associate '{name}' declares no namespace. A declaration names "
@@ -1237,7 +1239,7 @@ def get_associates_config(
                 f"identifies the repository it means."
             )
         result[name] = {
-            "path": entry["path"],
+            "path": entry.get("path") or None,
             "namespace": entry["namespace"],
             "git": entry.get("git"),
         }

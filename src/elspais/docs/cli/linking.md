@@ -376,6 +376,13 @@ before an *Assertion* label, `+` between labels), and the repository holds
 | `# **Implements**: REQ-d00001` (off markdown) | — | binds; `E_KEYWORD_MARKDOWN_EMPHASIS_OFF_MARKDOWN` |
 | `#   REQ-d00001` (no keyword above) | — | reported as an undeclared relationship |
 
+A copy made by `Satisfies:` is named `<declaring>::<original>`, for example
+`REQ-p00002::REQ-d00001`. That name is the graph's, not one an author writes:
+`::` is reserved out of every identifier, so a reference spelled that way is
+`malformed` with `E_NOT_AN_IDENTIFIER`, whichever repository holds the copy. Where
+the graph holds a copy under that name, the report names the original to cite
+instead.
+
 The `forbidden` class covers every reference that reads and resolves and whose
 relationship is refused anyway. Its description says only what is true of all
 of them; which refusal it was is the finding's code.

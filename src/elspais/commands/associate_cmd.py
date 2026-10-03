@@ -392,6 +392,15 @@ def cmd_list(args: argparse.Namespace) -> int:
 
     for assoc_name, assoc_info in associates.items():
         path_str = assoc_info["path"]
+        if not path_str:
+            # Implements: REQ-d00202-R
+            # Expected and not linked here: the row says so, and says which
+            # file supplies the path.
+            print(
+                f"{assoc_name:<20} {assoc_info['namespace']:<10} {'NOT LINKED':<12} "
+                f"{'-':<7} (supply the path in .elspais.local.toml)"
+            )
+            continue
         repo_path = Path(path_str)
         if not repo_path.is_absolute() and git_root:
             repo_path = Path(git_root) / repo_path
@@ -648,10 +657,30 @@ def register_associate(
         )
 
     recorded = _assembled_associates(config)
-    existing = recorded.get(assoc_name)
-    existing_path = existing.get("path", "") if existing else ""
     target = Path(repo_path).resolve()
-    entry_moves = existing is not None and _resolve_recorded(existing_path, repo_root) != target
+    # Implements: REQ-d00289-J, REQ-d00289-L
+    # A declaration naming this namespace already says which repository is
+    # meant when it supplies no path or supplies this one, so the
+    # registration addresses it under its own name. Recording beside it
+    # under the name the repository gives itself would be a second claim
+    # on one namespace.
+    declared = _declaring_entry(recorded, namespace, target, repo_root)
+    if declared is not None:
+        assoc_name = declared
+    existing = recorded.get(assoc_name)
+    existing_path = (existing.get("path") or "") if existing else ""
+    # Implements: REQ-d00289-M, REQ-d00202-L
+    # A declaration awaiting its path states only the namespace its author
+    # expects. The registration is judged against that expectation, so a
+    # repository declaring another namespace is the mismatch a build
+    # refuses rather than a new namespace written over the expectation.
+    # A declaration recording a path is replaced only as C and D decide.
+    expected_namespace = namespace
+    if existing and not existing_path and existing.get("namespace"):
+        expected_namespace = str(existing["namespace"])
+    # A declaration with no path is recorded nowhere, so supplying one
+    # replaces nothing.
+    entry_moves = bool(existing_path) and _resolve_recorded(existing_path, repo_root) != target
 
     # Implements: REQ-d00289-E, REQ-d00289-H
     # What may enter a federation is not decided here. The planner is
@@ -665,7 +694,7 @@ def register_associate(
         config,
         assoc_name,
         repo_path,
-        namespace,
+        expected_namespace,
         repo_root=repo_root,
     )
     if refusal is not None:
@@ -694,7 +723,7 @@ def register_associate(
             target=repo_path,
         )
 
-    if existing is not None and not entry_moves:
+    if existing_path and not entry_moves:
         # Implements: REQ-d00289-B
         return Registration(
             kind=Outcome.UNCHANGED,
@@ -772,6 +801,28 @@ def _assembled_associates(config: dict[str, Any]) -> dict[str, Any]:
     """
     table = config.get("associates") or {}
     return {n: e for n, e in table.items() if isinstance(e, dict)}
+
+
+def _declaring_entry(
+    recorded: dict[str, Any], namespace: str, target: Path, repo_root: Path
+) -> str | None:
+    """The declaration naming this namespace at this directory or at none.
+
+    Implements: REQ-d00289-J, REQ-d00289-L
+
+    A declaration already recording the target is preferred to one still
+    awaiting its path, since it is the one a repeated registration repeats.
+    """
+    awaiting = None
+    for key, entry in recorded.items():
+        if entry.get("namespace") != namespace:
+            continue
+        path = entry.get("path")
+        if not path:
+            awaiting = awaiting or key
+        elif _resolve_recorded(str(path), repo_root) == target:
+            return key
+    return awaiting
 
 
 def _matching_entry(recorded: dict[str, Any], name: str) -> str | None:
@@ -894,16 +945,24 @@ def _federation_refusal(
     """
     from elspais.graph.federation_plan import plan_federation, refuse_unreadable
 
+    # Implements: REQ-d00289-K
+    # A declaration still awaiting its path supplies no member to conflict
+    # with, in this repository or in any the federation reaches, so the
+    # planner is asked to set each one aside rather than refuse it.
     recorded = config.get("associates") or {}
 
     try:
-        refuse_unreadable(plan_federation({**config, "associates": recorded}, repo_root))
+        refuse_unreadable(plan_federation(config, repo_root, set_aside_unlinked=True))
     except FederationError as exc:
         return str(exc), True
 
     prospective = {**recorded, assoc_name: {"path": repo_path, "namespace": namespace}}
     try:
-        refuse_unreadable(plan_federation({**config, "associates": prospective}, repo_root))
+        refuse_unreadable(
+            plan_federation(
+                {**config, "associates": prospective}, repo_root, set_aside_unlinked=True
+            )
+        )
     except FederationError as exc:
         return str(exc), False
 

@@ -381,46 +381,35 @@ def _ingest_target_results(
             )
 
     repo_root_resolved = Path(repo_root).resolve()
+
+    def _repo_relative_or_kept(raw: str | None) -> str | None:
+        # An absolute path inside the repository becomes repo-relative. A
+        # relative path, or one outside the repository, is kept as it is.
+        if raw and os.path.isabs(raw):
+            try:
+                return str(Path(raw).resolve().relative_to(repo_root_resolved))
+            except ValueError:
+                return raw
+        return raw
+
     count = 0
     for rec in records:
         raw_src = rec.get("source_path", "")
-        # Normalize absolute source_path to repo-relative for source_file.
-        # If already relative or outside the repo, keep as-is.
-        if raw_src and os.path.isabs(raw_src):
-            try:
-                source_file = str(Path(raw_src).resolve().relative_to(repo_root_resolved))
-            except ValueError:
-                source_file = raw_src  # outside repo root -- keep absolute
-        else:
-            source_file = raw_src
+        source_file = _repo_relative_or_kept(raw_src) or ""
 
-        # Normalize root_path (from root_url after stripping file://) the same
-        # way. root_path is set only by flutter-machine for testWidgets() calls
+        # root_path is set only by flutter-machine for testWidgets() calls
         # whose test.line is a framework wrapper rather than the user call site.
-        raw_root = rec.get("root_path") or None
-        if raw_root and os.path.isabs(raw_root):
-            try:
-                root_file: str | None = str(
-                    Path(raw_root).resolve().relative_to(repo_root_resolved)
-                )
-            except ValueError:
-                root_file = raw_root  # outside repo root -- keep absolute
-        else:
-            root_file = raw_root
+        root_file = _repo_relative_or_kept(rec.get("root_path") or None)
+
+        # Implements: REQ-d00294-G
+        # The file that executed the test, where the reporter names one. It
+        # differs from source_file for a scenario declared in a shared file.
+        runner_file = _repo_relative_or_kept(rec.get("runner_path") or None)
 
         # Results-file provenance (REQ-d00254): repo-relative path + line of
         # the artifact that recorded this result, distinct from source_file
         # (the TEST's source, which stays the RESULT->TEST match key).
-        raw_result_file = rec.get("result_file") or None
-        if raw_result_file and os.path.isabs(raw_result_file):
-            try:
-                result_file: str | None = str(
-                    Path(raw_result_file).resolve().relative_to(repo_root_resolved)
-                )
-            except ValueError:
-                result_file = raw_result_file  # outside repo root -- keep absolute
-        else:
-            result_file = raw_result_file
+        result_file = _repo_relative_or_kept(rec.get("result_file") or None)
         result_line = rec.get("result_line")
 
         # Implements: REQ-d00294-A+B
@@ -484,6 +473,7 @@ def _ingest_target_results(
             "line": rec.get("line"),
             "root_line": rec.get("root_line"),
             "root_file": root_file,
+            "runner_file": runner_file,
             "result_file": result_file,
             "result_line": result_line,
             # Implements: REQ-d00294-C

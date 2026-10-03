@@ -50,6 +50,10 @@ RETIRED = "RETIRED"
 # (upper case) and valued by the canonical spelling used for rendering.
 RECOGNIZED_DIRECTIVES: dict[str, str] = {RETIRED: RETIRED}
 
+# The text a deleted *Assertion* is left carrying: the RETIRED directive and
+# nothing after it. The label stays in the requirement, so it stays allocated.
+RETIRED_ASSERTION_TEXT = f"<{RETIRED}>"
+
 # The node fields a parsed directive is recorded in. Named here so the readers
 # below and the builder that writes them cannot drift apart.
 FIELD_DIRECTIVE = "directive"

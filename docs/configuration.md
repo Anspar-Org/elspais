@@ -303,7 +303,10 @@ output_root = ".results"
 # selectivity section). Which targets' results a run requires is the same
 # kind of decision: `elspais checks --expect NAME ...` names them, and a target
 # a run neither executes nor expects reads as not run rather than as missing
-# results (`elspais docs test-targets`, Expected results). NAMESPACE:NAME
+# results (`elspais docs test-targets`, Expected results). `elspais test
+# --targets NAME ...` executes targets and records their results without
+# evaluating checks, so parallel jobs can each run part of the suite and one
+# `checks --expect` gate judges them all. NAMESPACE:NAME
 # names a target or group another federation member declares, resolved by
 # that member's own configuration.
 
@@ -315,7 +318,7 @@ output_root = ".results"
 # No target may be named `none` or claim it.
 # The tool refuses a `--targets` selection standing for no target.
 # The exception is `none` on `summary`/`trace`.
-# `checks --run-tests` refuses `none` too. It has nothing to run.
+# `checks --run-tests` and `test` refuse `none` too. They have nothing to run.
 # If every target claims another group, then `default` holds no target.
 # The tool then refuses a run naming nothing. The run must name what it runs.
 # A target claiming no group belongs to
@@ -508,8 +511,12 @@ values = ["id", "title", "status", "implemented", "tested", "verified"]
 # during federation. See `elspais docs graph-model`.
 #──────────────────────────────────────────────────────────────────────────────
 
-# A declaration states the path and the namespace it expects to find
-# there; both are required. The namespace must match the one the
+# A declaration states the namespace it expects and the path where that
+# repository sits. The namespace is required. The path may be left out of
+# this file and supplied by `.elspais.local.toml` (run `elspais associate
+# <path>`): the committed declaration then records that the repository is
+# expected, and a checkout that has not supplied the path is refused
+# naming the associate and the file to supply it in. The namespace must match the one the
 # repository at that path declares for itself, and no two repositories in
 # one federation may declare the same namespace — a namespace is what
 # says whose identifiers these are. `elspais associate` checks all three
@@ -527,6 +534,9 @@ namespace = "CAL"
 [associates.phoenix]
 path = "../phoenix"
 namespace = "PHX"
+
+# [associates.titan]                 # Expected, with the path left to each
+# namespace = "TTN"                  #   machine's .elspais.local.toml
 
 #──────────────────────────────────────────────────────────────────────────────
 # FEDERATION - Write / generation surface control
@@ -1024,7 +1034,7 @@ the file at `coverage`, so a coverage-only target need not name one.
 | --- | --- | --- | --- |
 | `coverage-json` | file | coverage | Parses the JSON report `coverage json` (coverage.py) writes, in either its aggregate or its per-context form, into per-file line coverage. |
 | `coverage-sqlite` | file | coverage | Reads coverage.py's own `.coverage` SQLite data file through coverage.py's public API, so per-test contexts are read compactly rather than through a JSON expansion of them. Needs the `coverage` package (`elspais[coverage]`) importable, and degrades to unattributed coverage where it is not. |
-| `flutter-machine` | stdout | results | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the real `suite.path` and test line, so `match = "source"` binds each result to the test that produced it. |
+| `flutter-machine` | stdout | results | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the file and line where each test is declared, and the file that executed it, so `match = "source"` binds each result to its test, including a test declared in a shared file that a runner file executes. |
 | `junit` | file | results | Parses JUnit XML result files matched by the `results` glob. Honours an optional per-`<testcase>` `file` attribute (a real source path) and `line` attribute, so `match = "source"` can bind to a scanned test node. |
 | `lcov` | file | coverage | Parses an LCOV report -- the `lcov.info` that `flutter test --coverage` and most language toolchains write -- into per-file line coverage. |
 | `pytest-json` | file | results | Parses the report pytest's `--json-report` writes, matched by the `results` glob. |

@@ -17,7 +17,9 @@ FILE CONTAINS parent, incoming IMPLEMENTS edges carrying assertion targets
 (REQ-p00001 -> REQ-d00001 targeting A/B/C), a plain incoming IMPLEMENTS edge
 (REQ-o00001), STRUCTURES children (assertions A-D plus sections), and
 outgoing IMPLEMENTS/VERIFIES edges to CODE and TEST nodes with assertion
-targets.
+targets. The fixture first gives it the Draft status: a requirement in the
+active role is retired in place rather than removed (REQ-p00017-D), and a
+provisional one is removed, which is the deletion these tests undo.
 """
 
 from pathlib import Path
@@ -47,7 +49,9 @@ def requirement_graph_from_disk():
     ``journey_graph_from_disk`` in test_journey_mutations.py.
     """
     fg = build_repo_graph(repo_root=FIXTURES_DIR / "hht-like")
-    return fg._repos[fg._root_repo].graph
+    graph = fg._repos[fg._root_repo].graph
+    graph.change_status(TARGET_ID, "Draft")
+    return graph
 
 
 def _edge_signature(node):

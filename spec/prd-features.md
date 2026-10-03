@@ -341,17 +341,22 @@ D. The MCP server SHALL provide mutation tools for AI-assisted requirement manag
 
 E. The MCP server SHALL support undo operations for all graph mutations.
 
+F. If an MCP tool is called with an argument that the tool does not declare, then the MCP server SHALL refuse the call and report the undeclared argument together with the arguments that the tool accepts.
+
 ### Rationale
 
 AI agents need programmatic access to requirements data for tasks like coverage analysis, requirement drafting, and *Traceability* verification. The MCP protocol provides a standardized interface that works with multiple AI platforms.
 
+An argument a tool does not declare has no effect. A caller that is not told so believes it asked for something the tool did not do, so F refuses the call and names what the tool accepts.
+
 ### Changelog
 
+- 2026-10-02 | 55090ed9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | a729a853 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 3ebc237a | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | 3ebc237a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *MCP Server for AI-Driven Requirements Management* | **Hash**: a729a853
+*End* *MCP Server for AI-Driven Requirements Management* | **Hash**: 55090ed9
 ---
 
 ## REQ-d00226: Comment Data Models

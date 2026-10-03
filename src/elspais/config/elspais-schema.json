@@ -42,8 +42,16 @@
       "additionalProperties": false,
       "properties": {
         "path": {
-          "title": "Path",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
         },
         "namespace": {
           "title": "Namespace",
@@ -75,7 +83,6 @@
         }
       },
       "required": [
-        "path",
         "namespace"
       ],
       "title": "AssociateEntryConfig",

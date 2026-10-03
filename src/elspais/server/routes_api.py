@@ -36,6 +36,9 @@ from elspais.mcp.server import (
     _attach_declaration_version,
     _attach_version,
     _automatic_save_record,
+    _delete_assertion_with_version,
+    _delete_remainder_with_version,
+    _delete_requirement_with_version,
     _executable_difference,
     _get_assertion_code_map,
     _get_assertion_refines_map,
@@ -59,12 +62,9 @@ from elspais.mcp.server import (
     _mutate_change_edge_kind,
     _mutate_change_edge_targets,
     _mutate_change_status,
-    _mutate_delete_assertion,
     _mutate_delete_declaration,
     _mutate_delete_edge,
     _mutate_delete_journey,
-    _mutate_delete_remainder,
-    _mutate_delete_requirement,
     _mutate_journey_section,
     _mutate_move_node_to_file,
     _mutate_rename_declaration,
@@ -1583,7 +1583,7 @@ async def api_mutate_assertion_delete(request: Request) -> JSONResponse:
     conflict = _write_refusal(state, data, assertion_id)
     if conflict is not None:
         return conflict
-    result = _mutate_delete_assertion(state.graph, assertion_id, confirm=True)
+    result = _delete_assertion_with_version(state.graph, assertion_id, confirm=True)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
@@ -1647,7 +1647,7 @@ async def api_mutate_remainder_delete(request: Request) -> JSONResponse:
     conflict = _write_refusal(state, data, node_id)
     if conflict is not None:
         return conflict
-    result = _mutate_delete_remainder(state.graph, node_id)
+    result = _delete_remainder_with_version(state.graph, node_id)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 
@@ -1787,7 +1787,7 @@ async def api_mutate_requirement_delete(request: Request) -> JSONResponse:
     conflict = _write_refusal(state, data, node_id)
     if conflict is not None:
         return conflict
-    result = _mutate_delete_requirement(state.graph, node_id, confirm=True)
+    result = _delete_requirement_with_version(state.graph, node_id, confirm=True)
     status_code = 200 if result.get("success") else 400
     return JSONResponse(result, status_code=status_code)
 

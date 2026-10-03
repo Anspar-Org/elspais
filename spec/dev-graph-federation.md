@@ -97,7 +97,7 @@ The config system SHALL parse `[associates.<name>]` sections from `.elspais.toml
 
 A. A repository's associate declarations SHALL be read from its `[associates]` sections, each declaration yielding the associate's name together with its path, its namespace, and its git remote.
 
-B. A declaration SHALL require a path and a namespace. The git remote SHALL be optional and SHALL serve clone assistance only.
+B. A declaration SHALL require a namespace. The git remote SHALL be optional and SHALL serve clone assistance only.
 
 C. When no `[associates]` section exists in config, `get_associates_config()` SHALL return an empty dict.
 
@@ -127,6 +127,12 @@ O. A relative associate path SHALL be resolved against the root of the working t
 
 P. When verbose output is requested, the tool SHALL report for each declaration the path it declares, the root that path was resolved against, and the directory it resolved to.
 
+Q. A committed configuration SHALL be able to declare an associate by its namespace alone, leaving the associate's path to the machine-local configuration.
+
+R. When the configuration of a repository declares an associate and supplies no path for it, the build SHALL refuse before any check runs, naming the associate, its namespace, and the machine-local configuration file of that repository as the place that supplies the path.
+
+S. The refusal of R SHALL be distinguishable from the refusal of a configuration that will not load, in its exit status and in its message.
+
 ### Rationale
 
 Associates are declared in `.elspais.toml` using a structured TOML section. Each associate specifies a relative filesystem path, a namespace, and an optional git remote URL. The remote is optional because it identifies nothing: the path and the namespace do that, so a declaration without one is complete. It is carried so that the refusal a repository that cannot be read produces can say where to obtain it, the declaration being the one place that knows. Transitive resolution (assertion D) is what lets the tool work from any repository in a dependency chain rather than from the root alone, and it is what allows an org-policy repository reachable only through a chain to be federated at all. Directed cycles are a genuine error because dependency direction drives resolution order; diamonds are convergence, not cycles, and the identity rule (assertion G) is what makes the two distinguishable: one namespace reached twice at one directory is convergence, and reached at two directories is the collision K reports. Disjoint ID spaces (assertion H) are a precondition of federation rather than a preference: a reference resolves to a repository by asking which one claims the identifier, so two claimants make the answer arbitrary.
@@ -137,10 +143,13 @@ A repository declares everything it directly needs in order to resolve on its ow
 
 A declaration that cannot be read has said nothing about a namespace, so it is not one of the two claimants K is about -- K reaches directories that were read, and a directory that is not there was not. Treating it as one produces a report naming a collision between a real directory and a path that does not exist, which sends the reader looking for a conflict instead of at the missing repository -- the fault is that a declaration points nowhere, and that is what has to be said. Failing remains the right outcome, since a configuration naming a repository that is not there is misconfigured whatever else is true of it; what M fixes is which fault is named. Where a surface is built to carry on with the members it could read, N keeps the unreadable one a failed check: a federation quietly missing a member answers questions about a corpus nobody chose.
 
+Which associates a repository federates against is a fact about the repository, and where each one sits is a fact about the machine. Q lets the committed configuration hold the first, so the expectation arrives with every clone and every working tree made from it and changes only through a reviewed commit, while the path stays in the machine-local configuration that exists to hold it. A path written as empty names no directory and is read as no path. A checkout that has never been linked is then an incomplete environment rather than a repository that federates nothing, and R says so before anything is reported: without it, every reference into the missing associate reads as a broken reference in the citing *Specification*, and the reader is told their *Specification* is at fault when their environment is. R names the file that supplies the path because the committed file is deliberately left without one, and a remedy pointing there sends the reader to edit the wrong thing. S keeps the two conditions apart for a script as well as for a reader: an unlinked associate is repaired by linking it, and a configuration that will not load is repaired by editing it.
+
 A member's declared name is a label the declaring repository chose for its own convenience, and it settles nothing: two members named alike are still two members, distinguishable by the one thing they cannot share. A namespace answers whose identifiers these are, so a federation in which two directories claim one namespace can answer nothing — the same argument disjoint requirement IDs rest on under H. That is also why the namespace is the identity (G): it is the one thing a member cannot share, it is declared rather than discovered, and L binds it to what the repository at that path says of itself, so it cannot be claimed by mistake. A repository reached at two directories under one namespace is therefore a collision to report rather than a convergence to guess at, while two directories that declare different namespaces are two members however closely related they are — their identifiers cannot be confused, so nothing about holding both is ambiguous. Identity that read the git origin instead answered a question nobody asked: it converged two directories a federation had every reason to hold apart, and it silently dropped the second. A repository owns its own namespace; an associate declaration does not name a second one but states the namespace the declaring repository expects at that path, so a mismatch means the declaration points somewhere its author did not intend. Both are declaration-time failures, reported before any graph is built, because a federation assembled on an ambiguous or mistaken namespace produces wrong answers rather than missing ones.
 
 ### Changelog
 
+- 2026-10-02 | 52fe05b1 | - | Michael Lewis (<michael@anspar.org>) | B, Q, R and S: an associate may be declared by namespace alone, and a missing path is refused naming the machine-local file
 - 2026-10-01 | 46b7046a | - | Michael Lewis (<michael@anspar.org>) | O and P added: a relative path resolves against the declaring working tree, and verbose output names that root
 - 2026-09-12 | faadf2aa | - | Michael Lewis (<michael@anspar.org>) | J retired: a member is its namespace, not its declared name
 - 2026-09-11 | e7e61b6a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -156,7 +165,7 @@ A member's declared name is a label the declaring repository chose for its own c
 - 2026-05-11 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 479dcbb8 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Associates Config Loading* | **Hash**: 46b7046a
+*End* *Associates Config Loading* | **Hash**: 52fe05b1
 ---
 
 ## REQ-d00203: Multi-Repo Build Pipeline

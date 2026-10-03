@@ -167,7 +167,7 @@ B. The system SHALL ...
   - MUST be uppercase letters A–Z,
   - MUST be unique within the requirement,
   - MUST remain stable over time,
-  - MUST NOT be reused once removed (**IMPORTANT**)
+  - MUST NOT be reused once removed from a requirement in the active role (**IMPORTANT**); a requirement in the provisional or aspirational role is still being drafted, and deleting one of its assertions closes the gap
 - If more than 26 assertions are required, the requirement MUST be split.
 
 ### Assertion Parsing Directives

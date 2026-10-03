@@ -260,7 +260,8 @@ _FIELD_COMMENTS: dict[str, str] = {
         "relative source paths in its coverage report are read from it"
     ),
     "scanning.test.targets.command": (
-        "Shell command executed by --run-tests; omit in CI (ingest pre-produced files)"
+        "Shell command executed by `checks --run-tests` and `test`;"
+        " omit in CI (ingest pre-produced files)"
     ),
     "scanning.test.targets.reporter": (
         'Parser format: "flutter-machine" | "junit" | "pytest-json"'
@@ -448,7 +449,11 @@ _FIELD_COMMENTS: dict[str, str] = {
     "output.dir": "Directory for generated output files",
     # --- [associates] ---
     "associates": "Associated repository definitions for cross-repo federation",
-    "associates.*.path": "Path to the associated repository (absolute or relative to repo root)",
+    "associates.*.path": (
+        "Path to the associated repository (absolute or relative to repo root); "
+        "leave it out of .elspais.toml to have each machine supply it in "
+        ".elspais.local.toml"
+    ),
     "associates.*.namespace": (
         "Namespace the associated repo declares for itself; unique across the federation"
     ),

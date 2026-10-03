@@ -12,6 +12,53 @@ elspais associate --list              # Show linked associates
 elspais associate --unlink <name>     # Remove a link
 ```
 
+## Adding an associate
+
+Adding an associate has two halves, done in two places:
+
+1. **Declare the expectation** in the committed `.elspais.toml`, by namespace.
+   It arrives with every clone and every working tree made from one, and it
+   changes only through a reviewed commit:
+
+   ```toml
+   [associates.callisto]
+   namespace = "CAL"
+   ```
+
+2. **Bind the path** on each machine, which writes `.elspais.local.toml`:
+
+   ```bash
+   elspais associate ../callisto
+   # Linked callisto (CAL) at /home/user/repos/callisto
+   ```
+
+   `elspais associate --all` binds every expected associate found beside
+   the working tree in one run.
+
+Until the path is bound, every command that builds the graph refuses, naming
+each associate still awaiting a path and the file that supplies it:
+
+```text
+Error: The repository at /home/user/repos/core expects 1 associate(s) with no path supplied:
+  callisto (namespace CAL)
+Supply each path in /home/user/repos/core/.elspais.local.toml: run `elspais associate <path>` in /home/user/repos/core for each one, or `elspais associate --all` to link the ones found beside it.
+```
+
+The run exits with status 69, apart from the status 1 a configuration that
+will not load gets, so a script can tell an environment to complete from a
+configuration to correct. Without the declaration, an unlinked checkout
+would instead report every reference into the associate as broken, as
+though the specification were at fault.
+
+A registration supplying the path for an expected associate records it under
+that declaration's own name, whatever the repository calls itself, and an
+associate still awaiting its path, here or in any repository the federation
+reaches, never refuses the registration of another. Registering a repository
+a declaration already records under its namespace changes nothing and reports
+that declaration. A repository declaring a namespace other than the one an
+expected associate names is refused, and the expectation stays as committed.
+A repository that declares no associates is unaffected.
+
 ## What it does
 
 Associates are linked repositories whose requirements are included in combined traceability matrices. The `associate` command manages these links by writing to `.elspais.local.toml` (your local config, not shared with other developers).
@@ -186,6 +233,9 @@ elspais associate --list
 # callisto             CAL        OK           -       /home/user/repos/callisto
 # titan                TTN        OK           yes     /home/user/repos/titan
 ```
+
+An associate declared without a path, and not yet linked on this machine,
+is listed as `NOT LINKED`.
 
 `Local` says whether that repository's own configuration was assembled with a
 `.elspais.local.toml` of its own. It answers one question -- was a machine-local

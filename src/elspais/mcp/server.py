@@ -102,7 +102,7 @@ from elspais.mcp.shared_state import (
     rebuild_shared_graph,
     report_shutdown_outcome,
 )
-from elspais.utilities.patterns import FederatedIdReader, build_resolver
+from elspais.utilities.patterns import FederatedIdReader, GrammarUnavailable, build_resolver
 
 
 # Known schema fields (by alias and Python name) for filtering non-schema keys
@@ -260,6 +260,12 @@ def _serialize_result_entry(result_node: Any, graph: FederatedGraph) -> dict[str
     environment = result_node.get_field("environment")
     if environment:
         entry["environment"] = environment
+    # Implements: REQ-d00294-G
+    # The file that executed the test, where it is not the file that declares
+    # it: one shared scenario runs through several runner files.
+    runner = result_node.get_field("runner_file")
+    if runner and runner != result_node.get_field("source_file"):
+        entry["runner_file"] = runner
     return entry
 
 
@@ -452,7 +458,16 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             if parent.kind == NodeKind.REQUIREMENT:
                 ref_id = parent.id
                 if edge.assertion_targets:
-                    ref_id = f"{parent.id}-{edge.assertion_targets[0]}"
+                    # The citation is spelled under the grammar of the
+                    # repository owning the cited requirement, naming every
+                    # label the edge carries.
+                    if graph is None:
+                        raise GrammarUnavailable(
+                            f"Spelling the citation of {parent.id} needs the "
+                            "graph that holds its repository's grammar"
+                        )
+                    resolver = graph.repo_for_node(parent).graph.resolver
+                    ref_id = resolver.make_assertion_ref(parent.id, list(edge.assertion_targets))
                 parents.append(
                     {
                         "id": parent.id,
@@ -607,7 +622,8 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             "message": node.get_field("message", ""),
             "classname": node.get_field("classname", ""),
         }
-        for field_name in ("result_file", "result_line", "environment"):
+        # Implements: REQ-d00294-G
+        for field_name in ("result_file", "result_line", "environment", "runner_file"):
             value = node.get_field(field_name)
             if value:
                 properties[field_name] = value
@@ -3012,6 +3028,36 @@ def _guard_shutdown(state: Any) -> dict[str, Any] | None:
     }
 
 
+# Implements: REQ-p00060-F
+def _guard_undeclared_arguments(
+    tool: Any, arguments: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """Refuse a call that passes an argument the tool does not declare.
+
+    An undeclared argument has no effect, so a caller who is not told
+    believes the tool did something it did not. The declared arguments are
+    the ones the tool publishes in its input schema. An unknown tool is left
+    to the dispatcher, which reports it.
+    """
+    if tool is None or not arguments:
+        return None
+    accepted = sorted((tool.parameters or {}).get("properties", {}))
+    unknown = sorted(set(arguments) - set(accepted))
+    if not unknown:
+        return None
+    return {
+        "success": False,
+        "code": "undeclared_argument",
+        "undeclared": unknown,
+        "accepted": accepted,
+        "error": (
+            f"Tool '{tool.name}' does not accept {', '.join(repr(a) for a in unknown)}. "
+            f"It accepts: {', '.join(accepted) if accepted else 'no arguments'}. "
+            "Nothing was done; call it again with only those arguments."
+        ),
+    }
+
+
 # Implements: REQ-o00077-A, REQ-o00077-F
 def _guard_executable_drift(state: Any, tool_name: str) -> dict[str, Any] | None:
     """Refuse a call this process cannot renew itself out of.
@@ -3441,6 +3487,55 @@ def _mutate_add_requirement(
         return {"success": False, "error": str(e)}
 
 
+# Implements: REQ-o00062-K, REQ-o00062-O
+def _delete_assertion_with_version(
+    graph: FederatedGraph, assertion_id: str, confirm: bool = False
+) -> dict[str, Any]:
+    """Delete an assertion and attach the version the caller quotes next.
+
+    The MCP tool and the viewer route both answer through this function. The
+    version is the surviving parent's: the requirement that renders and
+    guards the assertion.
+    """
+    parent = _owning_container(graph, assertion_id)
+    result = _mutate_delete_assertion(graph, assertion_id, confirm)
+    return _attach_version(result, parent) if parent is not None else result
+
+
+# Implements: REQ-o00062-K, REQ-o00062-O
+def _delete_remainder_with_version(graph: FederatedGraph, node_id: str) -> dict[str, Any]:
+    """Delete a remainder section and attach the version the caller quotes next.
+
+    The MCP tool and the viewer route both answer through this function. The
+    version is the surviving parent's: the requirement or journey that renders
+    the section.
+    """
+    parent = _owning_container(graph, node_id)
+    result = _mutate_delete_remainder(graph, node_id)
+    return _attach_version(result, parent) if parent is not None else result
+
+
+# Implements: REQ-o00062-K, REQ-o00062-O
+def _delete_requirement_with_version(
+    graph: FederatedGraph, node_id: str, confirm: bool = False
+) -> dict[str, Any]:
+    """Delete a requirement and attach the version the caller quotes next.
+
+    The MCP tool and the viewer route both answer through this function, so
+    both surfaces report the same version. A removal reports the version of
+    the containing FILE, the surviving container that absorbed the change. A
+    retirement modifies the requirement itself, which survives, so it reports
+    the requirement's own version.
+    """
+    node = graph.find_by_id(node_id)
+    file_node = node.file_node() if node is not None else None
+    result = _mutate_delete_requirement(graph, node_id, confirm)
+    retired = result.get("mutation", {}).get("before_state", {}).get("disposition")
+    if retired == "retired" and node is not None:
+        return _attach_version(result, node)
+    return _attach_version(result, file_node) if file_node is not None else result
+
+
 # Implements: REQ-d00065-C, REQ-o00062-F, REQ-o00062-E
 def _mutate_delete_requirement(
     graph: FederatedGraph, node_id: str, confirm: bool = False
@@ -3459,10 +3554,17 @@ def _mutate_delete_requirement(
 
     try:
         entry = graph.delete_requirement(node_id)
+        if entry.before_state.get("disposition") == "retired":
+            message = (
+                f"Retired requirement {node_id} in place with status "
+                f"'{entry.after_state['status']}'; its identifier is kept"
+            )
+        else:
+            message = f"Deleted requirement {node_id}"
         return {
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
-            "message": f"Deleted requirement {node_id}",
+            "message": message,
         }
     except (ValueError, KeyError) as e:
         return {"success": False, "error": str(e)}
@@ -3613,10 +3715,9 @@ def _mutate_update_assertion(
 def _mutate_delete_assertion(
     graph: FederatedGraph,
     assertion_id: str,
-    compact: bool = True,
     confirm: bool = False,
 ) -> dict[str, Any]:
-    """Delete assertion.
+    """Delete assertion by retiring it in place under its label.
 
     REQ-o00062-F: Requires confirm=True for destructive operations.
     REQ-o00062-E: Returns MutationEntry for audit.
@@ -3628,7 +3729,7 @@ def _mutate_delete_assertion(
         }
 
     try:
-        entry = graph.delete_assertion(assertion_id, compact=compact)
+        entry = graph.delete_assertion(assertion_id)
         return {
             "success": True,
             "mutation": _serialize_mutation_entry(entry),
@@ -6396,7 +6497,17 @@ Assertion tokens are the PARENT REQUIREMENT's version.
   label in the series is assigned and returned as `label`
 - `mutate_update_assertion(assertion_id, new_text, if_version)` - Update text
 - `mutate_delete_assertion(assertion_id, if_version, confirm=True)` - Delete
-  (requires confirm); returns the parent requirement's resulting version
+  (requires confirm). Active requirement: retired in place as `<RETIRED>`,
+  label kept. Draft-like requirement: removed and later labels renumbered,
+  refused while a reference would be repointed. Returns the parent
+  requirement's resulting version
+- A requirement whose status is in the retired role is read-only: every
+  mutation of its content or identifier is refused; change its status first.
+- `mutate_delete_requirement` on an active requirement retires it in place
+  with the one retired-role status the project declares; with several or
+  none declared it is refused and you set the status yourself.
+- A tool called with an argument it does not declare is refused with
+  `code: "undeclared_argument"`, naming the arguments it accepts.
 - `mutate_rename_assertion(old_id, new_label, if_version)` - Rename label
 
 ### Section / Remainder Mutations (in-memory)
@@ -6643,9 +6754,9 @@ def create_server(
             print(f"CONFIG ERROR: {e}", file=sys.stderr)
             graph = FederatedGraph.empty(name="<unconfigured>")
 
-    # Implements: REQ-o00077-A, REQ-o00077-F
+    # Implements: REQ-o00077-A, REQ-o00077-F, REQ-p00060-F
     # Every tool call reaches the transport through ``call_tool``, so the
-    # rule lands there rather than on each tool: a per-tool opt-in is one
+    # rules land there rather than on each tool: a per-tool opt-in is one
     # a later tool forgets, and REQ-o00077-C is stated over all of them at
     # once. Subclassed rather than patched onto the instance because
     # ``_setup_handlers`` binds this method during construction, and a
@@ -6656,6 +6767,9 @@ def create_server(
             blocked = _guard_executable_drift(_state, name)
             if blocked is not None:
                 return blocked
+            undeclared = _guard_undeclared_arguments(self._tool_manager.get_tool(name), arguments)
+            if undeclared is not None:
+                return undeclared
             return await super().call_tool(name, arguments)
 
     # Create server with instructions for AI agents (REQ-d00065)
@@ -7214,6 +7328,12 @@ def create_server(
     ) -> dict[str, Any]:
         """Delete a requirement and its assertions. Returns error unless confirm=True.
 
+        A requirement in the active role is retired in place instead: it keeps
+        its identifier and takes the one status the project declares in the
+        retired role. Where the project declares several or none, the call is
+        refused; change the status yourself. A requirement in the retired role
+        is read-only and is refused.
+
         On success, returns the resulting `version` of the containing FILE —
         the surviving container that absorbed the change (REQ-o00062-K).
 
@@ -7226,12 +7346,7 @@ def create_server(
         conflict = _guard_version(_state["graph"], node_id, if_version)
         if conflict:
             return conflict
-        # REQ-o00062-K: a whole-node deletion reports the version of the
-        # surviving container that absorbed the change — the containing FILE.
-        node = _state["graph"].find_by_id(node_id)
-        file_node = node.file_node() if node is not None else None
-        result = _mutate_delete_requirement(_state["graph"], node_id, confirm)
-        return _attach_version(result, file_node) if file_node is not None else result
+        return _delete_requirement_with_version(_state["graph"], node_id, confirm)
 
     # ─────────────────────────────────────────────────────────────────────
     # Assertion Mutation Tools (REQ-o00062-B)
@@ -7290,12 +7405,22 @@ def create_server(
     @mcp.tool()
     @_locked
     def mutate_delete_assertion(
-        assertion_id: str, if_version: str, compact: bool = True, confirm: bool = False
+        assertion_id: str, if_version: str, confirm: bool = False
     ) -> dict[str, Any]:
         """Delete an assertion. Returns error unless confirm=True.
 
-        Remaining labels re-sequenced if compact=True. On success, returns
-        the parent requirement's resulting `version` (REQ-o00062-K).
+        The requirement's status role decides what deletion does:
+        - active: the assertion is retired in place as `<RETIRED>`; its label
+          stays allocated, no other label moves, and a citation of it keeps
+          its text and reads as unresolved.
+        - provisional or aspirational: the assertion is removed and each
+          later label moves down one place; citations from requirements and
+          journeys follow. Refused, naming the references, where the deleted
+          assertion is cited or a moved one is cited from code, a test or an
+          unresolved reference -- remove or retarget those first.
+        - retired: refused; the requirement is read-only.
+        On success, returns the parent requirement's resulting `version`
+        (REQ-o00062-K).
 
         Args:
             if_version: The version of the PARENT REQUIREMENT from your last
@@ -7307,11 +7432,7 @@ def create_server(
         conflict = _guard_version(_state["graph"], assertion_id, if_version)
         if conflict:
             return conflict
-        # REQ-o00062-K: deletion reports the surviving parent's resulting
-        # version — the requirement that renders (and guards) the assertion.
-        parent = _owning_container(_state["graph"], assertion_id)
-        result = _mutate_delete_assertion(_state["graph"], assertion_id, compact, confirm)
-        return _attach_version(result, parent) if parent is not None else result
+        return _delete_assertion_with_version(_state["graph"], assertion_id, confirm)
 
     # Implements: REQ-o00062-B, REQ-o00062-I
     @mcp.tool()
@@ -7418,10 +7539,7 @@ def create_server(
         conflict = _guard_version(_state["graph"], node_id, if_version)
         if conflict:
             return conflict
-        # REQ-o00062-K: deletion reports the surviving parent's resulting version
-        parent = _owning_container(_state["graph"], node_id)
-        result = _mutate_delete_remainder(_state["graph"], node_id)
-        return _attach_version(result, parent) if parent is not None else result
+        return _delete_remainder_with_version(_state["graph"], node_id)
 
     # Implements: REQ-o00060-G
     @mcp.tool()

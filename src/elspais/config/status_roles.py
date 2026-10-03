@@ -87,6 +87,14 @@ class StatusRolesConfig:
         """
         return {self._original_case.get(k, k.title()) for k in self._mapping}
 
+    def statuses_with_role(self, role: StatusRole) -> list[str]:
+        """The status names declared in *role*, in declared order and original case."""
+        return [
+            self._original_case.get(name_lower, name_lower.title())
+            for name_lower, declared in self._mapping.items()
+            if declared is role
+        ]
+
     def coverage_excluded_statuses(self) -> set[str]:
         """Return the set of original-case status names excluded from coverage."""
         result: set[str] = set()

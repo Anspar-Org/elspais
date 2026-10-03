@@ -167,7 +167,7 @@ class TestRenderSaveDirtyFiles:
 
     # Verifies: REQ-d00132-A
     def test_REQ_d00132_A_delete_assertion_saves(self, tmp_path: Path):
-        """delete_assertion mutation removes assertion from rendered file."""
+        """delete_assertion mutation saves the assertion retired under its label."""
         from elspais.graph.render import render_save
 
         graph, spec_file, _ = _build_graph_with_spec(tmp_path)
@@ -178,6 +178,7 @@ class TestRenderSaveDirtyFiles:
         assert result["success"] is True
         content = spec_file.read_text(encoding="utf-8")
         assert "A. The system SHALL do something." in content
+        assert "B. <RETIRED>" in content
         assert "do another thing" not in content
 
     # Verifies: REQ-d00132-A

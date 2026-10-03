@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.factory import build_graph
 from elspais.graph.GraphNode import NodeKind
 from elspais.graph.parsers import ParsedContent
+from elspais.graph.parsers.directives import RETIRED_ASSERTION_TEXT, assertion_is_retired
 from elspais.graph.render import render_save
 from elspais.utilities.patterns import build_resolver
 from tests.core.graph_test_helpers import grammar_for
@@ -480,31 +482,77 @@ class TestAddAssertion:
         assert new_count == original_count
 
 
+def _assertion_state(graph, req_id: str) -> dict[str, tuple[str, str]]:
+    """Each assertion of *req_id*, by id, as (label, text)."""
+    req = graph.find_by_id(req_id)
+    return {
+        child.id: (child.get_field("label"), child.get_label())
+        for child in req.iter_children()
+        if child.kind == NodeKind.ASSERTION
+    }
+
+
 class TestDeleteAssertion:
-    """Tests for TraceGraph.delete_assertion()."""
+    """TraceGraph.delete_assertion() on an active requirement retires in place.
 
-    # Verifies: REQ-o00062-B
-    def test_REQ_o00062_B_delete_removes_and_preserves(self):
-        """REQ-o00062-B: Basic delete removes assertion from index (with default compact)."""
+    Requirements here carry the Active status, which is in the active role;
+    the provisional, aspirational and retired roles are covered in
+    test_assertion_compaction.py and test_retired_requirement_read_only.py.
+    """
+
+    @pytest.mark.parametrize("label", ["A", "B", "C"], ids=["first", "middle", "last"])
+    # Verifies: REQ-p00017-A
+    def test_REQ_p00017_A_delete_leaves_every_other_assertion_unchanged(self, label):
+        """No other assertion's id, label or text changes, wherever the deleted
+        one stands in the series."""
         graph = build_graph_with_assertions()
+        target = f"REQ-p00001-{label}"
+        before = _assertion_state(graph, "REQ-p00001")
 
-        # Before: A, B, C
-        # After (with compact): A, B (was C)
-        entry = graph.delete_assertion("REQ-p00001-B")
+        graph.delete_assertion(target)
 
+        after = _assertion_state(graph, "REQ-p00001")
+        assert set(after) == set(before)
+        others_before = {k: v for k, v in before.items() if k != target}
+        others_after = {k: v for k, v in after.items() if k != target}
+        assert others_after == others_before
+
+    @pytest.mark.parametrize("label", ["A", "B", "C"], ids=["first", "middle", "last"])
+    # Verifies: REQ-p00017-K
+    def test_REQ_p00017_K_delete_retires_under_the_existing_label(self, label):
+        """The deleted assertion stays in the graph under its id and label,
+        carrying the RETIRED directive."""
+        graph = build_graph_with_assertions()
+        target = f"REQ-p00001-{label}"
+
+        entry = graph.delete_assertion(target)
+
+        node = graph.find_by_id(target)
+        assert node is not None
+        assert node.kind == NodeKind.ASSERTION
+        assert node.get_field("label") == label
+        assert assertion_is_retired(node)
+        assert node.get_label() == RETIRED_ASSERTION_TEXT
+        assert target not in {n.id for n in graph.deleted_nodes()}
         assert entry.operation == "delete_assertion"
-        assert entry.target_id == "REQ-p00001-B"
+        assert entry.target_id == target
+        assert entry.after_state["text"] == RETIRED_ASSERTION_TEXT
 
-        # The original B was deleted, but C was compacted to B
-        # So find_by_id("REQ-p00001-B") returns the compacted node
-        # Check that deleted_nodes contains the original B
-        deleted = graph.deleted_nodes()
-        deleted_ids = {n.id for n in deleted}
-        assert "REQ-p00001-B" in deleted_ids
+    # Verifies: REQ-p00017-K
+    def test_REQ_p00017_K_deleting_a_retired_assertion_is_refused(self):
+        """A retired assertion cannot be deleted again; the refusal changes nothing."""
+        graph = build_graph_with_assertions()
+        parent = graph.find_by_id("REQ-p00001")
+        graph.delete_assertion("REQ-p00001-B")
+        hash_after_first = parent.get_field("hash")
+        logged = len(graph.mutation_log)
 
-        # The old C (now B) has C's original text
-        compacted = graph.find_by_id("REQ-p00001-B")
-        assert compacted.get_label() == "Third assertion"
+        with pytest.raises(ValueError, match="already retired"):
+            graph.delete_assertion("REQ-p00001-B")
+
+        assert len(graph.mutation_log) == logged
+        assert parent.get_field("hash") == hash_after_first
+        assert assertion_is_retired(graph.find_by_id("REQ-p00001-B"))
 
     # Verifies: REQ-o00062-B
     def test_delete_not_found(self):
@@ -522,75 +570,15 @@ class TestDeleteAssertion:
         with pytest.raises(ValueError, match="not an assertion"):
             graph.delete_assertion("REQ-p00001")
 
-    # Verifies: REQ-o00062-B
-    def test_delete_preserves_in_deleted_nodes(self):
-        """Deleted assertion is preserved in _deleted_nodes."""
-        graph = build_graph_with_assertions()
-
-        graph.delete_assertion("REQ-p00001-B")
-
-        assert graph.has_deletions()
-        deleted = graph.deleted_nodes()
-        deleted_ids = {n.id for n in deleted}
-        assert "REQ-p00001-B" in deleted_ids
-
-    # Verifies: REQ-o00062-B
-    def test_delete_with_compact(self):
-        """Delete with compact=True renumbers subsequent assertions."""
-        graph = build_graph_with_assertions()
-
-        # Before: A, B, C
-        assert graph.find_by_id("REQ-p00001-A") is not None
-        assert graph.find_by_id("REQ-p00001-B") is not None
-        assert graph.find_by_id("REQ-p00001-C") is not None
-
-        # Delete B with compact
-        entry = graph.delete_assertion("REQ-p00001-B", compact=True)
-
-        # After: A, B (was C)
-        assert graph.find_by_id("REQ-p00001-A") is not None
-        assert graph.find_by_id("REQ-p00001-B") is not None  # Was C
-        assert graph.find_by_id("REQ-p00001-C") is None
-
-        # The compacted B should have C's text
-        compacted = graph.find_by_id("REQ-p00001-B")
-        assert compacted.get_label() == "Third assertion"
-        assert compacted.get_field("label") == "B"
-
-        # Check renames were recorded
-        assert len(entry.before_state["renames"]) == 1
-        rename = entry.before_state["renames"][0]
-        assert rename["old_label"] == "C"
-        assert rename["new_label"] == "B"
-
-    # Verifies: REQ-o00062-B
-    def test_delete_without_compact(self):
-        """Delete with compact=False leaves gaps."""
-        graph = build_graph_with_assertions()
-
-        graph.delete_assertion("REQ-p00001-B", compact=False)
-
-        # After: A, C (gap at B)
-        assert graph.find_by_id("REQ-p00001-A") is not None
-        assert graph.find_by_id("REQ-p00001-B") is None
-        assert graph.find_by_id("REQ-p00001-C") is not None
-
-    # Verifies: REQ-o00062-B
-    def test_delete_removes_edges(self):
-        """Delete removes edges referencing the assertion."""
+    # Verifies: REQ-p00017-H
+    def test_REQ_p00017_H_delete_keeps_the_citation_of_the_label(self):
+        """A citation of the deleted assertion keeps naming its label; it is
+        not dropped and not widened to the whole requirement."""
         graph = build_graph_with_child_implementing_assertion()
 
-        parent = graph.find_by_id("REQ-p00001")
+        graph.delete_assertion("REQ-p00001-A")
 
-        # Before: edge has A in assertion_targets
-        edges = list(parent.iter_outgoing_edges())
-        assert any("A" in e.assertion_targets for e in edges)
-
-        graph.delete_assertion("REQ-p00001-A", compact=False)
-
-        # After: no edges reference A
-        edges = list(parent.iter_outgoing_edges())
-        assert not any("A" in e.assertion_targets for e in edges)
+        assert _cited_labels(graph, "REQ-p00002", "REQ-p00001") == ["A"]
 
     # Verifies: REQ-o00062-E
     def test_delete_changes_hash(self):
@@ -623,84 +611,53 @@ class TestDeleteAssertion:
         entry = graph.mutation_log.last()
         assert entry.operation == "delete_assertion"
 
-    # Verifies: REQ-o00062-G
-    def test_delete_undo_without_compact(self):
-        """Undo restores the deleted assertion (no compact)."""
-        graph = build_graph_with_assertions()
+    @pytest.mark.parametrize("label", ["A", "B"], ids=["cited", "uncited"])
+    # Verifies: REQ-o00062-P
+    def test_REQ_o00062_P_undo_restores_the_assertion_and_its_citations(self, label):
+        """Undo restores the text, un-retires the assertion, restores the
+        parent hash, and leaves every citation naming the label."""
+        graph = build_graph_with_child_implementing_assertion()
         parent = graph.find_by_id("REQ-p00001")
+        target = f"REQ-p00001-{label}"
+        before = _assertion_state(graph, "REQ-p00001")
+        original_hash = parent.get_field("hash")
 
-        entry = graph.delete_assertion("REQ-p00001-B", compact=False)
-        original_hash = entry.before_state.get("parent_hash")
-        assert graph.find_by_id("REQ-p00001-B") is None
-
+        graph.delete_assertion(target)
         graph.undo_last()
 
-        node = graph.find_by_id("REQ-p00001-B")
-        assert node is not None
-        assert node.get_label() == "Second assertion"
-        assert node.get_field("label") == "B"
+        node = graph.find_by_id(target)
+        assert not assertion_is_retired(node)
+        assert _assertion_state(graph, "REQ-p00001") == before
         assert parent.get_field("hash") == original_hash
+        assert _cited_labels(graph, "REQ-p00002", "REQ-p00001") == ["A"]
 
-    # Verifies: REQ-o00062-G
-    def test_delete_undo_with_compact(self):
-        """Undo restores the deleted assertion and un-compacts."""
+    # Verifies: REQ-p00017-A
+    def test_REQ_p00017_A_add_after_deleting_the_last_takes_the_next_label(self):
+        """The retired last label stays allocated, so the next add skips it."""
         graph = build_graph_with_assertions()
-        parent = graph.find_by_id("REQ-p00001")
 
-        # Get original C text
-        original_c_text = graph.find_by_id("REQ-p00001-C").get_label()
+        graph.delete_assertion("REQ-p00001-C")
+        entry = graph.add_assertion("REQ-p00001", "The tool SHALL do a fourth thing.")
 
-        entry = graph.delete_assertion("REQ-p00001-B", compact=True)
-        original_hash = entry.before_state.get("parent_hash")
+        assert entry.after_state["label"] == "D"
+        assert assertion_is_retired(graph.find_by_id("REQ-p00001-C"))
+        assert graph.find_by_id("REQ-p00001-D").get_label() == ("The tool SHALL do a fourth thing.")
 
-        # After delete+compact: A, B (was C)
-        assert graph.find_by_id("REQ-p00001-B").get_label() == "Third assertion"
 
-        graph.undo_last()
+class TestDeletionHasNoCompaction:
+    """Deletion takes no compaction option on any surface."""
 
-        # Restored: A, B, C
-        assert graph.find_by_id("REQ-p00001-A") is not None
-        assert graph.find_by_id("REQ-p00001-B") is not None
-        assert graph.find_by_id("REQ-p00001-C") is not None
-
-        # B should have original text
-        assert graph.find_by_id("REQ-p00001-B").get_label() == "Second assertion"
-
-        # C should have original text
-        assert graph.find_by_id("REQ-p00001-C").get_label() == original_c_text
-
-        # Hash restored
-        assert parent.get_field("hash") == original_hash
-
+    @pytest.mark.parametrize("surface", ["trace", "federated"])
     # Verifies: REQ-o00062-B
-    def test_delete_first_assertion(self):
-        """Deleting first assertion compacts correctly."""
-        graph = build_graph_with_assertions()
+    def test_REQ_o00062_B_compact_keyword_is_refused(self, tmp_path: Path, surface: str):
+        root = _write_citing_project(tmp_path)
+        federated = build_graph(repo_root=root)
+        graph = federated if surface == "federated" else _root_graph(root)[1]
 
-        graph.delete_assertion("REQ-p00001-A", compact=True)
+        with pytest.raises(TypeError, match="compact"):
+            graph.delete_assertion("REQ-p00001-B", compact=True)
 
-        # After: A (was B), B (was C)
-        assert graph.find_by_id("REQ-p00001-A") is not None
-        assert graph.find_by_id("REQ-p00001-B") is not None
-        assert graph.find_by_id("REQ-p00001-C") is None
-
-        assert graph.find_by_id("REQ-p00001-A").get_label() == "Second assertion"
-        assert graph.find_by_id("REQ-p00001-B").get_label() == "Third assertion"
-
-    # Verifies: REQ-o00062-B
-    def test_delete_last_assertion(self):
-        """Deleting last assertion requires no compaction."""
-        graph = build_graph_with_assertions()
-
-        entry = graph.delete_assertion("REQ-p00001-C", compact=True)
-
-        # After: A, B
-        assert graph.find_by_id("REQ-p00001-A") is not None
-        assert graph.find_by_id("REQ-p00001-B") is not None
-        assert graph.find_by_id("REQ-p00001-C") is None
-
-        # No renames needed
-        assert len(entry.before_state["renames"]) == 0
+        assert not assertion_is_retired(graph.find_by_id("REQ-p00001-B"))
 
 
 class TestMultipleAssertionMutations:
@@ -745,7 +702,7 @@ class TestAssertionMutationChain:
 
     Uses REQ-p00002 from the canonical (hht-like) graph which has assertions
     A-D. The chain adds assertion E, updates it, renames it to F, then
-    deletes F — leaving exactly the original A-D in place. The mutable_graph
+    deletes F — leaving the original A-D and F retired. The mutable_graph
     fixture undoes any remaining mutations after the class, so later tests
     see a pristine canonical graph regardless of where the chain stops.
 
@@ -790,16 +747,18 @@ class TestAssertionMutationChain:
         assert node.get_field("label") == "F"
         assert len(mutable_graph.mutation_log) == 3
 
-    # Verifies: REQ-o00062-B
+    # Verifies: REQ-o00062-B, REQ-p00017-K
     def test_step_4_delete_assertion(self, mutable_graph):
-        """Delete assertion F, restoring the original assertion count."""
-        from elspais.graph.GraphNode import NodeKind
-
-        mutable_graph.delete_assertion("REQ-p00002-F", compact=False)
-        assert mutable_graph.find_by_id("REQ-p00002-F") is None
+        """Delete assertion F: it stays under its label, retired."""
+        mutable_graph.delete_assertion("REQ-p00002-F")
+        node = mutable_graph.find_by_id("REQ-p00002-F")
+        assert node is not None
+        assert assertion_is_retired(node)
         parent = mutable_graph.find_by_id("REQ-p00002")
-        remaining = sum(1 for c in parent.iter_children() if c.kind == NodeKind.ASSERTION)
-        assert remaining == self.__class__._orig_assertion_count
+        assertions = [c for c in parent.iter_children() if c.kind == NodeKind.ASSERTION]
+        assert len(assertions) == self.__class__._orig_assertion_count + 1
+        live = [c for c in assertions if not assertion_is_retired(c)]
+        assert len(live) == self.__class__._orig_assertion_count
         assert len(mutable_graph.mutation_log) == 4
 
     # Verifies: REQ-o00062-G
@@ -831,7 +790,7 @@ FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures"
 # "Rationale" section, so a mis-placed assertion lands after it.
 _PLACEMENT_CASES = [
     pytest.param("hht-like", "REQ-o00002", "spec/ops-deploy.md", id="uppercase"),
-    pytest.param("e2e-fda-numeric", "DEV-00001", "spec/dev-audit.md", id="numeric-0"),
+    pytest.param("e2e-fda-numeric", "PRD-00001", "spec/prd-core.md", id="numeric-0"),
 ]
 
 
@@ -1151,3 +1110,262 @@ class TestAMutationLeavesOtherRequirementsCitationsAlone:
 
         assert _cited_labels(graph, "REQ-d00002", "REQ-p00002") == ["A"]
         assert _cited_labels(graph, "REQ-d00003", "REQ-p00002") == ["C"]
+
+
+# ---------------------------------------------------------------------------
+# Deletion on disk: retirement survives save and rebuild, labels stay
+# allocated, and citations of the retired label are reported, not rewritten.
+#
+# The fixture's REQ-p00001 has A, B and C. REQ-d00001 (another spec file) and a code file
+# each cite REQ-p00001-B.
+# ---------------------------------------------------------------------------
+
+_CITING_CONFIG = """version = 5
+
+[project]
+name = "retire"
+namespace = "REQ"
+
+[levels.prd]
+rank = 1
+letter = "p"
+implements = ["prd"]
+
+[levels.dev]
+rank = 3
+letter = "d"
+implements = ["dev", "prd"]
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
+"""
+
+_CITING_PRD = """# REQ-p00001: Parent
+
+**Level**: prd | **Status**: Active | **Implements**: -
+
+## Assertions
+
+A. The tool SHALL do alpha.
+
+B. The tool SHALL do beta.
+
+C. The tool SHALL do gamma.
+
+*End* *Parent* | **Hash**: 00000000
+---
+"""
+
+_CITING_DEV = """# REQ-d00001: Child
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00001-B
+
+## Assertions
+
+A. The tool SHALL do delta.
+
+*End* *Child* | **Hash**: 00000000
+---
+"""
+
+_CITING_CODE = "# Implements: REQ-p00001-B\ndef f():\n    pass\n"
+
+_CITING_FILES = ("spec/dev.md", "src/m.py")
+
+
+def _write_citing_project(tmp_path: Path) -> Path:
+    """Write the citing project into *tmp_path* and return its root."""
+    root = tmp_path / "repo"
+    (root / "spec").mkdir(parents=True)
+    (root / "src").mkdir()
+    (root / ".elspais.toml").write_text(_CITING_CONFIG, encoding="utf-8")
+    (root / "spec" / "prd.md").write_text(_CITING_PRD, encoding="utf-8")
+    (root / "spec" / "dev.md").write_text(_CITING_DEV, encoding="utf-8")
+    (root / "src" / "m.py").write_text(_CITING_CODE, encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    return root
+
+
+def _code_node_ids(graph) -> list[str]:
+    return [node.id for node in graph.iter_by_kind(NodeKind.CODE)]
+
+
+class TestDeletionOnDisk:
+    """Deleting from an active requirement retires the assertion in the saved
+    file and leaves citing files alone."""
+
+    # Verifies: REQ-p00017-K
+    def test_REQ_p00017_K_saved_file_carries_the_retired_assertion(self, tmp_path: Path):
+        root = _write_citing_project(tmp_path)
+        graph = build_graph(repo_root=root)
+
+        graph.delete_assertion("REQ-p00001-B")
+        result = render_save(graph, repo_root=root)
+
+        assert result["success"] is True, result.get("errors")
+        lines = (root / "spec" / "prd.md").read_text(encoding="utf-8").splitlines()
+        assert "B. <RETIRED>" in lines
+        assert "A. The tool SHALL do alpha." in lines
+        assert "C. The tool SHALL do gamma." in lines
+        rebuilt = build_graph(repo_root=root)
+        assert assertion_is_retired(rebuilt.find_by_id("REQ-p00001-B"))
+
+    @pytest.mark.parametrize("save_between", [False, True], ids=["in-memory", "after-rebuild"])
+    # Verifies: REQ-p00017-A
+    def test_REQ_p00017_A_deleted_last_label_is_not_given_again(
+        self, tmp_path: Path, save_between: bool
+    ):
+        """After the last assertion is deleted, an add takes the next label --
+        also when the deletion was saved and the graph rebuilt from disk."""
+        root = _write_citing_project(tmp_path)
+        graph = build_graph(repo_root=root)
+
+        graph.delete_assertion("REQ-p00001-C")
+        if save_between:
+            assert render_save(graph, repo_root=root)["success"] is True
+            graph = build_graph(repo_root=root)
+        entry = graph.add_assertion("REQ-p00001", "The tool SHALL do zeta.")
+
+        assert entry.after_state["label"] == "D"
+        assert assertion_is_retired(graph.find_by_id("REQ-p00001-C"))
+        assert render_save(graph, repo_root=root)["success"] is True
+        rebuilt = build_graph(repo_root=root)
+        assert assertion_is_retired(rebuilt.find_by_id("REQ-p00001-C"))
+        assert rebuilt.find_by_id("REQ-p00001-D").get_label() == "The tool SHALL do zeta."
+
+    # Verifies: REQ-p00017-H
+    def test_REQ_p00017_H_citing_files_are_not_rewritten(self, tmp_path: Path):
+        root = _write_citing_project(tmp_path)
+        before = {name: (root / name).read_bytes() for name in _CITING_FILES}
+        graph = build_graph(repo_root=root)
+
+        graph.delete_assertion("REQ-p00001-B")
+        result = render_save(graph, repo_root=root)
+
+        assert result["success"] is True, result.get("errors")
+        assert [Path(f).name for f in result["files_modified"]] == ["prd.md"]
+        assert {name: (root / name).read_bytes() for name in _CITING_FILES} == before
+
+    # Verifies: REQ-p00017-H
+    def test_REQ_p00017_H_citation_of_a_retired_assertion_is_unresolved(self, tmp_path: Path):
+        """After rebuild, each citation of the retired assertion is reported
+        as unresolved, and no edge binds it to the requirement."""
+        root = _write_citing_project(tmp_path)
+        graph = build_graph(repo_root=root)
+        graph.delete_assertion("REQ-p00001-B")
+        assert render_save(graph, repo_root=root)["success"] is True
+
+        rebuilt = build_graph(repo_root=root)
+
+        code_ids = _code_node_ids(rebuilt)
+        assert len(code_ids) == 1
+        faults = {(f.source_id, f.target_id) for f in rebuilt.unresolved_references()}
+        assert ("REQ-d00001", "REQ-p00001-B") in faults
+        assert (code_ids[0], "REQ-p00001-B") in faults
+        parent = rebuilt.find_by_id("REQ-p00001")
+        bound = {edge.target.id for edge in parent.iter_outgoing_edges()}
+        assert "REQ-d00001" not in bound
+        assert code_ids[0] not in bound
+
+    # Verifies: REQ-p00017-H
+    def test_REQ_p00017_H_citations_resolve_before_the_deletion(self, tmp_path: Path):
+        """Control for the test above: the same citations bind while B is live."""
+        root = _write_citing_project(tmp_path)
+        graph = build_graph(repo_root=root)
+
+        faults = {(f.source_id, f.target_id) for f in graph.unresolved_references()}
+        assert not any(target == "REQ-p00001-B" for _, target in faults)
+        assert _cited_labels(graph, "REQ-d00001", "REQ-p00001") == ["B"]
+
+
+# ---------------------------------------------------------------------------
+# The same guarantees under a multi-character label series: labels 1..12, the
+# cited assertion 10 has later siblings 11 and 12.
+# ---------------------------------------------------------------------------
+
+_NUMERIC_CONFIG = (
+    _CITING_CONFIG
+    + """
+[id-patterns.assertions]
+label_style = "numeric_1based"
+max_count = 99
+"""
+)
+
+_NUMERIC_PRD = (
+    "# REQ-p00001: Parent\n\n"
+    "**Level**: prd | **Status**: Active | **Implements**: -\n\n"
+    "## Assertions\n\n"
+    + "".join(f"{n}. The tool SHALL do thing {n}.\n\n" for n in range(1, 13))
+    + "*End* *Parent* | **Hash**: 00000000\n---\n"
+)
+
+_NUMERIC_DEV = _CITING_DEV.replace("REQ-p00001-B", "REQ-p00001-10")
+
+
+def _write_numeric_project(tmp_path: Path) -> Path:
+    """Write the numeric-label project into *tmp_path* and return its root."""
+    root = tmp_path / "numeric"
+    (root / "spec").mkdir(parents=True)
+    (root / ".elspais.toml").write_text(_NUMERIC_CONFIG, encoding="utf-8")
+    (root / "spec" / "prd.md").write_text(_NUMERIC_PRD, encoding="utf-8")
+    (root / "spec" / "dev.md").write_text(_NUMERIC_DEV, encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    return root
+
+
+class TestDeletionUnderMultiCharacterLabels:
+    """Deleting cited assertion 10 of 1..12 of an active requirement moves no
+    label and drops no citation."""
+
+    # Verifies: REQ-p00017-A
+    def test_REQ_p00017_A_later_siblings_keep_their_ids_and_texts(self, tmp_path: Path):
+        root = _write_numeric_project(tmp_path)
+        graph = build_graph(repo_root=root)
+        before = _assertion_state(graph, "REQ-p00001")
+        assert _cited_labels(graph, "REQ-d00001", "REQ-p00001") == ["10"]
+
+        graph.delete_assertion("REQ-p00001-10")
+
+        after = _assertion_state(graph, "REQ-p00001")
+        assert set(after) == set(before)
+        for label in ("11", "12"):
+            assert after[f"REQ-p00001-{label}"] == (label, f"The tool SHALL do thing {label}.")
+        assert after["REQ-p00001-10"] == ("10", RETIRED_ASSERTION_TEXT)
+        assert _cited_labels(graph, "REQ-d00001", "REQ-p00001") == ["10"]
+
+    # Verifies: REQ-p00017-A
+    def test_REQ_p00017_A_saved_deletion_leaves_the_citation_unresolved(self, tmp_path: Path):
+        root = _write_numeric_project(tmp_path)
+        dev_before = (root / "spec" / "dev.md").read_bytes()
+        graph = build_graph(repo_root=root)
+
+        graph.delete_assertion("REQ-p00001-10")
+        assert render_save(graph, repo_root=root)["success"] is True
+
+        assert (root / "spec" / "dev.md").read_bytes() == dev_before
+        lines = (root / "spec" / "prd.md").read_text(encoding="utf-8").splitlines()
+        assert "10. <RETIRED>" in lines
+        assert "11. The tool SHALL do thing 11." in lines
+        assert "12. The tool SHALL do thing 12." in lines
+        rebuilt = build_graph(repo_root=root)
+        faults = {(f.source_id, f.target_id) for f in rebuilt.unresolved_references()}
+        assert ("REQ-d00001", "REQ-p00001-10") in faults
+        assert _cited_labels(rebuilt, "REQ-d00001", "REQ-p00001") == []
+        assert rebuilt.find_by_id("REQ-p00001-11").get_label() == "The tool SHALL do thing 11."
+
+    # Verifies: REQ-p00017-A
+    def test_REQ_p00017_A_undo_restores_the_deleted_assertion(self, tmp_path: Path):
+        root = _write_numeric_project(tmp_path)
+        graph = build_graph(repo_root=root)
+        before = _assertion_state(graph, "REQ-p00001")
+
+        graph.delete_assertion("REQ-p00001-10")
+        graph.undo_last()
+
+        assert _assertion_state(graph, "REQ-p00001") == before
+        assert not assertion_is_retired(graph.find_by_id("REQ-p00001-10"))
+        assert _cited_labels(graph, "REQ-d00001", "REQ-p00001") == ["10"]

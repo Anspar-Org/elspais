@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from elspais.config.schema import (
     ElspaisConfig,
     ScanningConfig,
@@ -326,3 +328,300 @@ def test_ingest_two_junit_files_distinct_source_paths(tmp_path: Path):
     assert None not in source_paths, "source_path must not be None for file-channel results"
     # The two results must have distinct source_paths (no collision)
     assert len(source_paths) == 2, f"source_paths must be distinct per file, got: {source_paths}"
+
+
+# ---------------------------------------------------------------------------
+# (f) One scenario declared in a shared file, executed through runner files
+# ---------------------------------------------------------------------------
+
+_SHARED_CONFIG = """\
+version = 5
+
+[project]
+name = "shared"
+namespace = "REQ"
+
+[levels.dev]
+rank = 1
+letter = "d"
+implements = ["dev"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
+
+[id-patterns.component]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.test]
+enabled = true
+directories = ["test"]
+file_patterns = ["*.dart"]
+
+[[scanning.test.targets]]
+name = "flutter"
+reporter = "flutter-machine"
+results = "machine.jsonl"
+match = "source"
+
+[rules.format]
+require_hash = false
+require_assertions = false
+require_status = false
+"""
+
+_SHARED_SPEC = """\
+# Requirements
+
+---
+
+### REQ-d00001: Boot
+
+**Level**: dev | **Status**: Active
+
+## Assertions
+
+A. The system SHALL give two stores one identity.
+
+*End* *Boot*
+---
+"""
+
+# The scenario is declared on line 3 and cites from inside its body.
+_SHARED_FILE = "test/support/boot_conformance.dart"
+_SHARED_DART = """\
+void bootConformance() {
+  group('boot', () {
+    test('two stores share one identity', () {
+      // Verifies: REQ-d00001-A
+      expect(1, 1);
+    });
+  });
+}
+"""
+_SHARED_LINE = 3
+
+_RUNNER_A = "test/a/a_test.dart"
+_RUNNER_A_DART = """\
+import '../support/boot_conformance.dart';
+
+void main() {
+  bootConformance();
+}
+"""
+
+# A decoy test is declared on the same line number as the scenario.
+_RUNNER_B = "test/b/b_test.dart"
+_RUNNER_B_DART = """\
+import '../support/boot_conformance.dart';
+void main() {
+  test('decoy', () {
+    // Verifies: REQ-d00001-A
+    expect(2, 2);
+  });
+  bootConformance();
+}
+"""
+
+
+def _machine_run(root: Path, runner: str, declared: str, outcome: str, suite_id: int) -> str:
+    """The machine events of one runner file executing the shared scenario."""
+    import json
+
+    test_id = suite_id + 1
+    return "\n".join(
+        [
+            json.dumps(
+                {
+                    "suite": {"id": suite_id, "platform": "vm", "path": str(root / runner)},
+                    "type": "suite",
+                }
+            ),
+            json.dumps(
+                {
+                    "test": {
+                        "id": test_id,
+                        "name": "boot two stores share one identity",
+                        "suiteID": suite_id,
+                        "groupIDs": [],
+                        "line": _SHARED_LINE,
+                        "column": 5,
+                        "url": f"file://{root / declared}",
+                        "root_line": 4,
+                        "root_column": 3,
+                        "root_url": f"file://{root / runner}",
+                    },
+                    "type": "testStart",
+                }
+            ),
+            json.dumps(
+                {
+                    "testID": test_id,
+                    "result": outcome,
+                    "skipped": False,
+                    "hidden": False,
+                    "type": "testDone",
+                }
+            ),
+        ]
+    )
+
+
+def _shared_scenario_project(root: Path, outcome_b: str):
+    """Build a project whose scenario two runner files executed.
+
+    Runner A's run passed; runner B's run had ``outcome_b``.
+    Returns the federated graph and the repository's configuration.
+    """
+    from elspais.graph.factory import build_graph as _factory_build_graph
+
+    files = {
+        ".elspais.toml": _SHARED_CONFIG,
+        "spec/requirements.md": _SHARED_SPEC,
+        _SHARED_FILE: _SHARED_DART,
+        _RUNNER_A: _RUNNER_A_DART,
+        _RUNNER_B: _RUNNER_B_DART,
+    }
+    for rel, text in files.items():
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    out = root / ".results" / "flutter"
+    out.mkdir(parents=True)
+    (out / "machine.jsonl").write_text(
+        _machine_run(root, _RUNNER_A, _SHARED_FILE, "success", 1)
+        + "\n"
+        + _machine_run(root, _RUNNER_B, _SHARED_FILE, outcome_b, 10)
+        + "\n",
+        encoding="utf-8",
+    )
+    graph = _factory_build_graph(repo_root=root)
+    (entry,) = list(graph.iter_repos())
+    return graph, entry.config
+
+
+def _test_at(graph, rel: str):
+    (node,) = [
+        t
+        for t in graph.iter_by_kind(NodeKind.TEST)
+        if t.file_node() is not None and t.file_node().get_field("relative_path") == rel
+    ]
+    return node
+
+
+def _results_of(test_node) -> set[str]:
+    return {c.id for c in test_node.iter_children() if c.kind == NodeKind.RESULT}
+
+
+def _result_run_by(graph, runner: str):
+    (node,) = [
+        r for r in graph.iter_by_kind(NodeKind.RESULT) if r.get_field("runner_file") == runner
+    ]
+    return node
+
+
+@pytest.fixture(scope="module", params=["success", "failure"], ids=["b-passed", "b-failed"])
+def shared_scenario(request, tmp_path_factory):
+    root = tmp_path_factory.mktemp("shared") / "proj"
+    graph, config = _shared_scenario_project(root, request.param)
+    return request.param, graph, config
+
+
+# Verifies: REQ-d00254-G, REQ-d00254-Z
+def test_each_run_binds_to_the_scenario_where_it_is_declared(shared_scenario):
+    from elspais.graph.relations import EdgeKind
+
+    _outcome, graph, _config = shared_scenario
+    scenario = _test_at(graph, _SHARED_FILE)
+    a = _result_run_by(graph, _RUNNER_A)
+    b = _result_run_by(graph, _RUNNER_B)
+
+    assert scenario.get_field("parse_line") == _SHARED_LINE
+    yielded = {e.target.id for e in scenario.iter_outgoing_edges() if e.kind == EdgeKind.YIELDS}
+    assert yielded == {a.id, b.id}
+    for result in (a, b):
+        assert result.get_field("match_scope") == "test"
+        assert result.get_field("source_file") == _SHARED_FILE
+        assert result.get_field("line") == _SHARED_LINE
+        # A record naming its declaration never falls back to the runner file.
+        assert result.get_field("root_file") is None
+        assert result.get_field("root_line") is None
+
+
+# Verifies: REQ-d00254-Z
+def test_no_run_binds_to_a_runner_test_on_the_same_line(shared_scenario):
+    _outcome, graph, _config = shared_scenario
+    decoy = _test_at(graph, _RUNNER_B)
+
+    assert decoy.get_field("parse_line") == _SHARED_LINE
+    assert _results_of(decoy) == set()
+
+
+# Verifies: REQ-d00294-G
+def test_each_result_records_the_runner_file_that_executed_it(shared_scenario):
+    _outcome, graph, _config = shared_scenario
+    results = list(graph.iter_by_kind(NodeKind.RESULT))
+
+    assert sorted(r.get_field("runner_file") for r in results) == [_RUNNER_A, _RUNNER_B]
+    assert {r.get_field("source_file") for r in results} == {_SHARED_FILE}
+
+
+# Verifies: REQ-d00294-E
+def test_the_scenario_is_passing_only_when_every_run_passed(shared_scenario):
+    from elspais.graph.metrics import tested_and_passing
+
+    outcome, graph, _config = shared_scenario
+    rollup = graph.find_by_id("REQ-d00001").get_metric("rollup_metrics")
+    passing = tested_and_passing(rollup)
+
+    assert rollup.tested.covered == 1.0
+    if outcome == "success":
+        assert passing.covered == 1.0
+        assert passing.has_failures is False
+    else:
+        assert passing.covered == 0
+        assert passing.has_failures is True
+
+
+# Verifies: REQ-d00294-G
+def test_a_failed_run_is_reported_with_the_runner_that_executed_it(shared_scenario):
+    from elspais.commands.health import check_test_results
+
+    outcome, graph, config = shared_scenario
+    check = check_test_results(graph, config)
+    messages = [f.message for f in check.findings]
+
+    if outcome == "success":
+        assert check.passed is True
+        assert not any("(run by" in m for m in messages)
+    else:
+        assert check.passed is False
+        (message,) = messages
+        assert f"(run by {_RUNNER_B})" in message
+        assert _RUNNER_A not in message
+
+
+# Verifies: REQ-d00294-G
+def test_a_failed_test_its_own_suite_ran_names_no_runner(tmp_path: Path):
+    """Where the declaring file is the file that ran, the report names it once."""
+    from elspais.commands.health import check_test_results
+    from elspais.graph.factory import build_graph as _factory_build_graph
+
+    root = tmp_path / "proj"
+    _graph, config = _shared_scenario_project(root, "success")
+    out = root / ".results" / "flutter" / "machine.jsonl"
+    # Runner B's own decoy, declared and run in b_test.dart, fails.
+    out.write_text(_machine_run(root, _RUNNER_B, _RUNNER_B, "failure", 1) + "\n", encoding="utf-8")
+
+    graph = _factory_build_graph(repo_root=root)
+    result = next(iter(graph.iter_by_kind(NodeKind.RESULT)))
+    assert result.get_field("source_file") == _RUNNER_B
+    assert result.get_field("runner_file") == _RUNNER_B
+
+    (finding,) = check_test_results(graph, config).findings
+
+    assert "(run by" not in finding.message

@@ -372,13 +372,20 @@ The failure shapes this requirement guards against:
 - References the tool cannot see. Requirement IDs appear in artifacts elspais does not parse — prose documentation, SQL migrations, Terraform, shell scripts, commit messages. The tool cannot update these, but it can refuse to strand them: an identity mapping from former to successor identifiers makes out-of-graph references mechanically updatable. The obligation is the mapping's existence and availability, not its format.
 - Deletion that ignores lifecycle. The estate classifies statuses into roles (active, provisional, aspirational, retired). A provisional or aspirational requirement has attracted no committed references, so removing or renumbering it is routine. An active requirement is load-bearing; removing it outright would strand every reference to it, so it retires in place instead. A retired requirement is a historical record; editing it would falsify the record that its identifier preserves.
 
-**Assertion-level retirement (the RETIRED directive).** An *Assertion* withdrawn in prose alone is still an *Assertion*: the parser builds an ordinary node from it, so the letter counts as a permanently-uncovered assertion in every coverage denominator and no gap surface can tell "retired by design" from "never verified". The RETIRED parsing directive (syntax per REQ-p00002-E) makes retirement machine-readable: an *Assertion* carrying it "does not exist" for coverage and *Traceability* purposes — it exits every denominator (no longer counted among assertions expected to be implemented, tested, or validated), and references to it break loudly instead of designating a withdrawn obligation, which is precisely this requirement's governing invariant applied at *Assertion* granularity. What retirement does NOT release is the label: the letter stays allocated forever, the assertion-level analogue of the label-stability invariant assertion A states for reorder/delete mutations and of the identifier-reuse prohibition assertion F states for requirements. G/H/I are the *Assertion*-granularity counterparts of the requirement-level retire-in-place discipline in D/E/F. The adjacent concept in REQ-p00016 (a declaring requirement marking a template *Assertion* NOT APPLICABLE for one instance) is per-instance exclusion; RETIRED withdraws the obligation estate-wide at its definition site.
+**Assertion-level retirement (the RETIRED directive).** An *Assertion* withdrawn in prose alone is still an *Assertion*: the parser builds an ordinary node from it, so the letter counts as a permanently-uncovered assertion in every coverage denominator and no gap surface can tell "retired by design" from "never verified". The RETIRED parsing directive (syntax per REQ-p00002-E) makes retirement machine-readable: an *Assertion* carrying it "does not exist" for coverage and *Traceability* purposes — it exits every denominator (no longer counted among assertions expected to be implemented, tested, or validated), and references to it break loudly instead of designating a withdrawn obligation, which is precisely this requirement's governing invariant applied at *Assertion* granularity. What retirement does NOT release is the label: the letter stays allocated forever, the assertion-level analogue of the label-stability invariant assertion A states for reorder/delete mutations and of the identifier-reuse prohibition assertion F states for requirements. G/H/I/K are the *Assertion*-granularity counterparts of the requirement-level retire-in-place discipline in D/E/F; K is D's counterpart, so deleting an *Assertion* of an active requirement leaves its label in the text carrying the directive, which is the record that keeps the label allocated after the mutation is saved. A provisional or aspirational requirement is still being drafted, so deleting one of its *Assertions* removes it and closes the gap (L), and every reference the graph holds to a relabelled *Assertion* follows it under B. Compaction is routine only where nothing outside the drafting depends on the labels. A reference the tool cannot carry to a new label, or a reference to the removed *Assertion* itself, would otherwise designate a neighbour without any report, so M refuses that deletion and names the references to remove or retarget first. The adjacent concept in REQ-p00016 (a declaring requirement marking a template *Assertion* NOT APPLICABLE for one instance) is per-instance exclusion; RETIRED withdraws the obligation estate-wide at its definition site.
+
+A refusal under M names where each reference is held. A citation in code or a test is held on its own line. A citation in a requirement's metadata is held by that requirement, so it is located at the requirement's *Requirement Location*.
+
+N exists because status roles are configured per project. Retiring in place under D needs one status to give the requirement, and a project may declare several statuses in the retired role, or none. Choosing one would be a guess about what the author means, so the deletion is refused and the author sets the status.
 
 Interplay with existing requirements: this requirement governs what an *applied* mutation must preserve. When a mutation cannot be applied — or can be applied only partially — reporting the unapplied change and its cause is REQ-p00015-B's obligation, cited here rather than restated. REQ-d00201 and REQ-d00065 specify *which layer executes* mutations (delegation of mutation logic to the graph); they are complementary plumbing and say nothing about designation integrity, which is this requirement's subject. Protection against concurrent writers (lost updates, conflict detection) is the concern of the MCP mutation tooling spec under REQ-o00062, not of this requirement — scope here is designation integrity of the mutations that are applied.
 
+Requirement Location
+: The file and line that declare a requirement's identifier.
+
 ## Assertions
 
-A. If a mutation reorders or deletes *Assertions* within a requirement, then the tool SHALL NOT assign a label previously borne by one *Assertion* to a different *Assertion*.
+A. If a mutation reorders or deletes *Assertions* within a requirement whose status is in the active role, then the tool SHALL NOT assign a label previously borne by one *Assertion* to a different *Assertion*.
 
 B. When a mutation renames the identifier of a requirement or of one of its *Assertions*, the tool SHALL update every reference held in the graph to the former identifier so that it designates the same entity under its new identifier.
 
@@ -398,8 +405,20 @@ I. The tool SHALL NOT assign a label borne by an *Assertion* carrying the RETIRE
 
 J. When a mutation renames or removes an *Assertion*, the tool SHALL leave unchanged every reference that designates an *Assertion* of another requirement.
 
+K. If a mutation would delete an *Assertion* of a requirement whose status is in the active role, then the tool SHALL give the *Assertion* the RETIRED parsing directive under its existing label rather than remove it.
+
+L. When a mutation deletes an *Assertion* of a requirement whose status is in the provisional or aspirational role, the tool SHALL remove the *Assertion* and give each later *Assertion* of that requirement the label that precedes its own in the label series.
+
+M. If deleting an *Assertion* of a requirement whose status is in the provisional or aspirational role would leave a reference held in the graph designating a different *Assertion*, or the whole requirement, instead of what it designated before, then the tool SHALL refuse the deletion and report the reason together with each such reference and where it is held: the file and line of a citation in code or a test, or the *Requirement Location* of a citing requirement.
+
+N. If a mutation would delete a requirement whose status is in the active role, and the configuration does not declare exactly one status in the retired role, then the tool SHALL refuse the deletion and report the statuses that the configuration declares in the retired role.
+
 ## Changelog
 
+- 2026-10-02 | bc9e593e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-02 | 8c800926 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-02 | cfcacc28 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-02 | 743fb70a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-01 | d2f70506 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-24 | 3e4c9ddb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 8ddf7122 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -407,7 +426,7 @@ J. When a mutation renames or removes an *Assertion*, the tool SHALL leave uncha
 - 2026-07-31 | c0aae59d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-20: author reference-integrity-under-mutation invariant (GI-3)
 
-*End* *Reference Integrity Under Mutation* | **Hash**: d2f70506
+*End* *Reference Integrity Under Mutation* | **Hash**: bc9e593e
 ---
 
 # REQ-p00018: Compiled Risk Register

@@ -482,6 +482,8 @@ R. <RETIRED> reported trailing content that opened neither a reference nor a com
 
 S. An item SHALL be reported under the same class whichever *Traceability* keyword introduced it.
 
+T. If an item is the identifier of a copy that a `Satisfies:` declaration made, then the report SHALL name the original that the copy was made from.
+
 ### Rationale
 
 Classes are only as useful as the rule that assigns them. Reading either reaches a stage or it does not, so a class is a fact about the item rather than a judgement of it, and the report says what was reached and stops there.
@@ -491,6 +493,8 @@ Attribution decided by a declared namespace separates three populations a projec
 Minimality bounds diagnosis without a list of defects worth naming. The smallest set of relaxations is the one the input determines; a larger set that also succeeds contains a relaxation the input never asked for, and naming it describes a defect the author does not have.
 
 Trailing content ranks beneath every named relaxation because an item opening with a valid reference can always be read as that reference plus whatever follows. Unranked, that reading accounts for every malformed item and leaves every diagnosis generic. The ranking governs what is reported and settles nothing about what binds.
+
+The identifier of a copy made by `Satisfies:` is the graph's own name for that copy, not an identifier an author writes, so a reference spelled that way reads as no identifier at all. The author who wrote one meant the original, and naming it turns the report into its remedy without naming a cause beyond the one the report already states.
 
 A non-canonical form is a fact about the file rather than a defect in the reference. One canonical spelling exists for a keyword and for an identifier alike, and admitting more than one form is not writing more than one, so the report names the form that was written.
 
@@ -504,6 +508,8 @@ This requirement concretizes the REQ-p00019 anti-pattern template for reference 
 
 ### Changelog
 
+- 2026-10-02 | 84d91fef | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | T added: a reference spelled as the identifier of a copy is reported naming the original
 - 2026-10-01 | 58971daa | - | Michael Lewis (<michael@anspar.org>) | S added: the class an item reaches does not depend on the keyword that introduced it
 - 2026-08-25 | 9f1a7a6a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-25 | e46b563e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -519,7 +525,7 @@ This requirement concretizes the REQ-p00019 anti-pattern template for reference 
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: record how each REQ-p00019 class is answered for this subsystem — concretized, bound through the instance, or left visibly uncovered with its reason
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: the rule assigning reference failure classes — the space and namespace tests, minimal relaxation, and reading within an item without binding from it
 
-*End* *Reference Fault Diagnosis* | **Hash**: 58971daa
+*End* *Reference Fault Diagnosis* | **Hash**: 84d91fef
 ---
 
 ## REQ-d00287: Reading a Reference
@@ -583,11 +589,11 @@ C. The configuration surface SHALL express test result and coverage ingestion vi
 
 D. A run of citations with no executable line between them SHALL attribute the lines of the function it is written above, or else the executable lines following it up to the next citation, the end of its enclosing function or -- where no function encloses it -- the start of the next function declaration (its first decorator line, where it has decorators), or the end of the file, whichever comes first.
 
-E. A reporter registry SHALL map each `reporter` format name to a parser and an input channel (`stdout` or `file`). The registry SHALL include a native `flutter test --machine` reporter that parses the machine JSON event stream into result records carrying each test's real source-file path (from the suite path), pass/fail/skip status, and line -- without an external JUnit converter.
+E. A reporter registry SHALL map each `reporter` format name to a parser and an input channel (`stdout` or `file`). The registry SHALL include a native `flutter test --machine` reporter that parses the machine JSON event stream into result records carrying the file and line at which each test is declared, the file that executed it, and its pass/fail/skip status -- without an external JUnit converter.
 
 F. For each configured target, the system SHALL obtain the reporter's output (captured from the command's stdout for stdout-channel reporters, or read from the `results` glob for file-channel reporters), build RESULT nodes carrying the real test-file path (`source_file`, repo-relative) and the target's `match` mode, and ingest the target's `coverage` file. Coverage crediting SHALL be derived from the targets' `credit_coverage`/`min_coverage_fraction`. File-channel results SHALL additionally record where each result was recorded — the results artifact's repo-relative path and, when derivable from the artifact (e.g. one JUnit `<testcase>` per line), the per-result line — as provenance distinct from the test's source path, and result links in reporting surfaces SHALL point at that artifact location.
 
-G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step reference (in the configured reference form) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the result's real source-file path and `test()` source line to the specific test node at that `(path, line)`. A result that binds at neither scope SHALL credit nothing. `aggregate` SHALL derive the per-app green/red signal, which informs the line-coverage dimension only.
+G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step reference (in the configured reference form) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the file and line at which the result's test is declared to the specific test node at that `(path, line)`. A result that binds at neither scope SHALL credit nothing. `aggregate` SHALL derive the per-app green/red signal, which informs the line-coverage dimension only.
 
 H. `elspais checks --run-tests` SHALL accept a `--targets` selector naming a subset of `[[scanning.test.targets]]` to execute; an unknown target name SHALL be an error, and an absent selector SHALL execute the targets a run executes when no selection is made (REQ-d00283). The same `--targets` flag on `summary`/`trace` SHALL mark provenance without executing anything.
 
@@ -625,6 +631,8 @@ X. Line figures that a surface states beside each other SHALL each be taken over
 
 Y. When a coverage artifact of a test target records a relative source path, the system SHALL resolve that path against the working directory of that test target.
 
+Z. When a result records that its test is declared in a file other than the file that executed it, the system SHALL bind that result to the test at the file and line where the test is declared.
+
 ### Rationale
 
 A line number means nothing without its origin, and producers disagree: the `line` attribute pytest writes into JUnit XML counts from zero, while the tool numbers source lines from one. Read as though they agreed, every such result missed the test it named by exactly one line and bound at file granularity instead -- which the file-granular inference then papered over, so the disagreement never surfaced as an error. Declaring the origin with the reporter puts the knowledge where the format is known rather than in each project's config, and the per-target override is for a producer that departs from its format's convention. Normalising once, at ingestion, is what keeps the rest of the system able to treat a line as a line -- to match on it, and to point a reader at it.
@@ -651,8 +659,12 @@ W and X keep the difference between two line figures a count of lines. A line th
 
 Y anchors a relative path to the place the measuring tool ran, because that is the place the tool wrote it from: Flutter writes a path relative to its package, and coverage.py writes one relative to its working directory when it records relative files. Where an artifact is stored says nothing about where it was measured. A target that declares no working directory runs in the repository root, and a member of a federation resolves the working directory of its own targets against its own root. A path that names no scanned file under that directory credits nothing.
 
+Z places a result where its citations are. A project that runs one scenario against several backends declares the test once, in a shared file, and executes it through a small runner file for each backend. The test's `Verifies:` citations live at the declaration, so a result bound to the runner file reaches no test, and a result bound to the runner file at the declared line reaches the wrong one. Where the producer records the declaring location, that location is the test's identity.
+
 ### Changelog
 
+- 2026-10-02 | b9bda3b5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-125: a result binds to the test at the file and line where the test is declared, and records the file that executed it (E, G, Z)
 - 2026-10-01 | 192b9bb4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-01 | 04c09b44 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-98: an estate-wide figure of executed implementation lines counts each line once, and line figures stated together are taken over one set of files (W, X)
@@ -691,7 +703,7 @@ Y anchors a relative path to the place the measuring tool ran, because that is t
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 192b9bb4
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: b9bda3b5
 
 ---
 
@@ -1288,6 +1300,8 @@ E. A test SHALL read as failing where any of its own results failed.
 
 F. An environment a result carries SHALL be presented beside that result, and a test SHALL be named the same way whether or not its results carry an environment.
 
+G. Where a failing result was executed by a file other than the file that declares its test, the report of that failure SHALL name the file that executed it.
+
 ### Rationale
 
 One test run across twenty devices writes twenty records, and until each one is
@@ -1339,7 +1353,9 @@ a result belongs to that result and is shown there. It is not attached to the
 name of the test, because the test is one test wherever it ran, and a test whose
 results record no environment is named exactly as it is named now.
 
-*End* *A Result Is Its Own Record* | **Hash**: 66e2737b
+G applies the same principle to one scenario that several runner files execute. Each run is a result of the one declared test, and E makes any failure govern. A reader who sees that the test failed cannot fix it without knowing which run failed. The file that executed the run is that fact, so the report names it.
+
+*End* *A Result Is Its Own Record* | **Hash**: d3e70367
 
 ## REQ-d00281: Level Vocabulary of a Reported Graph
 

@@ -606,7 +606,12 @@ class TestDeleteRequirementBrokenRefs:
     def test_REQ_d00132_G_delete_requirement_retires_and_undo_restores_broken_refs(
         self, fidelity_graph
     ):
-        """REQ-o00003's only ref is broken: delete removes it, undo restores."""
+        """REQ-o00003's only ref is broken: delete removes it, undo restores.
+
+        The requirement is made Draft first: an active one is retired in
+        place (REQ-p00017-D) and so keeps its references.
+        """
+        fidelity_graph.change_status("REQ-o00003", "Draft")
         assert len(_broken_refs_from(fidelity_graph, "REQ-o00003")) == 1
 
         fidelity_graph.delete_requirement("REQ-o00003")

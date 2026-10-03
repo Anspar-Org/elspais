@@ -1343,6 +1343,11 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
                 if (r.environment) {
                     html += '<span class="result-environment" title="Environment this result was recorded in">' + escapeHtml(r.environment) + '</span>';
                 }
+                {# Implements: REQ-d00294-G #}
+                // The runner file says which run of a shared scenario this is.
+                if (r.runner_file) {
+                    html += '<span class="result-environment" title="File that executed this result">run by ' + escapeHtml(r.runner_file) + '</span>';
+                }
                 html += '</div>';
             });
             html += '</div>';
@@ -1807,6 +1812,11 @@ function renderAssertionResults(panel, reqId, label, data) {
         // result with none is drawn exactly as it was drawn before.
         if (r.environment) {
             html += '<span class="result-environment" title="Environment this result was recorded in">' + escapeHtml(r.environment) + '</span>';
+        }
+        {# Implements: REQ-d00294-G #}
+        // The runner file says which run of a shared scenario this is.
+        if (r.runner_file) {
+            html += '<span class="result-environment" title="File that executed this result">run by ' + escapeHtml(r.runner_file) + '</span>';
         }
         html += '</div>';
     }

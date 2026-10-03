@@ -451,10 +451,11 @@ class TestMultipleMutationsSameReq:
         """Multiple mutations to the same requirement all apply correctly."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
 
-        # Apply multiple mutations
-        graph.change_status("REQ-t00001", "Deprecated")
+        # Apply multiple mutations. The status change comes last: Deprecated is
+        # in the retired role, which makes the requirement read-only.
         graph.update_title("REQ-t00001", "Updated Requirement")
         graph.update_assertion("REQ-t00001-A", "The system SHALL do something updated.")
+        graph.change_status("REQ-t00001", "Deprecated")
 
         result = render_save(graph, tmp_path)
 
@@ -860,8 +861,8 @@ class TestSaveDeleteAssertion:
     """Tests for saving delete_assertion mutations to disk via render_save."""
 
     # Verifies: REQ-d00132-A
-    def test_delete_assertion_removes_line(self, tmp_path: Path):
-        """delete_assertion mutation removes the assertion from rendered output."""
+    def test_delete_assertion_retires_line(self, tmp_path: Path):
+        """delete_assertion mutation renders the assertion retired under its label."""
         graph, spec_file = _build_graph_with_spec(tmp_path, "placeholder")
 
         # Delete assertion B
@@ -873,6 +874,7 @@ class TestSaveDeleteAssertion:
         content = spec_file.read_text(encoding="utf-8")
         assert "A. The system SHALL do something." in content
         assert "B. The system SHALL do another thing." not in content
+        assert "B. <RETIRED>" in content
 
 
 # ---------------------------------------------------------------------------
@@ -957,6 +959,9 @@ class TestSaveDeleteRequirement:
     def test_delete_requirement_preserves_other_reqs(self, tmp_path: Path):
         """Deleting one requirement doesn't affect others in the same file."""
         graph, spec_file = _build_two_req_graph(tmp_path)
+        # A Draft requirement is removed; an active one would be retired in
+        # place under its identifier (REQ-p00017-D).
+        graph.change_status("REQ-t00001", "Draft")
 
         graph.delete_requirement("REQ-t00001")
 

@@ -1,4 +1,4 @@
-# Verifies: REQ-p00005-C, REQ-d00202-I, REQ-d00289-A+B+C+D+E+F+G+H+I, REQ-d00290-A+B
+# Verifies: REQ-p00005-C, REQ-d00202-I, REQ-d00289-A+B+C+D+E+F+G+H+I+J+K+L+M, REQ-d00290-A+B
 """Tests for elspais associate command.
 
 Validates REQ-p00005-C: CLI-based management of associate repository links.
@@ -9,6 +9,8 @@ Validates REQ-d00289-A..I: what a registration run reports, what it does when
 the entry already names another path or another entry already records the
 namespace declared, and which conditions it refuses at -- on the single-link
 surface and on --all discovery alike.
+Validates REQ-d00289-J..M: how a registration completes, repeats or is
+refused against a declaration that names its associate's namespace.
 """
 
 from __future__ import annotations
@@ -1076,26 +1078,24 @@ class TestAssociateRivalCandidates:
             "the candidate reached first holds the entry; the other is refused, not swapped in"
         )
 
-    # Verifies: REQ-d00289-C
+    # Verifies: REQ-d00289-L, REQ-d00202-G
     @pytest.mark.parametrize("name_entry_first", [True, False])
-    def test_REQ_d00289_C_name_match_decides_regardless_of_file_order(
+    def test_REQ_d00289_L_declaration_recording_the_target_decides_regardless_of_file_order(
         self, tmp_path, monkeypatch, capsys, name_entry_first
     ):
-        """An entry under the target's own name decides the outcome even when
-        an unrelated entry records the very path being registered, whichever
-        of the two is written into the file first. One obstacle is met -- the
-        entry named records another path -- so C governs, and the refusal
-        says how to replace the path it names."""
+        """A member is identified by its namespace, never by the name it
+        gives itself, so the entry recording the target's own directory
+        under the target's namespace is the declaration this registration
+        repeats. An entry under the target's own name that records another
+        repository with another namespace is not that declaration. The run
+        changes nothing and reports the recording entry, whichever of the two
+        is written into the file first."""
         from elspais.commands.associate_cmd import run
 
         core = _make_core_repo(tmp_path / "core")
         target = _make_associate_repo(tmp_path, "callisto", "CAL")
         # The entry under the target's name records a repository declaring a
-        # namespace of its own, so the starting configuration federates and
-        # the entry recording the target's path is the only thing this run
-        # meets besides the entry named. Two entries reaching ONE directory
-        # converge on one member, so recording the target twice is not a
-        # namespace collision.
+        # namespace of its own, so the starting configuration federates.
         recorded_elsewhere = _write_associate_config(
             tmp_path / "moved" / "callisto", "callisto", "OTH"
         )
@@ -1111,16 +1111,14 @@ class TestAssociateRivalCandidates:
         monkeypatch.chdir(core)
         rc = run(_link_args(core, str(target)))
 
-        assert rc != 0, "the name-matching entry records another path, so this is a refusal"
+        assert rc == 0, "the declaration already records this repository"
         assert local_config.read_bytes() == before
 
-        err = capsys.readouterr().err
-        assert str(recorded_elsewhere) in err, (
-            "the refusal must name the path recorded under this entry, "
-            "not the one recorded under another name"
+        captured = capsys.readouterr()
+        assert "No change: mirror (CAL)" in captured.out, captured.out
+        assert str(recorded_elsewhere) not in captured.out + captured.err, (
+            "the entry sharing only the target's name is not what this run addressed"
         )
-        assert str(target) in err
-        assert "-f" in err
 
 
 class TestAssociateSameNamespaceTwice:
@@ -1803,3 +1801,358 @@ class TestAssociateUnlinkReadsTheAssembledConfiguration:
         assert "remains declared" not in out, (
             "nothing declares the entry now, so saying it stands would be false"
         )
+
+
+def _register(core: Path, target: Path, name: str, namespace: str):
+    """Register `target` against `core` the way a single-link run does."""
+    from elspais.commands.associate_cmd import register_associate
+
+    return register_associate(
+        core,
+        str(target),
+        name,
+        namespace,
+        repo_root=core,
+        config_path=core / ".elspais.toml",
+    )
+
+
+def _plan_core(core: Path):
+    from elspais.config import load_config
+    from elspais.graph.federation_plan import plan_federation
+
+    return plan_federation(load_config(core / ".elspais.toml"), core)
+
+
+class TestAssociateCompletesAnExpectedDeclaration:
+    """Validates REQ-d00289-J, K, L and M: a registration supplies the path
+    a committed declaration left to the machine-local configuration, is
+    judged against the namespace that declaration expects, changes nothing
+    when a declaration already records the repository, and an associate
+    still awaiting its path refuses nothing."""
+
+    # Verifies: REQ-d00289-J, REQ-d00202-B
+    def test_REQ_d00289_J_path_is_recorded_under_the_declarations_own_name(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """The committed key differs from the name the repository gives
+        itself; the namespace says which declaration is meant, so the path
+        is recorded under that key and no second entry appears."""
+        from elspais.commands.associate_cmd import Outcome
+
+        core = _core_declaring(tmp_path, '\n[associates.betalib]\nnamespace = "BET"\n')
+        beta = _write_associate_config(tmp_path / "beta", "beta", "BET")
+
+        outcome = _register(core, beta, "beta", "BET")
+
+        assert outcome.kind is Outcome.RECORDED, outcome
+        assert outcome.name == "betalib"
+        local = tomlkit.parse((core / ".elspais.local.toml").read_text())
+        assert dict(local["associates"]) == {"betalib": {"path": str(beta), "namespace": "BET"}}
+
+        planned = _plan_core(core)
+        assert [entry.name for entry in planned] == ["core", "betalib"]
+        assert planned[1].repo_root == beta.resolve()
+
+    @pytest.mark.parametrize("path_line", ["", 'path = ""\n'], ids=["path-absent", "path-empty"])
+    # Verifies: REQ-d00289-J, REQ-d00202-B
+    def test_REQ_d00289_J_supplying_the_path_is_a_recording(
+        self, tmp_path, monkeypatch, capsys, path_line
+    ):
+        """A declaration awaiting its path records nowhere, so the run that
+        supplies one records it -- it is neither the entry-exists refusal nor
+        a run that changed nothing -- and the federation then plans."""
+        from elspais.commands.associate_cmd import Outcome, run
+
+        core = _core_declaring(tmp_path, f'\n[associates.callisto]\n{path_line}namespace = "CAL"\n')
+        callisto = _make_associate_repo(tmp_path, "callisto", "CAL")
+
+        outcome = _register(core, callisto, "callisto", "CAL")
+
+        assert outcome.kind is Outcome.RECORDED, outcome
+        assert outcome.path == str(callisto)
+        assert [entry.name for entry in _plan_core(core)] == ["core", "callisto"]
+
+        # A second run over the now-supplied path changes nothing.
+        monkeypatch.chdir(core)
+        assert run(_link_args(core, str(callisto))) == 0
+        assert _register(core, callisto, "callisto", "CAL").kind is Outcome.UNCHANGED
+
+    # Verifies: REQ-d00289-K
+    def test_REQ_d00289_K_an_associate_awaiting_its_path_refuses_no_other(self, tmp_path):
+        """Two associates await their paths; supplying one is recorded although
+        the other is still unlinked, and the refusal that remains names only
+        the one still awaiting."""
+        from elspais.commands.associate_cmd import Outcome
+        from elspais.graph.federation_plan import UnlinkedAssociates
+
+        core = _core_declaring(
+            tmp_path,
+            '\n[associates.callisto]\nnamespace = "CAL"\n'
+            '\n[associates.europa]\nnamespace = "EUR"\n',
+        )
+        callisto = _make_associate_repo(tmp_path, "callisto", "CAL")
+        _make_associate_repo(tmp_path, "europa", "EUR")
+
+        outcome = _register(core, callisto, "callisto", "CAL")
+
+        assert outcome.kind is Outcome.RECORDED, outcome
+        with pytest.raises(UnlinkedAssociates) as excinfo:
+            _plan_core(core)
+        assert excinfo.value.unlinked == {"europa": "EUR"}
+
+    # Verifies: REQ-d00289-K, REQ-d00289-I
+    def test_REQ_d00289_K_a_standing_fault_still_refuses_beside_an_awaiting_associate(
+        self, tmp_path
+    ):
+        """Setting aside the associates awaiting a path sets aside nothing
+        else: an entry pointing at a repository that declares another
+        namespace is a fault the configuration already held, and it still
+        refuses the candidate."""
+        from elspais.commands.associate_cmd import Outcome
+
+        core = _core_declaring(tmp_path, '\n[associates.europa]\nnamespace = "EUR"\n')
+        mismatched = _write_associate_config(tmp_path / "lib", "lib", "OTH")
+        local_config = core / ".elspais.local.toml"
+        local_config.write_text(f'[associates.lib]\npath = "{mismatched}"\nnamespace = "LIB"\n')
+        before = local_config.read_bytes()
+        gamma = _write_associate_config(tmp_path / "gamma", "gamma", "GAM")
+
+        outcome = _register(core, gamma, "gamma", "GAM")
+
+        assert outcome.kind is Outcome.WOULD_NOT_FEDERATE, outcome
+        assert outcome.pre_existing is True
+        assert str(mismatched) in outcome.reason
+        assert local_config.read_bytes() == before, "a refused registration must write nothing"
+
+    # Verifies: REQ-d00202-R
+    def test_REQ_d00202_R_list_shows_an_awaiting_associate_as_not_linked(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """`--list` names an associate still awaiting its path, and the file
+        that supplies it, rather than leaving it out or failing."""
+        from elspais.commands.associate_cmd import run
+
+        core = _core_declaring(tmp_path, '\n[associates.callisto]\nnamespace = "CAL"\n')
+
+        monkeypatch.chdir(core)
+        assert run(_link_args(core, None, list=True)) == 0
+
+        out = capsys.readouterr().out
+        (row,) = [line for line in out.splitlines() if line.startswith("callisto")]
+        assert "CAL" in row
+        assert "NOT LINKED" in row
+        assert ".elspais.local.toml" in row
+
+    # Verifies: REQ-d00289-L, REQ-d00289-J
+    def test_REQ_d00289_L_repeating_the_registration_of_an_expected_associate_changes_nothing(
+        self, tmp_path
+    ):
+        """Once the path is supplied, the declaration records this repository,
+        so registering it again addresses that declaration and writes no
+        second entry under the name the repository gives itself."""
+        from elspais.commands.associate_cmd import Outcome
+
+        core = _core_declaring(tmp_path, '\n[associates.betalib]\nnamespace = "BET"\n')
+        beta = _write_associate_config(tmp_path / "beta", "beta", "BET")
+        local_config = core / ".elspais.local.toml"
+
+        first = _register(core, beta, "beta", "BET")
+        assert first.kind is Outcome.RECORDED, first
+        assert first.name == "betalib"
+        after_first = local_config.read_bytes()
+
+        second = _register(core, beta, "beta", "BET")
+
+        assert second.kind is Outcome.UNCHANGED, second
+        assert second.name == "betalib"
+        assert local_config.read_bytes() == after_first
+        local = tomlkit.parse(local_config.read_text())
+        assert list(local["associates"]) == ["betalib"]
+
+    # Verifies: REQ-d00289-L
+    def test_REQ_d00289_L_a_committed_declaration_recording_the_target_is_unchanged(self, tmp_path):
+        """A committed declaration already recording this directory under this
+        namespace is the one the registration addresses, whatever name the
+        repository gives itself, so the machine-local file is not written."""
+        from elspais.commands.associate_cmd import Outcome
+
+        core = _core_declaring(
+            tmp_path, '\n[associates.betalib]\npath = "../beta"\nnamespace = "BET"\n'
+        )
+        beta = _write_associate_config(tmp_path / "beta", "beta", "BET")
+
+        outcome = _register(core, beta, "beta", "BET")
+
+        assert outcome.kind is Outcome.UNCHANGED, outcome
+        assert outcome.name == "betalib"
+        assert not (core / ".elspais.local.toml").exists()
+
+    # Verifies: REQ-d00289-L, REQ-d00289-B
+    def test_REQ_d00289_L_all_run_twice_reports_the_expected_associate_unchanged(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """A second --all scan meets the declaration it completed the first
+        time, counts it unchanged and records no entry beside it."""
+        from elspais.commands.associate_cmd import run
+
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        core = _core_declaring(workspace, '\n[associates.betalib]\nnamespace = "BET"\n')
+        _write_associate_config(workspace / "beta", "beta", "BET")
+        local_config = core / ".elspais.local.toml"
+
+        monkeypatch.chdir(core)
+        assert run(_link_args(core, None, all=True)) == 0
+        first = capsys.readouterr().out
+        assert "Linked 1 associate(s), 0 unchanged, 0 refused" in first, first
+        after_first = local_config.read_bytes()
+
+        assert run(_link_args(core, None, all=True)) == 0
+        second = capsys.readouterr().out
+        assert "Linked 0 associate(s), 1 unchanged, 0 refused" in second, second
+        assert local_config.read_bytes() == after_first
+        assert list(tomlkit.parse(local_config.read_text())["associates"]) == ["betalib"]
+
+    # Verifies: REQ-d00289-L
+    def test_REQ_d00289_L_a_namespace_no_declaration_names_is_recorded_under_its_own_name(
+        self, tmp_path
+    ):
+        """Only a declaration naming the repository's namespace is addressed;
+        any other registration is recorded under the repository's own name."""
+        from elspais.commands.associate_cmd import Outcome
+
+        core = _core_declaring(tmp_path, '\n[associates.betalib]\nnamespace = "BET"\n')
+        gamma = _write_associate_config(tmp_path / "gamma", "gamma", "GAM")
+
+        outcome = _register(core, gamma, "gamma", "GAM")
+
+        assert outcome.kind is Outcome.RECORDED, outcome
+        assert outcome.name == "gamma"
+        local = tomlkit.parse((core / ".elspais.local.toml").read_text())
+        assert dict(local["associates"]) == {"gamma": {"path": str(gamma), "namespace": "GAM"}}
+
+    # Verifies: REQ-d00289-M, REQ-d00202-L
+    @pytest.mark.parametrize("force", [False, True], ids=["plain", "forced"])
+    def test_REQ_d00289_M_a_repository_declaring_another_namespace_is_refused(
+        self, tmp_path, force
+    ):
+        """A declaration awaiting its path states the namespace its author
+        expects. A repository under that declaration's name declaring another
+        namespace is the mismatch a build refuses, and forcing does not write
+        it over the expectation."""
+        from elspais.commands.associate_cmd import Outcome, register_associate
+
+        core = _core_declaring(tmp_path, '\n[associates.lib]\nnamespace = "LIB"\n')
+        lib = _write_associate_config(tmp_path / "lib", "lib", "OTHER")
+
+        outcome = register_associate(
+            core,
+            str(lib),
+            "lib",
+            "OTHER",
+            repo_root=core,
+            force=force,
+            config_path=core / ".elspais.toml",
+        )
+
+        assert outcome.kind is Outcome.WOULD_NOT_FEDERATE, outcome
+        assert outcome.pre_existing is False
+        assert "'LIB'" in outcome.reason and "'OTHER'" in outcome.reason, outcome.reason
+        assert str(lib) in outcome.reason, outcome.reason
+        assert not (core / ".elspais.local.toml").exists()
+
+    # Verifies: REQ-d00289-M, REQ-d00289-J
+    def test_REQ_d00289_M_a_repository_declaring_the_expected_namespace_is_recorded(self, tmp_path):
+        """The repository declares the namespace the declaration expects, so
+        its path is recorded for that declaration."""
+        from elspais.commands.associate_cmd import Outcome
+
+        core = _core_declaring(tmp_path, '\n[associates.lib]\nnamespace = "LIB"\n')
+        lib = _write_associate_config(tmp_path / "lib", "lib", "LIB")
+
+        outcome = _register(core, lib, "lib", "LIB")
+
+        assert outcome.kind is Outcome.RECORDED, outcome
+        assert outcome.name == "lib"
+        local = tomlkit.parse((core / ".elspais.local.toml").read_text())
+        assert dict(local["associates"]) == {"lib": {"path": str(lib), "namespace": "LIB"}}
+
+    # Verifies: REQ-d00289-M, REQ-d00289-C
+    def test_REQ_d00289_M_a_declaration_recording_a_path_is_the_entry_exists_refusal(
+        self, tmp_path
+    ):
+        """A declaration that records a path is not judged by its namespace:
+        replacing what it records is the decision C leaves to the operator."""
+        from elspais.commands.associate_cmd import Outcome
+
+        core = _make_core_repo(tmp_path / "core")
+        other = _write_associate_config(tmp_path / "other", "other", "OTH")
+        local_config = core / ".elspais.local.toml"
+        local_config.write_text(f'[associates.lib]\npath = "{other}"\nnamespace = "OTH"\n')
+        before = local_config.read_bytes()
+        lib = _write_associate_config(tmp_path / "lib", "lib", "LIB")
+
+        outcome = _register(core, lib, "lib", "LIB")
+
+        assert outcome.kind is Outcome.ENTRY_EXISTS, outcome
+        assert local_config.read_bytes() == before
+
+
+def _nested_awaiting(tmp_path: Path, mid_extra: str = "") -> Path:
+    """A hub federating `mid`, whose own committed config awaits a path to `leaf`."""
+    _write_associate_config(tmp_path / "leaf", "leaf", "LEAF")
+    mid = _write_associate_config(tmp_path / "mid", "mid", "MID")
+    config = mid / ".elspais.toml"
+    config.write_text(config.read_text() + '\n[associates.leaf]\nnamespace = "LEAF"\n' + mid_extra)
+    return _core_declaring(tmp_path, '\n[associates.mid]\npath = "../mid"\nnamespace = "MID"\n')
+
+
+class TestAssociateSetsAsideAwaitingAssociatesThroughout:
+    """Validates REQ-d00289-K and REQ-d00202-R: an associate awaiting its
+    path refuses no registration wherever in the federation it is declared,
+    while a build still refuses it."""
+
+    # Verifies: REQ-d00289-K
+    def test_REQ_d00289_K_a_nested_awaiting_associate_refuses_no_other(self, tmp_path):
+        from elspais.commands.associate_cmd import Outcome
+
+        core = _nested_awaiting(tmp_path)
+        gamma = _write_associate_config(tmp_path / "gamma", "gamma", "GAM")
+
+        outcome = _register(core, gamma, "gamma", "GAM")
+
+        assert outcome.kind is Outcome.RECORDED, outcome
+        assert outcome.name == "gamma"
+
+    # Verifies: REQ-d00202-R
+    def test_REQ_d00202_R_a_build_still_refuses_the_nested_awaiting_associate(self, tmp_path):
+        from elspais.graph.federation_plan import UnlinkedAssociates
+
+        core = _nested_awaiting(tmp_path)
+
+        with pytest.raises(UnlinkedAssociates) as excinfo:
+            _plan_core(core)
+
+        assert excinfo.value.unlinked == {"leaf": "LEAF"}
+        assert excinfo.value.declaring_root == (tmp_path / "mid").resolve()
+
+    # Verifies: REQ-d00289-K, REQ-d00289-I
+    def test_REQ_d00289_K_a_nested_standing_fault_still_refuses(self, tmp_path):
+        """Setting aside the nested awaiting associate sets aside nothing else
+        the nested repository declares."""
+        from elspais.commands.associate_cmd import Outcome
+
+        wrong = _write_associate_config(tmp_path / "wrong", "wrong", "OTH")
+        core = _nested_awaiting(
+            tmp_path, '\n[associates.wrong]\npath = "../wrong"\nnamespace = "WRG"\n'
+        )
+        gamma = _write_associate_config(tmp_path / "gamma", "gamma", "GAM")
+
+        outcome = _register(core, gamma, "gamma", "GAM")
+
+        assert outcome.kind is Outcome.WOULD_NOT_FEDERATE, outcome
+        assert outcome.pre_existing is True
+        assert f"Associate 'wrong' at {wrong}" in outcome.reason, outcome.reason
+        assert "'WRG'" in outcome.reason and "'OTH'" in outcome.reason, outcome.reason
+        assert not (core / ".elspais.local.toml").exists()
