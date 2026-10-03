@@ -141,12 +141,15 @@ C. The command SHALL support independent detail flags (`--body`, `--assertions`,
 
 D. The default sets other than the most compact SHALL state the Implemented, Tested and Passing dimensions of REQ-d00277, each as the per-*Assertion* total of REQ-d00069-N.
 
+E. Each named default set SHALL differ from every other named default set in the values it states or in the detail it shows beneath each requirement.
+
 ### Rationale
 
-A JSON graph output mode enables programmatic consumption of the full *Traceability* graph with git-aware change tracking, supporting dashboard integrations and automated analysis pipelines. Named default sets and detail flags are independent axes of control: a reader may want a compact table with full coverage columns, or a minimal table with expanded *Assertion* rows. A default set is what a reader who names nothing receives; which columns a report may be asked for, and what a column stating a measure must say about itself, are REQ-d00282's.
+A JSON graph output mode enables programmatic consumption of the full *Traceability* graph with git-aware change tracking, supporting dashboard integrations and automated analysis pipelines. Named default sets and detail flags are independent axes of control: a reader may want a compact table with full coverage columns, or a minimal table with expanded *Assertion* rows. Two default sets that state the same values and the same detail are one set under two names, and a reader choosing between them chooses nothing. A default set is what a reader who names nothing receives; which columns a report may be asked for, and what a column stating a measure must say about itself, are REQ-d00282's.
 
 ### Changelog
 
+- 2026-10-03 | a164cae6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-21 | 5728e809 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-21 | a6ede1e4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-19 | 67887c51 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -158,7 +161,7 @@ A JSON graph output mode enables programmatic consumption of the full *Traceabil
 - 2026-05-11 | f8f0e0f2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | f8f0e0f2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Trace Command* | **Hash**: 5728e809
+*End* *Trace Command* | **Hash**: a164cae6
 ---
 
 ## REQ-d00085: Unified Report Composition

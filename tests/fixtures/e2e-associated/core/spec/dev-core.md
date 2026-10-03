@@ -1,6 +1,6 @@
 # REQ-d00001: Auth Impl
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-p00001
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00001
 
 ## Assertions
 
@@ -11,7 +11,7 @@ A. The module SHALL use bcrypt for hashing.
 
 # REQ-d00002: Data Module
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-p00002
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
 ## Assertions
 

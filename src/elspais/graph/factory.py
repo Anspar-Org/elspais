@@ -1309,6 +1309,12 @@ def build_graph(
         federated = FederatedGraph.from_single(graph, config, repo_root)
     # Implements: REQ-d00254-I
     federated.render_fresh_targets = fresh_targets
+    # Implements: REQ-d00132-N
+    # Once every edge is wired, a part's rendering is what a write would put
+    # on disk, so a part that rendering would change is marked now.
+    from elspais.graph.render import mark_parts_unlike_disk
+
+    mark_parts_unlike_disk(federated)
     return federated
 
 

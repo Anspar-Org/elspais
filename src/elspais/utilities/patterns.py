@@ -1312,6 +1312,23 @@ class FederatedIdReader:
                 return candidate, True
         return self.own.normalize_ref(raw_ref), False
 
+    # Implements: REQ-d00272-K
+    def _targets_named(self, ref: str) -> list[str]:
+        """Each target *ref* names, one per *Assertion* where it names several.
+
+        Read in the grammar of the member that claims *ref*, so each target is
+        spelled the one way that member spells it. A reference no member
+        claims names itself alone.
+        """
+        for resolver in self._resolvers:
+            if not resolver.is_local_id(ref):
+                continue
+            parsed = resolver.parse(ref)
+            if parsed is None:
+                break
+            return [resolver.render_canonical(single) for single in resolver.expand(parsed)]
+        return [ref]
+
     # Implements: REQ-p00014-Q
     def normalize(self, raw_ref: str) -> str:
         """Normalize *raw_ref* under the grammar of the member that claims it.
@@ -1526,13 +1543,19 @@ class FederatedIdReader:
         # hide the very thing worth reporting. Detection is on the resolved
         # (normalized) target, so two spellings of one identifier count as a
         # repeat; an item that never resolved names no target and so cannot
-        # collide with anything.
+        # collide with anything. An item naming several *Assertions* names
+        # each of them, so `A+B` repeats the `B` of a later item and `A+B+A`
+        # repeats itself.
+        item_targets = [
+            self._targets_named(item.resolved) if item.resolved is not None else []
+            for item in results
+        ]
         target_counts: dict[str, int] = {}
-        for item in results:
-            if item.resolved is not None:
-                target_counts[item.resolved] = target_counts.get(item.resolved, 0) + 1
+        for targets in item_targets:
+            for target in targets:
+                target_counts[target] = target_counts.get(target, 0) + 1
         for i, item in enumerate(results):
-            if item.resolved is not None and target_counts[item.resolved] > 1:
+            if any(target_counts[target] > 1 for target in item_targets[i]):
                 results[i] = RefItem(
                     raw=item.raw,
                     index=item.index,

@@ -377,12 +377,17 @@ class TestTraceOptions:
         output_str = json.dumps(data)
         assert "REQ-p00001" in output_str
 
+    # Verifies: REQ-d00084-C
     def test_trace_body(self, project):
         result = run_elspais("trace", "--format", "json", "--body", cwd=project)
         assert result.returncode == 0
         data = trace_rows(result.stdout)
         # Asked for the bodies, so the rows must actually carry one.
         assert data and all("body" in row for row in data)
+        assert any(row["body"].strip() for row in data), "every body is empty"
+        # The body is the requirement's own text, as written in its spec file.
+        auth = next(row for row in data if row["id"] == "REQ-p00001")
+        assert "The system SHALL enforce password policies." in auth["body"]
 
     def test_trace_output_to_file(self, project, tmp_path):
         out = tmp_path / "trace-output.json"

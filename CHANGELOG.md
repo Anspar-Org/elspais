@@ -41,7 +41,22 @@ All notable changes to elspais will be documented in this file.
 - **A rename onto an identifier that an unresolved reference names is refused (REQ-p00017-P)** -- the refusal lists each such reference with its file and line; the rename would otherwise make it designate the renamed entity without anybody choosing that.
 - **An edge mutation whose source is a citation in a code or test file is refused (REQ-o00062-U)** -- `mutate_add_edge`, `mutate_delete_edge`, `mutate_change_edge_kind` and `mutate_change_edge_targets` changed the graph but never the file, so the next build read the old relationship back. The refusal says to edit the comment in the file instead.
 - **A code or test file with CRLF line endings, or with no final newline, saves back byte for byte (REQ-d00132-M)** -- the file's own line-ending convention and final-newline state are kept. A file mixing line endings is still refused rather than normalised.
-- A requirement whose text a save or `elspais fix` rewrites no longer gains a second blank line before a definition block written after one of its sections (markdownlint MD012).
+
+### TOOL-140
+
+#### Fixed
+
+- **`trace --body` prints each requirement's body (REQ-d00084-C)** -- the option read a field no requirement holds, so every body came out empty in every format. The body is now the requirement's text as `get_requirement` presents it.
+
+- **The `full` trace preset states more than `standard` (REQ-d00084-E)** -- the two presets stated identical columns. `full` now adds `implements`, `hash` and `file` to the standard values; `-v` renders it with every detail flag, as before.
+
+- **`spec.needs_rewrite` reports every part a write would change (REQ-d00132-N)** -- the check reported only what the build itself had changed, so a level spelled in another case, a requirement with no `Implements` field, and the spacing before a part following a section were rewritten by the next save of their file, and named in its `changed_beyond_edits`, without the check having said so. A build now compares each part of a spec or journey file with what a write would put there and marks each difference with the reason `canonical_form`; the check reports it and `elspais fix` writes it, without a changelog entry. A project upgrading sees these parts reported once; running `elspais fix` writes them and clears the warning.
+
+- **A requirement's parts are written one blank line apart** -- the renderer wrote two blank lines before a part following a section, and none before the `*End*` marker of a requirement ending in a part with no heading, so neither could ever be in canonical form.
+
+- **`elspais fix REQ-x` adds no changelog entry for a formatting-only fix** -- as the fix of every requirement already did; a fix that changes only how a requirement is written changes nothing it says.
+
+- **A reference list naming one Assertion twice reports every instance, also inside a multi-assertion item (REQ-d00272-K)** -- a repeat was detected only between items spelled alike, so `REQ-d00001-A+B, REQ-d00001-B` and `REQ-d00001-A+B+A` each created their relationships unreported. Each item is now read as the targets it names, and every item naming a repeated target is reported and binds nothing.
 
 ### TOOL-134
 

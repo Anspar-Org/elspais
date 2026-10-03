@@ -332,13 +332,15 @@ L. When a save writes a file, the save SHALL leave the hash of each requirement 
 
 M. If a save would change a line of a code or test file other than a line of a citation that a pending mutation changed, then the save SHALL write no file and report that file and line.
 
+N. The checks SHALL report each requirement and each file-level text section whose text on disk differs from the text that a write of its file gives it.
+
 ### Rationale
 
 Render-based save replaces the brittle text surgery in persistence.py with graph-native serialization. Each FILE node renders its content from the graph, making the graph the single source of truth. The consistency check (rebuild + compare) proves round-trip fidelity.
 
 A save carries the edits somebody made. Bringing a file into canonical form is the work of the fix operation, which the author runs on purpose and reviews as its own change. A save that also rewrote every non-canonical file in the repository would turn a one-line edit into a broad change in files nobody opened, and a reviewer could not tell the edit from the tidying. A rename is the exception that proves the boundary: the files citing the renamed identifier hold text the rename changes, so they are part of the edit.
 
-Inside a file that a save does write, the file is rendered whole, so text that is not in canonical form is written in canonical form beside the edit. J makes that visible: the caller is told which requirements and which sections of file prose changed although nobody edited them, so a reviewer can tell the edit from the tidying. K is what keeps that list short. Text that a build brings into canonical form is reported where the reader can act on it with the fix operation, on purpose and as its own change, rather than first appearing as a side effect of somebody's edit.
+Inside a file that a save does write, the file is rendered whole, so text that is not in canonical form is written in canonical form beside the edit. J makes that visible: the caller is told which requirements and which sections of file prose changed although nobody edited them, so a reviewer can tell the edit from the tidying. K is what keeps that list short, and N closes it: a part that a write would change is reported whether the build changed it or only the write does, so a save names nothing the checks did not. Text that a build brings into canonical form is reported where the reader can act on it with the fix operation, on purpose and as its own change, rather than first appearing as a side effect of somebody's edit.
 
 Canonical form applies whenever elspais writes a requirement, and a change that leaves the hash where it was, such as spacing, layout or the depth of a heading, is fair game for any write. A change that moves the hash is material: it changes what the requirement is recorded as saying. Marking a *Defined Term* in an *Assertion* is such a change, because the emphasis says the word carries its defined meaning. L keeps a material change a deliberate act. A save makes it to a requirement somebody edited, and the fix operation makes it to any requirement on purpose, but a save never makes it to a requirement nobody edited. The hash L speaks of is the one the requirement's text yields. A recorded hash that no longer matches that text is a separate condition with its own check, and a save that records the hash the text already has changes no requirement's hash.
 
@@ -346,6 +348,7 @@ A code or test file belongs to its authors. The tool changes one only to respell
 
 ### Changelog
 
+- 2026-10-03 | 4033b420 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-03 | 16a9564a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-01 | b7f05ffb | - | Michael Lewis (<michael@anspar.org>) | Add assertion L: a save leaves the hash of each requirement it did not edit unchanged
 - 2026-10-01 | 6eb9b930 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -356,7 +359,7 @@ A code or test file belongs to its authors. The tool changes one only to respell
 - 2026-05-11 | 7043f7af | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 7043f7af | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Render-Based Save Operation* | **Hash**: 16a9564a
+*End* *Render-Based Save Operation* | **Hash**: 4033b420
 ---
 
 ## REQ-d00325: Changelog Reason for a Saved Change

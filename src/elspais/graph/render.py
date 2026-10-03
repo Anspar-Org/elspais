@@ -507,9 +507,10 @@ def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
             if heading == "preamble":
                 in_assertions = False
                 if content:
-                    # One blank line separates it from what precedes it; a
-                    # section already ends on one (markdownlint MD012).
-                    if not lines or lines[-1] != "":
+                    # One blank line separates the text from what precedes
+                    # it, also where that part already ended on one
+                    # (markdownlint MD012).
+                    if lines and lines[-1] != "":
                         lines.append("")
                     lines.append(content)
             elif heading_style:
@@ -573,7 +574,10 @@ def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
     # Implements: REQ-d00131-P
     hash_val = compute_normalized_hash(assertions) if assertions else "N/A"
 
-    # End marker (separator is a REMAINDER node, not part of the requirement)
+    # End marker (separator is a REMAINDER node, not part of the requirement),
+    # one blank line below the text above it whatever part that text ended.
+    if lines and lines[-1] != "":
+        lines.append("")
     lines.append(render_end_marker(title, hash_val))
 
     return "\n".join(lines)
@@ -1395,6 +1399,50 @@ def _source_file_violations(
     return violations
 
 
+# Implements: REQ-d00132-J+N
+def _parts_unlike_disk(
+    file_node: GraphNode,
+    disk_text: str,
+    resolver: Any | None,
+    *,
+    skip: dict[int, Any] | None = None,
+) -> list[tuple[float, GraphNode, int]]:
+    """Each part of a file whose rendering differs from the lines it was read from.
+
+    A composed file is written whole, so each CONTAINS child is written in
+    the form its renderer gives it. Each child records the lines it was read
+    from; where that slice of the file on disk differs from the child's
+    rendering, a write of the file changes that part.
+
+    Args:
+        file_node: A FILE whose content is composed from its CONTAINS children.
+        disk_text: The file's text on disk.
+        resolver: The grammar the file is rendered in.
+        skip: Content nodes left out of the comparison, by identity.
+
+    Returns:
+        ``(render_order, part, first_line)`` for each differing part.
+    """
+    lines = disk_text.split("\n")
+    changed: list[tuple[float, GraphNode, int]] = []
+    for edge in file_node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.CONTAINS:
+            continue
+        child = edge.target
+        if skip is not None and id(child) in skip:
+            continue
+        start = edge.metadata.get("start_line")
+        end = edge.metadata.get("end_line")
+        if not isinstance(start, int) or not isinstance(end, int) or start < 1:
+            continue
+        rendered = _contained_text(edge, resolver)
+        if rendered is None or rendered == "\n".join(lines[start - 1 : end]):
+            continue
+        changed.append((edge.metadata.get("render_order", 0.0), child, start))
+    changed.sort(key=lambda item: item[0])
+    return changed
+
+
 # Implements: REQ-d00132-J
 def _changed_beyond_edits(
     file_node: GraphNode,
@@ -1403,11 +1451,6 @@ def _changed_beyond_edits(
     resolver: Any | None,
 ) -> list[dict[str, Any]]:
     """Name each part of a file whose written text differs from disk though no mutation reached it.
-
-    A composed file is written whole, so a part nobody edited is written in
-    the form its renderer gives it. Each CONTAINS child records the lines it
-    was read from; where that slice of the file on disk differs from the
-    child's rendering, the save changes text nobody asked it to change.
 
     Args:
         file_node: The FILE about to be written.
@@ -1418,35 +1461,56 @@ def _changed_beyond_edits(
     Returns:
         One entry per changed part, in file order.
     """
-    lines = disk_text.split("\n")
-    changed: list[tuple[float, dict[str, Any]]] = []
-    for edge in file_node.iter_outgoing_edges():
-        if edge.kind != EdgeKind.CONTAINS:
+    return [
+        {
+            "file": file_node.get_field("relative_path"),
+            "node_id": child.id,
+            "kind": child.kind.value,
+            "label": child.get_label() or "",
+            "line": start,
+        }
+        for _order, child, start in _parts_unlike_disk(file_node, disk_text, resolver, skip=reached)
+    ]
+
+
+# The parse-dirty reason a part carries where a write of its file would
+# change it and the build itself changed nothing in it.
+CANONICAL_FORM_REASON = "canonical_form"
+
+# The file types a write brings into canonical form. A code or test file
+# is written back as its author wrote it.
+_WRITTEN_FILE_TYPES = frozenset({FileType.SPEC, FileType.JOURNEY})
+
+
+# Implements: REQ-d00132-N
+def mark_parts_unlike_disk(graph: FederatedGraph) -> None:
+    """Mark each part of a spec or journey file that a write would change.
+
+    A build marks the parts whose text it changed; a write renders every
+    part, and can change a part the build left as it was (the spelling of a
+    level, an empty metadata field, spacing between parts). Each such part
+    is marked parse-dirty here, so the checks report it and the fix
+    operation writes it, the same as a part the build changed. A part
+    already marked keeps its own reasons.
+    """
+    for file_node in graph.nodes_by_kind(NodeKind.FILE):
+        if _file_type_of(file_node) not in _WRITTEN_FILE_TYPES:
             continue
-        child = edge.target
-        if id(child) in reached:
+        path = file_node.get_field("absolute_path")
+        if not path:
             continue
-        start = edge.metadata.get("start_line")
-        end = edge.metadata.get("end_line")
-        if not isinstance(start, int) or not isinstance(end, int) or start < 1:
+        try:
+            disk_text = Path(path).read_text(encoding="utf-8")
+        except OSError:
             continue
-        rendered = _contained_text(edge, resolver)
-        if rendered is None or rendered == "\n".join(lines[start - 1 : end]):
-            continue
-        changed.append(
-            (
-                edge.metadata.get("render_order", 0.0),
-                {
-                    "file": file_node.get_field("relative_path"),
-                    "node_id": child.id,
-                    "kind": child.kind.value,
-                    "label": child.get_label() or "",
-                    "line": start,
-                },
-            )
-        )
-    changed.sort(key=lambda pair: pair[0])
-    return [entry for _order, entry in changed]
+        resolver = None
+        try:
+            resolver = getattr(graph.repo_for_node(file_node).graph, "_resolver", None)
+        except (KeyError, AttributeError):
+            pass
+        for _order, part, _start in _parts_unlike_disk(file_node, disk_text, resolver):
+            if not part.get_field("parse_dirty"):
+                part.mark_parse_dirty(CANONICAL_FORM_REASON)
 
 
 # Implements: REQ-d00132-A, REQ-d00132-C, REQ-d00134-D, REQ-d00134-E

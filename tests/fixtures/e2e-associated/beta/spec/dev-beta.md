@@ -1,6 +1,6 @@
 # REQ-BET-d00001: Beta Implementation
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-BET-p00001
+**Level**: dev | **Status**: Active | **Implements**: REQ-BET-p00001
 
 ## Assertions
 

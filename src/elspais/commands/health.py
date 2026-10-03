@@ -513,6 +513,7 @@ def check_spec_needs_rewrite(
     - duplicate_refs: same REQ ID appears more than once in Implements/Refines
     - stale_hash: stored hash does not match the computed hash
     - spacing, section depth and term forms brought into canonical form
+    - canonical_form: any other text a write of the file would change
 
     A journey and a section of file-level prose record a term form brought
     into canonical form of themselves, and are reported beside requirements.

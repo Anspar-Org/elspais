@@ -625,8 +625,8 @@ def _associated_draft_project(tmp_path: Path) -> tuple[Path, Path]:
     base = _copy(tmp_path, "e2e-associated", ("core", "alpha", "beta"))
     _replace_once(
         base / "core" / "spec" / "prd-core.md",
-        "# REQ-p00001: Core Auth\n\n**Level**: PRD | **Status**: Active",
-        "# REQ-p00001: Core Auth\n\n**Level**: PRD | **Status**: Draft",
+        "# REQ-p00001: Core Auth\n\n**Level**: prd | **Status**: Active",
+        "# REQ-p00001: Core Auth\n\n**Level**: prd | **Status**: Draft",
     )
     _replace_once(
         base / "alpha" / "spec" / "dev-alpha.md",
@@ -802,23 +802,24 @@ RESTORE_CASES = pytest.mark.parametrize("setup", list(RESTORE_SETUPS))
 
 
 def _record_hashes(root: Path, template: str) -> None:
-    """Write the current hash of *template*, and of each requirement found stale.
+    """Write the current hash of *template*, and of each requirement found stale or unhashed.
 
     A save of a mutation records the hash of each requirement it writes, and
     a build of a recorded hash that disagrees with the text marks the
     requirement, and each copy of it, as needing a rewrite, which that save
-    then clears. Recording the hashes first keeps both out of a comparison
-    of what the mutation did.
+    then clears. A requirement with no recorded hash is one a write would
+    change too, so the checks report it. Recording the hashes first keeps
+    all of these out of a comparison of what the mutation did.
     """
     graph = _build(root)
     for _ns, member in graph._live_graphs():
         for node in member.iter_by_kind(NodeKind.REQUIREMENT):
             if node.get_field("stereotype") == Stereotype.INSTANCE:
                 continue
-            stale = "stale_hash" in (node.get_field("parse_dirty_reasons") or ())
-            if not stale and node.id != template:
-                continue
             stored, current = node.get_field("hash"), compute_hash_for_node(node)
+            stale = "stale_hash" in (node.get_field("parse_dirty_reasons") or ())
+            if not stale and stored is not None and node.id != template:
+                continue
             if stored == current:
                 continue
             path = Path(node.file_node().get_field("absolute_path"))
@@ -1010,8 +1011,8 @@ def _foreign_citation_project(variant: str, *, draft: bool = False):
         if draft:
             _replace_once(
                 base / "core" / "spec" / "prd-core.md",
-                "# REQ-p00001: Core Auth\n\n**Level**: PRD | **Status**: Active",
-                "# REQ-p00001: Core Auth\n\n**Level**: PRD | **Status**: Draft",
+                "# REQ-p00001: Core Auth\n\n**Level**: prd | **Status**: Active",
+                "# REQ-p00001: Core Auth\n\n**Level**: prd | **Status**: Draft",
             )
         return base, base / "core"
 

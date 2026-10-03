@@ -833,9 +833,14 @@ def _get_graph_status(
 
 def _has_dirty_terms(graph: FederatedGraph) -> bool:
     """Check if any definition_block REMAINDER nodes are dirty."""
+    from elspais.graph.render import CANONICAL_FORM_REASON
+
     for node in graph.nodes_by_kind(NodeKind.REMAINDER):
         if node.get_field("content_type") == "definition_block":
-            if node.get_field("parse_dirty"):
+            # A definition written in a form only a write would change is
+            # not a term whose form the build changed.
+            reasons = node.get_field("parse_dirty_reasons") or []
+            if node.get_field("parse_dirty") and reasons != [CANONICAL_FORM_REASON]:
                 return True
     return False
 
