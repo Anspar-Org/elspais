@@ -193,7 +193,7 @@ jobs:
               - 'src/elspais/html/**'
               - 'src/elspais/server/**'
               - 'src/elspais/commands/viewer*.py'
-              - 'tests/e2e/test_viewer_browser.py'
+              - 'tests/e2e/viewer_browser/**'
               - 'tests/conftest.py'
               - 'pyproject.toml'
               - '.github/workflows/ci.yml'
