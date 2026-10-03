@@ -49,7 +49,7 @@ Some body text but no assertions section.
 REQ_NO_ASSERTIONS_NA_HASH = """\
 # REQ-d00001: No Assertions Req
 
-**Level**: DEV | **Status**: Draft | **Implements**: -
+**Level**: dev | **Status**: Draft | **Implements**: -
 
 Some body text but no assertions section.
 

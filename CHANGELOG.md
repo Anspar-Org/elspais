@@ -12,6 +12,12 @@ All notable changes to elspais will be documented in this file.
 
 - **The `full` trace preset states more than `standard` (REQ-d00084-E)** -- the two presets stated identical columns. `full` now adds `implements`, `hash` and `file` to the standard values; `-v` renders it with every detail flag, as before.
 
+- **`spec.needs_rewrite` reports every part a write would change (REQ-d00132-M)** -- the check reported only what the build itself had changed, so a level spelled in another case, a requirement with no `Implements` field, and the spacing before a part following a section were rewritten by the next save of their file, and named in its `changed_beyond_edits`, without the check having said so. A build now compares each part of a spec or journey file with what a write would put there and marks each difference with the reason `canonical_form`; the check reports it and `elspais fix` writes it, without a changelog entry. A project upgrading sees these parts reported once; running `elspais fix` writes them and clears the warning.
+
+- **A requirement's parts are written one blank line apart** -- the renderer wrote two blank lines before a part following a section, and none before the `*End*` marker of a requirement ending in a part with no heading, so neither could ever be in canonical form.
+
+- **`elspais fix REQ-x` adds no changelog entry for a formatting-only fix** -- as the fix of every requirement already did; a fix that changes only how a requirement is written changes nothing it says.
+
 ### TOOL-134
 
 - **A spec or journey metadata line naming one target in another repository more than once reports every instance and creates no relationship (REQ-d00272-K, REQ-d00287-F)** -- an `Implements:` list in one federation member naming a requirement another member owns twice created one relationship and reported nothing, while the same list in a code or test file, and a repeated target in the declaring repository itself, were refused and reported. A repository read its spec metadata and journey `Validates:` lists in its own identifier grammar alone, so a target another member owns did not read as an identifier there and the repetition check, which compares identifiers, never saw it. Those lists are now read in every member's grammar, as code and test annotations already were, so each instance of a repeated foreign target is reported under the same class as a repeated local one. A requirement header is still read in its own repository's grammar alone, since a repository declares only the identifiers it owns.

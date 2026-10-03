@@ -1,6 +1,6 @@
 # REQ-p00001: Core Auth
 
-**Level**: PRD | **Status**: Active
+**Level**: prd | **Status**: Active | **Implements**: -
 
 ## Assertions
 
@@ -13,7 +13,7 @@ B. The platform SHALL support SSO.
 
 # REQ-p00002: Core Data
 
-**Level**: PRD | **Status**: Active
+**Level**: prd | **Status**: Active | **Implements**: -
 
 ## Assertions
 

@@ -57,23 +57,23 @@ PRD_TARGETS_MD = """\
 
 ## REQ-p00001: First parent
 
-**Level**: PRD | **Status**: Active | **Implements**: -
+**Level**: prd | **Status**: Active | **Implements**: -
 
 ### Assertions
 
 A. The system SHALL do thing one.
 
-*End* *First parent*
+*End* *First parent* | **Hash**: 8a261d33
 
 ## REQ-p00002: Second parent
 
-**Level**: PRD | **Status**: Active | **Implements**: -
+**Level**: prd | **Status**: Active | **Implements**: -
 
 ### Assertions
 
 A. The system SHALL do thing two.
 
-*End* *Second parent*
+*End* *Second parent* | **Hash**: f3ffbed1
 """
 
 DEV_FILE_A_MD = """\

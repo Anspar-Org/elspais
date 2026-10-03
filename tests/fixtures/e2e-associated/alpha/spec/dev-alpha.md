@@ -1,6 +1,6 @@
 # REQ-ALP-d00001: Alpha Auth Impl
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-p00001
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00001
 
 ## Assertions
 
@@ -11,7 +11,7 @@ A. Alpha SHALL implement core auth.
 
 # REQ-ALP-d00002: Alpha Data Impl
 
-**Level**: DEV | **Status**: Active | **Implements**: REQ-p00002
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
 
 ## Assertions
 

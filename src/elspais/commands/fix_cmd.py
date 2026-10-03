@@ -128,6 +128,7 @@ _REASON_LABELS: dict[str, str] = {
     "section_header_depth": "canonicalize section header depth",
     "section_header_depth_unfixable": "section header depth (req at H6 — move req shallower)",
     "fix_single": "fix requirement",
+    "canonical_form": "write in canonical form",
 }
 
 # Reasons that produce a different on-disk rendering but do NOT change the
@@ -140,6 +141,7 @@ _FORMATTING_ONLY_REASONS: frozenset[str] = frozenset(
         "section_header_depth",
         "assertion_spacing",
         "list_spacing",
+        "canonical_form",
     }
 )
 
@@ -514,6 +516,11 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
                 seen_prose.add((old_form, new_form))
                 detail = f"canonicalize term {old_form} -> {new_form}"
                 print(line.format(prefix=prefix, node_id=node.id, detail=detail))
+        # Implements: REQ-d00132-M
+        for r in node.get_field("parse_dirty_reasons") or []:
+            if r != "non_canonical_term":
+                detail = _REASON_LABELS.get(r, r)
+                print(line.format(prefix=prefix, node_id=node.id, detail=detail))
 
     if dry_run:
         return _scan_and_report_unfixable(graph)
@@ -676,8 +683,18 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
             print(f"{prefix} {req_id}: add missing changelog section")
         return 0
 
+    # A fix that only changes how the requirement is written changes nothing
+    # it says, so it adds no changelog entry -- as in the fix of every
+    # requirement.
+    formatting_only = (
+        not hash_changed
+        and not needs_new_section
+        and not changelog_hash_drifted
+        and all(r in _FORMATTING_ONLY_REASONS or r == "stale_hash" for r in dirty_reasons)
+    )
+
     # Add changelog entry when changelog is enabled for Active reqs
-    if is_active and changelog_enforce:
+    if is_active and changelog_enforce and not formatting_only:
         # Use explicit message if provided, otherwise auto-generate
         if message:
             reason = message
