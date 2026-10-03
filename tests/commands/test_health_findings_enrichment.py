@@ -29,6 +29,7 @@ from elspais.graph.builder import TraceGraph
 from elspais.graph.factory import build_graph
 from elspais.graph.federated import FederatedGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
+from elspais.graph.parsers.lark.transformers.requirement import NO_DECLARED_LEVEL
 
 
 def _fed(graph: TraceGraph, tmp_path: Path) -> FederatedGraph:
@@ -521,6 +522,49 @@ class TestCheckSpecHierarchyUndefinedLevels:
         assert len(checks) == 1
         assert [f.node_id for f in checks[0].findings] == ["REQ-d00003"]
         assert checks[0].severity == "warning"
+
+    # Verifies: REQ-d00281-F
+    def test_REQ_d00281_F_a_requirement_without_a_level_is_named_as_declaring_none(
+        self, tmp_path: Path
+    ) -> None:
+        spec = """# REQ-p00001: Parent PRD
+
+**Level**: PRD | **Status**: Active
+
+## Assertions
+
+A. The system SHALL exist.
+
+*End* *Parent PRD* | **Hash**: eeee5555
+
+# REQ-d00004: Levelless Child
+
+**Status**: Active
+**Implements**: REQ-p00001
+
+## Assertions
+
+A. The system SHALL be described.
+
+*End* *Levelless Child* | **Hash**: abcd5678
+"""
+        graph, config = _hierarchy_project(tmp_path, spec, None)
+        child = graph.find_by_id("REQ-d00004")
+        assert child is not None
+        assert child.level == NO_DECLARED_LEVEL, "the child was expected to declare no level"
+
+        check = check_spec_hierarchy_undefined_levels(graph, config)
+        hierarchy = check_spec_hierarchy_levels(graph, config)
+
+        assert len(check.findings) == 1
+        finding = check.findings[0]
+        assert finding.node_id == "REQ-d00004"
+        assert finding.related == ["REQ-p00001"]
+        assert "REQ-d00004 declares no level" in finding.message
+        assert "(no level)" in finding.message
+        assert "unknown" not in finding.message.lower()
+        assert "[levels] in .elspais.toml" in finding.message
+        assert [f.node_id for f in hierarchy.findings if f.node_id == "REQ-d00004"] == []
 
 
 class TestCheckSpecUndefinedLevelsFindings:

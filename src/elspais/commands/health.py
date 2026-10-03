@@ -840,17 +840,34 @@ def check_spec_hierarchy_undefined_levels(
     defined = {name.lower() for name in typed_config.levels}
     where = _levels_declared_in(graph, namespace)
 
+    from elspais.graph.parsers.lark.transformers.requirement import NO_DECLARED_LEVEL
+
+    def _shown(req: GraphNode, level: str) -> str:
+        return "no level" if req.level == NO_DECLARED_LEVEL else level.upper()
+
     findings: list[HealthFinding] = []
     for node, node_level, parent, parent_level in _level_relationships(graph, namespace):
-        undefined = sorted({lvl for lvl in (node_level, parent_level) if lvl not in defined})
-        if not undefined:
+        # A requirement with no Level line is stored with a placeholder, which
+        # no configuration defines; it is reported as declaring no level
+        # rather than as declaring a level called by the placeholder's name.
+        problems: list[str] = []
+        undefined: list[str] = []
+        for req, level in ((node, node_level), (parent, parent_level)):
+            if req.level == NO_DECLARED_LEVEL:
+                problems.append(f"{req.id} declares no level")
+            elif level not in defined and level not in undefined:
+                undefined.append(level)
+        if undefined:
+            named = ", ".join(f"'{lvl.upper()}'" for lvl in sorted(undefined))
+            problems.insert(0, f"level {named} is not defined")
+        if not problems:
             continue
-        named = ", ".join(f"'{lvl.upper()}'" for lvl in undefined)
         findings.append(
             HealthFinding(
                 message=(
-                    f"{node.id} ({node_level.upper()}) -> {parent.id} ({parent_level.upper()}): "
-                    f"level {named} is not defined; levels are declared under {where}"
+                    f"{node.id} ({_shown(node, node_level)}) -> "
+                    f"{parent.id} ({_shown(parent, parent_level)}): "
+                    f"{'; '.join(problems)}; levels are declared under {where}"
                 ),
                 node_id=node.id,
                 related=[parent.id],
@@ -862,8 +879,8 @@ def check_spec_hierarchy_undefined_levels(
             name="spec.hierarchy_undefined_levels",
             passed=False,
             message=(
-                f"{len(findings)} parent relationship(s) involve a level "
-                "this configuration does not define"
+                f"{len(findings)} parent relationship(s) involve a level this "
+                "configuration does not define, or a requirement declaring none"
             ),
             category="spec",
             severity=severity,
