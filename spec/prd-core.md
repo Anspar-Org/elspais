@@ -126,7 +126,7 @@ Requirements change over time. Regulators and auditors need to know what changed
 
 elspais provides two complementary change detection mechanisms:
 
-- **Content hashing**: A SHA-256 hash of each requirement's body is stored in the document footer. When the hash no longer matches the content, the requirement has changed and downstream artifacts may need review.
+- **Content hashing**: A SHA-256 hash of each requirement's *Assertions* is stored in the document footer. When the hash no longer matches the content, the requirement has changed and downstream artifacts may need review.
 - **Git integration**: The tool detects uncommitted changes, changes relative to the main branch, and requirements that have moved between files.
 
 Together, these mechanisms support:

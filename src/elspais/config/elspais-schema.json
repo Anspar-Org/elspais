@@ -1380,6 +1380,7 @@
       "additionalProperties": false,
       "properties": {
         "hash_mode": {
+          "const": "normalized-text",
           "default": "normalized-text",
           "title": "Hash Mode",
           "type": "string"

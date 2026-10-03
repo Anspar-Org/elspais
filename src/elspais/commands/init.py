@@ -441,7 +441,7 @@ _FIELD_COMMENTS: dict[str, str] = {
     "keywords.min_length": "Minimum word length for keyword extraction",
     # --- [validation] ---
     "validation": "Hash and validation settings",
-    "validation.hash_mode": '"normalized-text" — how requirement content is hashed',
+    "validation.hash_mode": '"normalized-text" (the only value) — the hash covers Assertions alone',
     "validation.hash_algorithm": '"sha256" (default) — hash algorithm',
     "validation.hash_length": "Hash truncation length in chars (default: 8)",
     "validation.strict_hierarchy": "Strict hierarchy validation mode",

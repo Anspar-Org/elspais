@@ -491,12 +491,84 @@ class TestValidationConfigRetiredKeys:
         path = tmp_path / ".elspais.toml"
         path.write_text(
             'version = 5\n[project]\nname = "t"\nnamespace = "REQ"\n'
-            '[validation]\nhash_mode = "full-text"\n'
+            "[validation]\nstrict_hierarchy = true\n"
         )
-        assert load_config(path)["validation"]["hash_mode"] == "full-text"
+        assert load_config(path)["validation"]["strict_hierarchy"] is True
 
     # Verifies: REQ-d00269-F
     def test_REQ_d00269_F_validation_config_still_accepts_its_real_fields(self):
-        vc = ValidationConfig(hash_mode="full-text", strict_hierarchy=True)
-        assert vc.hash_mode == "full-text"
+        vc = ValidationConfig(hash_mode="normalized-text", strict_hierarchy=True)
+        assert vc.hash_mode == "normalized-text"
         assert vc.strict_hierarchy is True
+
+
+_HASH_MODE_PROJECT = 'version = 5\n[project]\nname = "t"\nnamespace = "REQ"\n'
+
+
+class TestRetiredHashMode:
+    """``[validation] hash_mode`` admits only ``normalized-text``; the retired
+    ``full-text`` value is refused with a message saying what to write and what
+    the next ``elspais fix`` does to stored hashes."""
+
+    @staticmethod
+    def _write(tmp_path, validation: str):
+        path = tmp_path / ".elspais.toml"
+        path.write_text(_HASH_MODE_PROJECT + validation)
+        return path
+
+    @staticmethod
+    def _assert_names_the_remedy(message: str) -> None:
+        assert "[validation] hash_mode" in message, message
+        assert 'hash_mode = "normalized-text"' in message, message
+        assert "Remove the hash_mode line" in message, message
+        assert "elspais fix" in message, message
+        assert "rewrites the stored hash of every" in message, message
+
+    # Verifies: REQ-d00212-Z
+    def test_REQ_d00212_Z_full_text_in_a_file_is_refused(self, tmp_path):
+        from elspais.config import load_config
+
+        path = self._write(tmp_path, '[validation]\nhash_mode = "full-text"\n')
+        with pytest.raises(ValueError) as excinfo:
+            load_config(path)
+        self._assert_names_the_remedy(str(excinfo.value))
+
+    # Verifies: REQ-d00212-Z
+    def test_REQ_d00212_Z_full_text_refused_by_the_model(self):
+        with pytest.raises(ValidationError) as excinfo:
+            ValidationConfig(hash_mode="full-text")
+        self._assert_names_the_remedy(str(excinfo.value))
+
+    # Verifies: REQ-d00212-Z
+    def test_REQ_d00212_Z_unknown_hash_mode_refused(self):
+        """A value that was never offered is refused too, not passed through."""
+        with pytest.raises(ValidationError, match="normalized-text"):
+            ValidationConfig(hash_mode="sha-of-everything")
+
+    # Verifies: REQ-d00212-Z
+    @pytest.mark.parametrize(
+        "validation",
+        ['[validation]\nhash_mode = "normalized-text"\n', "[validation]\nhash_length = 8\n", ""],
+        ids=["explicit-normalized", "absent-in-table", "no-table"],
+    )
+    def test_REQ_d00212_Z_normalized_or_absent_loads(self, tmp_path, validation):
+        from elspais.config import load_config
+
+        config = load_config(self._write(tmp_path, validation))
+        assert config["validation"]["hash_mode"] == "normalized-text"
+
+    # Verifies: REQ-d00212-Z
+    @pytest.mark.parametrize("command", ["checks", "fix"])
+    def test_REQ_d00212_Z_cli_refuses_with_the_message(
+        self, tmp_path, monkeypatch, capsys, command
+    ):
+        """A subcommand run in such a project exits non-zero and prints the refusal."""
+        from elspais.cli import main
+
+        self._write(tmp_path, '[validation]\nhash_mode = "full-text"\n')
+        (tmp_path / "spec").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        assert main([command]) != 0
+        captured = capsys.readouterr()
+        self._assert_names_the_remedy(captured.out + captured.err)

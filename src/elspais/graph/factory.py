@@ -1321,14 +1321,12 @@ def _build_repository(
     default_dispatcher = FileDispatcher(default_resolver, member_resolvers)
 
     # 4. Build graph from all spec directories
-    hash_mode = typed_config.validation.hash_mode
     satellite_kinds = ["assertion", "result"]
     # YIELDS (RESULT->TEST) links are always enabled: flutter-machine emits
     # test_id=None (never queues YIELDS), while junit/pytest emit real test_ids
     # (YIELDS desired).  So the per-test link is unconditionally safe.
     builder = GraphBuilder(
         repo_root=repo_root,
-        hash_mode=hash_mode,
         satellite_kinds=satellite_kinds,
         resolver=default_resolver,
         namespace=typed_config.project.namespace,

@@ -104,11 +104,10 @@ class TestREQ_d00131_B_post_save_rebuild:
             scan_code=False,
             scan_tests=False,
         )
-        hash_mode = getattr(graph, "hash_mode", "full-text")
 
         # All requirements should be clean
         for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-            reasons = _detect_fixable(node, hash_mode, changelog_enforce=False)
+            reasons = _detect_fixable(node, changelog_enforce=False)
             assert reasons == [], f"{node.id} still has fixable issues after fix: {reasons}"
 
     # Verifies: REQ-d00131-B
@@ -143,8 +142,7 @@ B. Second assertion
             scan_code=False,
             scan_tests=False,
         )
-        hash_mode = getattr(graph, "hash_mode", "full-text")
 
         for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-            reasons = _detect_fixable(node, hash_mode, changelog_enforce=False)
+            reasons = _detect_fixable(node, changelog_enforce=False)
             assert reasons == [], f"{node.id} still dirty after fix: {reasons}"

@@ -458,20 +458,7 @@ Each requirement MUST end with a Footer including a content hash:
 *End* *{Title}* | **Hash**: {value}
 ```
 
-The hash calculation mode is configurable via `[validation].hash_mode` in `.elspais.toml`. Two modes are supported:
-
-### `full-text` Mode
-
-The hash SHALL be calculated from:
-
-- every line AFTER the Header line
-- every line BEFORE the Footer line
-
-No normalization is applied. The hash is computed from the raw text between the header and footer lines.
-
-### `normalized-text` Mode (Default)
-
-The hash SHALL be calculated from **assertion text only**. Non-assertion body text (context, definitions, explanations) is excluded from the hash.
+The hash SHALL be calculated from **assertion text only** (REQ-d00131-S). Non-assertion body text (context, definitions, explanations) is excluded from the hash. The hash has this one definition; no configuration setting selects another.
 
 Any material behavioral constraint SHALL be expressed as an Assertion. Non-assertion text is supplementary context and does not affect the content hash.
 

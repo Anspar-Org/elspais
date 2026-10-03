@@ -645,12 +645,6 @@ class FederatedGraph:
         return entry.repo_root if entry else Path(".")
 
     @property
-    def hash_mode(self) -> str:
-        """Return the root repo's hash mode."""
-        graph = self._repos[self._root_repo].graph
-        return graph.hash_mode if graph else "normalized-text"
-
-    @property
     def satellite_kinds(self) -> frozenset:
         """Return the root repo's satellite kinds."""
         graph = self._repos[self._root_repo].graph

@@ -135,39 +135,10 @@ def compute_version_hash(content: str, length: int = 16) -> str:
     return _select_hasher("sha256")(content.encode("utf-8")).hexdigest()[:length]
 
 
-# Implements: REQ-p00004-A
-def verify_hash(
-    content: str,
-    expected_hash: str,
-    length: int = 8,
-    algorithm: str = "sha256",
-    normalize_whitespace: bool = False,
-) -> bool:
-    """Verify that content matches an expected hash.
-
-    Args:
-        content: Text content to verify
-        expected_hash: Expected hash value
-        length: Hash length used (default 8)
-        algorithm: Hash algorithm used (default "sha256")
-        normalize_whitespace: If True, aggressively normalize whitespace.
-
-    Returns:
-        True if hash matches, False otherwise
-    """
-    actual_hash = calculate_hash(
-        content,
-        length=length,
-        algorithm=algorithm,
-        normalize_whitespace=normalize_whitespace,
-    )
-    return actual_hash.lower() == expected_hash.lower()
-
-
 def normalize_assertion_text(label: str, text: str) -> str:
     """Normalize a single assertion for hash computation.
 
-    Normalization rules (per spec/requirements-spec.md normalized-text mode):
+    Normalization rules (per the Hash Definition in spec/requirements-spec.md):
     1. Join multiline text into a single line (collapse newlines to spaces)
     2. Collapse multiple internal spaces to a single space
     3. Strip trailing whitespace
@@ -191,7 +162,7 @@ def normalize_assertion_text(label: str, text: str) -> str:
     return f"{label}. {text}"
 
 
-# Implements: REQ-d00131-J
+# Implements: REQ-d00131-J+S
 def compute_normalized_hash(
     assertions: list[tuple[str, str]],
     length: int = 8,
@@ -199,7 +170,7 @@ def compute_normalized_hash(
 ) -> str:
     """Compute hash from normalized assertion text (order-independent).
 
-    Used by normalized-text hash mode. Per REQ-d00131-J, each assertion's
+    This is a requirement's content hash. Per REQ-d00131-J, each assertion's
     normalized text is hashed individually, the per-assertion hashes are
     sorted lexicographically, and the sorted collection is hashed into the
     final result — so reordering assertions does not change the hash.

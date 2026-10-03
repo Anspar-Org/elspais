@@ -427,3 +427,60 @@ class TestPreambleEditing:
         graph.update_remainder(preamble_id, text="Updated preamble content")
 
         assert preamble.get_field("text") == "Updated preamble content"
+
+
+def _build_hashed_graph_with_sections() -> TraceGraph:
+    """A requirement holding both Assertions and sections, with its hash recomputed."""
+    builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
+    builder.add_parsed_content(
+        make_req(
+            "REQ-p00001",
+            "Requirement with Sections",
+            assertions=[
+                {"label": "A", "text": "The system SHALL validate input."},
+                {"label": "B", "text": "The system SHALL log errors."},
+            ],
+            sections=[
+                {"heading": "preamble", "content": "Some preamble text", "line": 2},
+                {"heading": "Rationale", "content": "Why we need this", "line": 4},
+            ],
+        )
+    )
+    graph = builder.build()
+    graph._recompute_requirement_hash(graph.find_by_id("REQ-p00001"))
+    return graph
+
+
+class TestRemainderMutationsLeaveHashAlone:
+    """Section text lies outside a requirement's hash, so a section mutation
+    neither claims to affect the hash nor moves it; an Assertion mutation does."""
+
+    # Verifies: REQ-d00131-S
+    @pytest.mark.parametrize(
+        ("mutate", "affects_hash", "hash_moves"),
+        [
+            (
+                lambda g: g.update_remainder("REQ-p00001:section:1", text="A rewritten reason."),
+                False,
+                False,
+            ),
+            (lambda g: g.add_remainder("REQ-p00001", "Notes", "A new section."), False, False),
+            (lambda g: g.delete_remainder("REQ-p00001:section:1"), False, False),
+            (
+                lambda g: g.update_assertion("REQ-p00001-A", "The system SHALL reject input."),
+                True,
+                True,
+            ),
+        ],
+        ids=["update_remainder", "add_remainder", "delete_remainder", "update_assertion"],
+    )
+    def test_affects_hash_matches_whether_the_hash_moves(self, mutate, affects_hash, hash_moves):
+        graph = _build_hashed_graph_with_sections()
+        parent = graph.find_by_id("REQ-p00001")
+        hash_before = parent.get_field("hash")
+        assert hash_before and hash_before != "N/A"
+
+        entry = mutate(graph)
+
+        assert entry.affects_hash is affects_hash
+        assert (parent.get_field("hash") != hash_before) is hash_moves

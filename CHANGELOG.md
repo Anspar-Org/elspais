@@ -10,6 +10,12 @@ All notable changes to elspais will be documented in this file.
 
 - **A cross-repository reference in spec or journey metadata is read in the grammar of the member that owns it (REQ-d00272-N)** -- that member normalizes it, as it already did for code and test annotations, so a reference written in an accepted but non-canonical spelling may newly receive a `references.identifier_form` style finding.
 
+### TOOL-61
+
+- **Breaking: the `full-text` hash mode is retired (REQ-d00131-S, REQ-d00212-Z)** -- a requirement's hash now has one definition: it covers the requirement's assertions alone, each normalized and hashed on its own, the sorted results hashed together. `[validation] hash_mode` admits only `"normalized-text"`, and a configuration that selects `"full-text"` is refused when it is read, with a message naming the setting. To upgrade, remove the `hash_mode` line (or set it to `"normalized-text"`), then run `elspais fix`: it rewrites the stored hash of every requirement to the normalized digest. Commit that rewrite on its own so a reviewer can tell it from an edit to what a requirement says. A project already on `"normalized-text"` needs no change.
+- A requirement created through the mutation API with no assertions now stores the reserved hash value `N/A`, the value its footer renders, rather than a digest of an empty body.
+- Adding, changing or removing a requirement's section no longer reports `affects_hash` in the mutation log: section text is outside the hash.
+
 ### Added
 
 - **`elspais viewer --port 0` serves on any free port, and its record names that port (REQ-o00076-E)** -- the viewer binds the port before it writes `.elspais/daemon.json`, so the record a client reads names the port the server answers on and nothing can take it in between. `--port 0` previously read as no port given and served on 5001.

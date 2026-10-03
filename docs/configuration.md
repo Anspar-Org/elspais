@@ -649,7 +649,9 @@ color = "#6c757d"
 #──────────────────────────────────────────────────────────────────────────────
 
 [validation]
-# Hash mode for change detection: "full-text" | "normalized-text"
+# How requirement content is hashed. "normalized-text" is the only value:
+# the hash covers each requirement's Assertions alone. A configuration
+# selecting the retired "full-text" mode is refused when it is read.
 hash_mode = "normalized-text"
 
 # hash_algorithm = "sha256"         # Hash algorithm
