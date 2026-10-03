@@ -16,6 +16,8 @@ All notable changes to elspais will be documented in this file.
 
 - **An unbound test citation of another repository's identifier credits nothing (REQ-d00274-H)** -- a test citation that binds to no test was linked as a real relationship when its target lived in another repository of a federation, so the Assertion read as Tested on evidence no test produced. It now links nothing, as in the citation's own repository; `elspais checks` still reports it as unbound, and it is reported as unresolved only where its target is missing or retired.
 
+- **A requirement satisfying a single Assertion is hashed over its own Assertions alone (REQ-d00131-S)** -- for a requirement with an Assertion-level `Satisfies:`, the hash computed outside the renderer counted the copy of the satisfied Assertion as one of its own. The hash held in memory after an edit, and the hash a save recorded in the changelog row it added, therefore differed from the hash the file's End marker carries and the next build reads. Every hash of a requirement now covers its own Assertions alone.
+
 - **Deleting a requirement that is not Active reports its citations (REQ-p00017-H, REQ-o00062-P)** -- the requirement is removed, and every citation of it or of one of its Assertions, in any member of a federation, is now reported as unresolved at once, as a build of the saved text reports it. A citing requirement left without a parent is a root, not an orphan. The requirement's sections and its `Satisfies:` copies leave with it, and so do the copies other requirements made of it. Undo restores all of it.
 
 ### TOOL-134

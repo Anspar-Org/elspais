@@ -32,6 +32,8 @@ from elspais.graph.GraphNode import NodeKind
 from elspais.graph.reference_faults import FaultClass
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.graph.render import compute_hash_for_node, render_end_marker, render_save
+from elspais.mcp.server import _add_changelog_for_active_mutations
+from elspais.utilities.hasher import compute_normalized_hash
 from tests.core.test_retired_citation_unresolved import FIXTURES_DIR, _build, _replace_once
 
 # ---------------------------------------------------------------------------
@@ -1117,3 +1119,105 @@ class TestAnUnboundCitationInAnotherMember:
                 _retitle("REQ-p00002"),
             )
         _assert_undo_restores(tmp_path, case, undo)
+
+
+# ---------------------------------------------------------------------------
+# 7. A requirement's hash covers its own Assertions alone
+# ---------------------------------------------------------------------------
+
+# (project, the requirement whose Satisfies: names one template Assertion,
+# the copy of that Assertion hung beneath it)
+OWN_HASH_SETUPS = {
+    "in-repo": (_in_repo_project, "REQ-p00012", "REQ-p00012::REQ-p00010-A"),
+    "xrepo-tenant-assertion": (
+        _xrepo_project("tenant", assertion_satisfies=True),
+        "TEN-p00001",
+        "TEN-p00001::LIB-p00001-A",
+    ),
+}
+
+OWN_HASH_CASES = pytest.mark.parametrize("setup", list(OWN_HASH_SETUPS))
+
+
+def _own_assertions_hash(node) -> str:
+    """The hash over the Assertions *node* structures, computed apart from the renderer."""
+    return compute_normalized_hash(
+        [
+            (child.get_field("label"), child.get_label())
+            for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})
+            if child.kind == NodeKind.ASSERTION
+        ]
+    )
+
+
+def _record_own_hash(root: Path, req_id: str) -> None:
+    """Write the hash of *req_id*'s own Assertions into its End marker."""
+    node = _build(root).find_by_id(req_id)
+    path = Path(node.file_node().get_field("absolute_path"))
+    title = node.get_label()
+    own = _own_assertions_hash(node)
+    if node.get_field("hash") != own:
+        _replace_once(
+            path, render_end_marker(title, node.get_field("hash")), render_end_marker(title, own)
+        )
+    recorded = _build(root).find_by_id(req_id)
+    assert recorded.get_field("hash") == own
+    assert "stale_hash" not in (recorded.get_field("parse_dirty_reasons") or ())
+
+
+def _own_hash_project(tmp_path: Path, setup: str):
+    make, req_id, copy_id = OWN_HASH_SETUPS[setup]
+    _base, root = make(tmp_path)
+    _record_own_hash(root, req_id)
+    graph = _build(root)
+    declaring = graph.find_by_id(req_id)
+    # Premise: the copy is among the declaring requirement's children.
+    assert copy_id in {child.id for child in declaring.iter_children()}
+    assert graph.find_by_id(copy_id).kind == NodeKind.ASSERTION
+    return root, graph, declaring
+
+
+class TestAHashCoversItsOwnAssertions:
+    """Validates REQ-d00131-S."""
+
+    @OWN_HASH_CASES
+    # Verifies: REQ-d00131-S
+    def test_REQ_d00131_S_hash_leaves_out_a_satisfies_copy(self, tmp_path, setup):
+        _root, _graph, declaring = _own_hash_project(tmp_path, setup)
+
+        assert compute_hash_for_node(declaring) == _own_assertions_hash(declaring)
+        assert compute_hash_for_node(declaring) == declaring.get_field("hash")
+
+    @OWN_HASH_CASES
+    # Verifies: REQ-d00131-S
+    def test_REQ_d00131_S_a_saved_edit_records_the_hash_the_next_build_reads(self, tmp_path, setup):
+        _make, req_id, _copy_id = OWN_HASH_SETUPS[setup]
+        root, graph, declaring = _own_hash_project(tmp_path, setup)
+
+        graph.update_assertion(f"{req_id}-A", "The record SHALL name its author.")
+        in_memory = graph.find_by_id(req_id).get_field("hash")
+        assert in_memory == _own_assertions_hash(graph.find_by_id(req_id))
+        _save(graph, root)
+
+        rebuilt = _build(root).find_by_id(req_id)
+        assert "stale_hash" not in (rebuilt.get_field("parse_dirty_reasons") or ())
+        assert rebuilt.get_field("hash") == _own_assertions_hash(rebuilt)
+        assert rebuilt.get_field("hash") == in_memory
+
+    @OWN_HASH_CASES
+    # Verifies: REQ-d00131-S
+    def test_REQ_d00131_S_a_changelog_row_records_the_saved_hash(self, tmp_path, setup):
+        _make, req_id, _copy_id = OWN_HASH_SETUPS[setup]
+        root, graph, _declaring = _own_hash_project(tmp_path, setup)
+
+        graph.update_assertion(f"{req_id}-A", "The record SHALL name its author.")
+        _save(graph, root)
+        written = _add_changelog_for_active_mutations(
+            graph, root, {req_id}, "Name the author.", {"name": "Tester", "id": "tester"}
+        )
+        assert written == 1
+
+        rebuilt = _build(root).find_by_id(req_id)
+        (row, *_older) = rebuilt.get_field("changelog")
+        assert row["hash"] == rebuilt.get_field("hash")
+        assert row["hash"] == _own_assertions_hash(rebuilt)
