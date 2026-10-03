@@ -1,9 +1,9 @@
 """Parser for `flutter test --machine` newline-delimited JSON events.
 
-Builds RESULT records carrying where each test is declared (path, line), the
+Builds result records carrying where each test is declared (path, line), the
 file that executed it, and its name.
 
-Record shape mirrors sibling parsers (junit_xml, pytest_json):
+Result record shape mirrors sibling parsers (junit_xml, pytest_json):
 ``{"ordinal", "name", "classname", "status", "duration", "message",
 "source_path", "line", "root_path", "root_line", "runner_path", "test_id"}``.
 
@@ -15,11 +15,11 @@ test's citations sit at the declaration. Consequently, a ``file:`` URL in
 ``runner_path`` (REQ-d00254-Z).
 
 For ``testWidgets(...)``, ``test.url`` names a frame inside
-``package:flutter_test``, which is no file of the project. The record then
+``package:flutter_test``, which is no file of the project. The result record then
 takes ``source_path`` from ``suite.path`` and carries ``test.root_url`` /
 ``test.root_line``, which name the call site in the suite's file. The builder
 tries ``(source_path, line)`` and falls back to ``(root_path, root_line)``. A
-record that names its declaration carries no root location. Consequently,
+result record that names its declaration carries no root location. Consequently,
 it never falls back to the runner file.
 
 ``test_id`` is always ``None``: which test a result belongs to is answered at
@@ -70,7 +70,7 @@ class FlutterMachineParser(DiagnosticRecorder):
                 # Suppressed deliberately: this reporter reads a runner's live
                 # stdout, where a build banner, a warning, or a plugin's own
                 # print sits between events. A line that is not JSON is
-                # expected traffic, not a record that failed to read. What
+                # expected traffic, not a result record that failed to read. What
                 # would be a real condition -- a stream carrying no events at
                 # all -- is recorded once, after the loop.
                 continue
@@ -129,8 +129,8 @@ class FlutterMachineParser(DiagnosticRecorder):
                         # This format usually arrives on a runner's output,
                         # where there is no artifact to name. It is also saved
                         # to files and read back by a pattern, and then the
-                        # artifact is what separates one run's records from
-                        # another's: without it every file's records start
+                        # artifact is what separates one run's result records
+                        # from another's: without it every file's result records start
                         # their count again and collide (REQ-d00294-A).
                         "result_file": source_path or None,
                         "result_line": None,

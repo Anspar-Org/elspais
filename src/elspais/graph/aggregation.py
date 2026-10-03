@@ -1242,11 +1242,11 @@ def _measure_fields(prefix: str, sums: DimensionSums) -> dict[str, float]:
 class FileBoundResults:
     """The results one artifact holds that bind only through a test file.
 
-    ``artifact`` is where the records were read: the results file, or the
+    ``artifact`` is where the result records were read: the results file, or the
     target name where the runner's output held them and no file exists.
     ``namespace`` names the repository that read them, because two members
     can hold one repository-relative path. ``tests`` are the tests each result
-    could have bound to: every test in the file its record names.
+    could have bound to: every test in the file its result record names.
     """
 
     namespace: str
@@ -1278,16 +1278,16 @@ def iter_file_bound_results(graph: Any) -> list[FileBoundResults]:
             continue
         if not any(True for _ in result.iter_parents(edge_kinds={EdgeKind.YIELDS})):
             continue
-        # A RESULT id names the repository that read it and the place of
-        # record, which is the artifact.
+        # A RESULT id names the repository that read it and the place of its
+        # result record, which is the artifact.
         _prefix, namespace, place, _ordinal = parse_structural_id(result.id)
         groups.setdefault((namespace, place), []).append(result)
 
-    records: list[FileBoundResults] = []
+    bound: list[FileBoundResults] = []
     for (namespace, artifact), results in sorted(groups.items()):
         lines = [r.get_field("result_line") for r in results if r.get_field("result_line")]
         tests = {test.id for r in results for test in r.iter_parents(edge_kinds={EdgeKind.YIELDS})}
-        records.append(
+        bound.append(
             FileBoundResults(
                 namespace=namespace,
                 artifact=artifact,
@@ -1298,7 +1298,7 @@ def iter_file_bound_results(graph: Any) -> list[FileBoundResults]:
                 tests=tuple(sorted(tests)),
             )
         )
-    return records
+    return bound
 
 
 # Implements: REQ-d00086-A, REQ-d00258-C, REQ-d00291-I

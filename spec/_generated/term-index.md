@@ -2,6 +2,31 @@
 <!-- Do not edit manually; changes will be overwritten. -->
 # Term Index
 
+## Attribution Record
+
+**REQ:**
+
+- REQ-d00254:section:1
+
+## Automatic Save Record
+
+**REQ:**
+
+- REQ-o00074-J
+- REQ-p00083-C
+- REQ-p00083-H
+- REQ-o00074:section:1
+- REQ-o00077:section:1
+- REQ-p00083:section:0
+
+## Daemon Record
+
+**REQ:**
+
+- REQ-o00074-B
+- REQ-o00074:section:1
+- REQ-o00076:section:1
+
 ## Defined Term
 
 **REQ:**
@@ -34,6 +59,27 @@
 
 - REQ-p00017-M
 - REQ-p00017:section:0
+
+## Result Fingerprint
+
+**REQ:**
+
+- REQ-d00311-D
+- REQ-d00313-B
+- REQ-d00313-D
+- REQ-d00313:section:1
+
+## Result Record
+
+**REQ:**
+
+- REQ-d00294
+- REQ-d00082-K
+- REQ-d00082-L
+- REQ-d00254-A
+- REQ-d00294-A
+- REQ-d00294:section:0
+- REQ-d00294:section:1
 
 ## Specification
 

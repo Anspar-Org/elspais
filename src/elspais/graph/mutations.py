@@ -17,7 +17,7 @@ from uuid import uuid4
 
 @dataclass
 class MutationEntry:
-    """Single mutation operation record.
+    """Single mutation-log entry.
 
     Records a mutation for auditing and undo support. The before_state
     contains enough information to reverse the operation.
@@ -108,7 +108,7 @@ class MutationLog:
         """Append a mutation entry to the log.
 
         Args:
-            entry: The mutation record to append.
+            entry: The mutation entry to append.
         """
         was_holding = bool(self._entries)
         self._entries.append(entry)

@@ -19,7 +19,7 @@ class LcovParser(DiagnosticRecorder):
     LF (lines found), LH (lines hit), and end_of_record.  Prefixes carrying
     function and branch data (FN, FNDA, BRDA, BRF, BRH, TN, etc.) are passed
     over deliberately and not recorded as conditions: this tool measures
-    lines, so a record describing something else is not content it declined
+    lines, so an LCOV record describing something else is not content it declined
     to read but content it has no question about.
     """
 
@@ -64,7 +64,7 @@ class LcovParser(DiagnosticRecorder):
                 parts = line[3:].split(",", 1)
                 # A DA record the format cannot read leaves its line
                 # unmeasured, and an unmeasured line reads as an uncovered
-                # one. Record the record rather than dropping it.
+                # one. Report the DA record rather than dropping it.
                 if len(parts) != 2:
                     self._record_diagnostic(
                         source_path,

@@ -686,9 +686,9 @@ name different paths under it. The flag applies to
 the server alone: with `--static` it is refused, since a generated file
 requests nothing under a prefix. With no prefix the server is exactly what
 it is without the flag.
-The viewer's record in `.elspais/daemon.json` names the prefix as
+The viewer's daemon record, `.elspais/daemon.json`, names the prefix as
 `base_path`, so every command that reaches a running server through the
-record — the CLI's graph queries, `elspais doctor`, `elspais mcp env`
+daemon record — the CLI's graph queries, `elspais doctor`, `elspais mcp env`
 — reaches a prefixed viewer where it answers. The state the page keeps in
 the browser is scoped to the prefix too, so viewers under different
 prefixes on one host keep state of their own.
@@ -1298,14 +1298,14 @@ dropping them.
 deadline above is not the only way a daemon stops, and the others hold
 the same work. An idle timeout firing on a daemon with no client left, and an
 external stop — `elspais daemon`, a `kill`, a container shutting down —
-both persist pending mutations and leave the same record before the
-process ends. Being told to stop says nothing about what the daemon
+both persist pending mutations and leave the same automatic save record
+before the process ends. Being told to stop says nothing about what the daemon
 happens to be holding. Being told to discard does:
 
     idle timeout expires, work pending -> SAVE to disk, record it, stop
     stop signal arrives, work pending  -> SAVE to disk, record it, stop
     told to discard, work pending      -> drop it, write nothing, stop
-    stopping with nothing pending      -> stop, and write no record
+    stopping with nothing pending      -> stop, and leave no automatic save record
 
 If the save fails on either of the first two, the mutations are kept.
 The idle timeout then declines to stop and waits out another idle period,
@@ -1323,9 +1323,9 @@ the process outright. The deadline belongs to whoever asked for the stop,
 which is why the work is written first: by the time it passes there is
 nothing left in the process to lose.
 
-**How you find out.** A save the daemon performed is recorded in
-`.elspais/automatic-save.json` and reported to the next client in the
-ordinary metadata it already reads: `get_workspace_info`,
+**How you find out.** A save the daemon performed leaves an automatic save
+record in `.elspais/automatic-save.json`, which is reported to the next
+client in the ordinary metadata it already reads: `get_workspace_info`,
 `get_graph_status`, `/api/dirty` and `/api/check-freshness` all carry an
 `automatic_save` block while one is outstanding. It states who saved
 (the daemon), when, how many mutations it covered, and what triggered it.
@@ -1334,8 +1334,8 @@ can disappear because it finished, because it crashed, or because a
 connection dropped, and the daemon cannot tell those apart. You decide;
 it reports.
 
-The record is retired the moment any client saves at its own request
-(`save_mutations` over MCP, Save in the viewer, or
+The automatic save record is retired the moment any client saves at its
+own request (`save_mutations` over MCP, Save in the viewer, or
 `elspais daemon --persist`). A later automatic save replaces it.
 Committing or reverting the files does not clear it — the daemon is not
 watching your working tree — so save deliberately, or delete the file, if
@@ -1352,7 +1352,7 @@ If a server starts and finds that file, the process that wrote it is gone
 and never wrote what it held — a SIGKILL, a machine that slept, a
 supervisor with a shorter patience than the save took. The finding
 becomes `.elspais/lost-changes` and is reported as a `lost_changes` block
-on the same surfaces the automatic-save record uses, so what you learn is
+on the same surfaces the automatic save record uses, so what you learn is
 that something was lost, not what. It is retired the next time a client
 saves at its own request. A discard you asked for is not a loss and
 leaves nothing behind.

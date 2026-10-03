@@ -147,7 +147,7 @@ def _record_parser_diagnostics(
 ) -> None:
     """Lift what a results parser declined to read onto the graph.
 
-    ``recorder`` is whatever holds the records -- the builder while the graph
+    ``recorder`` is whatever holds the ingestion faults -- the builder while the graph
     is being built, the graph itself once it is. A parser that records
     nothing contributes nothing.
     """
@@ -271,7 +271,7 @@ def _ingest_target_results(
     """Parse a target's reporter output and add RESULT ParsedContent.
 
     Each ParsedContent carries real source_file (repo-relative) + match.
-    Returns the count of RESULT records added.
+    Returns the count of RESULT nodes added.
 
     Only "results"-kind reporters are handled; coverage-kind reporters are
     skipped (returns 0 immediately).
@@ -307,7 +307,7 @@ def _ingest_target_results(
         return 0
 
     parser = spec.parser_factory()
-    records = parser.parse(results_text, source_path)
+    result_records = parser.parse(results_text, source_path)
     # Implements: REQ-d00285-G
     _record_parser_diagnostics(builder, parser, "results", target.name, source_path, repo_root)
 
@@ -319,7 +319,7 @@ def _ingest_target_results(
     # artifact and is already 1-based, so it is left alone.
     line_shift = 1 - (target.line_base if target.line_base is not None else spec.line_base)
     if line_shift:
-        for rec in records:
+        for rec in result_records:
             for key in ("line", "root_line"):
                 if isinstance(rec.get(key), int):
                     rec[key] = rec[key] + line_shift
@@ -330,7 +330,7 @@ def _ingest_target_results(
     # exactly one test scanned for this target; otherwise it binds to nothing
     # and carries why, so the result can be reported rather than dropped.
     form = target.classname or spec.classname
-    for rec in records:
+    for rec in result_records:
         if not rec.get("test_id"):
             continue  # already bound by a source file the producer named
         if form == "python-module":
@@ -393,7 +393,7 @@ def _ingest_target_results(
         return raw
 
     count = 0
-    for rec in records:
+    for rec in result_records:
         raw_src = rec.get("source_path", "")
         source_file = _repo_relative_or_kept(raw_src) or ""
 
@@ -414,10 +414,11 @@ def _ingest_target_results(
 
         # Implements: REQ-d00294-A+B
         # The id is spelled here, where the repository root and the
-        # namespace are known, so the place of record is repo-relative and
-        # the same run reads the same way in any checkout. A record an
-        # artifact holds is placed by that artifact; a record read from a
-        # runner's output has no artifact and is placed by its target.
+        # namespace are known, so the place of a result record is
+        # repo-relative and the same run reads the same way in any checkout.
+        # A result record an artifact holds is placed by that artifact; one
+        # read from a runner's output has no artifact and is placed by its
+        # target.
         # An artifact outside the repository keeps the path it has, because
         # it has no repo-relative form to take. Such an id holds a path from
         # the machine that read it, and two checkouts reading one artifact
@@ -426,8 +427,9 @@ def _ingest_target_results(
         if ordinal is None:
             raise ValueError(
                 f"reporter {target.reporter!r} produced a result carrying no "
-                f"ordinal, so the record cannot be told from the other records "
-                f"of the same test. Every results reporter numbers its records."
+                f"ordinal, so the result record cannot be told from the other "
+                f"result records of the same test. Every results reporter numbers "
+                f"its result records."
             )
         result_id = make_result_id(namespace, result_file or target.name, ordinal)
 
@@ -442,11 +444,11 @@ def _ingest_target_results(
                 # author fixes them differently: one by declaring another
                 # source, the other by mending the producer.
                 if "suite_hostname" in rec:
-                    reason = "the suite that holds this record names no hostname"
+                    reason = "the suite that holds this result record names no hostname"
                 else:
                     reason = (
                         f"reporter {target.reporter!r} reads a format whose "
-                        f"records carry no suite hostname"
+                        f"result records carry no suite hostname"
                     )
                 builder.record_ingestion_fault(
                     path=_repo_relative(source_path, repo_root) if source_path else "",
@@ -591,10 +593,10 @@ def _run_prescan_command(
     and outputs a JSON array on stdout with the standardized schema:
     [{"file": "...", "function": "...", "class": "...|null", "line": N}, ...]
 
-    Each record's ``file`` may be repo-relative (the form handed in on stdin)
+    Each attribution record's ``file`` may be repo-relative (the form handed in on stdin)
     or absolute; both resolve against the scanned file, because every
     relative key returned here is aliased to its absolute form by the caller.
-    Files the command reports on are attributed from its records; every other
+    Files the command reports on are attributed from its attribution records; every other
     scanned test file keeps built-in attribution, so a command may cover one
     file type and leave the rest alone.
 
@@ -1400,7 +1402,7 @@ def _build_repository(
                 )
                 # Paths go out on stdin repo-relative, so a conforming command
                 # answers with those, while scanning dispatches absolute paths.
-                # Alias each relative key to its absolute form so records govern
+                # Alias each relative key to its absolute form so attribution records govern
                 # either way (REQ-d00254-N).
                 if prescan_data:
                     for reported in list(prescan_data):

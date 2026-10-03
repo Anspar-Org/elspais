@@ -287,9 +287,9 @@ def check_spec_no_duplicates(
 ) -> HealthCheck:
     """Check for cross-file duplicate requirement IDs.
 
-    Reads the build-time collision record from the graph, since by the time
+    Reads the build-time collision list from the graph, since by the time
     this check runs the in-memory node index has already disambiguated
-    subsequent occurrences with synthetic IDs. The collision record preserves
+    subsequent occurrences with synthetic IDs. The collision list preserves
     every source file that defined each canonical ID.
     """
     severity = severity_for("spec.no_duplicates", config)
@@ -3661,8 +3661,8 @@ def check_unscanned_keyword_files(
             "code.unscanned_keyword_file", "Unscanned files carrying a Traceability keyword"
         )
 
-    records = graph.unscanned_keyword_files()
-    if not records:
+    unscanned = graph.unscanned_keyword_files()
+    if not unscanned:
         return HealthCheck(
             name="code.unscanned_keyword_file",
             passed=True,
@@ -3680,17 +3680,17 @@ def check_unscanned_keyword_files(
             file_path=r.path,
             line=r.line,
         )
-        for r in sorted(records, key=lambda r: (r.path, r.line))
+        for r in sorted(unscanned, key=lambda r: (r.path, r.line))
     ]
     return HealthCheck(
         name="code.unscanned_keyword_file",
         passed=False,
         message=(
-            f"{len(records)} file(s) carrying a Traceability keyword were not read by any scan"
+            f"{len(unscanned)} file(s) carrying a Traceability keyword were not read by any scan"
         ),
         category="code",
         severity=severity,
-        details={"count": len(records)},
+        details={"count": len(unscanned)},
         findings=findings,
     )
 
@@ -3883,7 +3883,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     if failed > 0:
         # Implements: REQ-d00294-F
         # The environment stands beside the result, so several failures of
-        # one test read apart. A finding points at the record that failed
+        # one test read apart. A finding points at the result record that failed
         # where the reporter said where it wrote it, and at the test's own
         # source where it did not.
         findings = []
@@ -4673,7 +4673,7 @@ def check_file_bound_results(
 
     from elspais.graph.aggregation import iter_file_bound_results
 
-    records = iter_file_bound_results(graph)
+    bound = iter_file_bound_results(graph)
     repo_names = {entry.namespace: entry.name for entry in graph.iter_repos()}
     findings = [
         HealthFinding(
@@ -4688,7 +4688,7 @@ def check_file_bound_results(
             related=list(r.tests),
             repo=repo_names[r.namespace],
         )
-        for r in records
+        for r in bound
     ]
     if not findings:
         return HealthCheck(
@@ -4698,14 +4698,14 @@ def check_file_bound_results(
             category="tests",
             severity=severity,
         )
-    count = sum(len(r.result_ids) for r in records)
+    count = sum(len(r.result_ids) for r in bound)
     return HealthCheck(
         name="tests.file_bound_results",
         passed=False,
-        message=f"{count} ingested result(s) in {len(records)} artifact(s) name no test",
+        message=f"{count} ingested result(s) in {len(bound)} artifact(s) name no test",
         category="tests",
         severity=severity,
-        details={"count": count, "artifacts": len(records)},
+        details={"count": count, "artifacts": len(bound)},
         findings=findings,
     )
 
@@ -4735,9 +4735,9 @@ def check_unbound_citations(
     if severity == Severity.OFF:
         return skipped_check("tests.unbound_citation", "Citations attaching to no test")
 
-    # A record names a file relative to the repository holding it, and two
+    # A citation names a file relative to the repository holding it, and two
     # members of a federation may hold the same relative path, so the member
-    # is read from the graph the record came out of rather than looked up
+    # is read from the graph the citation came out of rather than looked up
     # afterwards from a path that answers for both.
     findings = [
         HealthFinding(
@@ -4888,16 +4888,16 @@ def check_ingestion_faults(
     for opposite actions -- which is why the point that dropped the artifact
     recorded what it dropped (REQ-d00285-G). Recording it and never saying it
     is only marginally better than dropping it silently, so this is where the
-    record is spoken (REQ-p00019-H).
+    fault is spoken (REQ-p00019-H).
 
     Each finding NAMES its artifact: the path the configuration reached, the
     line where the condition has one, the target it arose under, and the cause
     in the words the recording site chose (REQ-d00285-A). A count without the
     names would leave the reader the search the tool already performed.
 
-    A record names its artifact relative to the repository holding it, and two
+    A fault names its artifact relative to the repository holding it, and two
     members of a federation may hold the same relative path, so the member is
-    read from the graph the record came out of rather than looked up
+    read from the graph the fault came out of rather than looked up
     afterwards from a path that answers for both.
     """
     severity = severity_for("tests.ingestion_fault", config)
@@ -4939,7 +4939,7 @@ def check_ingestion_faults(
         return HealthCheck(
             name="tests.ingestion_fault",
             passed=True,
-            message="Every artifact ingestion reached produced records",
+            message="Every artifact ingestion reached produced results or coverage",
             category="tests",
             severity=severity,
         )
@@ -5010,7 +5010,7 @@ def check_runs_in_progress(
     Nothing in that target's output area was read, so its results and its
     coverage are neither judged nor counted. The finding states when the run
     started and nothing more: a run that has not recorded its end may still be
-    going, or may have stopped, and the record cannot say which.
+    going, or may have stopped, and the result fingerprint cannot say which.
     """
     severity = severity_for("tests.run_in_progress", config)
     if severity == Severity.OFF:

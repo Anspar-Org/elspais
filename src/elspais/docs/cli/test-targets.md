@@ -136,7 +136,7 @@ that are partial or not yet written, so elspais reads nothing from that folder.
 `elspais checks` reports the target under `tests.run_in_progress` (info),
 stating when the run started, and judges neither its freshness nor whether its
 results are missing. A run that stopped without `finish` reads the same way:
-the record cannot tell a run that is still going from one that died, so the
+the fingerprint cannot tell a run that is still going from one that died, so the
 report states the start time and leaves that judgement to the reader.
 
 ### The record of the last run
@@ -525,14 +525,15 @@ Three things must be true:
 1. **Specs are scanned as TEST nodes.**  elspais cannot parse TypeScript
    natively, so point `[scanning.test].prescan_command` at an external scanner
    that reports each `test(...)` call, and add the spec directories /
-   `*.spec.ts` to the test `directories` / `file_patterns`.  Each record
-   carries `file`, `function`, `line`, an optional `class` and an optional
-   `end_line`.  The name is the test's own -- a record names one test, so its
-   spelling decides nothing -- and `line` is the line the test is declared
-   on.  A citation written above that line belongs to the test below it, as
-   it does in every language elspais scans itself.  This rule also holds
-   where a record carries no `end_line`.  elspais never reads the comments
-   directly above a test as the body of the test before it.
+   `*.spec.ts` to the test `directories` / `file_patterns`.  Each
+   attribution record carries `file`, `function`, `line`, an optional `class`
+   and an optional `end_line`.  The name is the test's own -- an attribution
+   record names one test, so its spelling decides nothing -- and `line` is
+   the line the test is declared on.  A citation written above that line
+   belongs to the test below it, as it does in every language elspais scans
+   itself.  This rule also holds where an attribution record carries no
+   `end_line`.  elspais never reads the comments directly above a test as
+   the body of the test before it.
 2. **elspais knows what the recorded name means.**  Playwright's JUnit reporter
    omits the per-`<testcase>` `file` attribute and writes the spec's basename
    into `classname`.  Left to itself elspais reads a `classname` as a Python
@@ -600,7 +601,7 @@ target says so. Without it every line arrives one too high and no result finds
 its test.
 
 The reporter keeps `hostname` on each suite, so one report serves both
-readings: each project's records are told apart, and each result names the
+readings: each project's result records are told apart, and each result names the
 project it came from.
 
 Because JUnit `line` values are not true source lines, binding is
@@ -1179,7 +1180,7 @@ Two sources are available:
 | Source | Reads |
 |--------|-------|
 | `results-path` | The part of the path that the wildcard in this target's `results` glob matched |
-| `suite-hostname` | The `hostname` attribute of the `<testsuite>` holding the record |
+| `suite-hostname` | The `hostname` attribute of the `<testsuite>` holding the result record |
 
 Use `results-path` where each environment writes its own artifact:
 
@@ -1213,10 +1214,10 @@ environment = "suite-hostname"          # <testsuite hostname="firefox">
 A declared source does not always give an answer. A `results` glob holding
 `**`, holding more than one wildcard segment, or holding more than one
 wildcard within its wildcard segment, does not say which part of the path is
-the environment. A record may also hold no hostname at all. In each of these
-the result carries no environment and `elspais checks` reports that none was
-derived. The tool does not guess, because a guess reads exactly like a
-reading in every figure that follows.
+the environment. A result record may also sit in a suite that names no
+hostname. In each of these the result carries no environment and
+`elspais checks` reports that none was derived. The tool does not guess,
+because a guess reads exactly like a reading in every figure that follows.
 
 ### Where the Environment Is Shown
 

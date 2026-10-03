@@ -86,7 +86,7 @@ This covers a repository reached indirectly too -- membership follows each assoc
 
 Every run states the entry and the path the configuration holds when the
 command returns, never the path you typed. A run that recorded nothing says
-so, so an operator -- or a compile script whose only record is this output --
+so, so an operator -- or a compile script whose only account is this output --
 can tell a registration that happened from one that did not:
 
 ```bash

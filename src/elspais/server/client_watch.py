@@ -50,7 +50,7 @@ which every other way of stopping runs too, so the daemon behaves the
 same whether its clients went away, its idle timeout expired, or
 somebody signalled it. That routine records who saved, when, how much,
 and what triggered it, so a later client can see how the files reached
-their current form (REQ-p00083-C). The record states those facts and
+their current form (REQ-p00083-C). The automatic save record states those facts and
 nothing else: a client can disappear because it finished, crashed, or
 lost its connection, and nothing here can tell those apart, so no
 conclusion about the work is drawn on the reader's behalf.
@@ -242,7 +242,7 @@ class ClientWatchdog:
         here rather than keeping a second answer that can disagree.
 
         A read, not a check: it prunes nothing and publishes nothing, so
-        the state record does not depend on how often it is asked. A
+        the daemon record does not depend on how often it is asked. A
         handle source that cannot be read is inconclusive, which is
         neither "some" nor "none", and reads as a client being there.
         """
@@ -289,7 +289,7 @@ class ClientWatchdog:
 
         None means the source could not be read: inconclusive, which is
         neither "some" nor "none". It keeps the daemon and publishes
-        nothing, because a record written from an unreadable instrument
+        nothing, because a daemon record written from an unreadable instrument
         would state as fact something nobody observed.
         """
         if self._extra_liveness_fn is None:
@@ -311,12 +311,12 @@ class ClientWatchdog:
 
         The periodic check is the one place that knows the daemon's true
         client composition: a client present only as a held stream
-        registers nothing, so a record written on registration alone
+        registers nothing, so a daemon record written on registration alone
         never mentions it, and the operator asking why the daemon is
         still running finds no answer for the client keeping it alive.
 
         Only a changed composition is written. Rewriting an unchanged
-        record every interval is churn under whoever is reading it, and
+        daemon record every interval is churn under whoever is reading it, and
         buys no information.
         """
         if self._publish_fn is None or held is None:
@@ -329,7 +329,7 @@ class ClientWatchdog:
         except Exception as exc:
             print(
                 f"WARNING: could not publish the daemon's client set ({exc!r}); "
-                "the daemon's lifetime is unaffected, but its state record "
+                "the daemon's lifetime is unaffected, but its daemon record "
                 "may not describe the clients it is watching.",
                 file=sys.stderr,
                 flush=True,
@@ -576,7 +576,7 @@ def build_client_watchdog(
     pending count and activity token are read from whatever graph the
     holder currently publishes, the stop hands over to the process's one
     shutdown routine, held streams are read from the tracker the app
-    published, and the client set is recorded in the state record. The
+    published, and the client set is recorded in the daemon record. The
     check interval and grace period come from the same environment knobs
     in both processes. A viewer passes no pid, and a watchdog with no pid
     reads streams alone, so it waits out the grace before a clean exit
@@ -616,7 +616,7 @@ def build_client_watchdog(
         from elspais.mcp.daemon import record_daemon_clients
 
         # A process that has committed to stopping does not update its
-        # own advertisement: publishing read-modify-writes the record, so
+        # own advertisement: publishing read-modify-writes the daemon record, so
         # a mark landing between its read and its write would be dropped.
         if shared.is_shutting_down:
             return

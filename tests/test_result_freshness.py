@@ -17,12 +17,12 @@ from elspais.config import validate_config
 from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.utilities.fingerprint import (
-    RECORD_NAME,
+    FINGERPRINT_NAME,
     RunNotStarted,
     finish_run,
     input_files,
     judge,
-    read_record,
+    read_fingerprint,
     run_in_progress,
     start_run,
     target_folder,
@@ -161,7 +161,7 @@ def test_a_target_with_no_results_on_disk_is_not_judged(tmp_path):
 # Verifies: REQ-d00311-N
 @pytest.mark.parametrize("results_written", [False, True], ids=["empty-area", "results-written"])
 def test_a_run_that_recorded_no_end_is_running_whatever_the_area_holds(tmp_path, results_written):
-    """The record is read before the results. An area whose run has not ended
+    """The fingerprint is read before the results. An area whose run has not ended
     holds results that are partial or not yet written, so neither "absent" nor
     "fresh" is reported, even where the inputs match the recorded manifest."""
     root = _project(tmp_path)
@@ -173,8 +173,8 @@ def test_a_run_that_recorded_no_end_is_running_whatever_the_area_holds(tmp_path,
     verdict = judge(root, config, "unit")
 
     assert verdict.state == "running"
-    assert verdict.record == read_record(folder)
-    assert verdict.record["started_at"]
+    assert verdict.fingerprint == read_fingerprint(folder)
+    assert verdict.fingerprint["started_at"]
 
 
 # Verifies: REQ-d00311-N
@@ -183,7 +183,7 @@ def test_a_run_that_recorded_its_end_is_judged_on_its_results(tmp_path):
     root = _project(tmp_path)
     config = _config([_target()])
     folder = start_run(root, config, "unit")
-    assert run_in_progress(folder) == read_record(folder)
+    assert run_in_progress(folder) == read_fingerprint(folder)
 
     (folder / "junit.xml").write_text(_JUNIT, encoding="utf-8")
     finish_run(root, config, "unit")
@@ -232,17 +232,17 @@ def test_a_run_recorded_from_outside_is_judged_as_one_the_tool_recorded(tmp_path
         encoding="utf-8",
     )
     tool = start_run(root, config, "unit")
-    tool_digest = read_record(tool)["digest"]
+    tool_digest = read_fingerprint(tool)["digest"]
 
     (tool / "leftover.xml").write_text(_JUNIT, encoding="utf-8")
 
     monkeypatch.chdir(root)
     assert main(["fingerprint", "start", "unit"]) == 0
-    assert sorted(p.name for p in tool.iterdir()) == [RECORD_NAME]
+    assert sorted(p.name for p in tool.iterdir()) == [FINGERPRINT_NAME]
     (tool / "junit.xml").write_text(_JUNIT, encoding="utf-8")
     assert main(["fingerprint", "finish", "unit"]) == 0
 
-    assert read_record(tool)["digest"] == tool_digest
+    assert read_fingerprint(tool)["digest"] == tool_digest
     assert judge(root, config, "unit").state == "fresh"
 
 
@@ -441,7 +441,7 @@ def test_a_run_starts_with_an_empty_output_area(tmp_path):
 
     start_run(root, config, "unit")
 
-    assert sorted(p.name for p in folder.iterdir()) == [RECORD_NAME]
+    assert sorted(p.name for p in folder.iterdir()) == [FINGERPRINT_NAME]
 
 
 # Verifies: REQ-d00312-D, REQ-d00311-B
@@ -467,5 +467,5 @@ def test_the_runner_hands_the_command_its_folder_and_records_the_run(tmp_path):
     results, _ = run_configured_targets(validate_config(config), root)
 
     assert results[0].returncode == 0
-    assert sorted(p.name for p in stale.iterdir()) == sorted([RECORD_NAME, "junit.xml"])
+    assert sorted(p.name for p in stale.iterdir()) == sorted([FINGERPRINT_NAME, "junit.xml"])
     assert judge(root, config, "unit").state == "fresh"

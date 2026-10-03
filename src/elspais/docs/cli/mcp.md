@@ -477,8 +477,8 @@ that no change reached can change form too. The result's
 `changed_beyond_edits` names each such part -- a requirement, a journey or a
 section of file-level prose -- as `{file, node_id, kind, label, line}`, and is
 empty where the save changed nothing beyond its edits. `save_mutations`, the
-viewer's `/api/save` and the record of a save the daemon made itself all
-carry the same list. `spec.needs_rewrite` reports the same parts before any
+viewer's `/api/save` and the automatic save record of a save the daemon made
+itself all carry the same list. `spec.needs_rewrite` reports the same parts before any
 save, so `elspais fix` can tidy them as a change of their own.
 
 Canonical form never moves the hash of a requirement no change reached. A

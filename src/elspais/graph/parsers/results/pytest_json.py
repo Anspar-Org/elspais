@@ -68,16 +68,16 @@ class PytestJSONParser(DiagnosticRecorder):
 
         Returns:
             List of test result dictionaries with keys:
-            - ordinal: Position of the record in this report
+            - ordinal: Position of the result record in this report
             - name: Test name
             - classname: Test class/module name
             - status: passed, failed, skipped, or error
             - duration: Test duration in seconds
             - message: Error/failure message (if any)
         """
-        # The position of a record is its place among the records this
+        # The position of a result record is its place among those this
         # report yielded, so a test reported once for each environment it
-        # ran in keeps one record for each. A test entry this parser
+        # ran in keeps one result record for each. A test entry this parser
         # declines takes no position.
         results: list[dict[str, Any]] = []
         self._start_diagnostics()
@@ -192,7 +192,7 @@ class PytestJSONParser(DiagnosticRecorder):
             "source_path": source_path,
             "test_id": test_id,
             # Results-file provenance: for pytest JSON the results file IS the
-            # parsed file; JSON has no meaningful per-record line.
+            # parsed file; JSON has no meaningful per-result line.
             "result_file": source_path or None,
             "result_line": None,
         }

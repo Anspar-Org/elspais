@@ -6,8 +6,9 @@ Terms:
 - An input is a file that the results of a test target depend on.
 - The output area of a target is the directory ``<output_root>/<name>``.
   The command of the target writes its results and coverage there.
-- A fingerprint is the record of one run of a target. The record holds a
-  manifest: the path and the content digest of each input.
+- A result fingerprint is a statement of one run of a target. It holds a
+  manifest: the path and the content digest of each input, and the times the
+  run started and finished.
 
 A run writes its fingerprint into the output area when the run starts. The
 results are fresh while the manifest matches the inputs on disk. The manifest
@@ -36,14 +37,14 @@ from pathlib import Path
 from typing import Any
 
 #: The name of the fingerprint file in the output area.
-RECORD_NAME = ".elspais-run.json"
+FINGERPRINT_NAME = ".elspais-run.json"
 
 #: The environment variable that holds the path of the output area for the command.
 OUTPUT_ENV = "ELSPAIS_TARGET_OUTPUT"
 
-_RECORD_VERSION = 2
+_FINGERPRINT_VERSION = 2
 
-#: The name of the record of the last run's executed targets, in the output root.
+#: The name of the file that names the last run's executed targets, in the output root.
 #: A target name cannot start with ``.``, so no output area can take this name.
 LAST_RUN_NAME = ".elspais-last-run.json"
 
@@ -57,7 +58,7 @@ class Freshness:
     ``state`` is ``"fresh"``, ``"stale"``, ``"absent"`` or ``"running"``.
     ``"absent"`` means that no results are on disk. The missing-results check
     reports that case. ``"running"`` means that a run of the target started
-    and recorded no end. ``record`` then holds the record of that run.
+    and recorded no end. ``fingerprint`` then holds the fingerprint of that run.
     ``reason`` holds ``"no-fingerprint"``, ``"changed"`` or
     ``"changed-during-run"`` for stale results. Otherwise ``reason`` is empty.
     ``changed`` names the inputs that differ.
@@ -67,7 +68,7 @@ class Freshness:
     state: str
     reason: str = ""
     changed: tuple[str, ...] = ()
-    record: dict[str, Any] = field(default_factory=dict)
+    fingerprint: dict[str, Any] = field(default_factory=dict)
 
 
 def _typed(config: Any) -> Any:
@@ -218,18 +219,18 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def read_record(folder: Path) -> dict[str, Any] | None:
+def read_fingerprint(folder: Path) -> dict[str, Any] | None:
     """Return the fingerprint in the output area *folder*, or ``None``."""
-    path = folder / RECORD_NAME
+    path = folder / FINGERPRINT_NAME
     if not path.is_file():
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    # A record of another format version reads as no record. Consequently,
+    # A fingerprint of another format version reads as no fingerprint. Consequently,
     # its results read as stale, never as fresh.
-    if not isinstance(data, dict) or data.get("version") != _RECORD_VERSION:
+    if not isinstance(data, dict) or data.get("version") != _FINGERPRINT_VERSION:
         return None
     inputs = data.pop("inputs", None)
     if not isinstance(inputs, list):
@@ -246,13 +247,14 @@ def read_record(folder: Path) -> dict[str, Any] | None:
     return data
 
 
-def _write_record(folder: Path, record: dict[str, Any]) -> None:
+def _write_fingerprint(folder: Path, fingerprint: dict[str, Any]) -> None:
     folder.mkdir(parents=True, exist_ok=True)
-    on_disk = {k: v for k, v in record.items() if k != "manifest"}
+    on_disk = {k: v for k, v in fingerprint.items() if k != "manifest"}
     on_disk["inputs"] = [
-        {"path": rel, "digest": record["manifest"][rel]} for rel in sorted(record["manifest"])
+        {"path": rel, "digest": fingerprint["manifest"][rel]}
+        for rel in sorted(fingerprint["manifest"])
     ]
-    (folder / RECORD_NAME).write_text(json.dumps(on_disk, indent=1, sort_keys=True) + "\n")
+    (folder / FINGERPRINT_NAME).write_text(json.dumps(on_disk, indent=1, sort_keys=True) + "\n")
 
 
 def empty_folder(folder: Path) -> None:
@@ -278,10 +280,10 @@ def start_run(repo_root: Path, config: Any, target_name: str) -> Path:
     empty_folder(folder)
     manifest = compute_manifest(root, config, target)
     commit, dirty = _git_state(root)
-    _write_record(
+    _write_fingerprint(
         folder,
         {
-            "version": _RECORD_VERSION,
+            "version": _FINGERPRINT_VERSION,
             "target": target_name,
             "started_at": _now(),
             "finished_at": "",
@@ -312,30 +314,30 @@ def finish_run(repo_root: Path, config: Any, target_name: str) -> dict[str, Any]
     root = Path(repo_root).resolve()
     target = _find_target(config, target_name)
     folder = target_folder(root, config, target_name)
-    record = read_record(folder)
-    if record is None or record.get("finished_at"):
+    fingerprint = read_fingerprint(folder)
+    if fingerprint is None or fingerprint.get("finished_at"):
         raise RunNotStarted(
             f"no run of target {target_name!r} is in progress; a run begins with "
             f"`elspais fingerprint start {target_name}`, which empties the target's "
             f"folder, and only then can it be finished"
         )
     manifest = compute_manifest(root, config, target)
-    record["changed_during_run"] = differences(record["manifest"], manifest)
-    record["finished_at"] = _now()
-    _write_record(folder, record)
-    return record
+    fingerprint["changed_during_run"] = differences(fingerprint["manifest"], manifest)
+    fingerprint["finished_at"] = _now()
+    _write_fingerprint(folder, fingerprint)
+    return fingerprint
 
 
 def run_in_progress(folder: Path) -> dict[str, Any] | None:
-    """Return the record of the run in progress in the output area *folder*, or ``None``.
+    """Return the fingerprint of the run in progress in the output area *folder*, or ``None``.
 
-    A run is in progress from the time its record is written with no end
+    A run is in progress from the time its fingerprint is written with no end
     until the time its end is recorded.
     """
-    record = read_record(folder)
-    if record is None or record.get("finished_at"):
+    fingerprint = read_fingerprint(folder)
+    if fingerprint is None or fingerprint.get("finished_at"):
         return None
-    return record
+    return fingerprint
 
 
 def results_present(repo_root: Path, config: Any, target: Any) -> bool:
@@ -365,62 +367,66 @@ def judge(
     target = _find_target(config, target_name)
     folder = target_folder(root, config, target_name)
     # Implements: REQ-d00311-N
-    # The record is read before the results. A run empties the area when it
+    # The fingerprint is read before the results. A run empties the area when it
     # starts, so an area with no results yet holds a run that is not finished.
     running = run_in_progress(folder)
     if running is not None:
-        return Freshness(target=target_name, state="running", record=running)
+        return Freshness(target=target_name, state="running", fingerprint=running)
     if not results_present(root, config, target):
         return Freshness(target=target_name, state="absent")
-    record = read_record(folder)
-    if record is None:
+    fingerprint = read_fingerprint(folder)
+    if fingerprint is None:
         return Freshness(target=target_name, state="stale", reason="no-fingerprint")
-    during = tuple(record.get("changed_during_run") or ())
+    during = tuple(fingerprint.get("changed_during_run") or ())
     if during:
         return Freshness(
             target=target_name,
             state="stale",
             reason="changed-during-run",
             changed=during,
-            record=record,
+            fingerprint=fingerprint,
         )
     current = compute_manifest(root, config, target, digest_cache)
-    changed = tuple(differences(record["manifest"], current))
+    changed = tuple(differences(fingerprint["manifest"], current))
     if changed:
         return Freshness(
-            target=target_name, state="stale", reason="changed", changed=changed, record=record
+            target=target_name,
+            state="stale",
+            reason="changed",
+            changed=changed,
+            fingerprint=fingerprint,
         )
-    return Freshness(target=target_name, state="fresh", record=record)
+    return Freshness(target=target_name, state="fresh", fingerprint=fingerprint)
 
 
 def last_run_path(repo_root: Path, config: Any) -> Path:
-    """Return the path of the record of the last run's executed targets."""
+    """Return the path of the file that names the last run's executed targets."""
     return output_root(repo_root, config) / LAST_RUN_NAME
 
 
 # Implements: REQ-d00316-A+B+C+D
 def write_last_run(repo_root: Path, config: Any, executed: list[str]) -> Path:
-    """Record the targets a run executed, replacing the record of any earlier run.
+    """Write the targets a run executed, replacing the file an earlier run wrote.
 
-    The record is a JSON object: ``version`` (1), ``executed`` (the names of
+    The file holds a JSON object: ``version`` (1), ``executed`` (the names of
     the targets the run executed, sorted) and ``finished_at`` (an ISO 8601
     time). It sits in the output root, beside the output areas, because a
     target's own area is emptied whenever that target runs.
     """
     path = last_run_path(repo_root, config)
     path.parent.mkdir(parents=True, exist_ok=True)
-    record = {
+    last_run = {
         "version": _LAST_RUN_VERSION,
         "executed": sorted(set(executed)),
         "finished_at": _now(),
     }
-    path.write_text(json.dumps(record, indent=1, sort_keys=True) + "\n")
+    path.write_text(json.dumps(last_run, indent=1, sort_keys=True) + "\n")
     return path
 
 
 # Implements: REQ-d00316-F
 def read_last_run(repo_root: Path, config: Any) -> list[str] | None:
-    """Return the targets the last recorded run executed, or ``None`` with no readable record."""
+    """Return the targets the last run executed, or ``None`` where no readable file names them."""
     path = last_run_path(repo_root, config)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))

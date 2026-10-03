@@ -236,7 +236,7 @@ def _record_ingestion_fault(
     read as a count of two distinct conditions.
 
     Ingestion reaches an artifact both before the graph exists and after it
-    does, so the two holders of these records share this one rule rather than
+    does, so the two holders of these faults share this one rule rather than
     each deciding when a condition is the same one again.
     """
     fault = IngestionFault(
@@ -294,7 +294,7 @@ class UnscannedKeywordFile:
     the fact that the tool passed the file over is recorded here rather than
     left to be inferred from a requirement reading as uncovered.
 
-    This record belongs beside the other parse-time findings in
+    This finding belongs beside the other parse-time findings in
     ``reference_faults``; it is here because it is not a reference fault --
     nothing was read, so nothing failed to bind.
 
@@ -503,7 +503,7 @@ class TraceGraph:
     # Implements: REQ-d00285-G
     # Artifacts ingestion reached and produced nothing from. Recorded rather
     # than dropped: an unreadable report and a suite that never ran are the
-    # same absence downstream, and only this record tells them apart.
+    # same absence downstream, and only this list tells them apart.
     _ingestion_faults: list[IngestionFault] = field(default_factory=list, init=False, repr=False)
     # Implements: REQ-d00283-R+S+T+V, REQ-d00311-N
     # Artifacts a test target names that the build did not read, because they
@@ -5670,7 +5670,7 @@ class GraphBuilder:
             "result_file": data.get("result_file"),
             "result_line": data.get("result_line"),
             # Implements: REQ-d00294-C+F
-            # The environment this record was written in, where the target
+            # The environment this result record was written in, where the target
             # declared where to read one. It is a field of its own and never
             # part of the label, so a test whose results carry no environment
             # is named exactly as it was before.

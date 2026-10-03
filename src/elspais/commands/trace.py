@@ -438,7 +438,7 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         # Implements: REQ-d00254-J, REQ-d00282-M
         # Whether this requirement's verified figure was TAKEN AT ALL, decided
         # before any of it is recorded. "Not run" (REQ-d00254-J) means the
-        # referenced TEST nodes have zero RESULT records in a selective run --
+        # referenced TEST nodes have zero result records in a selective run --
         # the target was skipped and nothing was seeded. Keyed on RESULT
         # existence, not on "no pass/fail signal": results can exist yet
         # contribute no verified signal (all skipped, say), and those are a

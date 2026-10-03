@@ -939,10 +939,10 @@ def _automatic_save_record(git_root: Path) -> dict | None:
     import json
 
     try:
-        record = json.loads((git_root / ".elspais" / "automatic-save.json").read_text())
+        automatic_save = json.loads((git_root / ".elspais" / "automatic-save.json").read_text())
     except (OSError, json.JSONDecodeError):
         return None
-    return record if isinstance(record, dict) else None
+    return automatic_save if isinstance(automatic_save, dict) else None
 
 
 def run_environment_checks(

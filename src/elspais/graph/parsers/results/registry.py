@@ -2,7 +2,7 @@
 
 Channel: "stdout" (captured from a runner command's stdout) or "file"
 (read from the target's `results`/`coverage` path). Kind: "results"
-(produces RESULT records) or "coverage" (annotates FILE line_coverage).
+(produces result records) or "coverage" (annotates FILE line_coverage).
 """
 
 from __future__ import annotations

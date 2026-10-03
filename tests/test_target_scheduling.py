@@ -29,7 +29,7 @@ from elspais.config.schema import (
     TestScanningConfig,
     TestTargetConfig,
 )
-from elspais.utilities.fingerprint import judge, read_record, start_run, target_folder
+from elspais.utilities.fingerprint import judge, read_fingerprint, start_run, target_folder
 
 # Modes (argv[1]):
 #   hold SECONDS [LOCK [PARTNER]]
@@ -393,8 +393,8 @@ def test_a_target_ends_when_its_command_exits_though_a_background_process_holds_
     assert [(r.name, r.returncode) for r in results] == [("bg", 0)]
     assert "[bg] started" in out.splitlines()
     assert re.search(rf"^<<< bg: passed {_TALLY}$", err, re.M)
-    record = read_record(target_folder(repo, cfg, "bg"))
-    assert record is not None and record.get("finished_at")
+    fingerprint = read_fingerprint(target_folder(repo, cfg, "bg"))
+    assert fingerprint is not None and fingerprint.get("finished_at")
 
 
 # Verifies: REQ-d00314-B+C+D
@@ -437,7 +437,7 @@ def test_fail_fast_starts_nothing_more_and_lets_running_targets_finish(repo, stu
     assert not target_folder(repo, cfg, "c").exists(), "a target started after the failure"
     # b was running when a failed, and finished afterwards with its end recorded.
     assert _interval(repo, cfg, "b")[1] > _interval(repo, cfg, "a")[1]
-    assert read_record(target_folder(repo, cfg, "b"))["finished_at"]
+    assert read_fingerprint(target_folder(repo, cfg, "b"))["finished_at"]
 
 
 # ---------------------------------------------------------------------------

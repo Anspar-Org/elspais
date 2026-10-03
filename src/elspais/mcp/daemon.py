@@ -370,14 +370,14 @@ def write_daemon_json(
         # Implements: REQ-o00076-E
         # A port alone does not describe a server mounted under a prefix:
         # at the root of that port it answers nothing. The prefix is part
-        # of the address, so it is part of the record.
+        # of the address, so it is part of the daemon record.
         "base_path": base_path,
     }
     # Implements: REQ-o00074-B, REQ-o00074-C, REQ-o00076-H
     # Recording the client is also what keeps the two origins apart: a
     # process started on behalf of a client carries one, and one started
     # at an operator's request carries none, so which brought it into
-    # existence stays answerable from the record for as long as it runs
+    # existence stays answerable from the daemon record for as long as it runs
     # rather than being inferred afterwards.
     if client_pid is not None:
         info["client_pid"] = client_pid
@@ -393,8 +393,8 @@ def write_daemon_json(
 def daemon_url(info: dict, endpoint: str) -> str:
     """The address at which the server ``info`` describes answers ``endpoint``.
 
-    The ONE place a record is turned into a URL. Every reader of the
-    record builds its address here, so a server mounted under a prefix is
+    The ONE place a daemon record is turned into a URL. Every reader of the
+    daemon record builds its address here, so a server mounted under a prefix is
     reached under it by each of them, and none addresses the root of a
     port where such a server answers nothing.
     """
@@ -403,14 +403,14 @@ def daemon_url(info: dict, endpoint: str) -> str:
 
 # Implements: REQ-o00074-B
 def record_daemon_clients(repo_root: Path, client_pids: list[int], held: int = 0) -> None:
-    """Publish the daemon's current client set in its state record.
+    """Publish the daemon's current client set in its daemon record.
 
     A lifetime rule nobody can inspect cannot be diagnosed, and the set
     grows as clients pick the daemon up, so publishing only the first one
     would answer a question nobody is asking by the time it matters.
 
     Each entry names the kind of handle it is, because a client can be
-    present as a held stream rather than as a process id, and a record
+    present as a held stream rather than as a process id, and a daemon record
     that can only hold process ids leaves such a client watched and
     invisible.
     """
@@ -457,7 +457,7 @@ def _daemon_dir(repo_root: Path) -> Path:
     return repo_root / ".elspais"
 
 
-def _port_record_path(repo_root: Path) -> Path:
+def _port_reservation_path(repo_root: Path) -> Path:
     return _daemon_dir(repo_root) / "daemon-port.json"
 
 
@@ -481,14 +481,14 @@ def reserved_port(repo_root: Path) -> int | None:
     """The address this working tree is reached at, or None if never set.
 
     Kept apart from ``daemon.json`` because it is a different fact with a
-    different lifetime. That record names the process serving this tree
+    different lifetime. That daemon record names the process serving this tree
     now and is removed when none is (REQ-o00076-E); this one names where
     the tree is reached, and has to outlive there being nothing to reach
     -- otherwise a client that resolved the address once could not find
     the tree again after serving stopped and started.
     """
     try:
-        port = json.loads(_port_record_path(repo_root).read_text()).get("port")
+        port = json.loads(_port_reservation_path(repo_root).read_text()).get("port")
     except (OSError, json.JSONDecodeError, AttributeError):
         return None
     return port if isinstance(port, int) and 0 < port < 65536 else None
@@ -503,7 +503,7 @@ def reserve_port(repo_root: Path, port: int) -> None:
     guarantee that the address survives a replacement, which is a
     degradation and not a failure.
     """
-    path = _port_record_path(repo_root)
+    path = _port_reservation_path(repo_root)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         _write_json_atomic(path, {"port": port})
@@ -513,17 +513,17 @@ def reserve_port(repo_root: Path, port: int) -> None:
 
 # Implements: REQ-o00076-D
 def _write_json_atomic(path: Path, payload: dict) -> None:
-    """Replace a state record without a reader ever seeing it half-written.
+    """Replace a state file without a reader ever seeing it half-written.
 
     Truncate-then-write leaves a window in which the file is short. A reader
-    landing there gets invalid JSON and concludes the record is corrupt --
-    and the reader for this record *deletes* it on that conclusion, so a
+    landing there gets invalid JSON and concludes the file is corrupt --
+    and the reader of the daemon record *deletes* it on that conclusion, so a
     daemon that is running and healthy becomes undiscoverable while it is
     still serving, and the next command starts a second one for the same
     working tree.
 
     Writing a sibling and renaming over the target is atomic on POSIX: a
-    reader sees either the whole old record or the whole new one. The
+    reader sees either the whole old file or the whole new one. The
     temporary file is a sibling so the rename stays within one filesystem,
     and carries the writer's pid so two writers cannot collide on it.
     """
@@ -651,11 +651,11 @@ def notify_unbound_lifetime(repo_root: Path, reason: str) -> bool:
 
 
 def _automatic_save_path(repo_root: Path) -> Path:
-    """Record of a save the daemon performed itself.
+    """The automatic save record: a save the daemon performed itself.
 
     A sibling of daemon.json rather than a key inside it: daemon.json
     describes the process that is running now and is removed when that
-    process stops, while this record has to outlive the daemon that
+    process stops, while the automatic save record has to outlive the daemon that
     wrote it — its whole purpose is to reach the *next* client.
     """
     return _daemon_dir(repo_root) / "automatic-save.json"
@@ -670,7 +670,7 @@ def _unsaved_changes_path(repo_root: Path) -> Path:
     holding starts, and the holding goes on changing afterwards.
 
     A sibling of daemon.json rather than a key inside it, for the same
-    reason the automatic-save record is: daemon.json is unlinked when the
+    reason the automatic save record is: daemon.json is unlinked when the
     process stops, and this has to reach the process that comes next.
     """
     return _daemon_dir(repo_root) / "unsaved-changes"
@@ -702,7 +702,7 @@ def _remove_sentinel(path: Path, what: str) -> None:
     try:
         path.unlink(missing_ok=True)
     except OSError as exc:
-        print(f"warning: could not clear the record that {what}: {exc}", file=sys.stderr)
+        print(f"warning: could not clear the marker that {what}: {exc}", file=sys.stderr)
 
 
 # Implements: REQ-p00083-E
@@ -746,7 +746,7 @@ def adopt_inherited_sentinel(repo_root: Path) -> bool:
     The sentinel is not simply left in place: from this moment it would
     read as a statement about the starting process, which holds nothing.
     It is not simply deleted either, because deleting it is the only way
-    the finding can be lost a second time. It becomes the other record,
+    the finding can be lost a second time. It becomes the other marker,
     which says what is actually known.
 
     Returns True if such a sentinel was found.
@@ -776,21 +776,21 @@ def record_automatic_save(
 
     ``changed_beyond_edits`` is the save's own account of the text it changed
     that no mutation reached (REQ-d00132-J); no client was present to be told,
-    so the record carries it to the next one.
+    so the automatic save record carries it to the next one.
 
-    The record carries facts only — who saved, when, how much, and what
+    The automatic save record carries facts only — who saved, when, how much, and what
     condition triggered it. It says nothing about whether the work is
     finished, wanted, or trustworthy: a client can disappear because it
     completed, crashed, or lost its connection, and those are
     indistinguishable from here. The reader draws the conclusion.
 
-    Best effort: a daemon that cannot write this record has already
+    Best effort: a daemon that cannot write this automatic save record has already
     written the files, and failing the save afterwards would be worse
     than an unrecorded one. The failure is printed instead.
     """
     from elspais import __version__
 
-    record = {
+    automatic_save = {
         "saved_by": "daemon",
         "saved_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "mutation_count": mutation_count,
@@ -802,40 +802,40 @@ def record_automatic_save(
     path = _automatic_save_path(repo_root)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        _write_json_atomic(path, record)
+        _write_json_atomic(path, automatic_save)
     except OSError as exc:
         print(f"warning: could not record the automatic save: {exc}", file=sys.stderr)
 
 
 # Implements: REQ-p00083-C
 def read_automatic_save(repo_root: Path) -> dict | None:
-    """Return the outstanding automatic-save record, or None."""
+    """Return the outstanding automatic save record, or None."""
     path = _automatic_save_path(repo_root)
     if not path.is_file():
         return None
     try:
-        record = json.loads(path.read_text())
+        automatic_save = json.loads(path.read_text())
     except (json.JSONDecodeError, OSError):
         return None
-    return record if isinstance(record, dict) else None
+    return automatic_save if isinstance(automatic_save, dict) else None
 
 
 # Implements: REQ-p00083-H
 def clear_automatic_save(repo_root: Path) -> None:
-    """Retire the record once a client saves at its own request.
+    """Retire the automatic save record once a client saves at its own request.
 
-    From that point the record describes a state that no longer stands,
+    From that point the automatic save record describes a state that no longer stands,
     and a notice that never retires is one nobody reads.
     """
     try:
         _automatic_save_path(repo_root).unlink(missing_ok=True)
     except OSError as exc:
-        print(f"warning: could not retire the automatic-save record: {exc}", file=sys.stderr)
+        print(f"warning: could not retire the automatic save record: {exc}", file=sys.stderr)
 
 
 # Implements: REQ-o00075-B, REQ-o00076-E
 def mark_daemon_stopping(repo_root: Path, pid: int | None = None) -> bool:
-    """Record that the daemon described by the state record is stopping.
+    """Record that the daemon described by the daemon record is stopping.
 
     A process that has committed to stopping goes on answering until it
     actually goes, so being alive no longer distinguishes it from one that
@@ -844,17 +844,17 @@ def mark_daemon_stopping(repo_root: Path, pid: int | None = None) -> bool:
     which is not what happens while this one is still the server a client
     locates.
 
-    The record is marked rather than removed. Removing it while the
+    The daemon record is marked rather than removed. Removing it while the
     process still serves is what lets a successor boot alongside it, and
     one working tree is served by one process (REQ-o00075-B). It is
     unlinked once the process is gone, which is stopping's job.
 
-    Only a record describing *this* process is marked. A server holding a
+    Only a daemon record describing *this* process is marked. A server holding a
     private graph — a stdio session, or any process that did not write the
-    record — would otherwise report a daemon as stopping that is serving
+    daemon record — would otherwise report a daemon as stopping that is serving
     perfectly well.
 
-    Returns True if the record was marked. Best effort: a stop that could
+    Returns True if the daemon record was marked. Best effort: a stop that could
     not write this is still a stop, so failure is warned about and never
     raised into a shutdown already underway.
     """
@@ -881,7 +881,7 @@ def mark_daemon_stopping(repo_root: Path, pid: int | None = None) -> bool:
 
 # Implements: REQ-o00076-E
 def daemon_is_stopping(info: dict | None) -> bool:
-    """True when the record says its daemon has committed to stopping."""
+    """True when the daemon record says its daemon has committed to stopping."""
     return bool(info and info.get("stopping"))
 
 
@@ -894,8 +894,8 @@ def replace_stopping_daemon(repo_root: Path, info: dict, timeout: float = 20.0) 
     put two processes on one working tree, each holding a graph the other
     cannot see.
 
-    The record is unlinked only if it still describes the process waited
-    on. A successor that has already registered owns the record by then,
+    The daemon record is unlinked only if it still describes the process waited
+    on. A successor that has already registered owns the daemon record by then,
     and clearing it would hide a daemon that is serving.
 
     Returns False when the daemon did not go, in which case the caller has
@@ -919,7 +919,7 @@ def replace_stopping_daemon(repo_root: Path, info: dict, timeout: float = 20.0) 
 def process_is_daemon(pid: int) -> bool | None:
     """Whether *pid* names an elspais daemon, or None when that cannot be told.
 
-    A pid alone identifies nothing: the number is reused, and a record can name
+    A pid alone identifies nothing: the number is reused, and a daemon record can name
     a process that never was a daemon. Signalling on a pid alone is therefore
     signalling a stranger, so this answers the question the pid cannot.
 
@@ -946,21 +946,21 @@ def process_is_daemon(pid: int) -> bool | None:
 def get_daemon_info(repo_root: Path) -> dict | None:
     """Read the daemon record, drop it if the pid it names is not in use.
 
-    TWO things, and the second is a WRITE: a record naming a pid nobody holds
+    TWO things, and the second is a WRITE: a daemon record naming a pid nobody holds
     is deleted here. That deletion is why this is not a pure read, and callers
-    that only want to look must read the record instead of calling this.
+    that only want to look must read the daemon record instead of calling this.
 
     What it checks is LIVENESS, not identity: ``pid_alive`` says a
     process is running under that number, never that the process is a daemon. Pids are
-    reused, and a record can be written by something that is not a daemon, so
+    reused, and a daemon record can be written by something that is not a daemon, so
     a caller about to SIGNAL the pid must ask ``process_is_daemon`` as well --
     this function's answer is not grounds for killing anything.
 
-    A client arranges nothing in advance: it reads the record kept at a
+    A client arranges nothing in advance: it reads the daemon record kept at a
     known place under the working tree it is operating in, so a session
     that never started a daemon reaches the same one as the session that
-    did. The record stands for as long as a process is serving, and a
-    record naming a process that is gone is removed rather than
+    did. The daemon record stands for as long as a process is serving, and a
+    daemon record naming a process that is gone is removed rather than
     returned.
 
     Returns dict with pid/port/repo_root/started_at, or None if
@@ -1126,7 +1126,7 @@ class StopOutcome(str, enum.Enum):
 def stop_daemon(repo_root: Path, wait: bool = True, timeout: float = 20.0) -> StopOutcome:
     """Stop a running daemon. Reports which of three things happened.
 
-    The record is unlinked last, and only once the process it describes
+    The daemon record is unlinked last, and only once the process it describes
     has exited. Removing it first left a window in which a daemon was
     serving and undiscoverable: a concurrent command found nothing and
     started a second process for the same working tree, and a successor
@@ -1149,16 +1149,16 @@ def stop_daemon(repo_root: Path, wait: bool = True, timeout: float = 20.0) -> St
     NOT_RUNNING means there was nothing to stop -- including the case
     where the daemon exited between the caller's own look and this one.
     STILL_RUNNING means the process is there after everything a stopper
-    can do; the record stays, because it still describes something a
+    can do; the daemon record stays, because it still describes something a
     client would reach.
     """
     info = get_daemon_info(repo_root)
     if info is None:
         return StopOutcome.NOT_RUNNING
 
-    # A record names a pid; a pid names whatever holds that number now. Confirm
+    # A daemon record names a pid; a pid names whatever holds that number now. Confirm
     # the process is a daemon before signalling it, because the alternative is
-    # killing a stranger -- a record naming a pid that has been reused, or one
+    # killing a stranger -- a daemon record naming a pid that has been reused, or one
     # written by a process that was never a daemon, is indistinguishable here
     # from a real one. An answer of None means the platform will not say, and
     # that is not permission to assume the worst in either direction: the stop
@@ -1168,7 +1168,7 @@ def stop_daemon(repo_root: Path, wait: bool = True, timeout: float = 20.0) -> St
         print(
             f"warning: {_daemon_json_path(repo_root)} names pid {info['pid']}, "
             "which is not an elspais daemon. Leaving that process alone and "
-            "discarding the record.",
+            "discarding the daemon record.",
             file=sys.stderr,
         )
         _daemon_json_path(repo_root).unlink(missing_ok=True)
@@ -1177,7 +1177,7 @@ def stop_daemon(repo_root: Path, wait: bool = True, timeout: float = 20.0) -> St
     try:
         os.kill(info["pid"], signal.SIGTERM)
     except OSError:
-        pass  # already gone; fall through and clear the record
+        pass  # already gone; fall through and clear the daemon record
     if wait and not wait_for_daemon_exit(info, timeout=timeout):
         if identified is not True:
             # Never escalate to a signal nothing survives on a process this
@@ -1186,7 +1186,7 @@ def stop_daemon(repo_root: Path, wait: bool = True, timeout: float = 20.0) -> St
             print(
                 f"warning: pid {info['pid']} did not stop within {timeout:.0f}s "
                 "and this platform cannot confirm it is an elspais daemon, so "
-                "it has not been ended. Its record is left in place.",
+                "it has not been ended. Its daemon record is left in place.",
                 file=sys.stderr,
             )
             return StopOutcome.STILL_RUNNING
@@ -1208,7 +1208,7 @@ def stop_daemon(repo_root: Path, wait: bool = True, timeout: float = 20.0) -> St
         if not wait_for_daemon_exit(info, timeout=5.0):
             print(
                 f"warning: the daemon (pid {info['pid']}) is still there after "
-                "being ended. Its state record is left in place because it is "
+                "being ended. Its daemon record is left in place because it is "
                 "still what a client would reach.",
                 file=sys.stderr,
             )
@@ -1256,9 +1256,9 @@ class ServingDifference(NamedTuple):
 
 # Implements: REQ-o00076-I
 def serving_difference(info: dict | None, repo_root: Path) -> ServingDifference:
-    """Compare the daemon a record describes against this client.
+    """Compare the daemon a daemon record describes against this client.
 
-    A field the record does not carry is not a difference: a daemon
+    A field the daemon record does not carry is not a difference: a daemon
     written by an older elspais records no program identity, and reading
     its absence as a mismatch would restart every such daemon on the
     first command that met it.
@@ -1392,8 +1392,8 @@ def ensure_client_registered(repo_root: Path, info: dict | None) -> bool:
     one per command.
 
     ``repo_root`` keys the unbound-lifetime notice: both call sites already
-    hold it, and a notice keyed on a path read back out of the record would
-    be keyed on whatever the record happened to say rather than on the
+    hold it, and a notice keyed on a path read back out of the daemon record would
+    be keyed on whatever the daemon record happened to say rather than on the
     daemon this session is actually reusing.
     """
     if not info:
@@ -1407,7 +1407,7 @@ def ensure_client_registered(repo_root: Path, info: dict | None) -> bool:
         )
         notify_unbound_lifetime(repo_root, reason)
         return False
-    # Read tolerantly: an absent key means "not recorded", so a record
+    # Read tolerantly: an absent key means "not recorded", so a daemon record
     # written by a differently-versioned process costs one wasted attach
     # round-trip rather than a missed registration.
     recorded = {c.get("id") for c in (info.get("clients") or []) if c.get("kind") == "pid"}
@@ -1632,10 +1632,10 @@ def restart_daemon(
                     "processes."
                 ),
             }
-        # The daemon is confirmed gone here, so the record is unlinked now
+        # The daemon is confirmed gone here, so the daemon record is unlinked now
         # rather than by the stop_daemon() call below. That call reads
         # through get_daemon_info(), which would see the pid already dead
-        # and quietly clear the record as stale -- indistinguishable, from
+        # and quietly clear the daemon record as stale -- indistinguishable, from
         # stop_daemon()'s own view, from nothing having been running.
         _daemon_json_path(repo_root).unlink(missing_ok=True)
         stopped = True

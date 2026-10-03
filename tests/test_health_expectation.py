@@ -374,13 +374,13 @@ def test_results_present_with_coverage_absent_is_missing_coverage_unexpected(tmp
 
 # Verifies: REQ-d00311-N+O
 def test_a_run_in_progress_is_reported_with_its_start_and_judged_no_other_way(tmp_path):
-    from elspais.utilities.fingerprint import read_record, start_run
+    from elspais.utilities.fingerprint import read_fingerprint, start_run
 
     root = _project(tmp_path)
     config = _config(root)
     folder = start_run(root, config, "unit")
     (folder / "junit.xml").write_text(_JUNIT, encoding="utf-8")
-    started_at = read_record(folder)["started_at"]
+    started_at = read_fingerprint(folder)["started_at"]
 
     graph = _build(root)
     running = check_runs_in_progress(graph, {})

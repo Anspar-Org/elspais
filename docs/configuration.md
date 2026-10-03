@@ -71,7 +71,7 @@ stats = ""
 # external stop signal: it saves what it is holding first. The save is
 # recorded in .elspais/automatic-save.json and reported to the next client
 # in the ordinary workspace/status metadata; a client-requested save
-# retires the record. Explicitly started servers (`elspais daemon
+# retires that automatic save record. Explicitly started servers (`elspais daemon
 # restart`, `elspais mcp serve`, the viewer) are never client-tied and
 # keep TTL-only behavior.
 cli_ttl = 30
@@ -271,15 +271,15 @@ reference_keyword = "Verifies"
 #   [{"file": "path", "function": "name", "class": "Name|null", "line": N,
 #     "end_line": M}]
 # `line` is the line the test is declared on, counted from one. `end_line`
-# is optional. If a record has no `end_line`, then the test ends at its last
-# line before the next test that is neither blank nor a comment.
-# Consequently, the comments written directly above a test belong to that
-# test. A record names one test. Consequently, the name may be the test's
-# own and need not be spelled any particular way.
+# is optional. If an attribution record has no `end_line`, then the test
+# ends at its last line before the next test that is neither blank nor a
+# comment. Consequently, the comments written directly above a test belong
+# to that test. An attribution record names one test. Consequently, the name
+# may be the test's own and need not be spelled any particular way.
 # `file` may be repo-relative (as handed in) or absolute; either is matched
 # against the scanned file. Files the command reports on are attributed from
-# its records; every other scanned test file keeps built-in attribution, so a
-# command may cover one file type and leave the rest alone.
+# its attribution records; every other scanned test file keeps built-in
+# attribution, so a command may cover one file type and leave the rest alone.
 # prescan_command = "dart run tool/list_tests.dart"
 # output_root holds one folder per test target, <output_root>/<name>, from the
 # repository root. The test targets write into these folders. A target's
@@ -1073,7 +1073,7 @@ alternative for suites too small to worry about the JSON-report size cost.
 ### Test Result Reporters (`reporter`)
 
 A `[[scanning.test.targets]]` entry names the format its results arrive in
-through `reporter`. A results-kind reporter produces pass/fail records; a
+through `reporter`. A results-kind reporter produces pass/fail result records; a
 coverage-kind one annotates files with line coverage and is chosen by sniffing
 the file at `coverage`, so a coverage-only target need not name one.
 
