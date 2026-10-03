@@ -1125,6 +1125,14 @@ def _mutation_reach(
                 _mark_node_file(new_id)
                 _mark_citing_files(graph.find_by_id(new_id), label=None)
 
+        # Implements: REQ-p00017-B
+        # A removal renumbers the later assertions, and each citing
+        # requirement renders the new label from its live edge.
+        if entry.operation == "delete_assertion":
+            parent_id = entry.before_state.get("parent_id", "")
+            for rename in entry.before_state.get("renames", ()) or ():
+                _mark_citing_files(graph.find_by_id(parent_id), label=rename["new_label"])
+
         if entry.operation == "rename_assertion":
             renamed = graph.find_by_id(entry.after_state.get("id", ""))
             parent_id = entry.before_state.get("parent_id", "")

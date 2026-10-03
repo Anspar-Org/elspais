@@ -449,7 +449,11 @@ _FIELD_COMMENTS: dict[str, str] = {
     "output.dir": "Directory for generated output files",
     # --- [associates] ---
     "associates": "Associated repository definitions for cross-repo federation",
-    "associates.*.path": "Path to the associated repository (absolute or relative to repo root)",
+    "associates.*.path": (
+        "Path to the associated repository (absolute or relative to repo root); "
+        "leave it out of .elspais.toml to have each machine supply it in "
+        ".elspais.local.toml"
+    ),
     "associates.*.namespace": (
         "Namespace the associated repo declares for itself; unique across the federation"
     ),

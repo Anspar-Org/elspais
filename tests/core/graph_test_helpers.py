@@ -6,6 +6,7 @@ the graph through observable output rather than internal state.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from elspais.graph import GraphNode
@@ -838,3 +839,19 @@ def end_marker_hash(text: str, req_id: str) -> str:
     """The hash recorded in the End marker of ``req_id`` in a spec file's text."""
     block = requirement_block(text, req_id)
     return block.rsplit("**Hash**: ", 1)[1].strip()
+
+
+def comparable_mutation_result(body: dict) -> dict:
+    """*body* as a client reads it, without the parts that differ between mutations.
+
+    Both surfaces answer in JSON, so the body is compared after a JSON round
+    trip: a tuple held in memory and the list a client receives are the same
+    answer. A mutation entry carries its own id and timestamp, so two surfaces
+    that apply the same change still differ there. Every other key is compared.
+    """
+    body = json.loads(json.dumps(body))
+    if "mutation" in body:
+        body["mutation"] = {
+            key: value for key, value in body["mutation"].items() if key not in ("id", "timestamp")
+        }
+    return body

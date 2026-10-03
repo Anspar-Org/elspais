@@ -37,18 +37,18 @@ def make_req(
     )
 
 
-def build_simple_graph() -> TraceGraph:
+def build_simple_graph(status: str = "Active") -> TraceGraph:
     """Build a simple graph with one root requirement and a child."""
     builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
-    builder.add_parsed_content(make_req("REQ-p00001", "Test Requirement"))
+    builder.add_parsed_content(make_req("REQ-p00001", "Test Requirement", status=status))
     builder.add_parsed_content(make_req("REQ-o00001", "Child Req", implements=["REQ-p00001"]))
     return builder.build()
 
 
-def build_hierarchy_graph() -> TraceGraph:
+def build_hierarchy_graph(status: str = "Active") -> TraceGraph:
     """Build a graph with parent-child hierarchy."""
     builder = GraphBuilder(namespace="REQ", resolver=grammar_for("REQ"))
-    builder.add_parsed_content(make_req("REQ-p00001", "Parent"))
+    builder.add_parsed_content(make_req("REQ-p00001", "Parent", status=status))
     builder.add_parsed_content(make_req("REQ-p00002", "Child", implements=["REQ-p00001"]))
     return builder.build()
 
@@ -71,13 +71,14 @@ def slash_grammar():
     return build_resolver(config)
 
 
-def build_graph_with_assertions(resolver=None) -> TraceGraph:
+def build_graph_with_assertions(resolver=None, status: str = "Active") -> TraceGraph:
     """Build a graph with a requirement that has assertions."""
     builder = GraphBuilder(namespace="REQ", resolver=resolver or grammar_for("REQ"))
     builder.add_parsed_content(
         make_req(
             "REQ-p00001",
             "Requirement with Assertions",
+            status=status,
             assertions=[
                 {"label": "A", "text": "First assertion"},
                 {"label": "B", "text": "Second assertion"},
@@ -571,13 +572,22 @@ class TestAddRequirement:
         assert len(graph.mutation_log) == 0
 
 
+# Draft is in the provisional role under the default status roles.
+DRAFT = "Draft"
+
+
 class TestDeleteRequirement:
-    """Tests for TraceGraph.delete_requirement()."""
+    """Tests for TraceGraph.delete_requirement() removing a requirement.
+
+    A Draft requirement is in the provisional role, so deleting it removes
+    it; an active one is retired in place instead (REQ-p00017-D), which
+    tests/core/test_requirement_retire_on_delete.py covers.
+    """
 
     # Verifies: REQ-o00062-A
     def test_REQ_o00062_A_delete_requirement_removes_node(self):
         """REQ-o00062-A: Basic delete removes node from index."""
-        graph = build_simple_graph()
+        graph = build_simple_graph(status=DRAFT)
 
         entry = graph.delete_requirement("REQ-p00001")
 
@@ -588,7 +598,7 @@ class TestDeleteRequirement:
     # Verifies: REQ-o00062-A
     def test_delete_requirement_not_found(self):
         """Deleting non-existent node raises KeyError."""
-        graph = build_simple_graph()
+        graph = build_simple_graph(status=DRAFT)
 
         with pytest.raises(KeyError, match="not found"):
             graph.delete_requirement("REQ-nonexistent")
@@ -608,7 +618,7 @@ class TestDeleteRequirement:
     # Verifies: REQ-o00062-A
     def test_delete_requirement_preserves_in_deleted_nodes(self):
         """Deleted node is preserved in _deleted_nodes."""
-        graph = build_simple_graph()
+        graph = build_simple_graph(status=DRAFT)
 
         graph.delete_requirement("REQ-p00001")
 
@@ -620,7 +630,7 @@ class TestDeleteRequirement:
     # Verifies: REQ-o00062-A
     def test_delete_requirement_removes_from_roots(self):
         """Deleting a root removes it from roots list."""
-        graph = build_simple_graph()
+        graph = build_simple_graph(status=DRAFT)
         assert graph.has_root("REQ-p00001")
 
         graph.delete_requirement("REQ-p00001")
@@ -630,7 +640,7 @@ class TestDeleteRequirement:
     # Verifies: REQ-o00062-A
     def test_delete_requirement_orphans_children(self):
         """Deleting a parent orphans its non-assertion children."""
-        graph = build_hierarchy_graph()
+        graph = build_hierarchy_graph(status=DRAFT)
 
         graph.delete_requirement("REQ-p00001")
 
@@ -640,7 +650,7 @@ class TestDeleteRequirement:
     # Verifies: REQ-o00062-A
     def test_delete_requirement_deletes_assertions(self):
         """Deleting a requirement also deletes its assertions."""
-        graph = build_graph_with_assertions()
+        graph = build_graph_with_assertions(status=DRAFT)
 
         assert graph.find_by_id("REQ-p00001-A") is not None
         assert graph.find_by_id("REQ-p00001-B") is not None
@@ -659,7 +669,7 @@ class TestDeleteRequirement:
     # Verifies: REQ-o00062-E
     def test_delete_requirement_logs_mutation(self):
         """Delete operation is logged."""
-        graph = build_simple_graph()
+        graph = build_simple_graph(status=DRAFT)
 
         graph.delete_requirement("REQ-p00001")
 
@@ -670,7 +680,7 @@ class TestDeleteRequirement:
     # Verifies: REQ-o00062-G
     def test_delete_requirement_undo(self):
         """Undo restores the deleted node."""
-        graph = build_simple_graph()
+        graph = build_simple_graph(status=DRAFT)
         original_label = graph.find_by_id("REQ-p00001").get_label()
 
         graph.delete_requirement("REQ-p00001")
@@ -685,7 +695,7 @@ class TestDeleteRequirement:
     # Verifies: REQ-o00062-E
     def test_delete_records_before_state(self):
         """Delete entry records full before state for undo."""
-        graph = build_simple_graph()
+        graph = build_simple_graph(status=DRAFT)
 
         entry = graph.delete_requirement("REQ-p00001")
 

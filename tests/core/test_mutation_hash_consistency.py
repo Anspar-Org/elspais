@@ -149,8 +149,7 @@ class TestDeleteAssertionHashConsistency:
 
         old_hash = parent.get_field("hash")
 
-        # Perform mutation (delete A, no compact)
-        graph.delete_assertion("REQ-p00001-A", compact=False)
+        graph.delete_assertion("REQ-p00001-A")
 
         # Verify hash matches reconstructed body_text
         new_hash = parent.get_field("hash")
@@ -160,36 +159,18 @@ class TestDeleteAssertionHashConsistency:
         # Verify hash actually changed
         assert new_hash != old_hash
 
-    # Verifies: REQ-o00062-B
-    def test_delete_assertion_with_compact_updates_hash(self):
-        """After delete_assertion with compact, hash matches reconstruct_body_text().
-
-        REQ-o00062-B: Delete with compact renumbers assertions and recomputes hash.
-        """
+    # Verifies: REQ-o00062-B, REQ-p00017-K
+    def test_delete_assertion_hashes_the_retired_text(self):
+        """The recomputed hash covers the retired *Assertion* under its label,
+        and every other *Assertion* unchanged."""
         graph = build_graph_for_hash()
         parent = graph.find_by_id("REQ-p00001")
 
-        # Perform mutation (delete A, with compact)
-        graph.delete_assertion("REQ-p00001-A", compact=True)
-
-        # Verify hash matches reconstructed body_text
-        new_hash = parent.get_field("hash")
-        expected_hash = calculate_hash(reconstruct_body_text(parent))
-        assert new_hash == expected_hash
-
-        # B should now be A after compaction
-        body = reconstruct_body_text(parent)
-        assert "A. The system SHALL log errors." in body
-
-    # Verifies: REQ-o00062-B
-    def test_delete_assertion_preserves_other_content(self):
-        """After delete_assertion, remaining assertions are in reconstructed body."""
-        graph = build_graph_for_hash()
-        parent = graph.find_by_id("REQ-p00001")
-
-        graph.delete_assertion("REQ-p00001-A", compact=False)
+        graph.delete_assertion("REQ-p00001-A")
 
         body = reconstruct_body_text(parent)
+        assert "A. <RETIRED>" in body
+        assert "The system SHALL validate input." not in body
         assert "B. The system SHALL log errors." in body
 
 
@@ -276,15 +257,15 @@ class TestHashConsistencyAfterMultipleMutations:
         graph = build_graph_for_hash()
         parent = graph.find_by_id("REQ-p00001")
 
-        # Delete A (with compact, so B becomes A)
-        graph.delete_assertion("REQ-p00001-A", compact=True)
-        # Add a new B
-        graph.add_assertion("REQ-p00001", "New B assertion.")
+        # Retire A, then add: the new assertion takes C, after the retired A
+        graph.delete_assertion("REQ-p00001-A")
+        graph.add_assertion("REQ-p00001", "New C assertion.")
 
         # Verify hash consistency
         stored_hash = parent.get_field("hash")
         expected_hash = calculate_hash(reconstruct_body_text(parent))
         assert stored_hash == expected_hash
+        assert "C. New C assertion." in reconstruct_body_text(parent)
 
     # Verifies: REQ-o00062-B
     def test_update_all_assertions_maintains_hash_consistency(self):
