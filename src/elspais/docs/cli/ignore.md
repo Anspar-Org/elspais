@@ -111,7 +111,7 @@ the file's name and against its path *within* the directory being scanned, so
 ## Pattern Characters
 
 - `*` matches any characters within a path component
-- `**` matches zero or more directories (directory patterns)
+- `**` matches zero or more directories (in any skip pattern holding a `/`)
 - `?` matches a single character
 
 ## Common Patterns

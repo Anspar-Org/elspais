@@ -204,9 +204,10 @@ it is decided:
    scanned directory, so `*.py` selects at any depth and `api/*.py`
    selects within a subdirectory.
 
-Patterns are `fnmatch` globs, matched the same way the ignore lists are:
-`*` matches any characters **including** `/`, and `**` is not special (it
-behaves as `*`). So `*.sql` selects a `.sql` file at any depth, while
+`file_patterns` entries are `fnmatch` globs: `*` matches any characters
+**including** `/`, and `**` is not special (it behaves as `*`). The ignore
+lists are matched differently, with `**` standing for zero or more
+directories; see `elspais docs ignore`. So `*.sql` selects a `.sql` file at any depth, while
 `database/**/*.sql` requires a literal `database/` prefix and at least one
 more `/` -- it does NOT match `database/schema.sql`. A pattern that reached
 files through the retired repository-root glob usually wants rewriting: name
