@@ -169,7 +169,7 @@
 | REQ-d00246 | Markdown Emphasis Normalization Utility                       | prd-core.md             | 6db4d559 |
 | REQ-d00247 | Fenced Code Block Preservation                                | prd-core.md             | 499a4ce4 |
 | REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | 99bb6d77 |
-| REQ-d00249 | Configured test runner execution                              | dev-cli.md              | eaae2588 |
+| REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 3a252869 |
 | REQ-d00250 | Section Header Depth Canonicalization                         | dev-graph-core.md       | 48fc2f11 |
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | b49bd5ee |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 3b102d6f |
@@ -223,6 +223,9 @@
 | REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | 4fe7db4a |
 | REQ-d00312 | Test Target Output Areas                                      | dev-graph-core.md       | a0788b2a |
 | REQ-d00313 | Served Graph Currency                                         | dev-traceview-review.md | e791c1a1 |
+| REQ-d00314 | Concurrent Test Target Runs                                   | dev-graph-core.md       | 228b3b98 |
+| REQ-d00315 | Stale-Only Test Target Runs                                   | dev-graph-core.md       | 890ea4b2 |
+| REQ-d00316 | Record of the Test Targets a Run Executed                     | dev-graph-core.md       | c5639977 |
 | REQ-d00320 | Viewer Edit Controls State What They Do                       | dev-traceview-review.md | e8010396 |
 | REQ-d00321 | Static View Embedded Content                                  | dev-traceview-review.md | 736babc4 |
 

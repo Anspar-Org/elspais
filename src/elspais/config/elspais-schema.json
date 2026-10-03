@@ -1249,6 +1249,18 @@
           "title": "Groups",
           "type": "object"
         },
+        "resources": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Resources",
+          "type": "object"
+        },
+        "concurrency": {
+          "default": 1,
+          "title": "Concurrency",
+          "type": "integer"
+        },
         "targets": {
           "items": {
             "$ref": "#/$defs/TestTargetConfig"
@@ -1341,6 +1353,13 @@
           ],
           "default": null,
           "title": "Line Base"
+        },
+        "resources": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Resources",
+          "type": "array"
         },
         "inputs": {
           "$ref": "#/$defs/ScanningKindConfig"

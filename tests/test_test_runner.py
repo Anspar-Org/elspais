@@ -1,4 +1,3 @@
-# Verifies: REQ-d00249-A, REQ-d00249-B, REQ-d00249-C
 """Unit tests for the test-target dispatcher."""
 
 from __future__ import annotations
@@ -54,6 +53,7 @@ def _terminal_tee(path: Path):
             os.close(saved_err_fd)
 
 
+# Verifies: REQ-d00314-C
 def test_no_targets_returns_empty(tmp_path: Path):
     cfg = _cfg_with_targets([])
     results, captured = run_configured_targets(cfg, tmp_path)
@@ -61,6 +61,7 @@ def test_no_targets_returns_empty(tmp_path: Path):
     assert captured == {}
 
 
+# Verifies: REQ-d00314-K, REQ-d00249-L
 def test_single_target_success(tmp_path: Path):
     cfg = _cfg_with_targets([TestTargetConfig(name="ok", command="true", reporter="junit")])
     results, captured = run_configured_targets(cfg, tmp_path)
@@ -74,12 +75,14 @@ def test_single_target_success(tmp_path: Path):
     assert r.cwd == tmp_path
 
 
+# Verifies: REQ-d00314-K
 def test_target_failure_records_nonzero(tmp_path: Path):
     cfg = _cfg_with_targets([TestTargetConfig(name="bad", command="false", reporter="junit")])
     results, _captured = run_configured_targets(cfg, tmp_path)
     assert results[0].returncode != 0
 
 
+# Verifies: REQ-d00314-C
 def test_targets_run_in_declaration_order(tmp_path: Path):
     marker = tmp_path / "log.txt"
     cfg = _cfg_with_targets(
@@ -93,6 +96,7 @@ def test_targets_run_in_declaration_order(tmp_path: Path):
     assert marker.read_text().splitlines() == ["first", "second"]
 
 
+# Verifies: REQ-d00249-C, REQ-d00314-M
 def test_fail_fast_stops_after_first_failure(tmp_path: Path):
     marker = tmp_path / "marker.txt"
     cfg = _cfg_with_targets(
@@ -107,6 +111,7 @@ def test_fail_fast_stops_after_first_failure(tmp_path: Path):
     assert not marker.exists()
 
 
+# Verifies: REQ-d00249-L
 def test_cwd_resolves_relative_to_repo_root(tmp_path: Path):
     subdir = tmp_path / "subproj"
     subdir.mkdir()
@@ -119,6 +124,7 @@ def test_cwd_resolves_relative_to_repo_root(tmp_path: Path):
     assert (subdir / "out.txt").read_text().strip() == str(subdir.resolve())
 
 
+# Verifies: REQ-d00249-L
 def test_empty_cwd_uses_repo_root(tmp_path: Path):
     cfg = _cfg_with_targets(
         [TestTargetConfig(name="here", command="pwd > out.txt", reporter="junit")]
@@ -128,6 +134,7 @@ def test_empty_cwd_uses_repo_root(tmp_path: Path):
     assert (tmp_path / "out.txt").read_text().strip() == str(tmp_path.resolve())
 
 
+# Verifies: REQ-d00249-C
 def test_default_does_not_fail_fast(tmp_path: Path):
     marker = tmp_path / "marker.txt"
     cfg = _cfg_with_targets(
@@ -143,6 +150,7 @@ def test_default_does_not_fail_fast(tmp_path: Path):
     assert marker.exists()
 
 
+# Verifies: REQ-d00249-M
 def test_absolute_cwd_outside_repo_is_rejected(tmp_path: Path):
     outside = tmp_path / "elsewhere"
     outside.mkdir()
@@ -158,6 +166,7 @@ def test_absolute_cwd_outside_repo_is_rejected(tmp_path: Path):
     assert "outside the repo root" in r.error
 
 
+# Verifies: REQ-d00249-M
 def test_parent_traversal_cwd_is_rejected(tmp_path: Path):
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -169,6 +178,7 @@ def test_parent_traversal_cwd_is_rejected(tmp_path: Path):
     assert "outside the repo root" in results[0].error
 
 
+# Verifies: REQ-d00249-L
 def test_relative_subdir_cwd_is_accepted(tmp_path: Path):
     sub = tmp_path / "sub"
     sub.mkdir()
@@ -180,6 +190,7 @@ def test_relative_subdir_cwd_is_accepted(tmp_path: Path):
     assert results[0].cwd == sub.resolve()
 
 
+# Verifies: REQ-d00254-C
 def test_target_without_command_is_skipped(tmp_path: Path):
     """Targets with empty command are skipped (CI mode — tests already ran)."""
     cfg = _cfg_with_targets([TestTargetConfig(name="no-cmd", reporter="junit")])

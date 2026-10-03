@@ -247,7 +247,15 @@ _FIELD_COMMENTS: dict[str, str] = {
     "scanning.test.reference_keyword": 'Keyword for test->requirement refs (e.g. "Verifies")',
     "scanning.test.reference_patterns": "Additional regex patterns for reference detection",
     "scanning.test.groups": (
-        "Declared test groups: keyword = description. `all`, `default` and `none` are reserved"
+        "Declared test groups: keyword = description."
+        " `all`, `default`, `none` and `last-run` are reserved"
+    ),
+    "scanning.test.resources": (
+        "Declared shared resources: name = description. Two targets naming a"
+        " common resource never run at the same time"
+    ),
+    "scanning.test.concurrency": (
+        "Most test targets one run executes at the same time (default 1)"
     ),
     "scanning.test.output_root": (
         "Directory holding one folder per test target; a target writes its results"
@@ -282,6 +290,9 @@ _FIELD_COMMENTS: dict[str, str] = {
     ),
     "scanning.test.targets.groups": (
         "Groups this target belongs to (default: the `default` group)"
+    ),
+    "scanning.test.targets.resources": (
+        "Declared shared resources this target uses (default: none)"
     ),
     "scanning.test.targets.classname": (
         '"python-module" | "source-file" -- how results name their test'
@@ -483,6 +494,36 @@ _FIELD_COMMENTS: dict[str, str] = {
     ),
 }
 
+
+# Fields whose setting needs more than a one-line comment. Each line is a
+# standalone comment written above the field.
+_FIELD_NOTES: dict[str, tuple[str, ...]] = {
+    "scanning.test.concurrency": (
+        "The most test targets one run of `elspais test` or",
+        "`elspais checks --run-tests` executes at the same time.",
+        "At 1 the targets run one at a time, in declaration order, and their",
+        "output passes through unchanged. Above 1, each output line is prefixed",
+        "with the name of the target that wrote it.",
+        "The default is 1 because targets that share something no declaration",
+        "names would corrupt each other's runs. Before raising it, declare each",
+        "resource that targets share -- a database, a network port, a device or",
+        "emulator, a local service stack -- in [scanning.test.resources], and",
+        "list it in the `resources` of every target that uses it.",
+        "`--concurrency N` replaces this setting for one run.",
+    ),
+}
+
+# Tables written empty whose purpose an example makes plain. Each line is a
+# comment inside the table, so the example is shown and not set.
+_TABLE_EXAMPLES: dict[str, tuple[str, ...]] = {
+    "scanning.test.resources": (
+        "Name each resource that targets share outside elspais, and list the",
+        "name in the `resources` of each target that uses it. Two targets that",
+        "name a common resource never run at the same time. For example:",
+        'db = "The local Postgres instance the backend suites share"',
+    ),
+}
+
 # Per-project-type overrides applied on top of schema defaults.
 _CORE_OVERRIDES: dict[str, Any] = {
     "project": {"name": "my-project"},
@@ -680,10 +721,15 @@ def _add_table(
         field_path = f"{key}.{k}"
         if isinstance(v, dict):
             sub = tomlkit.table()
-            for sk, sv in v.items():
+            # Scalars first: tomlkit hoists a scalar above the sub-tables added
+            # before it, and a note written above that scalar would not follow.
+            ordered = sorted(v.items(), key=lambda kv: isinstance(kv[1], dict))
+            for sk, sv in ordered:
                 if sv is None:
                     continue
                 sub_field_path = f"{field_path}.{sk}"
+                for note in _FIELD_NOTES.get(sub_field_path, ()):
+                    sub.add(tomlkit.comment(note))
                 if isinstance(sv, dict):
                     inner = tomlkit.table()
                     for ik, iv in sv.items():
@@ -691,6 +737,8 @@ def _add_table(
                             continue
                         _add_field_comment(inner, f"{sub_field_path}.{ik}")
                         inner.add(ik, iv)
+                    for example in _TABLE_EXAMPLES.get(sub_field_path, ()):
+                        inner.add(tomlkit.comment(example))
                     inner_comment = _FIELD_COMMENTS.get(sub_field_path)
                     if inner_comment:
                         inner.comment(inner_comment)
@@ -841,32 +889,50 @@ def generate_config(
         "Uncomment and repeat for each package/suite.",
         "See: elspais docs test-targets",
         "",
+        "A target writes into its own folder, <output_root>/<name>, read from",
+        "ELSPAIS_TARGET_OUTPUT; `results` and `coverage` are relative to it.",
+        "",
         "-- Flutter/Dart package example --",
         "[[scanning.test.targets]]",
         'name    = "app"',
         'cwd     = "app"',
-        'command = "flutter test --machine --coverage"',
+        (
+            'command = "flutter test --machine --coverage'
+            ' --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"'
+        ),
         'reporter = "flutter-machine"',
-        'coverage = "coverage/lcov.info"',
+        'coverage = "lcov.info"',
         'match   = "source"',
         'credit_coverage = "verified"',
         "",
-        "-- Package with a shared DB (serialise test files) --",
+        "-- Package with a shared DB --",
+        "--concurrency=1 serialises the test files inside this package.",
+        "`resources` keeps every other target naming `db` from running beside it",
+        "when [scanning.test] concurrency is above 1. Declare the resource in the",
+        "[scanning.test.resources] table above first:",
+        '  db = "The local Postgres instance the backend suites share"',
         "[[scanning.test.targets]]",
         'name    = "backend"',
         'cwd     = "backend"',
-        'command = "flutter test --machine --coverage --concurrency=1"',
+        (
+            'command = "flutter test --machine --coverage --concurrency=1'
+            ' --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"'
+        ),
         'reporter = "flutter-machine"',
-        'coverage = "coverage/lcov.info"',
+        'coverage = "lcov.info"',
         'match   = "source"',
         'credit_coverage = "verified"',
+        'resources = ["db"]',
         "",
         "-- Python/pytest example --",
         "[[scanning.test.targets]]",
         'name    = "unit"',
-        'command = "pytest tests/ --json-report --json-report-file=.elspais/results/pytest.json"',
+        (
+            'command = "pytest tests/ --json-report'
+            ' --json-report-file=$ELSPAIS_TARGET_OUTPUT/pytest.json"'
+        ),
         'reporter = "pytest-json"',
-        'results = ".elspais/results/pytest.json"',
+        'results = "pytest.json"',
         "",
         "-- Playwright/JUnit example (feeds journey + step UAT coverage) --",
         "[[scanning.test.targets]]",

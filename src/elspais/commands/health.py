@@ -5454,7 +5454,7 @@ def _report_from_dict(data: dict[str, Any]) -> HealthReport:
     return report
 
 
-# Implements: REQ-d00249-A+F+G, REQ-d00285-H
+# Implements: REQ-d00249-F+G, REQ-d00285-H
 # Implements: REQ-d00283-D+E+H+I
 def run(args: argparse.Namespace) -> int:
     """Run the health command.
@@ -5491,8 +5491,14 @@ def run(args: argparse.Namespace) -> int:
             inert.append("--targets")
         if fail_fast:
             inert.append("--fail-fast")
+        # Implements: REQ-d00315-I
+        if getattr(args, "stale_only", False):
+            inert.append("--stale-only")
+        # Implements: REQ-d00314-O
+        if getattr(args, "concurrency", None) is not None:
+            inert.append("--concurrency")
         if inert:
-            named = " and ".join(inert)
+            named = ", ".join(inert[:-1]) + " and " + inert[-1] if len(inert) > 1 else inert[0]
             verb = "choose" if len(inert) > 1 else "chooses"
             print(
                 f"error: {named} {verb} what --run-tests executes, and this run does "
@@ -5536,7 +5542,17 @@ def run(args: argparse.Namespace) -> int:
         from elspais.commands._scope import flag_values
 
         selected = list(flag_values(args, "targets"))
-        from elspais.commands.test_runner import SelectionRefused, executable_selection
+        from elspais.commands.test_runner import (
+            SelectionRefused,
+            concurrency_refusal,
+            executable_selection,
+        )
+
+        # Implements: REQ-d00314-P
+        concurrency = getattr(args, "concurrency", None)
+        if concurrency is not None and concurrency < 1:
+            print(f"error: {concurrency_refusal(concurrency)}", file=sys.stderr)
+            return 2
 
         try:
             only = executable_selection(cfg, selected)
@@ -5547,8 +5563,21 @@ def run(args: argparse.Namespace) -> int:
             t for t in cfg.scanning.test.targets if t.command and (only is None or t.name in only)
         ]
         repo_root = find_git_root() or Path.cwd()
+        # Implements: REQ-d00315-B+F+G+H
+        # Every selected target stays expected; a stale-only run executes the
+        # ones whose results are not fresh and carries the rest.
+        if getattr(args, "stale_only", False):
+            from elspais.commands.test_runner import describe_stale_only, not_fresh_targets
+
+            execute, carry = not_fresh_targets(cfg, repo_root, only)
+            print(describe_stale_only(execute, carry), file=sys.stderr)
+            # The selection less what it carries, so a target with no command
+            # reads as it reads in the same run without --stale-only.
+            configured = {t.name for t in cfg.scanning.test.targets}
+            fresh = (configured if only is None else only) - carry
+            only = None if fresh == configured else fresh
         results, captured_map = run_configured_targets(
-            cfg, repo_root, fail_fast=fail_fast, only=only
+            cfg, repo_root, fail_fast=fail_fast, only=only, concurrency=concurrency
         )
         runner_failed = any(r.returncode != 0 for r in results)
         # Implements: REQ-d00283-Q

@@ -1456,3 +1456,139 @@ D. When a run of a test target starts, the system SHALL provide that target with
 Targets that share an output location can overwrite each other, and results that an earlier run left behind can pass for the results of a later run. An area for each target, empty whenever a run of that target starts, prevents both, and one location for every area gives the freshness judgement one place to exclude from its inputs.
 
 *End* *Test Target Output Areas* | **Hash**: a0788b2a
+
+## REQ-d00314: Concurrent Test Target Runs
+
+**Level**: dev | **Status**: Draft | **Implements**: -
+
+A run that executes several test targets can execute some of them at the same time. This requirement states which targets may overlap, which never do, and how a reader tells the output of one target from the output of another.
+
+### Assertions
+
+A. A project SHALL be able to set the maximum number of test targets that one run executes at the same time.
+
+B. Where a project sets no maximum, the system SHALL use a maximum of one.
+
+C. While the maximum is one, the system SHALL execute the selected test targets one at a time, in declaration order.
+
+D. While the maximum is one, the system SHALL show the live output of each test target as that target produced it.
+
+E. A project SHALL be able to declare shared resources, each with a name and a description of what the resource is.
+
+F. A test target SHALL be able to name any declared shared resource as a resource that it uses.
+
+G. The system SHALL reject at configuration-validation time a test target that names a shared resource that the project does not declare.
+
+H. The system SHALL execute at different times any two test targets that name a common shared resource.
+
+I. While fewer test targets run than the maximum, the system SHALL start each waiting test target that names no shared resource that a running test target names.
+
+J. While the maximum is more than one, the system SHALL mark each line of live output with the name of the test target that produced the line.
+
+K. The system SHALL report the outcome and the elapsed time of each test target together with the name of that target.
+
+L. The system SHALL keep the output that it captures from a test target apart from the output of every other test target.
+
+M. When a run that stops at the first failing test target meets a failure, the system SHALL start no further test target.
+
+N. When a run that stops at the first failing test target meets a failure, the system SHALL let each test target that is already running finish.
+
+O. A run SHALL be able to set, for that run alone, a maximum that replaces the maximum the project sets.
+
+P. The system SHALL refuse a maximum below one, whether the project or the run sets it.
+
+### Rationale
+
+A project with many independent targets waits for the sum of their run times when they run one at a time, although most of them share nothing. Each target already writes into an output area of its own (REQ-d00312), so two targets never write the same file. What two targets can still share is outside the tool: a database, a network port, a device or emulator, a local service stack. Only the project knows which targets use which of these, so the project says so, and the tool never overlaps two targets that name a common one.
+
+B keeps the capability inert until a project turns it on. A project whose targets share a database that no declaration names would otherwise see two targets corrupt each other's data on the day the tool is upgraded. C and D state what a run with a maximum of one does, which is what every run did before a maximum existed.
+
+E, F and G follow the discipline of test target groups (REQ-d00283-F+G). A resource is declared with a description, because the declaration is the only place a reader learns what the name stands for. A target naming an undeclared resource is refused, because a misspelled resource name would otherwise silently let two conflicting targets overlap. That failure appears only as an intermittent fault in a test, far from its cause.
+
+I makes the schedule use the room it has. A target waiting only for a free place starts as soon as one is free, and a target waiting for a resource does not hold back the targets behind it. A target's own runner owns the parallelism inside that target; this requirement schedules targets, not the tests within them.
+
+J and K keep a concurrent run readable. Lines from targets that run at the same time arrive interleaved, so each line carries the name of the target that wrote it, and the outcome and time of each target are reported against its name. L keeps the output that a reporter reads as results apart for each target, because a reporter reading another target's lines would attribute their results to the wrong tests.
+
+M and N define stopping at the first failure when several targets run. A target that has started is allowed to finish rather than being stopped, because a stopped target leaves a run that records a start and no end, and its results then read as in progress (REQ-d00311-N).
+
+O lets one run depart from the project's setting without editing the configuration: a continuous-integration job on a larger machine, or a developer who needs the targets one at a time to read their output. P refuses a maximum that would execute nothing.
+
+*End* *Concurrent Test Target Runs* | **Hash**: 228b3b98
+
+## REQ-d00315: Stale-Only Test Target Runs
+
+**Level**: dev | **Status**: Draft | **Implements**: -
+
+A run can execute only the test targets whose results the current tree has made stale, and carry the results of every other target forward. This requirement states which targets such a run executes and what it does with the rest.
+
+### Assertions
+
+A. A run that executes test targets SHALL be able to ask to execute only the selected test targets whose results are not fresh.
+
+B. A run that asks to execute only the targets whose results are not fresh SHALL execute exactly the selected test targets whose results are not fresh.
+
+C. The system SHALL decide whether the results of a test target are fresh by the judgement that it reports under REQ-d00311.
+
+D. The system SHALL treat a test target that has no results as a target whose results are not fresh.
+
+E. The system SHALL treat a run of a test target that is in progress as a run whose results are not fresh.
+
+F. A run that asks to execute only the targets whose results are not fresh SHALL treat the results of each selected test target that it does not execute as results carried from an earlier run.
+
+G. If every selected test target of a run that asks to execute only the targets whose results are not fresh has fresh results, then the system SHALL complete the run without executing a test target.
+
+H. A run that asks to execute only the targets whose results are not fresh SHALL state which selected test targets it executed and which it carried.
+
+I. If a run that does not execute test targets asks to execute only the targets whose results are not fresh, then the system SHALL refuse the run.
+
+### Rationale
+
+The fingerprint of a target records the inputs its results were produced from, and the tool already judges from those inputs whether the results are stale. A project that wants to execute only what a change affects would otherwise write its own classifier of changes, which duplicates knowledge the tool holds and drifts from it. The project, or its continuous integration, decides when to ask for such a run; the tool supplies the decision.
+
+A narrows the selection a run already makes rather than adding a second way to select targets. The selection still says which targets the run is about, and every target it reaches is expected (REQ-d00283-Q); freshness then decides only which of them need executing. A run that names its targets and does not ask for this executes every target it names (REQ-d00283-I).
+
+C keeps one judgement. A target that a report calls stale is a target this run executes, and a target that a report calls fresh is one it carries. D and E answer the cases the judgement leaves open. A target with no results has nothing to carry, and a run that started and recorded no end left results that are partial or missing, so both are executed.
+
+F makes the carried results read as they read after a selective run: they are honoured, a carried failure still fails (REQ-d00254-I), and they render as carried. G treats a run that has nothing to execute as a run that succeeded, because a tree that changed no input of any selected target is the case this run exists to make cheap. H tells the reader which targets ran fresh. REQ-d00316 records the same set for a report rendered afterwards.
+
+I applies the discipline of REQ-d00283-Y: a request read only by a run that executes targets is refused by a run that executes none, rather than accepted and ignored.
+
+*End* *Stale-Only Test Target Runs* | **Hash**: 890ea4b2
+
+## REQ-d00316: Record of the Test Targets a Run Executed
+
+**Level**: dev | **Status**: Draft | **Implements**: -
+
+A run that executes test targets leaves a record of which targets it executed. A later run that reads results names that record to mark those results as fresh and every other result as carried.
+
+### Assertions
+
+A. A run that executes test targets SHALL record the names of the test targets that it executed.
+
+B. The system SHALL keep the record in the test output location, outside the output area of every test target.
+
+C. The system SHALL write the record in a machine-readable form that the test-target documentation describes.
+
+D. A record SHALL replace the record of every earlier run.
+
+E. A run that reads results without executing test targets SHALL be able to name the test targets of the last recorded run wherever it names a test target.
+
+F. If a run names the test targets of the last recorded run and no readable record exists, then the system SHALL refuse the run and tell how to produce a record.
+
+G. If a run names the test targets of the last recorded run and the record names a test target that the project does not configure, then the system SHALL refuse the run and name that target.
+
+H. Where the last recorded run executed no test target, a run that names its test targets SHALL treat that name as an explicit statement that it selects no test target.
+
+I. If a run that executes test targets, or a run that names the test targets whose results it expects, names the test targets of the last recorded run, then the system SHALL refuse the run.
+
+### Rationale
+
+A report that marks results as fresh or carried needs to know which targets ran fresh. Without a record, the reader passes those names by hand or reads them out of the output of an earlier command, and a name typed wrong marks the wrong results as fresh.
+
+A, B and D keep one record, written by every run that executes targets, in the location that already holds each target's output area. The output area of a target is emptied whenever that target runs (REQ-d00312-D), so the record lives beside the areas and never inside one. C lets a program other than the tool read the record.
+
+E puts the record's name in the vocabulary that already names targets and groups (REQ-d00283-E), so a reader learns no second way to select. F and G refuse rather than guess. A run with no record, or a record naming a target the configuration no longer holds, cannot say which results ran fresh, and a report that assumed an answer would mark results with a provenance nobody established. H covers a run that executed nothing, such as a stale-only run whose targets were all fresh (REQ-d00315-G): every result it left was carried, which is what an explicit selection of no target states (REQ-d00283-J).
+
+I keeps the name to the one question it answers. A run that executes targets, and a run that states which results it expects, each ask about the run in progress, and a name standing for what an earlier run did would answer a different question.
+
+*End* *Record of the Test Targets a Run Executed* | **Hash**: c5639977
