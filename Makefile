@@ -34,8 +34,10 @@ setup: ## Set up development environment
 test: ## Run unit/integration tests (~12m, coverage is on by default)
 	$(PYTEST)
 
-test-e2e: ## Run e2e subprocess tests (~11m)
-	$(PYTEST) -m e2e
+# The same two-pass run the pre-push hook makes, fingerprinted into the
+# `elspais-e2e` target's output area so `elspais checks` reads its results.
+test-e2e: ## Run e2e subprocess tests (parallel pass, then serial pass)
+	$(VENV_PATH) .githooks/with-fingerprint elspais-e2e .githooks/run-e2e-tier
 
 test-browser: ## Run browser tests (~3m)
 	$(PYTEST) -m browser

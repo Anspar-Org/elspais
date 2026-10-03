@@ -730,6 +730,8 @@ class TestMcpUninstallDesktop:
 
 
 @pytest.mark.e2e
+# Registers with the user's own claude configuration.
+@pytest.mark.serial
 @_skip_e2e
 class TestMcpInstallE2E:
     """End-to-end: install registers with claude, uninstall removes it.

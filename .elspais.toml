@@ -187,12 +187,16 @@ groups = ["commit", "default"]
 # Tested; without a target their results never were, leaving an assertion tested
 # only by an e2e test reading as awaiting-a-result rather than passing.
 #
-# Each carries `--no-cov` deliberately. `addopts` in pyproject.toml turns on
+# Each runs with `--no-cov` deliberately. `addopts` in pyproject.toml turns on
 # `--cov=src/elspais`. The unit target alone measures line coverage. These
 # targets produce results only.
+#
+# The e2e tier runs through .githooks/run-e2e-tier, the one place that says
+# how: a parallel pass, then a serial pass for the modules marked `serial`,
+# merged into one `junit.xml`. The pre-push hook runs the same script.
 [[scanning.test.targets]]
 name = "elspais-e2e"
-command = "pytest -m e2e -q --no-cov --junitxml=$ELSPAIS_TARGET_OUTPUT/junit.xml -o junit_family=xunit1"
+command = ".githooks/run-e2e-tier"
 reporter = "junit"
 results = "junit.xml"
 groups = ["push"]

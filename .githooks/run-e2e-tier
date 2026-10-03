@@ -1,0 +1,86 @@
+#!/bin/bash
+# run-e2e-tier [output-dir]
+#
+# Runs the e2e tier and writes one junit.xml describing all of it.
+#
+# The tier runs in two passes. Most e2e modules build their projects under
+# pytest's temp directory, and nothing they touch is shared, so the first pass
+# runs them in parallel. `--dist loadfile` keeps each module on one worker, in
+# order: a module's ordered mutation classes share the project and the daemon
+# its module fixture built.
+#
+# A module marked `serial` shares something no worker owns -- the live
+# worktree and its daemon, the user's home directory, fixed ports. The second
+# pass runs those modules with no other test process alive. tests/conftest.py
+# refuses a parallel session that collects a `serial` test, so a selection
+# mistake cannot move one into the first pass.
+#
+# Coverage is off in both passes. The unit tier alone measures line coverage,
+# and a measured run writes `.coverage` in the repository root, where it
+# collides with whatever other tier is running there.
+#
+# The output directory defaults to $ELSPAIS_TARGET_OUTPUT, which
+# with-fingerprint sets. ELSPAIS_E2E_WORKERS sets the first pass's worker
+# count (default: auto). Both passes always run, so the results describe the
+# whole tier. The exit code is the first pass's when that pass failed, and the
+# second pass's otherwise.
+
+_out="${1:-$ELSPAIS_TARGET_OUTPUT}"
+if [ -z "$_out" ]; then
+    echo "ERROR: run-e2e-tier needs an output directory (argument or ELSPAIS_TARGET_OUTPUT)" >&2
+    exit 2
+fi
+mkdir -p "$_out"
+_workers="${ELSPAIS_E2E_WORKERS:-auto}"
+
+_parallel="$_out/junit-parallel.xml"
+_serial="$_out/junit-serial.xml"
+rm -f "$_parallel" "$_serial"
+
+echo "== e2e pass 1 of 2: parallel (-n $_workers --dist loadfile)"
+_rc_parallel=0
+pytest tests/ -m "e2e and not serial" -n "$_workers" --dist loadfile \
+    --no-cov --tb=short -q \
+    --junitxml="$_parallel" -o junit_family=xunit1 || _rc_parallel=$?
+
+echo "== e2e pass 2 of 2: serial"
+_rc_serial=0
+pytest tests/ -m "e2e and serial" \
+    --no-cov --tb=short -q \
+    --junitxml="$_serial" -o junit_family=xunit1 || _rc_serial=$?
+
+# One artifact for the target, because `elspais-e2e` declares `junit.xml` and
+# a result is bound to the file it was read from.
+_rc_merge=0
+python3 - "$_out/junit.xml" "$_parallel" "$_serial" <<'PY' || _rc_merge=$?
+import sys
+import xml.etree.ElementTree as ET
+
+target, *parts = sys.argv[1:]
+merged = ET.Element("testsuites")
+for part in parts:
+    try:
+        root = ET.parse(part).getroot()
+    except (OSError, ET.ParseError) as exc:
+        print(f"ERROR: no readable results from {part}: {exc}", file=sys.stderr)
+        sys.exit(1)
+    suites = [root] if root.tag == "testsuite" else root.findall("testsuite")
+    merged.extend(suites)
+tree = ET.ElementTree(merged)
+ET.indent(tree, space="  ")
+tree.write(target, encoding="unicode", xml_declaration=True)
+PY
+
+if [ "$_rc_parallel" -ne 0 ]; then
+    echo "e2e parallel pass failed (exit $_rc_parallel)" >&2
+    exit "$_rc_parallel"
+fi
+if [ "$_rc_serial" -ne 0 ]; then
+    echo "e2e serial pass failed (exit $_rc_serial)" >&2
+    exit "$_rc_serial"
+fi
+if [ "$_rc_merge" -ne 0 ]; then
+    echo "e2e results could not be merged (exit $_rc_merge)" >&2
+    exit "$_rc_merge"
+fi
+exit 0

@@ -20,7 +20,9 @@ FIXTURE_DIRS = sorted(
     if d.is_dir() and (d / ".elspais.toml").exists() and (d / "spec").exists()
 )
 
-pytestmark = [pytest.mark.e2e, requires_elspais]
+# `serial`: the CLI runs from the git root, so these checks read the live
+# worktree rather than the fixture directory they name.
+pytestmark = [pytest.mark.e2e, pytest.mark.serial, requires_elspais]
 
 
 @pytest.mark.parametrize(

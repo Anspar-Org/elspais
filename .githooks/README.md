@@ -66,9 +66,30 @@ Runs before pushing, with PR-aware blocking behavior:
 | --- | --- | --- |
 | Branch freshness | Fetches `origin/main`; auto-bumps the version if it matches main's | - |
 | PR detection | Decides whether failures block or warn | `gh` (optional) |
-| E2E tests | `pytest -m e2e`, cached by tree hash and CLI environment | `pytest` |
+| E2E tests | `e2e-verdict`, running `run-e2e-tier`; cached by tree hash and CLI environment | `pytest`, `pytest-xdist` |
 | Secret detection | Scans for leaked secrets | `gitleaks` |
 | Doc sync tests | `pytest tests/test_doc_sync.py` | `pytest` |
+
+The e2e stage is `e2e-verdict`, the one writer of `.results/.test-cache-e2e`.
+It records `<tree> PASS|FAIL <environment>` for the tree `git write-tree`
+names, and honours a recorded verdict for the same tree and environment.
+Running it before `git push` moves the run out of the push.
+
+`e2e-verdict` runs the tier through `run-e2e-tier`, which `make test-e2e` and
+the `elspais-e2e` target in `.elspais.toml` also call, so every way of running
+the tier runs it the same way:
+
+1. A parallel pass over the e2e tests not marked `serial`, with
+   `pytest-xdist` and `--dist loadfile`. Each module stays on one worker, in
+   order, beside the project and daemon its module fixture built.
+2. A serial pass over the tests marked `serial`, with no other test process
+   alive. These share state no worker owns: the live worktree and its daemon,
+   the user's home directory, fixed ports.
+
+Both passes always run, with coverage off, and their results are merged into
+the target's one `junit.xml`. `tests/conftest.py` fails a `serial` test that
+an xdist worker runs, so the split cannot be undone by a selection mistake.
+`ELSPAIS_E2E_WORKERS` sets the parallel pass's worker count (default `auto`).
 
 **Why this list is short.** Nothing that pre-commit already gates is repeated
 here. You cannot push what you have not committed, so every commit in a push

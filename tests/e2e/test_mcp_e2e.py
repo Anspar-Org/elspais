@@ -21,6 +21,8 @@ pytestmark = [
         reason="elspais CLI not found on PATH",
     ),
     pytest.mark.e2e,
+    # Reads the live worktree, its results included.
+    pytest.mark.serial,
 ]
 
 

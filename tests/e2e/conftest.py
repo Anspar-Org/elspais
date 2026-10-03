@@ -46,7 +46,14 @@ def _warm_daemon():
 
     Without this, the first CLI invocation pays ~3s for daemon auto-start.
     With this, the daemon starts once and all subsequent calls hit it in ~0.3s.
+
+    Inert on an xdist worker. The tests that use the REPO_ROOT daemon are
+    marked `serial` and never run on a worker, and every worker warming it at
+    once would race to start one daemon for the same tree.
     """
+    if os.environ.get("PYTEST_XDIST_WORKER"):
+        yield
+        return
     try:
         from elspais.config import find_git_root
         from elspais.mcp.daemon import ensure_daemon

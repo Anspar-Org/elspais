@@ -23,8 +23,10 @@ from tests.e2e.conftest import (
 )
 from tests.e2e.helpers import trace_rows
 
+# `serial`: runs against the live worktree and its daemon.
 pytestmark = [
     pytest.mark.e2e,
+    pytest.mark.serial,
     requires_elspais,
 ]
 

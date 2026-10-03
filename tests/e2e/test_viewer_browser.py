@@ -44,6 +44,9 @@ from .helpers import resolve_elspais  # noqa: E402
 
 pytestmark = [
     pytest.mark.browser,
+    # Serves the live worktree (stopping its daemon), writes daemon records
+    # into checked-in fixture directories, and probes a fixed port range.
+    pytest.mark.serial,
     pytest.mark.skipif(
         resolve_elspais() is None,
         reason="elspais CLI not found on PATH",
