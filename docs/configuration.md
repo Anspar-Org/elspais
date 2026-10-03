@@ -99,7 +99,10 @@ name = "my-project"
 # A requirement that names a parent through `Implements:` or `Refines:` at a
 # level its own level may not implement is reported by `spec.hierarchy_levels`,
 # at the severity `[rules.severity]` gives that check (info where nothing is
-# written).
+# written). Where either of the two levels is one this configuration does not
+# define, no `implements` rule speaks to the relationship, and it is reported
+# by `spec.hierarchy_undefined_levels` instead (warning where nothing is
+# written), which takes its own `[rules.severity]` key.
 #
 # A requirement may carry a level this configuration does not define -- an
 # associate declaring its own levels, a misspelling, or a level removed while

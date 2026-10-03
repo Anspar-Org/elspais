@@ -16,11 +16,13 @@ from elspais.commands.health import (
     check_reference_class,
     check_spec_format_rules,
     check_spec_hierarchy_levels,
+    check_spec_hierarchy_undefined_levels,
     check_spec_implements_resolve,
     check_spec_no_duplicates,
     check_spec_refines_resolve,
     check_spec_undefined_levels,
     check_test_results,
+    run_spec_checks,
 )
 from elspais.config import _merge_configs, config_defaults, get_config
 from elspais.graph.builder import TraceGraph
@@ -293,12 +295,21 @@ A. The system SHALL also exist.
 """
 
 
-def _hierarchy_project(tmp_path: Path, spec: str, severity: str | None) -> tuple:
+def _hierarchy_project(
+    tmp_path: Path,
+    spec: str,
+    severity: str | None,
+    severities: dict[str, str] | None = None,
+) -> tuple:
     """A project holding `spec`, with the hierarchy check's severity set to
-    `severity` under [rules.severity], or left unwritten where it is None."""
+    `severity` under [rules.severity], or left unwritten where it is None.
+    `severities` writes further [rules.severity] entries, keyed by check name."""
     text = _HIERARCHY_PROJECT
+    entries = dict(severities or {})
     if severity is not None:
-        text += f'\n[rules.severity]\n"spec.hierarchy_levels" = "{severity}"\n'
+        entries["spec.hierarchy_levels"] = severity
+    if entries:
+        text += "\n[rules.severity]\n" + "".join(f'"{k}" = "{v}"\n' for k, v in entries.items())
     config_path = tmp_path / ".elspais.toml"
     config_path.write_text(text)
     spec_dir = tmp_path / "spec"
@@ -383,6 +394,133 @@ A. The module SHALL write a log record.
 
         assert [f.node_id for f in check.findings if "::" in (f.node_id or "")] == []
         assert check.passed
+
+
+_UNDEFINED_LEVEL_PARENT = """# REQ-p00001: Parent PRD
+
+**Level**: PRD | **Status**: Active
+
+## Assertions
+
+A. The system SHALL exist.
+
+*End* *Parent PRD* | **Hash**: eeee5555
+
+# REQ-d00003: Quality Child
+
+**Level**: QA | **Status**: Active
+**Implements**: REQ-p00001
+
+## Assertions
+
+A. The system SHALL be checked.
+
+*End* *Quality Child* | **Hash**: abcd1234
+"""
+
+# A defined-level deviation (PRD implementing PRD, where prd implements
+# nothing) beside a relationship whose child carries an undefined level.
+_DEFINED_AND_UNDEFINED = (
+    _PRD_IMPLEMENTS_PRD
+    + """
+# REQ-d00003: Quality Child
+
+**Level**: QA | **Status**: Active
+**Implements**: REQ-p00001
+
+## Assertions
+
+A. The system SHALL be checked.
+
+*End* *Quality Child* | **Hash**: abcd1234
+"""
+)
+
+
+class TestCheckSpecHierarchyUndefinedLevels:
+    """A declared parent relationship involving a level the configuration does
+    not define is its own condition, reported apart from the hierarchy check."""
+
+    # Verifies: REQ-d00281-F
+    def test_REQ_d00281_F_undefined_level_relationship_is_a_warning(self, tmp_path: Path) -> None:
+        graph, config = _hierarchy_project(tmp_path, _UNDEFINED_LEVEL_PARENT, None)
+
+        check = check_spec_hierarchy_undefined_levels(graph, config)
+
+        assert check.name == "spec.hierarchy_undefined_levels"
+        assert check.severity == "warning"
+        assert not check.passed
+        assert [f.node_id for f in check.findings] == ["REQ-d00003"]
+        finding = check.findings[0]
+        assert finding.related == ["REQ-p00001"]
+        assert "'QA'" in finding.message
+        assert "[levels] in .elspais.toml" in finding.message
+
+    # Verifies: REQ-d00285-E
+    @pytest.mark.parametrize("severity", ["off", "info", "warning", "error"])
+    def test_REQ_d00285_E_undefined_level_severity_through_its_own_key(
+        self, tmp_path: Path, severity: str
+    ) -> None:
+        graph, config = _hierarchy_project(
+            tmp_path,
+            _UNDEFINED_LEVEL_PARENT,
+            None,
+            severities={"spec.hierarchy_undefined_levels": severity},
+        )
+
+        check = check_spec_hierarchy_undefined_levels(graph, config)
+
+        if severity == "off":
+            assert check.passed
+            assert check.severity == "info"
+            assert check.findings == []
+            assert "not reported (severity=off)" in check.message
+        else:
+            assert check.severity == severity
+            assert not check.passed
+            assert [f.node_id for f in check.findings] == ["REQ-d00003"]
+
+    # Verifies: REQ-d00281-F
+    def test_REQ_d00281_F_silencing_the_hierarchy_check_leaves_it_reported(
+        self, tmp_path: Path
+    ) -> None:
+        graph, config = _hierarchy_project(tmp_path, _UNDEFINED_LEVEL_PARENT, "off")
+
+        silenced = check_spec_hierarchy_levels(graph, config)
+        check = check_spec_hierarchy_undefined_levels(graph, config)
+
+        assert silenced.findings == []
+        assert check.severity == "warning"
+        assert not check.passed
+        assert [f.node_id for f in check.findings] == ["REQ-d00003"]
+
+    # Verifies: REQ-d00281-G
+    def test_REQ_d00281_G_only_defined_levels_are_judged_by_the_hierarchy(
+        self, tmp_path: Path
+    ) -> None:
+        graph, config = _hierarchy_project(tmp_path, _DEFINED_AND_UNDEFINED, "warning")
+
+        hierarchy = check_spec_hierarchy_levels(graph, config)
+        undefined = check_spec_hierarchy_undefined_levels(graph, config)
+
+        assert [(f.node_id, f.related) for f in hierarchy.findings] == [
+            ("REQ-p00002", ["REQ-p00001"])
+        ]
+        assert [(f.node_id, f.related) for f in undefined.findings] == [
+            ("REQ-d00003", ["REQ-p00001"])
+        ]
+
+    # Verifies: REQ-d00281-F
+    def test_REQ_d00281_F_spec_checks_report_the_undefined_level(self, tmp_path: Path) -> None:
+        graph, config = _hierarchy_project(tmp_path, _UNDEFINED_LEVEL_PARENT, None)
+
+        checks = [
+            c for c in run_spec_checks(graph, config) if c.name == "spec.hierarchy_undefined_levels"
+        ]
+
+        assert len(checks) == 1
+        assert [f.node_id for f in checks[0].findings] == ["REQ-d00003"]
+        assert checks[0].severity == "warning"
 
 
 class TestCheckSpecUndefinedLevelsFindings:

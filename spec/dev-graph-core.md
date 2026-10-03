@@ -1439,6 +1439,10 @@ D. Where a requirement carries a level the configuration a report is produced un
 
 E. A group formed from a level the configuration does not define SHALL be ordered after the groups formed from levels it does define.
 
+F. Where a requirement names a parent with `Implements:` or `Refines:` and either of the two carries a level the configuration does not define, the tool SHALL report that relationship, naming the requirement, the undefined level and the configuration file that declares the levels.
+
+G. The tool SHALL judge whether one level may implement another only where the configuration defines both levels.
+
 ### Rationale
 
 The subject of a report is the graph, and in a federation that graph is an assembly: each member declares its own levels, and every requirement any member holds is part of what the report is about. Forming the groups from the invoking configuration instead makes the report's shape a fact about who asked rather than about what was asked, so a member whose vocabulary differs from the asker's contributes requirements the report has nowhere to put. Drawing the groups from the requirements themselves is what makes one graph yield one answer whoever runs the report, and it is the same settlement REQ-d00251-L reaches for identifiers, reached here for the vocabulary a report is organised by.
@@ -1450,6 +1454,8 @@ C is where the asymmetry between a requirement's level and its status is deliber
 D is REQ-p00015-A reached by a second route. Content excluded from an answer is reportable whether it was refused admission or admitted and then passed over, because the reader cannot tell the two apart from the answer they are holding. It also catches the case no comparison between configurations would: a single repository where a level was misspelled on a requirement, or removed from the configuration while requirements still carry it, has no second configuration to differ from, and the requirements simply stop being counted. Naming the requirement and the level it carries is what turns that into something an author can act on, rather than a figure that quietly moved.
 
 E settles an ordering that would otherwise be decided independently by each surface, and decided differently. The levels a project defines are ordered by the ranks it gave them; a level it did not define has no rank to be ordered by, and inventing one would put it somewhere a reader has no way to predict. Placing such groups after the ranked ones keeps the familiar shape of a report intact and gathers what the configuration does not account for in one place, where D's report is about the same requirements.
+
+F and G separate two conditions that a single judgment would merge. The levels a configuration defines each declare which levels they may implement, so a relationship between two defined levels is judged against a rule the project wrote. A relationship involving an undefined level has no such rule: nothing the project declared permits it or forbids it, and reporting it as a forbidden relationship would claim a decision the project never made. G keeps that judgment to the relationships a rule speaks to. F reports the rest as what it is, a relationship the configuration cannot speak to, and names where levels are declared because that is where an author resolves it, by declaring the level or correcting the one the requirement carries. The two are distinct conditions, so a project that accepts every deviation it declared rules about has not thereby accepted a level it never declared.
 
 *End* *Level Vocabulary of a Reported Graph* | **Hash**: 4bde246d
 

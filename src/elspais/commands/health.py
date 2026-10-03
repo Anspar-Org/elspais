@@ -710,17 +710,59 @@ def check_spec_undefined_levels(
     )
 
 
-# Implements: REQ-p00002-B, REQ-p00061-A
-def check_spec_hierarchy_levels(
-    graph: FederatedGraph, config: dict[str, Any], namespace: str | None = None
-) -> HealthCheck:
-    """Report each requirement declaring a parent at a level its own level may not implement.
+def _level_relationships(
+    graph: FederatedGraph, namespace: str | None
+) -> Iterator[tuple[GraphNode, str, GraphNode, str]]:
+    """Each requirement paired with each parent it declares, with both levels.
 
     A parent is declared with `Implements:` or `Refines:` (REQ-p00061-A), so
     only those edges are read. A `Satisfies:` instance and an `Integrates:`
     target sit in another requirement's hierarchy, at whatever level that
     hierarchy gave them, and a level comparison across them reports nothing
-    the author chose.
+    the author chose. A requirement or parent carrying no level is passed
+    over: there is no level to judge.
+
+    Yields:
+        ``(child, child_level, parent, parent_level)``, levels lower-cased.
+    """
+    from elspais.graph import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    parent_edges = {EdgeKind.IMPLEMENTS, EdgeKind.REFINES}
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT, namespace=namespace):
+        node_level = node.level.lower() if node.level else None
+        if not node_level:
+            continue
+        for parent in node.iter_parents(edge_kinds=parent_edges):
+            if parent.kind != NodeKind.REQUIREMENT:
+                continue
+            parent_level = parent.level.lower() if parent.level else None
+            if parent_level:
+                yield node, node_level, parent, parent_level
+
+
+def _levels_declared_in(graph: FederatedGraph, namespace: str | None) -> str:
+    """Where the levels a check judges against are declared, for a reader."""
+    from elspais.graph import NodeKind
+    from elspais.graph.GraphNode import FileType
+
+    for node in graph.nodes_by_kind(NodeKind.FILE, namespace=namespace):
+        if node.get_field("file_type") is FileType.CONFIG:
+            path = str(node.get_field("relative_path") or "")
+            if Path(path).name == ".elspais.toml":
+                return f"[levels] in {path}"
+    return "[levels] in the configuration"
+
+
+# Implements: REQ-p00002-B, REQ-p00061-A, REQ-d00281-G
+def check_spec_hierarchy_levels(
+    graph: FederatedGraph, config: dict[str, Any], namespace: str | None = None
+) -> HealthCheck:
+    """Report each requirement declaring a parent at a level its own level may not implement.
+
+    Only a relationship between two levels the configuration defines is
+    judged here, because only there did the project write a rule. A
+    relationship involving an undefined level is `spec.hierarchy_undefined_levels`.
     """
     severity = severity_for("spec.hierarchy_levels", config)
     if severity == Severity.OFF:
@@ -728,42 +770,25 @@ def check_spec_hierarchy_levels(
             "spec.hierarchy_levels", "Implements references that cross the level hierarchy"
         )
 
-    from elspais.graph import NodeKind
-    from elspais.graph.relations import EdgeKind
-
     typed_config = _validate_config(config)
     allowed_parents_map = {
         name.lower(): [p.lower() for p in level.implements]
         for name, level in typed_config.levels.items()
     }
-    parent_edges = {EdgeKind.IMPLEMENTS, EdgeKind.REFINES}
 
     violations = []
-
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT, namespace=namespace):
-        node_level = node.level.lower() if node.level else None
-        if not node_level:
+    for node, node_level, parent, parent_level in _level_relationships(graph, namespace):
+        if node_level not in allowed_parents_map or parent_level not in allowed_parents_map:
             continue
-
-        allowed_parents = allowed_parents_map.get(node_level, [])
-
-        seen_parents: set[str] = set()
-        for parent in node.iter_parents(edge_kinds=parent_edges):
-            if parent.id in seen_parents:
-                continue
-            seen_parents.add(parent.id)
-            if parent.kind != NodeKind.REQUIREMENT:
-                continue
-            parent_level = parent.level.lower() if parent.level else None
-            if parent_level and parent_level not in allowed_parents:
-                violations.append(
-                    {
-                        "child": node.id,
-                        "child_level": node_level.upper(),
-                        "parent": parent.id,
-                        "parent_level": parent_level.upper(),
-                    }
-                )
+        if parent_level not in allowed_parents_map[node_level]:
+            violations.append(
+                {
+                    "child": node.id,
+                    "child_level": node_level.upper(),
+                    "parent": parent.id,
+                    "parent_level": parent_level.upper(),
+                }
+            )
 
     if violations:
         findings = [
@@ -790,6 +815,64 @@ def check_spec_hierarchy_levels(
         name="spec.hierarchy_levels",
         passed=True,
         message="All requirements follow hierarchy rules",
+        category="spec",
+    )
+
+
+# Implements: REQ-d00281-F
+def check_spec_hierarchy_undefined_levels(
+    graph: FederatedGraph, config: dict[str, Any], namespace: str | None = None
+) -> HealthCheck:
+    """Report each declared parent relationship involving a level the configuration does not define.
+
+    No rule the project wrote permits or forbids such a relationship, so it
+    is its own condition rather than a hierarchy violation, and silencing
+    `spec.hierarchy_levels` does not silence it.
+    """
+    severity = severity_for("spec.hierarchy_undefined_levels", config)
+    if severity == Severity.OFF:
+        return skipped_check(
+            "spec.hierarchy_undefined_levels",
+            "Parent relationships involving a level the configuration does not define",
+        )
+
+    typed_config = _validate_config(config)
+    defined = {name.lower() for name in typed_config.levels}
+    where = _levels_declared_in(graph, namespace)
+
+    findings: list[HealthFinding] = []
+    for node, node_level, parent, parent_level in _level_relationships(graph, namespace):
+        undefined = sorted({lvl for lvl in (node_level, parent_level) if lvl not in defined})
+        if not undefined:
+            continue
+        named = ", ".join(f"'{lvl.upper()}'" for lvl in undefined)
+        findings.append(
+            HealthFinding(
+                message=(
+                    f"{node.id} ({node_level.upper()}) -> {parent.id} ({parent_level.upper()}): "
+                    f"level {named} is not defined; levels are declared under {where}"
+                ),
+                node_id=node.id,
+                related=[parent.id],
+            )
+        )
+
+    if findings:
+        return HealthCheck(
+            name="spec.hierarchy_undefined_levels",
+            passed=False,
+            message=(
+                f"{len(findings)} parent relationship(s) involve a level "
+                "this configuration does not define"
+            ),
+            category="spec",
+            severity=severity,
+            findings=findings,
+        )
+    return HealthCheck(
+        name="spec.hierarchy_undefined_levels",
+        passed=True,
+        message="Every parent relationship is between levels this configuration defines",
         category="spec",
     )
 
@@ -2807,6 +2890,12 @@ def run_spec_checks(
         checks.append(
             _annotate_findings(
                 check_spec_undefined_levels(graph, repo_config, namespace=member),
+                entry.name,
+            )
+        )
+        checks.append(
+            _annotate_findings(
+                check_spec_hierarchy_undefined_levels(graph, repo_config, namespace=member),
                 entry.name,
             )
         )

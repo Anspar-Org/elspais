@@ -46,6 +46,14 @@ reports at `info` unless `[rules.severity]` says otherwise:
 "spec.hierarchy_levels" = "error"   # off | info | warning | error
 ```
 
+That check judges only a relationship between two levels `[levels]`
+defines. Where either requirement carries a level the configuration does
+not define, no `implements` list speaks to the relationship, so it is
+reported by `spec.hierarchy_undefined_levels` instead, naming the
+requirement, the undefined level and the file whose `[levels]` table to
+edit. It reports at `warning` unless its own `[rules.severity]` key says
+otherwise; silencing `spec.hierarchy_levels` leaves it reported.
+
 Example chain:
 
   `REQ-p00001`: Users can reset passwords (PRD)
