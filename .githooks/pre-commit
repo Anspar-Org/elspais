@@ -9,7 +9,8 @@
 #   - Python code quality (ruff: lint + format)
 #   - Markdown linting (markdownlint)
 #   - elspais fix (regenerate INDEX.md, KNOWN_ISSUES.md)
-#   - Unit/integration tests with coverage (last — most expensive)
+#   - Unit/integration tests with coverage (last — most expensive), through
+#     .githooks/unit-verdict. ELSPAIS_CHECKPOINT=1 defers them to pre-push.
 #
 # To install this hook:
 #   make setup   (or: git config core.hooksPath .githooks)
@@ -286,76 +287,20 @@ fi
 # 6. Unit/Integration Tests with Coverage (cached)
 # =====================================================
 
+# .githooks/unit-verdict is the one authority for the unit verdict, and it
+# runs the tier through .githooks/run-unit-tier. A checkpoint commit
+# (ELSPAIS_CHECKPOINT=1) defers the tier: it records no verdict for its tree,
+# so pre-push runs the tier for the tree it pushes. Every gate above still ran.
 REPO_ROOT=$(git rev-parse --show-toplevel)
-CACHE_DIR="$REPO_ROOT/.results"
-UNIT_CACHE="$CACHE_DIR/.test-cache-unit"
-
-# Killing this hook must not kill the tier it started — see the library.
-. "$REPO_ROOT/.githooks/lib-tier-run.sh"
-
-mkdir -p "$CACHE_DIR"
-
-# Compute content hash from the staged index (what the commit will contain).
-# An empty hash (write-tree failure) must never be used as a cache key: a
-# recorded "" would match the next failure's "" and skip tests forever.
-CONTENT_HASH=$(git write-tree 2>/dev/null | head -c 40) || CONTENT_HASH=""
-if [ -z "$CONTENT_HASH" ]; then
-    echo -e "${YELLOW}WARNING: git write-tree produced no hash — test cache disabled for this run${NC}"
-fi
-
-if [ -n "$CONTENT_HASH" ] && [ -f "$UNIT_CACHE" ] && [ "$(cat "$UNIT_CACHE" 2>/dev/null)" = "$CONTENT_HASH" ]; then
-    echo -e "${GREEN}Tests cached — no changes since last pass${NC}"
+if [ "${ELSPAIS_CHECKPOINT:-}" = "1" ]; then
+    echo -e "${YELLOW}Checkpoint commit: unit tests deferred to pre-push${NC}"
     echo ""
+elif ! "$REPO_ROOT/.githooks/unit-verdict"; then
+    echo ""
+    echo "Fix the errors above before committing, or commit a checkpoint"
+    echo "(ELSPAIS_CHECKPOINT=1 git commit ...) whose tests pre-push will run."
+    exit 1
 else
-    echo -e "${BLUE}Running unit/integration tests with coverage...${NC}"
-    echo ""
-
-    UNIT_RUN_DIR="$CACHE_DIR/run-unit"
-    mkdir -p "$UNIT_RUN_DIR"
-
-    # The verdict is recorded by the run itself, inside the detached session,
-    # so a hook killed mid-tier still leaves the tree certified. Writing it
-    # here instead would mean the timeout that kills the hook also discards a
-    # pass the tier had already earned.
-    {
-        printf '#!/bin/bash\n'
-        printf '# Records the unit verdict for the tree this run was started for.\n'
-        printf 'if [ "$1" -eq 0 ] && [ -n %q ]; then\n' "$CONTENT_HASH"
-        printf '    printf "%%s\\n" %q > %q\n' "$CONTENT_HASH" "$UNIT_CACHE"
-        printf 'else\n'
-        printf '    rm -f %q\n' "$UNIT_CACHE"
-        printf 'fi\n'
-    } > "$UNIT_RUN_DIR/finish.sh"
-
-    # UNIT_OUT is the output area of the `elspais-unit` target. The tier writes
-    # its results, coverage and fingerprint there. `elspais checks` reads these
-    # results as fresh until an input changes. If a later commit has an
-    # unchanged tree, then the hook skips the run. The results stay fresh.
-    UNIT_OUT="$REPO_ROOT/.results/elspais-unit"
-    UNIT_RC=$(tier_execute "$UNIT_RUN_DIR" "$CONTENT_HASH" "$REPO_ROOT" "unit" \
-        "$UNIT_RUN_DIR/finish.sh" \
-        "$REPO_ROOT/.githooks/with-fingerprint" elspais-unit \
-        "$REPO_ROOT/.githooks/run-unit-tier" "$UNIT_OUT")
-
-    if [ "$UNIT_RC" = "137" ]; then
-        echo ""
-        echo -e "${RED}The test run ended without recording a verdict.${NC}"
-        echo "Its output is in $UNIT_RUN_DIR/log. Commit again to re-run;"
-        echo "a run still in progress will be waited on rather than duplicated."
-        exit 1
-    fi
-
-    if [ "$UNIT_RC" != "0" ]; then
-        echo ""
-        echo -e "${RED}Tests failed!${NC}"
-        echo "Fix the errors above before committing."
-        echo ""
-        echo "To bypass this check (NOT RECOMMENDED):"
-        echo "  git commit --no-verify"
-        exit 1
-    fi
-
-    echo -e "${GREEN}Tests passed!${NC}"
     echo ""
 fi
 

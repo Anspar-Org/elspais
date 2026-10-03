@@ -1,0 +1,115 @@
+#!/bin/bash
+# =====================================================
+# unit-verdict: the one authority for the cached unit verdict
+# =====================================================
+#
+# Runs the unit tier and records the verdict in .results/.test-cache-unit,
+# keyed on the staged tree (git write-tree). pre-commit calls it for every
+# commit except a checkpoint (ELSPAIS_CHECKPOINT=1). pre-push calls it for
+# the tree it pushes, so a checkpoint's skipped tier runs before anything
+# leaves the machine. Running this script before `git push` moves the tier
+# out of the push, where a long run otherwise overruns the remote's idle
+# timeout.
+#
+# A verdict already recorded for the same tree is honored without
+# re-running. Re-run it with ELSPAIS_UNIT_FORCE=1. The verdict is written
+# only by a real run -- never pre-write it.
+
+set -e
+
+# Git sets these when it invokes a hook. Left set, they make the git commands
+# inside the tests operate on this repository instead of their temporary ones.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+unset GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_AUTHOR_DATE
+unset GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL GIT_COMMITTER_DATE
+
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT"
+
+# The tier means this tree's pytest and this tree's elspais.
+if [ -d "$REPO_ROOT/.venv/bin" ]; then
+    PATH="$REPO_ROOT/.venv/bin:$PATH"
+    export PATH
+fi
+
+# The tier imports the working tree, while the key names the staged tree.
+# Unstaged changes in src/ or tests/ would certify a tree that was not tested.
+UNSTAGED=$(git diff --name-only -- src tests)
+if [ -n "$UNSTAGED" ]; then
+    echo -e "${RED}ERROR: Unstaged changes in src/ or tests/; the unit verdict would describe another tree:${NC}"
+    printf '  %s\n' $UNSTAGED
+    echo "Stage them (git add) or set them aside, then run again."
+    exit 1
+fi
+
+CACHE_DIR="$REPO_ROOT/.results"
+UNIT_CACHE="$CACHE_DIR/.test-cache-unit"
+mkdir -p "$CACHE_DIR"
+
+# Killing this script must not kill the tier it started — see the library.
+. "$REPO_ROOT/.githooks/lib-tier-run.sh"
+
+# An empty hash (write-tree failure) must never be used as a cache key: a
+# recorded "" would match the next failure's "" and skip tests forever.
+CONTENT_HASH=$(git write-tree 2>/dev/null | head -c 40) || CONTENT_HASH=""
+if [ -z "$CONTENT_HASH" ]; then
+    echo -e "${YELLOW}WARNING: git write-tree produced no hash — test cache disabled for this run${NC}"
+fi
+
+if [ -z "${ELSPAIS_UNIT_FORCE:-}" ] && [ -n "$CONTENT_HASH" ] && [ -f "$UNIT_CACHE" ] \
+    && [ "$(cat "$UNIT_CACHE" 2>/dev/null)" = "$CONTENT_HASH" ]; then
+    echo -e "${GREEN}Unit tests cached — passed for this tree${NC}"
+    exit 0
+fi
+
+echo -e "${BLUE}Running unit/integration tests with coverage...${NC}"
+echo ""
+
+UNIT_RUN_DIR="$CACHE_DIR/run-unit"
+mkdir -p "$UNIT_RUN_DIR"
+
+# The verdict is recorded by the run itself, inside the detached session,
+# so a caller killed mid-tier still leaves the tree certified. Writing it
+# here instead would mean the timeout that kills the caller also discards a
+# pass the tier had already earned.
+{
+    printf '#!/bin/bash\n'
+    printf '# Records the unit verdict for the tree this run was started for.\n'
+    printf 'if [ "$1" -eq 0 ] && [ -n %q ]; then\n' "$CONTENT_HASH"
+    printf '    printf "%%s\\n" %q > %q\n' "$CONTENT_HASH" "$UNIT_CACHE"
+    printf 'else\n'
+    printf '    rm -f %q\n' "$UNIT_CACHE"
+    printf 'fi\n'
+} > "$UNIT_RUN_DIR/finish.sh"
+
+# UNIT_OUT is the output area of the `elspais-unit` target. The tier writes
+# its results, coverage and fingerprint there. `elspais checks` reads these
+# results as fresh until an input changes.
+UNIT_OUT="$REPO_ROOT/.results/elspais-unit"
+UNIT_RC=$(tier_execute "$UNIT_RUN_DIR" "$CONTENT_HASH" "$REPO_ROOT" "unit" \
+    "$UNIT_RUN_DIR/finish.sh" \
+    "$REPO_ROOT/.githooks/with-fingerprint" elspais-unit \
+    "$REPO_ROOT/.githooks/run-unit-tier" "$UNIT_OUT")
+
+if [ "$UNIT_RC" = "137" ]; then
+    echo ""
+    echo -e "${RED}The test run ended without recording a verdict.${NC}"
+    echo "Its output is in $UNIT_RUN_DIR/log. Run again to re-run;"
+    echo "a run still in progress will be waited on rather than duplicated."
+    exit 1
+fi
+
+if [ "$UNIT_RC" != "0" ]; then
+    echo ""
+    echo -e "${RED}Unit tests failed!${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}Unit tests passed!${NC}"
+exit 0
