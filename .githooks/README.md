@@ -122,8 +122,12 @@ in pre-commit instead.
 Install these tools for full hook functionality:
 
 ```bash
-# Python tools (via pip)
-pip install ruff pytest
+# This tree's venv, its editable elspais and the Python test tools -- ruff,
+# pytest, pytest-cov, pytest-xdist and the rest of the `dev` extra -- plus
+# the browser extra and chromium for the browser tests the e2e tier runs.
+# The hooks prefer .venv/bin, and the e2e tier refuses to run against an
+# elspais that does not import from this checkout.
+make setup
 
 # Markdown linting (via npm)
 npm install -g markdownlint-cli

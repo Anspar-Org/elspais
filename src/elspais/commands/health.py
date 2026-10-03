@@ -3777,15 +3777,6 @@ def run_checks(graph: FederatedGraph, config: dict[str, Any] | None = None) -> l
 # =============================================================================
 
 
-def _read_run_meta(config: dict | None) -> dict:
-    """Return test-run metadata defaults.
-
-    The run-metadata sidecar config source was removed in the greenfield
-    target-driven rework; this now always returns the defaults.
-    """
-    return {"deselected_count": 0, "runner": ""}
-
-
 # Implements: REQ-d00275-C
 def _configured_test_targets(graph: FederatedGraph, config: dict | None) -> list[tuple[str, Any]]:
     """``(repo name, target)`` for every federation member configuring one.
@@ -3837,8 +3828,6 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     from elspais.graph import NodeKind
 
     result_nodes = list(graph.nodes_by_kind(NodeKind.RESULT))
-    run_meta = _read_run_meta(config)
-    deselected = run_meta["deselected_count"]
 
     if not result_nodes:
         targets = _configured_test_targets(graph, config)
@@ -3890,7 +3879,6 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
 
     total = passed + failed + skipped
     pass_rate = (passed / total * 100) if total > 0 else 0
-    deselected_suffix = f", {deselected} deselected" if deselected else ""
 
     if failed > 0:
         # Implements: REQ-d00294-F
@@ -3923,7 +3911,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
             passed=False,
             message=(
                 f"Result failures: {failed} of {total} results failed "
-                f"({passed} passed, {skipped} skipped{deselected_suffix}, "
+                f"({passed} passed, {skipped} skipped, "
                 f"{pass_rate:.1f}% pass rate)"
             ),
             category="tests",
@@ -3932,7 +3920,6 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
                 "passed": passed,
                 "failed": failed,
                 "skipped": skipped,
-                "deselected": deselected,
                 "pass_rate": round(pass_rate, 1),
             },
             findings=findings,
@@ -3941,14 +3928,13 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     return HealthCheck(
         name="tests.results",
         passed=True,
-        message=f"All results passing: {passed} passed, {skipped} skipped{deselected_suffix}",
+        message=f"All results passing: {passed} passed, {skipped} skipped",
         category="tests",
         severity="info",
         details={
             "passed": passed,
             "failed": failed,
             "skipped": skipped,
-            "deselected": deselected,
             "pass_rate": round(pass_rate, 1),
         },
     )
