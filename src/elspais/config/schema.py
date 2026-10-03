@@ -663,7 +663,7 @@ CLASSNAME_FORMS = ("python-module", "source-file")
 # The sources a target may declare for the environment a result was recorded
 # in. "results-path" reads the part of the path that the wildcard in the
 # target's results glob matched; "suite-hostname" reads the `hostname`
-# attribute of the `<testsuite>` that holds the record.
+# attribute of the `<testsuite>` that holds the result record.
 ENVIRONMENT_SOURCES = ("results-path", "suite-hostname")
 
 
@@ -858,6 +858,25 @@ class TestScanningConfig(ScanningKindConfig):
                         f"description. Declared resources: {declared}"
                     )
         return self
+
+    # Implements: REQ-d00322-J
+    # evidence names the directory that holds the project's Evidence Snapshot,
+    # relative to the repository root. Empty names none.
+    evidence: str = ""
+
+    # Implements: REQ-d00322-J
+    @field_validator("evidence")
+    @classmethod
+    def _check_evidence(cls, v: str) -> str:
+        if not v.strip():
+            return ""
+        normalized = posixpath.normpath(v.strip().replace("\\", "/"))
+        if normalized in (".", "..") or normalized.startswith("../") or posixpath.isabs(normalized):
+            raise ValueError(
+                f"scanning.test.evidence {v!r} must name a directory inside the repository, "
+                f'relative to its root, such as "test-evidence"'
+            )
+        return normalized
 
     # Implements: REQ-d00283-F+G
     @model_validator(mode="after")

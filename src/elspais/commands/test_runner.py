@@ -40,19 +40,31 @@ class SelectionRefused(Exception):
     """A selection of targets that no run executes. The message names what to change."""
 
 
-# Implements: REQ-d00249-F+I, REQ-d00283-D+H+K+M+N+O
-def executable_selection(config: ElspaisConfig, selected: list[str]) -> set[str] | None:
+# Implements: REQ-d00249-F+I, REQ-d00283-D+H+K+M+N+O, REQ-d00322-A
+def executable_selection(
+    config: ElspaisConfig,
+    selected: list[str],
+    *,
+    require_command: bool = True,
+    flag: str = "--targets",
+) -> set[str] | None:
     """Resolve the ``--targets`` names of a run that executes targets.
 
     Both runs that execute targets call this function, the one that evaluates
     checks and the one that does not. Consequently, a name selects the same
-    targets in both, and both refuse the same selections.
+    targets in both, and both refuse the same selections. Writing an
+    *Evidence Snapshot* selects through it too, with *require_command*
+    false: it reads results another job may have produced, so a selected
+    target needs no command of its own.
+
+    *flag* is the option the names came from, so a refusal names it.
 
     Returns the selected target names, or ``None`` for every configured target.
 
     Raises:
         SelectionRefused: A name is neither a target nor a group, the
-            selection reaches no target, or no selected target has a command.
+            selection reaches no target, or (with *require_command*) no
+            selected target has a command.
     """
     from elspais.config import (
         empty_selection_refusal,
@@ -67,7 +79,7 @@ def executable_selection(config: ElspaisConfig, selected: list[str]) -> set[str]
     # Targets and groups share one namespace. The config reader keeps their
     # names apart (REQ-d00283-G). If a name is neither a target nor a group,
     # then the run refuses it and does not resolve it to nothing.
-    if refusal := unknown_target_refusal(config, selected):
+    if refusal := unknown_target_refusal(config, selected, flag=flag):
         raise SelectionRefused(refusal)
     if refusal := empty_selection_refusal(config, selected, executes=True):
         raise SelectionRefused(refusal)
@@ -78,7 +90,7 @@ def executable_selection(config: ElspaisConfig, selected: list[str]) -> set[str]
         only = selected_targets(config, selected or None)
     except ValueError as exc:
         raise SelectionRefused(str(exc)) from exc
-    if not any(
+    if require_command and not any(
         t.command and (only is None or t.name in only) for t in config.scanning.test.targets
     ):
         raise SelectionRefused(
@@ -89,6 +101,107 @@ def executable_selection(config: ElspaisConfig, selected: list[str]) -> set[str]
             "See docs/cli/test-targets.md for configuration examples."
         )
     return only
+
+
+@dataclass(frozen=True)
+class TargetRun:
+    """The targets of one federation member that a run executes, and where."""
+
+    namespace: str
+    config: ElspaisConfig
+    raw_config: dict[str, Any] | None
+    repo_root: Path
+    only: set[str] | None
+    # Whether the targets belong to the invoking repository, whose targets a
+    # reader names without a namespace.
+    is_root: bool = True
+
+    def spell(self, name: str) -> str:
+        """Name *name* as the reader would select it."""
+        from elspais.commands._targets import qualified_target
+
+        return name if self.is_root else qualified_target(self.namespace, name)
+
+
+# Implements: REQ-d00249-N, REQ-d00283-D+H+K
+def plan_target_runs(
+    config: ElspaisConfig,
+    repo_root: Path,
+    selected: list[str],
+    *,
+    raw_config: dict[str, Any] | None = None,
+    require_command: bool = True,
+) -> list[TargetRun]:
+    """Resolve a run's ``--targets`` names into one run per federation member.
+
+    A bare name, and a run naming nothing, select the invoking repository's
+    targets through :func:`executable_selection`. A name written after a
+    member's namespace and ``:`` selects that member's target or group,
+    resolved by that member's own declarations. Only such a name reaches a
+    member, because running a member's target executes a command that the
+    member's configuration declares. Each run carries its member's
+    configuration and repository root, so its targets execute there and write
+    into that member's output area.
+
+    *config* is the invoking repository's validated configuration and
+    *raw_config* the document it was validated from, where the caller holds
+    it: a run that builds a graph of the repository it selects needs it.
+
+    Raises:
+        SelectionRefused: A name is unknown to the member it names, names a
+            namespace no member declares, or a member's selection is refused
+            by :func:`executable_selection`.
+    """
+    from elspais.commands._targets import (
+        federation_members,
+        split_by_member,
+        unknown_namespace_refusal,
+    )
+
+    root_cfg = config
+    root_ns = root_cfg.project.namespace
+    wanted = [n for n in (x.strip() for x in selected) if n]
+    try:
+        by_member = split_by_member(wanted, root_ns, flag="--targets")
+        members = (
+            federation_members(raw_config or root_cfg, root_cfg, repo_root, flag="--targets")
+            if set(by_member) - {root_ns}
+            else {}
+        )
+    except ValueError as exc:
+        raise SelectionRefused(str(exc)) from exc
+
+    runs: list[TargetRun] = []
+    if not wanted or root_ns in by_member:
+        only = executable_selection(
+            root_cfg, by_member.get(root_ns, []), require_command=require_command
+        )
+        runs.append(TargetRun(root_ns, root_cfg, raw_config, repo_root, only))
+    for namespace, names in by_member.items():
+        if namespace == root_ns:
+            continue
+        member = members.get(namespace)
+        if member is None:
+            raise SelectionRefused(
+                unknown_namespace_refusal(namespace, names, members, flag="--targets")
+            )
+        only = executable_selection(
+            member.config,
+            names,
+            require_command=require_command,
+            flag=f"--targets (member {namespace})",
+        )
+        runs.append(
+            TargetRun(
+                namespace,
+                member.config,
+                member.raw_config,
+                member.repo_root,
+                only,
+                is_root=False,
+            )
+        )
+    return runs
 
 
 # Implements: REQ-d00249-K

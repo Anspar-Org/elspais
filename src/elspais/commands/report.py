@@ -123,7 +123,7 @@ def shared_parser() -> argparse.ArgumentParser:
         "--treat-active", nargs="*", action="extend", default=None, dest="treat_active"
     )
     # Trace-specific shared flags
-    parser.add_argument("--preset", choices=["minimal", "standard", "full"])
+    parser.add_argument("--preset", choices=["minimal", "standard", "full", "evidence"])
     parser.add_argument("--body", action="store_true")
     parser.add_argument("--assertions", dest="show_assertions", action="store_true")
     parser.add_argument("--tests", dest="show_tests", action="store_true")

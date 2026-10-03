@@ -42,7 +42,7 @@ be decided from the tree alone happens here, once per commit.
 | Python quality | `ruff check` and `ruff format --check` on `src/ tests/` | `ruff` |
 | Markdown linting | markdownlint on changed `.md` files | `markdownlint` |
 | Index regeneration | `elspais fix`, staging what it regenerates | `elspais` |
-| Unit tests | `run-unit-tier`, in parallel with per-test coverage, cached by tree hash | `pytest`, `pytest-cov`, `pytest-xdist` |
+| Unit tests | `unit-verdict`, running `run-unit-tier` in parallel with per-test coverage, cached by tree hash; deferred on a checkpoint commit | `pytest`, `pytest-cov`, `pytest-xdist` |
 
 The index step resolves this tree's `elspais` rather than whichever one is on
 `PATH`: a different version rewrites hashes across spec files the commit never
@@ -66,6 +66,12 @@ tree they ran against, so `elspais checks` reads them as fresh until an input
 changes -- including after a later commit skips the run because the tree is
 unchanged. The e2e tier does the same for `elspais-e2e`.
 
+A checkpoint commit, `ELSPAIS_CHECKPOINT=1 git commit ...`, runs every gate in
+this table except the unit tier. It records no unit verdict for its tree.
+Consequently, pre-push runs the tier for the tree it pushes. Use a checkpoint
+as a safety net for an intermediate commit on a branch that is squash-merged:
+only the pushed tree reaches review, so only the pushed tree needs a verdict.
+
 ### pre-push
 
 Runs before pushing, with PR-aware blocking behavior:
@@ -77,6 +83,7 @@ Runs before pushing, with PR-aware blocking behavior:
 | --- | --- | --- |
 | Branch freshness | Fetches `origin/main`; auto-bumps the version if it matches main's | - |
 | PR detection | Decides whether failures block or warn | `gh` (optional) |
+| Unit tests | `unit-verdict` for the pushed tree; runs the tier where no commit earned a verdict for that tree | `pytest`, `pytest-cov`, `pytest-xdist` |
 | E2E tests | `e2e-verdict`, running `run-e2e-tier`; cached by tree hash and CLI environment | `pytest`, `pytest-xdist` |
 | Secret detection | Scans for leaked secrets | `gitleaks` |
 | Doc sync tests | `pytest tests/test_doc_sync.py` | `pytest` |
@@ -109,9 +116,12 @@ count comes from `test-workers`. CI's `e2e-test` job runs `run-e2e-tier` too.
 **Why this list is short.** Nothing that pre-commit already gates is repeated
 here. You cannot push what you have not committed, so every commit in a push
 has already passed lint, formatting, markdown, index regeneration and the unit
-tier. Pre-push runs only what pre-commit cannot: checks that are too expensive
-to pay per commit (the e2e tier), and checks whose answer is not knowable at
-commit time because it depends on the remote (branch freshness, PR state).
+tier, except a checkpoint commit, which deferred the unit tier. Pre-push runs
+only what pre-commit cannot or did not: the unit tier for a pushed tree that no
+commit verified, checks that are too expensive to pay per commit (the e2e
+tier), and checks whose answer is not knowable at commit time because it
+depends on the remote (branch freshness, PR state). A pushed tree that a full
+commit already verified is a cache hit, so the unit stage then costs nothing.
 
 Re-running the rest would cost minutes per push to re-derive answers already
 in hand. If you are tempted to add a check here, first ask whether it belongs

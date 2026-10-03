@@ -1,4 +1,4 @@
-# Verifies: REQ-d00254-E
+# Verifies: REQ-d00254-E, REQ-d00322-M
 """flutter test --machine parser yields RESULT records with real paths."""
 
 from pathlib import Path
@@ -21,6 +21,7 @@ def test_real_path_from_suite():
         "classname",
         "status",
         "duration",
+        "output",
         "message",
         "source_path",
         "test_id",

@@ -97,7 +97,7 @@ def _disclose_graph_predates(predates: list[str]) -> None:
 
 
 def _build_daemon_source(info: dict) -> dict[str, Any]:
-    """Build graph_source dict from the record of the server that answered."""
+    """Build graph_source dict from the daemon record of the server that answered."""
     source: dict[str, Any] = {
         "port": info["port"],
         "type": info.get("type", "daemon"),
@@ -128,8 +128,8 @@ def _try_daemon(
         return None
 
     # 1. Try existing server (viewer or daemon — both use daemon.json)
-    record = _get_daemon_record()
-    if record:
+    daemon_record = _get_daemon_record()
+    if daemon_record:
         # A server that has committed to stopping still answers and still
         # refuses everything, so it is replaced rather than reused — and
         # only once it has actually gone, since a second process for one
@@ -145,9 +145,9 @@ def _try_daemon(
         if daemon_is_stopping(outgoing):
             if not replace_stopping_daemon(repo_root, outgoing):
                 return None
-            record = None
+            daemon_record = None
 
-    if record:
+    if daemon_record:
         # Implements: REQ-p00004-J, REQ-p00015-G, REQ-o00076-I, REQ-o00076-J
         # What differs, and whether a difference may be acted on, are both
         # asked through the one authority in mcp/daemon.py, which
@@ -181,12 +181,12 @@ def _try_daemon(
                 from elspais.mcp.daemon import stop_daemon
 
                 stop_daemon(repo_root)
-                record = None
+                daemon_record = None
 
-        if record:
-            result = _try_server(record, endpoint, params, "GET")
+        if daemon_record:
+            result = _try_server(daemon_record, endpoint, params, "GET")
             if result is not None:
-                source = _build_daemon_source(record)
+                source = _build_daemon_source(daemon_record)
                 if difference.version:
                     from elspais import __version__
 
@@ -205,14 +205,14 @@ def _try_daemon(
         from elspais.mcp.daemon import ensure_daemon
 
         ensure_daemon(repo_root)
-        # The record, not the port ensure_daemon returns: the record is
-        # what says where the server answers.
-        record = _get_daemon_record()
-        if record is None:
+        # The daemon record, not the port ensure_daemon returns: the daemon
+        # record is what says where the server answers.
+        daemon_record = _get_daemon_record()
+        if daemon_record is None:
             return None
-        result = _try_server(record, endpoint, params, "GET")
+        result = _try_server(daemon_record, endpoint, params, "GET")
         if result is not None:
-            source = _build_daemon_source(record)
+            source = _build_daemon_source(daemon_record)
             return result, source
     except Exception:
         pass

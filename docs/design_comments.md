@@ -4,7 +4,7 @@
 
 Allow reviewers to annotate requirements, assertions, relationships, and body sections
 with threaded comments during the review process. Comments are persisted through git,
-providing an auditable record of review activity alongside specification changes.
+providing an auditable trail of review activity alongside specification changes.
 
 ## Scope
 

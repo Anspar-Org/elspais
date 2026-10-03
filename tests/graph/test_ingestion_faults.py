@@ -825,12 +825,12 @@ coverage = "coverage.json"
 def _start_unfinished_run(project: Path) -> dict:
     """Begin a run of `unit`, write its results and coverage, and record no end."""
     from elspais.config import load_config
-    from elspais.utilities.fingerprint import read_record, start_run
+    from elspais.utilities.fingerprint import read_fingerprint, start_run
 
     folder = start_run(project, load_config(project / ".elspais.toml"), "unit")
     (folder / "junit.xml").write_text(_GOOD_JUNIT, encoding="utf-8")
     (folder / "coverage.json").write_text('{"files": {}}', encoding="utf-8")
-    return read_record(folder)
+    return read_fingerprint(folder)
 
 
 # Verifies: REQ-d00311-N+O
@@ -841,8 +841,8 @@ def test_an_unfinished_run_is_recorded_as_running_and_nothing_in_its_area_is_rea
     from elspais.graph.GraphNode import NodeKind
 
     project = _project(tmp_path, _RUNNING_TARGET)
-    record = _start_unfinished_run(project)
-    assert record["started_at"]
+    fingerprint = _start_unfinished_run(project)
+    assert fingerprint["started_at"]
 
     graph = _build(project)
 
@@ -854,14 +854,14 @@ def test_an_unfinished_run_is_recorded_as_running_and_nothing_in_its_area_is_rea
             artifact="coverage",
             path=".results/unit/coverage.json",
             reason="running",
-            started_at=record["started_at"],
+            started_at=fingerprint["started_at"],
         ),
         UnreadArtifact(
             target="unit",
             artifact="results",
             path=".results/unit/junit.xml",
             reason="running",
-            started_at=record["started_at"],
+            started_at=fingerprint["started_at"],
         ),
     ]
 
@@ -884,9 +884,9 @@ def test_a_finished_run_is_read_as_it_always_was(tmp_path):
 
 
 # Verifies: REQ-d00311-N
-def test_output_this_invocation_captured_is_read_though_the_record_shows_no_end(tmp_path):
+def test_output_this_invocation_captured_is_read_though_the_fingerprint_shows_no_end(tmp_path):
     """Output a runner handed this invocation comes from a run that has ended,
-    whatever the record in its area says."""
+    whatever the fingerprint in its area says."""
     from elspais.config import load_config
     from elspais.graph.GraphNode import NodeKind
     from elspais.utilities.fingerprint import start_run

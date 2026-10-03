@@ -30,8 +30,8 @@ def run(args: argparse.Namespace) -> int:
             folder = start_run(repo_root, config, args.target)
             print(folder)
         else:
-            record = finish_run(repo_root, config, args.target)
-            changed = record.get("changed_during_run") or []
+            fingerprint = finish_run(repo_root, config, args.target)
+            changed = fingerprint.get("changed_during_run") or []
             if changed:
                 print(
                     f"target {args.target}: inputs changed while it ran: "

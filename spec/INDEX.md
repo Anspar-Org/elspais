@@ -18,7 +18,7 @@
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-features.md | 185217a3 |
 | REQ-p00013 | End-to-End Tests Exercise the Installed Command  | prd-core.md     | 1b5c65b2 |
 | REQ-p00014 | Satisfies Relationship                           | prd-features.md | ca4892c1 |
-| REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 1ad561d2 |
+| REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 0871b750 |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
 | REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | bc9e593e |
 | REQ-p00018 | Compiled Risk Register                           | prd-core.md     | 0f0438e9 |
@@ -29,7 +29,7 @@
 | REQ-p00080 | Spec-to-PDF Compilation                          | prd-core.md     | 3296bc86 |
 | REQ-p00081 | Org-Wide Requirement Visibility                  | prd-features.md | 17fa4417 |
 | REQ-p00082 | Federated Authority and Verdict Scoping          | prd-features.md | b511fcfd |
-| REQ-p00083 | Durability of Uncommitted Work                   | prd-core.md     | 80cf3ca1 |
+| REQ-p00083 | Durability of Uncommitted Work                   | prd-core.md     | 20bc3a51 |
 | REQ-p00084 | Audience-Scoped Reporting                        | prd-core.md     | 168b514c |
 | REQ-p00085 | Report Configuration Disclosure                  | prd-core.md     | 35994055 |
 
@@ -66,7 +66,7 @@
 | REQ-o00071 | MCP Discover Requirements Tool                    | ops-mcp.md          | 128366d2 |
 | REQ-o00072 | Domain Deserialization Layer                      | ops-architecture.md | 53789928 |
 | REQ-o00073 | MCP Org-Wide Context                              | ops-mcp.md          | 346f3031 |
-| REQ-o00074 | Background Daemon Lifetime                        | ops-mcp.md          | fb36047e |
+| REQ-o00074 | Background Daemon Lifetime                        | ops-mcp.md          | fe168c0e |
 | REQ-o00075 | Shared Graph Daemon                               | ops-mcp.md          | 2598192d |
 | REQ-o00076 | Reaching the Serving Process                      | ops-mcp.md          | 85f1f1a5 |
 | REQ-o00077 | Serving From the Installed Program                | ops-mcp.md          | 3488ba9c |
@@ -105,7 +105,7 @@
 | REQ-d00079 | Discover Requirements Implementation                          | dev-mcp-tools.md        | 564cb7c6 |
 | REQ-d00080 | Diagnostic Command Exit Code Contract                         | dev-cli.md              | acc2aa77 |
 | REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | 6d66ba55 |
-| REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | edbd5d9a |
+| REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | dea1ce9b |
 | REQ-d00084 | Trace Command                                                 | dev-cli.md              | 5728e809 |
 | REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | fa6d7cdf |
 | REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 515f0165 |
@@ -148,7 +148,7 @@
 | REQ-d00225 | CLI Registration for Glossary and Term Index                  | prd-core.md             | 2b8a5235 |
 | REQ-d00226 | Comment Data Models                                           | prd-features.md         | 6d420b96 |
 | REQ-d00227 | Comment Index                                                 | prd-features.md         | 6ca252cb |
-| REQ-d00228 | Comment JSONL Storage                                         | prd-features.md         | 7415991a |
+| REQ-d00228 | Comment JSONL Storage                                         | prd-features.md         | c3b024cf |
 | REQ-d00229 | Comment Promotion Engine                                      | prd-features.md         | ec366878 |
 | REQ-d00230 | Comment Graph Integration                                     | prd-features.md         | 1eb4899c |
 | REQ-d00231 | Comment API Endpoints                                         | prd-features.md         | 15c0e4d6 |
@@ -169,12 +169,12 @@
 | REQ-d00246 | Markdown Emphasis Normalization Utility                       | prd-core.md             | 6db4d559 |
 | REQ-d00247 | Fenced Code Block Preservation                                | prd-core.md             | 499a4ce4 |
 | REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | 99bb6d77 |
-| REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 3a252869 |
+| REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 9e2255c3 |
 | REQ-d00250 | Section Header Depth Canonicalization                         | dev-graph-core.md       | 48fc2f11 |
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | b49bd5ee |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 3b102d6f |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | 8360f2f4 |
-| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | b9bda3b5 |
+| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | ec793007 |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 1ea68210 |
@@ -213,21 +213,22 @@
 | REQ-d00291 | Coverage Inclusion                                            | dev-graph-core.md       | 13bc6949 |
 | REQ-d00292 | Viewer Coverage Presentation                                  | dev-graph-core.md       | db9415cd |
 | REQ-d00293 | Configurable Viewer Presentation                              | dev-graph-core.md       | 31848b5c |
-| REQ-d00294 | A Result Is Its Own Record                                    | dev-graph-core.md       | d3e70367 |
+| REQ-d00294 | Each Result Record Is a Result of Its Own                     | dev-graph-core.md       | cd9ff4c9 |
 | REQ-d00295 | Viewer Served Under a Configured Prefix                       | dev-traceview-review.md | ae94b103 |
 | REQ-d00296 | Request Identity From a Trusted Proxy                         | prd-features.md         | fe4f3620 |
 | REQ-d00297 | Opening a Pull Request From the Viewer                        | prd-core.md             | 006e3f69 |
 | REQ-d00298 | Report Export                                                 | dev-cli.md              | 8c1b78eb |
 | REQ-d00299 | Configuration as Graph Content                                | dev-graph-config.md     | 0577c0a5 |
 | REQ-d00300 | Viewer Remembered State                                       | dev-traceview-review.md | f794104b |
-| REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | 4fe7db4a |
+| REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | 4a31d912 |
 | REQ-d00312 | Test Target Output Areas                                      | dev-graph-core.md       | a0788b2a |
-| REQ-d00313 | Served Graph Currency                                         | dev-traceview-review.md | e791c1a1 |
+| REQ-d00313 | Served Graph Currency                                         | dev-traceview-review.md | 8822f2a7 |
 | REQ-d00314 | Concurrent Test Target Runs                                   | dev-graph-core.md       | 228b3b98 |
 | REQ-d00315 | Stale-Only Test Target Runs                                   | dev-graph-core.md       | 890ea4b2 |
 | REQ-d00316 | Record of the Test Targets a Run Executed                     | dev-graph-core.md       | c5639977 |
 | REQ-d00320 | Viewer Edit Controls State What They Do                       | dev-traceview-review.md | e8010396 |
 | REQ-d00321 | Static View Embedded Content                                  | dev-traceview-review.md | 736babc4 |
+| REQ-d00322 | Evidence Snapshot                                             | dev-graph-core.md       | 5885653b |
 
 ## User Journeys
 

@@ -1025,7 +1025,7 @@ class TestServedGraphCurrency:
     # Verifies: REQ-d00313-D
     def test_writes_during_a_run_count_only_when_the_run_records_its_end(self, tmp_path):
         from elspais.config import load_config
-        from elspais.utilities.fingerprint import RECORD_NAME, finish_run, start_run
+        from elspais.utilities.fingerprint import FINGERPRINT_NAME, finish_run, start_run
 
         root = self._repo(tmp_path)
         config = load_config(root / ".elspais.toml")
@@ -1041,24 +1041,43 @@ class TestServedGraphCurrency:
         finish_run(root, config, "unit")
 
         changed = state.changed_files()
-        assert RECORD_NAME in {p.name for p in changed}
+        assert FINGERPRINT_NAME in {p.name for p in changed}
         state._last_stale_check = 0.0
         assert state.ensure_fresh() is True
         assert self._results_read(state)
 
     # Verifies: REQ-d00313-D
     def test_starting_a_run_is_a_change(self, tmp_path):
-        """The record changes when a run starts, and that says the area's
+        """The fingerprint changes when a run starts, and that says the area's
         content is about to go."""
         from elspais.config import load_config
-        from elspais.utilities.fingerprint import RECORD_NAME, start_run
+        from elspais.utilities.fingerprint import FINGERPRINT_NAME, start_run
 
         root = self._repo(tmp_path)
         state = self._state(root)
 
         start_run(root, load_config(root / ".elspais.toml"), "unit")
 
-        assert [p.name for p in state.changed_files()] == [RECORD_NAME]
+        assert [p.name for p in state.changed_files()] == [FINGERPRINT_NAME]
+
+    # Verifies: REQ-d00313-A
+    def test_writing_the_evidence_snapshot_makes_the_graph_stale(self, tmp_path):
+        """A member naming an Evidence Snapshot reads its results from it, so
+        a snapshot arriving after the build is a file the graph predates."""
+        config = _TARGET_CONFIG.replace(
+            "[scanning.test]\nenabled = true\n",
+            '[scanning.test]\nenabled = true\nevidence = "test-evidence"\n',
+        )
+        assert config != _TARGET_CONFIG
+        root = self._repo(tmp_path, config)
+        state = self._state(root)
+        assert not state.is_stale()
+
+        evidence = root / "test-evidence"
+        evidence.mkdir()
+        (evidence / "results.jsonl").write_text("")
+
+        assert [p.name for p in state.changed_files()] == ["results.jsonl"]
 
     # Verifies: REQ-d00313-A, REQ-p00004-J
     def test_creating_the_configuration_overlay_makes_the_graph_stale(self, tmp_path):

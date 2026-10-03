@@ -875,7 +875,7 @@ def tested_and_passing(metrics: RollupMetrics) -> CoverageDimension:
     wrote. ``lcov_tested`` remains its own dimension, reported beside these
     (REQ-d00254-B).
 
-    A failing *Assertion* contributes to no measure here, and the record that
+    A failing *Assertion* contributes to no measure here, and the fact that
     it failed survives in ``failing_labels`` -- which is what a per-*Assertion*
     standing reads first (REQ-d00292-D), so it still renders under its own
     standing rather than disappearing.

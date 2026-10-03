@@ -137,7 +137,7 @@ Together, these mechanisms support:
 
 **Dependency-change review.** A requirement's references make it dependent on content it does not own: an `Implements:` or `Refines:` target, a `Satisfies:` template subtree, an `Integrates:` target in an associate repository. When that content changes, the referencing requirement's claim may no longer hold, so the requirement is flagged for review at the granularity its reference declares — a reference naming an assertion is sensitive to that assertion alone; a reference naming a whole requirement is sensitive to the requirement. A review flag records a human obligation: only an explicit review action discharges it. Automated fixing (hash regeneration, `elspais fix`) never discharges one — a flag the tool can acknowledge to itself is noise, not audit evidence. And when the referenced source cannot be consulted at all (an associate repository not checked out, for example), the honest verdict is "cannot verify", never "unchanged"; treating absence as stability is the same silent-omission defect REQ-p00015 guards against in reporting. One candidate mechanism (proposed, not obligated): store beside each reference a bounded record of the target's content hash plus a one-level subtree summary hash, compared at build time. Assertion G formerly stated this obligation for `Satisfies:` references only; assertion K generalizes it to all reference kinds, and G is superseded so a single obligation family governs.
 
-**Reloading and the change-detection state.** Change detection compares the content the tool holds against the content on disk, so it depends on records of what the tool last read — a snapshot of the scanned files, a fingerprint of the configuration a long-running server was started with. A reload replaces the held content; a reload that does not also bring those records forward leaves the tool believing it is behind when it is current, and the cost is real work done twice or a running server discarded and restarted for nothing. The obligation is on reloading as such, not on any one surface that offers it: a reload reached through a request, through an agent tool, or through automatic freshness detection leaves the same state behind it.
+**Reloading and the change-detection state.** Change detection compares the content the tool holds against the content on disk, so it depends on the change-detection state, which says what the tool last read — a snapshot of the scanned files, a fingerprint of the configuration a long-running server was started with. A reload replaces the held content; a reload that does not also bring that state forward leaves the tool believing it is behind when it is current, and the cost is real work done twice or a running server discarded and restarted for nothing. The obligation is on reloading as such, not on any one surface that offers it: a reload reached through a request, through an agent tool, or through automatic freshness detection leaves the same state behind it.
 
 **Change reasons.** An audit trail answers *why* a requirement changed, not only *what* changed. Changes arrive through multiple editing surfaces; where the audit record requires a reason, every surface must be able to carry one. The obligation falls on each surface to gain the capability — never on the set of supported surfaces to shrink to those that already can.
 
@@ -175,6 +175,8 @@ O. When the tool reloads the graph from disk, the tool SHALL bring the change-de
 
 ## Changelog
 
+- 2026-10-02 | 1a49b829 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the change-detection state without the word record
 - 2026-09-19 | 1a49b829 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-19 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-105: F states the hand-back obligation for work that cannot be fast-forwarded, so one obligation governs the pull
 - 2026-08-24 | 1042856d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -338,7 +340,7 @@ D. If content, repositories, or requested changes are absent from the graph with
 
 E. When the tool serves a value derived from source content that has changed since the value was computed, the tool SHALL serve a value recomputed from the current content or mark the served value as stale.
 
-F. The tool SHALL record a change as applied only when the change is present at the destination the record names.
+F. The tool SHALL log a change as applied only when the change is present at the destination that the log entry names.
 
 G. While the tool serves answers computed from a configuration that no longer matches the configuration on disk, the tool SHALL disclose that the answers reflect a superseded configuration.
 
@@ -346,6 +348,8 @@ H. The tool SHALL NOT read content the ignore configuration excludes.
 
 ## Changelog
 
+- 2026-10-02 | 0871b750 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: F names the log entry that states a change as applied (F)
 - 2026-09-16 | 1ad561d2 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-16 | dc7033bf | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-16 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: state the boundary of A -- content the ignore configuration excludes is not read, so its absence is not an omission A obliges the tool to report
@@ -354,7 +358,7 @@ H. The tool SHALL NOT read content the ignore configuration excludes.
 - 2026-07-31 | 9aa9a8aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-10: author completeness/freshness invariant (merges GI-1 silent omission and GI-2 silent staleness)
 
-*End* *Complete and Current Reporting* | **Hash**: 1ad561d2
+*End* *Complete and Current Reporting* | **Hash**: 0871b750
 ---
 
 # REQ-p00017: Reference Integrity Under Mutation
@@ -1045,7 +1049,7 @@ Assertion A binds only where the tool is still executing at the moment the work 
 
 Assertion F is bounded to what an account written before the fact it records can honestly contain: that work was held and not written. Building it to seem capable of more would mean keeping every change as it is made, which is the larger obligation named above and is not this one. What assertion F buys is that a loss is known to have happened; a user told nothing concludes nothing was lost.
 
-Assertions B and G are a pair. "Only the work that existed when the instruction was given" is achievable only if no further work can arrive after the instruction, so the refusal in G is what makes B's scope true rather than approximately true. Assertion H bounds the disclosure so it does not become permanent noise: once the affected content has been persisted at a request, the record describes a state that no longer stands, and a notice that never retires is one nobody reads.
+Assertions B and G are a pair. "Only the work that existed when the instruction was given" is achievable only if no further work can arrive after the instruction, so the refusal in G is what makes B's scope true rather than approximately true. Assertion H bounds the disclosure so it does not become permanent noise: once the affected content has been persisted at a request, the *Automatic Save Record* describes a state that no longer stands, and a notice that never retires is one nobody reads.
 
 ## Assertions
 
@@ -1053,7 +1057,7 @@ A. Whenever the tool executes the ending of a process holding work that has been
 
 B. An instruction to discard applied work SHALL be honoured, and SHALL cover only the work that existed when the instruction was given.
 
-C. Where the tool persists work under assertion A, it SHALL record that it did so on its own initiative rather than at a request, and SHALL disclose that record to the next party that works with the affected content.
+C. Where the tool persists work under assertion A, it SHALL make an *Automatic Save Record* that states it did so on its own initiative rather than at a request, and SHALL disclose that *Automatic Save Record* to the next party that works with the affected content.
 
 D. If the tool cannot persist work it holds under assertion A, it SHALL report the failure and retain the work rather than discarding it.
 
@@ -1063,14 +1067,16 @@ F. When work is lost to an ending the tool does not execute, the tool SHALL disc
 
 G. The tool SHALL NOT accept work into a process that has already decided to end, and SHALL report the refusal to whoever offered it.
 
-H. A record disclosed under assertion C SHALL be retired once the affected content has been persisted at a party's own request, so that what the tool discloses describes a state that still stands.
+H. An *Automatic Save Record* disclosed under assertion C SHALL be retired once the affected content has been persisted at a party's own request, so that what the tool discloses describes a state that still stands.
 
 ## Changelog
 
+- 2026-10-02 | 20bc3a51 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the automatic save record with the Defined Term Automatic Save Record (C, H)
 - 2026-08-08 | 80cf3ca1 | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author uncommitted-work durability invariants
 - 2026-08-08 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author uncommitted-work durability invariants
 
-*End* *Durability of Uncommitted Work* | **Hash**: 80cf3ca1
+*End* *Durability of Uncommitted Work* | **Hash**: 20bc3a51
 
 ## REQ-d00297: Opening a Pull Request From the Viewer
 

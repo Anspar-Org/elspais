@@ -17,6 +17,7 @@ Complete reference for all elspais commands.
 | `search` | Reports | Search requirements by keyword |
 | `test` | Reports | Execute test targets and record their results, evaluating no check |
 | `fingerprint` | Reports | Record the fingerprint of a test run elspais did not execute |
+| `evidence` | Reports | Write or verify the Evidence Snapshot: one test run's results, bound to the tree |
 | `gaps` | Gaps & Issues | List which requirements fall short of each coverage dimension |
 | `uncovered` | Gaps & Issues | List requirements without code coverage |
 | `untested` | Gaps & Issues | List requirements without test coverage |
@@ -215,6 +216,48 @@ refuses a `finish` that no `start` began, with exit 1. The reason is that
 `start` empties the folder. Without `start`, the results that an earlier run
 left there would carry the fingerprint of this run. An unknown target name exits 2. See
 `elspais docs test-targets`, *Target Folders and Fresh Results*.
+
+## evidence
+
+Write or verify the *Evidence Snapshot*: the normalized results of one test
+run of one tree, stored in the repository with the traceability report
+derived from it. `[scanning.test] evidence` names its directory.
+
+  $ elspais test                                    # run the targets
+  $ elspais evidence write --fact backends=vm       # store their results
+  $ elspais evidence verify --run --fact backends=vm  # CI: run again, compare
+
+`write` derives the snapshot from the selected targets' own results and
+writes `results.jsonl`, `snapshot.json`, `timings.jsonl` and
+`TRACEABILITY.md` into that directory. The report is rendered from the
+snapshot and the specification alone. A target whose results are absent,
+stale or still being written is refused by name (exit 2). A tree that holds
+uncommitted or untracked changes is named on stderr, and the snapshot is
+still written, but it then matches no commit.
+
+`verify` derives the same snapshot in memory and compares it with the one
+in the directory. It lists each test whose outcome differs, each result on
+one side only, a tree that differs, a declared fact or a target that
+differs, and a report that differs. Durations and printed output are never
+compared.
+
+  `--targets T...`     The targets or groups to hold. The selection and its
+                       refusals are those of `checks --run-tests`. A target
+                       with no command is accepted when another job left
+                       its results in the target's folder. `NAMESPACE:NAME`
+                       selects a federation member's targets, and the
+                       command then writes or verifies that member's
+                       snapshot. A selection spans one repository.
+  `--fact NAME=VALUE`  A fact about the run, held in `snapshot.json`
+                       (repeatable).
+  `--run`              (`verify` only) Execute the selected targets first, as
+                       `elspais test` does. Every selected target then needs
+                       a command.
+
+Exit codes: 0 when written or when the two snapshots agree, 1 when they
+differ, 2 for a refusal or an unreadable snapshot. What the snapshot holds,
+how a build reads it back, and the CI workflow are in `elspais docs
+test-targets`, section Evidence Snapshot.
 
 ## errors
 
@@ -534,7 +577,7 @@ Generate traceability matrix and reports.
 **Options:**
 
   `--format {text,markdown,html,json,csv}`  Output format (default: markdown)
-  `--preset {minimal,standard,full}`        Named default value set
+  `--preset {minimal,standard,full,evidence}` Named default value set; `evidence` adds each assertion's code and tests with outcomes
   `--values KEY,KEY,...` State exactly these values, in this order. A coverage figure is also selectable as the numbers behind it -- `implemented.count`, `implemented.total`, `implemented.ratio` -- and `verified.carried` states whether the Passing verdict was carried from a baseline (see `elspais docs traceability`)
   `--body`               Show requirement body text
   `--assertions`         Show individual assertions
@@ -686,9 +729,9 @@ name different paths under it. The flag applies to
 the server alone: with `--static` it is refused, since a generated file
 requests nothing under a prefix. With no prefix the server is exactly what
 it is without the flag.
-The viewer's record in `.elspais/daemon.json` names the prefix as
+The viewer's daemon record, `.elspais/daemon.json`, names the prefix as
 `base_path`, so every command that reaches a running server through the
-record — the CLI's graph queries, `elspais doctor`, `elspais mcp env`
+daemon record — the CLI's graph queries, `elspais doctor`, `elspais mcp env`
 — reaches a prefixed viewer where it answers. The state the page keeps in
 the browser is scoped to the prefix too, so viewers under different
 prefixes on one host keep state of their own.
@@ -1298,14 +1341,14 @@ dropping them.
 deadline above is not the only way a daemon stops, and the others hold
 the same work. An idle timeout firing on a daemon with no client left, and an
 external stop — `elspais daemon`, a `kill`, a container shutting down —
-both persist pending mutations and leave the same record before the
-process ends. Being told to stop says nothing about what the daemon
+both persist pending mutations and leave the same automatic save record
+before the process ends. Being told to stop says nothing about what the daemon
 happens to be holding. Being told to discard does:
 
     idle timeout expires, work pending -> SAVE to disk, record it, stop
     stop signal arrives, work pending  -> SAVE to disk, record it, stop
     told to discard, work pending      -> drop it, write nothing, stop
-    stopping with nothing pending      -> stop, and write no record
+    stopping with nothing pending      -> stop, and leave no automatic save record
 
 If the save fails on either of the first two, the mutations are kept.
 The idle timeout then declines to stop and waits out another idle period,
@@ -1323,9 +1366,9 @@ the process outright. The deadline belongs to whoever asked for the stop,
 which is why the work is written first: by the time it passes there is
 nothing left in the process to lose.
 
-**How you find out.** A save the daemon performed is recorded in
-`.elspais/automatic-save.json` and reported to the next client in the
-ordinary metadata it already reads: `get_workspace_info`,
+**How you find out.** A save the daemon performed leaves an automatic save
+record in `.elspais/automatic-save.json`, which is reported to the next
+client in the ordinary metadata it already reads: `get_workspace_info`,
 `get_graph_status`, `/api/dirty` and `/api/check-freshness` all carry an
 `automatic_save` block while one is outstanding. It states who saved
 (the daemon), when, how many mutations it covered, and what triggered it.
@@ -1334,8 +1377,8 @@ can disappear because it finished, because it crashed, or because a
 connection dropped, and the daemon cannot tell those apart. You decide;
 it reports.
 
-The record is retired the moment any client saves at its own request
-(`save_mutations` over MCP, Save in the viewer, or
+The automatic save record is retired the moment any client saves at its
+own request (`save_mutations` over MCP, Save in the viewer, or
 `elspais daemon --persist`). A later automatic save replaces it.
 Committing or reverting the files does not clear it — the daemon is not
 watching your working tree — so save deliberately, or delete the file, if
@@ -1352,7 +1395,7 @@ If a server starts and finds that file, the process that wrote it is gone
 and never wrote what it held — a SIGKILL, a machine that slept, a
 supervisor with a shorter patience than the save took. The finding
 becomes `.elspais/lost-changes` and is reported as a `lost_changes` block
-on the same surfaces the automatic-save record uses, so what you learn is
+on the same surfaces the automatic save record uses, so what you learn is
 that something was lost, not what. It is retired the next time a client
 saves at its own request. A discard you asked for is not a loss and
 leaves nothing behind.

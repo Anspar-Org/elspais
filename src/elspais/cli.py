@@ -61,6 +61,9 @@ from elspais.commands.args import (
     DoctorArgs,
     EditArgs,
     ErrorsArgs,
+    EvidenceArgs,
+    EvidenceVerifyArgs,
+    EvidenceWriteArgs,
     ExampleArgs,
     FailingArgs,
     FingerprintArgs,
@@ -164,6 +167,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         DaemonArgs: "daemon",
         TestArgs: "test",
         FingerprintArgs: "fingerprint",
+        EvidenceArgs: "evidence",
         LinkArgs: "link",
         CompletionArgs: "completion",
         GlossaryArgs: "glossary",
@@ -220,6 +224,12 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
     elif isinstance(cmd, FingerprintArgs):
         _FINGERPRINT_MAP = {FingerprintStartArgs: "start", FingerprintFinishArgs: "finish"}
         ns.fingerprint_action = _FINGERPRINT_MAP.get(type(cmd.action), None)
+        if hasattr(cmd.action, "__dataclass_fields__"):
+            for field in dataclasses.fields(cmd.action):
+                setattr(ns, field.name, getattr(cmd.action, field.name))
+    elif isinstance(cmd, EvidenceArgs):
+        _EVIDENCE_MAP = {EvidenceWriteArgs: "write", EvidenceVerifyArgs: "verify"}
+        ns.evidence_action = _EVIDENCE_MAP.get(type(cmd.action), None)
         if hasattr(cmd.action, "__dataclass_fields__"):
             for field in dataclasses.fields(cmd.action):
                 setattr(ns, field.name, getattr(cmd.action, field.name))
@@ -492,6 +502,10 @@ def main(argv: list[str] | None = None) -> int:
             from elspais.commands import fingerprint_cmd
 
             return fingerprint_cmd.run(args)
+        elif args.command == "evidence":
+            from elspais.commands import evidence_cmd
+
+            return evidence_cmd.run(args)
         else:
             _print_help()
             return 1

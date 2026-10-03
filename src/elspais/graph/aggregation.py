@@ -17,12 +17,12 @@ estate is headlines ``"total"`` (REQ-d00258-A).
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from elspais.graph.GraphNode import NodeKind
+from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.metrics import (
     CoverageDimension,
     CoverageSource,
@@ -34,6 +34,7 @@ from elspais.graph.metrics import (
     tested_and_passing,
     tested_partition,
 )
+from elspais.graph.relations import EdgeKind
 
 # Implements: REQ-d00292-A
 # Unified coverage-state vocabulary: the requirement tier, per-assertion standing,
@@ -1242,11 +1243,11 @@ def _measure_fields(prefix: str, sums: DimensionSums) -> dict[str, float]:
 class FileBoundResults:
     """The results one artifact holds that bind only through a test file.
 
-    ``artifact`` is where the records were read: the results file, or the
+    ``artifact`` is where the result records were read: the results file, or the
     target name where the runner's output held them and no file exists.
     ``namespace`` names the repository that read them, because two members
     can hold one repository-relative path. ``tests`` are the tests each result
-    could have bound to: every test in the file its record names.
+    could have bound to: every test in the file its result record names.
     """
 
     namespace: str
@@ -1278,16 +1279,16 @@ def iter_file_bound_results(graph: Any) -> list[FileBoundResults]:
             continue
         if not any(True for _ in result.iter_parents(edge_kinds={EdgeKind.YIELDS})):
             continue
-        # A RESULT id names the repository that read it and the place of
-        # record, which is the artifact.
+        # A RESULT id names the repository that read it and the place of its
+        # result record, which is the artifact.
         _prefix, namespace, place, _ordinal = parse_structural_id(result.id)
         groups.setdefault((namespace, place), []).append(result)
 
-    records: list[FileBoundResults] = []
+    bound: list[FileBoundResults] = []
     for (namespace, artifact), results in sorted(groups.items()):
         lines = [r.get_field("result_line") for r in results if r.get_field("result_line")]
         tests = {test.id for r in results for test in r.iter_parents(edge_kinds={EdgeKind.YIELDS})}
-        records.append(
+        bound.append(
             FileBoundResults(
                 namespace=namespace,
                 artifact=artifact,
@@ -1298,7 +1299,7 @@ def iter_file_bound_results(graph: Any) -> list[FileBoundResults]:
                 tests=tuple(sorted(tests)),
             )
         )
-    return records
+    return bound
 
 
 # Implements: REQ-d00086-A, REQ-d00258-C, REQ-d00291-I
@@ -1481,11 +1482,85 @@ __all__ = [
     "authored_dimension",
     "denominator_labels",
     "dimension_measures",
+    "iter_assertion_coverage",
     "iter_file_bound_results",
     "iter_uncredited_evidence",
+    "location_of",
     "named_labels",
     "numerator_dimension",
     "relative_tier",
     "relative_tier_for",
     "tier_buckets",
 ]
+
+
+# Implements: REQ-d00066-B, REQ-d00066-D
+def iter_assertion_coverage(
+    req_node: GraphNode,
+    kind_filter: NodeKind,
+    *,
+    edge_kinds: set[EdgeKind] | None = None,
+    direct_only: bool = False,
+) -> Iterator[tuple[GraphNode, list[str]]]:
+    """Yield ``(node, labels)`` for each TEST or CODE node covering *req_node*.
+
+    Two-phase edge traversal:
+
+    Phase 1 — ``req_node.iter_outgoing_edges()``:
+      * If ``assertion_targets`` is set → those labels
+      * If absent → ALL assertion labels (indirect / blanket coverage)
+
+    Phase 2 — For each ASSERTION child → ``iter_outgoing_edges()``:
+      * Yields ``(node, [that_label])``
+
+    The same node may be yielded more than once (e.g. via both phases).
+    Callers are responsible for deduplication.
+
+    Args:
+        edge_kinds: If set, only consider edges whose kind is in this set.
+        direct_only: If True, skip Phase 1 edges that have no
+            ``assertion_targets`` (blanket coverage).
+    """
+    # Collect all assertion labels for the indirect-coverage case
+    all_labels: list[str] = []
+    assertion_children: list[tuple[Any, str]] = []  # (assertion_node, label)
+    for child in req_node.iter_children():
+        if child.kind == NodeKind.ASSERTION:
+            label = child.get_field("label", "")
+            all_labels.append(label)
+            assertion_children.append((child, label))
+
+    # Phase 1: REQ → kind_filter edges
+    for edge in req_node.iter_outgoing_edges():
+        if edge_kinds and edge.kind not in edge_kinds:
+            continue
+        target = edge.target
+        if target.kind != kind_filter:
+            continue
+        if edge.assertion_targets:
+            yield target, list(edge.assertion_targets)
+        elif not direct_only:
+            yield target, list(all_labels)
+
+    # Phase 2: ASSERTION → kind_filter edges
+    for assertion_node, label in assertion_children:
+        for edge in assertion_node.iter_outgoing_edges():
+            if edge_kinds and edge.kind not in edge_kinds:
+                continue
+            target = edge.target
+            if target.kind != kind_filter:
+                continue
+            yield target, [label]
+
+
+# Implements: REQ-d00322-G
+def location_of(node: GraphNode) -> str:
+    """A node's place as a reader finds it: its repo-relative file and line.
+
+    A `code:` or `test:` id holds an absolute path, which differs on every
+    machine. The file node holds the path relative to its repository.
+    """
+    file = node.file_node()
+    rel = (file.get_field("relative_path") or "") if file else ""
+    line = node.get_field("parse_line")
+    return f"{rel}:{line}" if line else rel

@@ -1,11 +1,14 @@
 """Parser for `flutter test --machine` newline-delimited JSON events.
 
-Builds RESULT records carrying where each test is declared (path, line), the
+Builds result records carrying where each test is declared (path, line), the
 file that executed it, and its name.
 
-Record shape mirrors sibling parsers (junit_xml, pytest_json):
+Result record shape mirrors sibling parsers (junit_xml, pytest_json):
 ``{"ordinal", "name", "classname", "status", "duration", "message",
-"source_path", "line", "root_path", "root_line", "runner_path", "test_id"}``.
+"source_path", "line", "root_path", "root_line", "runner_path", "test_id"}``,
+plus ``output``: what the test printed, one ``print`` event per line, or
+``None`` where it printed nothing. ``duration`` is the seconds between the
+test's ``testStart`` and ``testDone`` events.
 
 ``test.url`` and ``test.line`` name the frame that called ``test()``, and
 ``suite.path`` names the file the runner executed. The two differ for a
@@ -15,11 +18,11 @@ test's citations sit at the declaration. Consequently, a ``file:`` URL in
 ``runner_path`` (REQ-d00254-Z).
 
 For ``testWidgets(...)``, ``test.url`` names a frame inside
-``package:flutter_test``, which is no file of the project. The record then
+``package:flutter_test``, which is no file of the project. The result record then
 takes ``source_path`` from ``suite.path`` and carries ``test.root_url`` /
 ``test.root_line``, which name the call site in the suite's file. The builder
 tries ``(source_path, line)`` and falls back to ``(root_path, root_line)``. A
-record that names its declaration carries no root location. Consequently,
+result record that names its declaration carries no root location. Consequently,
 it never falls back to the runner file.
 
 ``test_id`` is always ``None``: which test a result belongs to is answered at
@@ -51,6 +54,18 @@ def _file_url_path(url: Any) -> str | None:
     return None
 
 
+# Implements: REQ-d00322-M
+def _seconds(start: Any, end: Any) -> float:
+    """The seconds between two event times, which the stream gives in milliseconds.
+
+    A missing or non-integer time gives 0.0, as for a reporter that records no
+    duration.
+    """
+    if isinstance(start, int) and isinstance(end, int):
+        return round((end - start) / 1000, 3)
+    return 0.0
+
+
 # Implements: REQ-d00254-E
 class FlutterMachineParser(DiagnosticRecorder):
     def parse(self, content: str, source_path: str = "") -> list[dict[str, Any]]:
@@ -59,6 +74,7 @@ class FlutterMachineParser(DiagnosticRecorder):
         results: list[dict[str, Any]] = []
         self._start_diagnostics()
         events = 0
+        done: set[Any] = set()
 
         for line in content.splitlines():
             line = line.strip()
@@ -70,7 +86,7 @@ class FlutterMachineParser(DiagnosticRecorder):
                 # Suppressed deliberately: this reporter reads a runner's live
                 # stdout, where a build banner, a warning, or a plugin's own
                 # print sits between events. A line that is not JSON is
-                # expected traffic, not a record that failed to read. What
+                # expected traffic, not a result record that failed to read. What
                 # would be a real condition -- a stream carrying no events at
                 # all -- is recorded once, after the loop.
                 continue
@@ -92,8 +108,17 @@ class FlutterMachineParser(DiagnosticRecorder):
                     "declared_path": declared_path,
                     "root_line": None if declared_path else t.get("root_line"),
                     "root_path": None if declared_path else _file_url_path(t.get("root_url")),
+                    "started": ev.get("time"),
                 }
+            # Implements: REQ-d00322-M
+            # What a test printed is kept with its result. A print that names
+            # no started test belongs to no result and is passed over.
+            elif etype == "print":
+                meta = tests.get(ev.get("testID"))
+                if meta is not None:
+                    meta.setdefault("output", []).append(str(ev.get("message", "")))
             elif etype == "testDone":
+                done.add(ev.get("testID"))
                 if ev.get("hidden"):
                     continue
                 meta = tests.get(ev.get("testID"))
@@ -117,7 +142,9 @@ class FlutterMachineParser(DiagnosticRecorder):
                         "name": meta["name"],
                         "classname": "",
                         "status": status,
-                        "duration": 0.0,
+                        # Implements: REQ-d00322-M
+                        "duration": _seconds(meta.get("started"), ev.get("time")),
+                        "output": "\n".join(meta["output"]) if meta.get("output") else None,
                         "message": None,
                         "source_path": meta["declared_path"] or runner,
                         "line": meta["line"],
@@ -129,8 +156,8 @@ class FlutterMachineParser(DiagnosticRecorder):
                         # This format usually arrives on a runner's output,
                         # where there is no artifact to name. It is also saved
                         # to files and read back by a pattern, and then the
-                        # artifact is what separates one run's records from
-                        # another's: without it every file's records start
+                        # artifact is what separates one run's result records
+                        # from another's: without it every file's result records start
                         # their count again and collide (REQ-d00294-A).
                         "result_file": source_path or None,
                         "result_line": None,
@@ -147,4 +174,17 @@ class FlutterMachineParser(DiagnosticRecorder):
                 source_path,
                 "flutter --machine output carried no JSON events",
             )
+        # Implements: REQ-d00285-G, REQ-d00254-Q
+        # A test that started and reported no result is a stream that ended
+        # inside it: the run was cut off, and what it reports is shorter than
+        # the run. Each such test is named, so the shorter stream never reads
+        # as the whole run.
+        for test_id, meta in tests.items():
+            if test_id not in done:
+                self._record_diagnostic(
+                    source_path,
+                    f"test {meta['name']!r} started and reported no result: "
+                    f"the stream ends before its testDone event",
+                    partial=bool(results),
+                )
         return results

@@ -15,11 +15,11 @@ from urllib.request import Request, urlopen
 
 # Implements: REQ-o00076-C
 def _get_daemon_record() -> dict | None:
-    """The record of a running server, if any.
+    """The daemon record of a running server, if any.
 
     Located from the working tree the command is running in, with
     nothing agreed in advance: no port is configured, passed or
-    remembered between commands. The whole record rather than its port,
+    remembered between commands. The whole daemon record rather than its port,
     because the port alone does not say where the server answers.
     """
     try:
@@ -42,7 +42,7 @@ def _try_server(
     params: dict | None,
     method: str,
 ) -> dict | list | None:
-    """Try the server a record describes. Returns parsed JSON or None."""
+    """Try the server a daemon record describes. Returns parsed JSON or None."""
     from elspais.mcp.daemon import daemon_url
 
     try:

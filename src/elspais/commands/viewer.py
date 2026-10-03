@@ -178,7 +178,7 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
         port = int(listener.getsockname()[1])
     elif _is_port_in_use(port) and requested_port is None:
         # The occupant is probed where it answers. When this working
-        # tree's record names the port, the record says where that is; a
+        # tree's daemon record names the port, it says where that is; a
         # server for some other tree is asked at the root, and one mounted
         # under a prefix there reads as another process, which is what it
         # is to this tree.
@@ -279,7 +279,7 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
     # still running: a daemon that exited between the look above and the
     # stop below is gone, which is what we wanted -- reporting that as a
     # refusal failed a command that had in fact succeeded. Writing our own
-    # record over a daemon that IS still serving would make it an
+    # daemon record over a daemon that IS still serving would make it an
     # undiscoverable second process for this working tree.
     existing = get_daemon_info(repo_root)
     if existing is not None and not stop_daemon(repo_root).is_gone:
@@ -291,7 +291,7 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
         )
         return 1
     # Implements: REQ-o00076-E
-    # The record names the prefix, so a command that locates this viewer
+    # The daemon record names the prefix, so a command that locates this viewer
     # through it reaches the viewer where it answers.
     write_daemon_json(
         repo_root=repo_root,
@@ -328,7 +328,7 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
 
         def _end_without_sessions() -> None:
             # The watchdog ends the process without unwinding it, so the
-            # record naming this process as the one serving the tree is
+            # daemon record naming this process as the one serving the tree is
             # removed here rather than by the cleanup below, which will
             # not run (REQ-o00076-E).
             daemon_json.unlink(missing_ok=True)
@@ -385,7 +385,7 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
             operator's signal lands while the viewer is serving.
             """
 
-            # Starting the save comes FIRST. Marking the state record
+            # Starting the save comes FIRST. Marking the daemon record
             # writes a file and can print, and this runs in true signal
             # context on whatever the main thread was doing; a write that
             # blocks there blocks here, and a handler that never reaches

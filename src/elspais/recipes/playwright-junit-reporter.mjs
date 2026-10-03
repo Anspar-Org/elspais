@@ -9,7 +9,7 @@
 // This reporter writes the same report and adds two attributes: `file`, the
 // path of the test's source relative to the project root, and `line`, the
 // line the test is declared on. It keeps `hostname` on each suite, which
-// names the project the records came from.
+// names the project the result records came from.
 //
 // It uses the public Reporter interface only. It does not extend Playwright's
 // own reporter, because that reporter is reached through a path inside the
@@ -51,8 +51,8 @@ export default class ElspaisJUnitReporter {
         this._outputFile = options.outputFile || 'junit.xml';
         this._rootDir = process.cwd();
         // One entry for each project, because a test that runs in several
-        // projects produces one record in each of them and a reader must be
-        // able to tell those records apart.
+        // projects produces one result record in each of them and a reader
+        // must be able to tell those result records apart.
         this._byProject = new Map();
     }
 
@@ -72,7 +72,7 @@ export default class ElspaisJUnitReporter {
             name,
             classname: file,
             // The location of the test itself, which is what lets a reader
-            // bind this record to one test rather than to a whole file.
+            // bind this result record to one test rather than to a whole file.
             file: test.location ? path.relative(this._rootDir, test.location.file) : '',
             line: test.location ? test.location.line : undefined,
             time: (result.duration || 0) / 1000,

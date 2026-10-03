@@ -6,7 +6,8 @@ the health checks to dividing those facts by the question the run asked: a
 target the run executed or expected that left nothing is missing results
 (`tests.ingestion_fault`); a target nobody ran or asked for is not run
 (`tests.not_run`); a target whose run has not recorded its end is in
-progress (`tests.run_in_progress`) and is judged in no other way.
+progress (`tests.run_in_progress`), and where the run expects it, its results
+are missing as well.
 """
 
 from __future__ import annotations
@@ -372,21 +373,21 @@ def test_results_present_with_coverage_absent_is_missing_coverage_unexpected(tmp
     assert finding.file_path == ".results/journeys/coverage.json"
 
 
-# Verifies: REQ-d00311-N+O
+# Verifies: REQ-d00311-N+O, REQ-d00283-S
 def test_a_run_in_progress_is_reported_with_its_start_and_judged_no_other_way(tmp_path):
-    from elspais.utilities.fingerprint import read_record, start_run
+    from elspais.utilities.fingerprint import read_fingerprint, start_run
 
     root = _project(tmp_path)
     config = _config(root)
     folder = start_run(root, config, "unit")
     (folder / "junit.xml").write_text(_JUNIT, encoding="utf-8")
-    started_at = read_record(folder)["started_at"]
+    started_at = read_fingerprint(folder)["started_at"]
 
     graph = _build(root)
     running = check_runs_in_progress(graph, {})
     stale = check_test_results_stale(graph, config)
-    faults = check_ingestion_faults(graph, {}, ("REQ:unit",))
-    not_run = check_targets_not_run(graph, {}, ("REQ:unit",))
+    faults = check_ingestion_faults(graph, {})
+    not_run = check_targets_not_run(graph, {})
 
     assert running.passed is False
     assert running.severity == "info"
@@ -395,8 +396,85 @@ def test_a_run_in_progress_is_reported_with_its_start_and_judged_no_other_way(tm
     assert started_at in finding.message
     assert stale.passed is True
     assert stale.findings == []
-    assert faults.passed is True
+    assert all("target unit" not in f.message for f in faults.findings)
     assert all("target unit" not in f.message for f in not_run.findings)
+
+
+# Verifies: REQ-d00283-R
+def test_an_expected_target_whose_run_is_in_progress_has_missing_results(tmp_path):
+    from elspais.utilities.fingerprint import read_fingerprint, start_run
+
+    root = _project(tmp_path)
+    config = _config(root)
+    folder = start_run(root, config, "unit")
+    (folder / "junit.xml").write_text(_JUNIT, encoding="utf-8")
+    started_at = read_fingerprint(folder)["started_at"]
+
+    graph = _build(root)
+    faults = check_ingestion_faults(graph, {}, ("REQ:unit",))
+    not_run = check_targets_not_run(graph, {}, ("REQ:unit",))
+    running = check_runs_in_progress(graph, {})
+
+    assert faults.passed is False
+    assert faults.severity == "error"
+    (finding,) = [f for f in faults.findings if "target unit" in f.message]
+    assert "run is in progress" in finding.message
+    assert started_at in finding.message
+    assert finding.file_path == ".results/unit/junit.xml"
+    assert all("target unit" not in f.message for f in not_run.findings)
+    # The run is still reported as in progress beside the missing results.
+    assert any("target unit" in f.message for f in running.findings)
+
+
+# Verifies: REQ-d00283-R
+@pytest.mark.parametrize(
+    "artifacts",
+    [
+        ["results"],
+        ["coverage"],
+        ["results", "coverage"],
+    ],
+    ids=["results", "coverage-only", "both"],
+)
+def test_an_expected_run_in_progress_is_reported_once_as_missing_results(artifacts):
+    target = {**_FILE_TARGET, "coverage": "coverage.json"}
+    running = [
+        UnreadArtifact(
+            target="unit",
+            artifact=artifact,
+            path=f".results/unit/{'junit.xml' if artifact == 'results' else 'coverage.json'}",
+            reason="running",
+            started_at="2026-10-01T09:00:00+00:00",
+        )
+        for artifact in artifacts
+    ]
+    graph = _single(target, *running)
+
+    unexpected = check_ingestion_faults(graph, {})
+    expected = check_ingestion_faults(graph, {}, ("REQ:unit",))
+
+    assert unexpected.passed is True
+    assert expected.passed is False
+    (finding,) = expected.findings
+    assert "target unit" in finding.message
+    assert "run is in progress (started 2026-10-01T09:00:00+00:00)" in finding.message
+
+
+# Verifies: REQ-d00283-R
+def test_an_expected_run_in_progress_reading_runner_output_names_the_target():
+    running = UnreadArtifact(
+        target="unit",
+        artifact="results",
+        path="",
+        reason="running",
+        started_at="2026-10-01T09:00:00+00:00",
+    )
+    graph = _single(_OUTPUT_TARGET, running)
+
+    (finding,) = check_ingestion_faults(graph, {}, ("REQ:unit",)).findings
+
+    assert finding.file_path is None
+    assert finding.message.startswith("target unit: results unread because its run is in progress")
 
 
 # Verifies: REQ-d00311-N

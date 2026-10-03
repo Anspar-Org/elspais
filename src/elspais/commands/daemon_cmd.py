@@ -35,7 +35,7 @@ def run(args: argparse.Namespace) -> int:
 def run_env(args: argparse.Namespace) -> int:
     """Print the address of the daemon serving this working tree.
 
-    A client that cannot read the daemon's record itself -- one that only
+    A client that cannot read the daemon record itself -- one that only
     expands environment variables -- learns the address this way, from a
     shell that can read it. Printed rather than exported because a
     process cannot set a variable in the shell that started it.
@@ -62,7 +62,7 @@ def run_env(args: argparse.Namespace) -> int:
         return 1
 
     # Implements: REQ-o00076-E
-    # The address comes from the record, so a server mounted under a
+    # The address comes from the daemon record, so a server mounted under a
     # prefix is announced where it answers.
     print(f"export ELSPAIS_MCP_URL={daemon_url(info, '/mcp')}")
     print(f"export ELSPAIS_MCP_PORT={port}")

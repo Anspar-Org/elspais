@@ -458,7 +458,7 @@ A background daemon's lifetime SHALL be bounded by the clients using it, and it 
 
 A. A daemon started implicitly on behalf of a client SHALL record, at the moment it is started, a handle to that client whose disappearance the daemon can afterwards observe without the client's cooperation.
 
-B. The client handles a daemon has recorded SHALL be observable in the state record by which clients locate the daemon.
+B. The client handles a daemon has recorded SHALL be observable in the *Daemon Record*.
 
 C. A daemon started explicitly rather than on behalf of a client SHALL record no client handle, and its lifetime SHALL remain governed solely by its idle timeout.
 
@@ -474,11 +474,11 @@ H. A change applied after a daemon observed every recorded client absent SHALL c
 
 I. A daemon SHALL stop only by an ending it executes: every client it knows of gone, nothing asked of it for a long time, or something outside it telling it to stop. Where it persists the changes it holds, it SHALL record how many changes it covered and the condition that triggered it.
 
-J. While a client persists pending changes at its own request, any outstanding record of a save the daemon performed on its own, and any outstanding finding that an earlier process ended holding unwritten changes, SHALL be retired.
+J. While a client persists pending changes at its own request, any outstanding *Automatic Save Record*, and any outstanding finding that an earlier process ended holding unwritten changes, SHALL be retired.
 
 K. If a daemon cannot persist the changes it holds, it SHALL report the failure, retain them rather than discarding them, and SHALL NOT complete a termination it is executing.
 
-L. The record that a daemon is holding unsaved changes SHALL cease as soon as it holds none. A daemon that finds such a record left by a process which no longer exists SHALL report that the earlier process ended holding changes it never wrote, and SHALL NOT allow that finding to be read as a statement about what it is holding itself.
+L. The marker that a daemon is holding unsaved changes SHALL cease as soon as it holds none. A daemon that finds such a marker left by a process which no longer exists SHALL report that the earlier process ended holding changes it never wrote, and SHALL NOT allow that finding to be read as a statement about what it is holding itself.
 
 M. While a daemon is holding a termination open for a grace interval, it SHALL disclose how many changes are pending and the deadline at which it will persist them and stop.
 
@@ -494,7 +494,7 @@ A daemon is started implicitly to serve one client and is then detached from it,
 
 Assertion C keeps the two ways a daemon comes into existence distinguishable. A daemon a person started deliberately answers to that person, not to whichever shell happened to be nearby; inferring a client for it would make deliberate starts unpredictably mortal. Assertion D is the same caution stated for the implicit path, and it refuses two different things. A guessed handle attaches the daemon's life to an unrelated process. A stand-in whose disappearance is never observable disables the lifetime rule outright, leaving a daemon that nothing can end. Recording none is better than either, because none degrades to the existing idle-timeout behaviour.
 
-Assertion B exists because a lifetime rule nobody can inspect cannot be diagnosed. The record that already tells clients where the daemon is is the place an operator will look to ask why one is, or is not, still running. What is published there has to describe each handle rather than assume its kind: a list that can only hold process identifiers leaves a session-held client watched and invisible, which is the failure B exists to prevent.
+Assertion B exists because a lifetime rule nobody can inspect cannot be diagnosed. The *Daemon Record*, which already tells clients where the daemon is, is the place an operator will look to ask why one is, or is not, still running. What is published there has to describe each handle rather than assume its kind: a list that can only hold process identifiers leaves a session-held client watched and invisible, which is the failure B exists to prevent.
 
 Assertion E is stated over clients rather than over the one that happened to start the daemon because a daemon is deliberately shared. It serves several clients at once, and it outlives the client that started it precisely so that a later one can pick it up; a lifetime tied to the starter alone would shut the daemon down underneath somebody who is actively using it. E binds the client-liveness rule's own behaviour rather than promising how long a daemon lives, because the lifetime a daemon actually has is the shortest of client liveness, the idle timeout, and an explicit stop. Read as a promise, an idle timeout that expires and an operator who stops the daemon would each breach it, and assertion K — which keeps a daemon alive precisely while it cannot write what it holds — would contradict it. Read as a bound, all of them stand: client liveness never ends a daemon that still has a client, and never leaves one serving once it has none.
 
@@ -502,15 +502,15 @@ E's last sentence follows from D. A client whose handle cannot be derived from t
 
 Assertion F exists because the two obvious places to hang the check are both wrong: an idle timeout resets on every request, so a client that merely polls holds an abandoned daemon open forever, and an idle timeout can be configured never to expire at all, which would disable the check outright. The obligation is therefore stated against the daemon's own passage of time rather than against its traffic. Assertion H covers what liveness checks cannot see — a client for which no handle could be derived still leaves evidence when it writes — and it does so without reopening the loophole F closes, because reading changes nothing.
 
-Assertion I enumerates the endings a daemon executes, and its point is that the list is complete: every way a daemon stops of its own accord is one of these three, so all of them fall inside the preservation rule REQ-p00083-A states rather than outside it. Which of them applies says nothing about the value of what the daemon is holding, so none of them may be the occasion on which work is quietly destroyed. What I adds beyond that is the content of the daemon's own account — how many changes it covered, and which condition triggered it — because a successor and a returning client both need to know how much arrived this way and why. The general obligations to preserve, to honour an instruction to discard, and to disclose the record are REQ-p00083's assertions A, B and C, and are not restated here.
+Assertion I enumerates the endings a daemon executes, and its point is that the list is complete: every way a daemon stops of its own accord is one of these three, so all of them fall inside the preservation rule REQ-p00083-A states rather than outside it. Which of them applies says nothing about the value of what the daemon is holding, so none of them may be the occasion on which work is quietly destroyed. What I adds beyond that is the content of the daemon's own account — how many changes it covered, and which condition triggered it — because a successor and a returning client both need to know how much arrived this way and why. The general obligations to preserve, to honour an instruction to discard, and to disclose the *Automatic Save Record* are REQ-p00083's assertions A, B and C, and are not restated here.
 
 The account is facts, not a characterisation. The changes themselves were authored deliberately, one at a time, by whoever made them; the only thing that happened without anyone asking is the save. Nor does the absence of a client tell the daemon anything about the work: a client can vanish because it finished, because it crashed, because a network dropped, or because a machine slept, and these are indistinguishable from inside the daemon. Naming the condition that triggered the save therefore reports what the daemon observed, and treating it as evidence of intent would be exactly the substitution of a conclusion for an observation that REQ-p00019 prohibits.
 
-Assertion J refines the general retirement rule at REQ-p00083-H with the second record a daemon can leave, which exists only because a daemon can be succeeded by another process in the same working tree. A client that persists at its own request retires both: the daemon's account of a save it performed unasked, and any outstanding finding that an earlier process ended holding work it never wrote. Once the files have been written, both describe a state that no longer stands.
+Assertion J refines the general retirement rule at REQ-p00083-H with the second statement a daemon can leave, which exists only because a daemon can be succeeded by another process in the same working tree. A client that persists at its own request retires both: the daemon's account of a save it performed unasked, and any outstanding finding that an earlier process ended holding work it never wrote. Once the files have been written, both describe a state that no longer stands.
 
 Assertion K covers the case where preservation is impossible: a daemon that cannot write must not resolve the deadlock by destroying the work instead, since that converts an infrastructure failure into data loss. It reports, retains, and does not treat the ending it is executing as complete. K binds only the terminations the daemon executes, because a stop signal it does not control cannot be declined; a rule that told a daemon not to complete such an ending would demand something no process can do and would make correct behaviour a permanent conformance failure. Work lost to an ending the daemon does not execute is disclosed under REQ-p00083-F rather than prevented here.
 
-Assertion L keeps the record of held work honest at both ends. It ceases as soon as the daemon holds nothing, because a marker that outlives the condition it describes turns every later reader into a false alarm. The rest of L answers a problem particular to a daemon: the same evidence read at two moments answers two different questions — what this daemon holds now, and what an earlier one was holding when it died — and a successor in the same working tree is the reader who meets both. One that cannot tell which question was answered has learned nothing from either, so a record left by a process that no longer exists is reported as a statement about that process. When the record must be written, and the obligation to disclose the loss at all, are REQ-p00083's assertions E and F.
+Assertion L keeps the marker of held work honest at both ends. It ceases as soon as the daemon holds nothing, because a marker that outlives the condition it describes turns every later reader into a false alarm. The rest of L answers a problem particular to a daemon: the same evidence read at two moments answers two different questions — what this daemon holds now, and what an earlier one was holding when it died — and a successor in the same working tree is the reader who meets both. One that cannot tell which question was answered has learned nothing from either, so a marker left by a process that no longer exists is reported as a statement about that process. When the marker must be written, and the obligation to disclose the loss at all, are REQ-p00083's assertions E and F.
 
 Assertion G's honest-count clause is there because a disclosure that understates what is at stake is REQ-p00019's silent-substitution failure wearing a warning's clothes. G carries no deadline because a deadline exists on only one of the paths by which a daemon stops, and that path is assertion M's: a daemon that has seen its clients go holds the termination open for a grace interval, and during that interval there is a future moment to name. An idle timeout and an external stop persist what is held and stop at once, so obliging them to disclose a deadline would oblige them to invent one, while the count remains meaningful everywhere.
 
@@ -518,10 +518,12 @@ Assertion N exists because a lifetime that is not bound to the client is invisib
 
 Assertion O settles which of a daemon's bounds answers when two of them disagree. Going quiet is not going away: a client that applies a change and then reasons about the next one sends nothing for long stretches, and an idle timeout counts that silence exactly as it counts an empty room. A timeout that cannot tell the two apart takes the daemon from the client least able to notice — one that is mid-task, holding work it has not written, and about to find its server gone. So which regime governs is decided by whether anyone is recorded as using the daemon, not by how recently they last spoke. The cost is real and is stated rather than hidden: a daemon with a live client outlives the idle timeout configured for it, for as long as that client exists. The client-liveness rule is what still bounds it, and assertion E is what makes that bound sufficient — a daemon whose recorded clients are all gone is ended by the same rule that spared it while one remained.
 
-P names an audience rather than a surface. A daemon's client handles, its pending count and its record of a save it performed alone are all obliged to be accurate and observable, but every way of asking for them runs through an agent or a browser. An operator deciding whether to restart a daemon, change branch or close a terminal is exactly the reader who needs to know whether anything would be lost, and is the one reader who has no way to ask.
+P names an audience rather than a surface. A daemon's client handles, its pending count and its *Automatic Save Record* are all obliged to be accurate and observable, but every way of asking for them runs through an agent or a browser. An operator deciding whether to restart a daemon, change branch or close a terminal is exactly the reader who needs to know whether anything would be lost, and is the one reader who has no way to ask.
 
 ### Changelog
 
+- 2026-10-02 | fe168c0e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the daemon record and the automatic save record with Defined Terms (B, J), and call the held-changes marker a marker (L)
 - 2026-08-25 | fb36047e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | dace8fb0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-08 | 870802ca | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -531,7 +533,7 @@ P names an audience rather than a surface. A daemon's client handles, its pendin
 - 2026-08-08 | 81945155 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-07 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-12: author background daemon lifetime, client-liveness, and unattended-persistence invariants
 
-*End* *Background Daemon Lifetime* | **Hash**: fb36047e
+*End* *Background Daemon Lifetime* | **Hash**: fe168c0e
 ---
 
 ## REQ-o00075: Shared Graph Daemon
@@ -622,7 +624,7 @@ O. When a process takes a port the operator did not name, the tool SHALL report 
 
 A client and the process serving it meet at one point — the client asks which process serves its working tree, and acts on the answer. Everything here is a property of that meeting: that it can happen at all, that the answer is true, and that what answers is what the client would have run. That a process exists and that exactly one of them serves a tree is REQ-o00075's subject and is not restated.
 
-Assertion E carries most of the weight. A record that names a process is read as a promise about the process it names, so one that goes on naming a process which has committed to stopping sends clients to a server that answers and refuses everything. The remedy is not to remove the record — a record removed while its process still serves is what lets a second process boot alongside it — but to keep it describing what the client would actually meet.
+Assertion E carries most of the weight. A *Daemon Record* is read as a promise about the process it names, so one that goes on naming a process which has committed to stopping sends clients to a server that answers and refuses everything. The remedy is not to remove the *Daemon Record* — one removed while its process still serves is what lets a second process boot alongside it — but to keep it describing what the client would actually meet.
 
 A process that outlives the commands that use it outlives the code that started it. A working tree whose contents are the tool's own source is the ordinary case for its developers, not an exotic one, and REQ-o00075-B forbids standing a second process beside a stale one, so a client cannot route around what it is handed. Program code and configuration are named together in assertion I because they are one failure: an answer computed from inputs the client is not running. Splitting them invites a remedy for one that leaves the other.
 
@@ -636,11 +638,11 @@ Assertion K is what lets a client outlive the process it is talking to. Assertio
 
 K is therefore what decides which side of REQ-o00077-D a client falls on. A process reachable at an address that survives its replacement can be replaced without ending that client's session, which is what D asks; a process whose address goes with it cannot, and its clients are owed REQ-o00077-F's refusal instead. Making an address survive is thus not a convenience — it is what buys a whole class of client the silent renewal D describes.
 
-An address that survives replacement must also survive there being nothing to replace. The record naming the process currently serving a tree is removed when none is, which is what E requires of it; the address a tree is reached at is a different fact with a different lifetime, and holding the two separately is what lets a tree be reached in the same place after serving has stopped and begun again.
+An address that survives replacement must also survive there being nothing to replace. The *Daemon Record* naming the process currently serving a tree is removed when none is, which is what E requires of it; the address a tree is reached at is a different fact with a different lifetime, and holding the two separately is what lets a tree be reached in the same place after serving has stopped and begun again.
 
-Assertions C through K govern the addresses the tool keeps for itself. L governs one it writes into somebody else's configuration, which is a different obligation because such a record is read where the writing never was. Every working tree of a repository reads the same client configuration, so an address settled while installing is one tree's answer offered to all of them -- wrong when written, not stale later. An address resolved as it is read cannot make that mistake, which is why L constrains what the recorded address must do rather than what it may say.
+Assertions C through K govern the addresses the tool keeps for itself. L governs one it writes into somebody else's configuration, which is a different obligation because such an address is read where the writing never was. Every working tree of a repository reads the same client configuration, so an address settled while installing is one tree's answer offered to all of them -- wrong when written, not stale later. An address resolved as it is read cannot make that mistake, which is why L constrains what the recorded address must do rather than what it may say.
 
-L does not weaken C. A client that can ask which process serves its tree still needs no arrangement; L binds the tool where it has already answered on such a client's behalf, into a record read later without asking again.
+L does not weaken C. A client that can ask which process serves its tree still needs no arrangement; L binds the tool where it has already answered on such a client's behalf, into a configuration read later without asking again.
 
 M exists because the failure is silent. A hardcoded address fails exactly as an address nobody is serving fails -- a refused connection -- so the client cannot tell them apart. Only the tool can read the registration and see which it is, and a condition nothing reports persists until somebody happens to investigate it.
 
@@ -654,6 +656,7 @@ N and O exist for whoever starts a process beside others that are already runnin
 
 - 2026-10-02 | 85f1f1a5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | Add N and O: an operator can start the serving process on any available port, and the tool reports the port it took
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the daemon record with the Defined Term Daemon Record in the Rationale
 - 2026-08-25 | 7505310d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-25 | 0bdae779 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | 32c4639b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -696,7 +699,7 @@ REQ-o00076-I governs what a client is handed when it acquires a process, and is 
 
 Assertion D renews rather than stops, and that distinction is the whole of it. A process that stopped would satisfy the half of the sentence about no longer answering from a superseded program while failing the half about the tree going on being served, and a client that cannot start one for itself -- which is any client that reaches a process by address rather than by launching it -- would simply lose the tool.
 
-Changes the process holds are carried across rather than treated as a reason to refuse. They exist nowhere else, so they must not be discarded; but writing them is enough to preserve them, and a renewal that writes first loses nothing that matters. What it does lose is the ability to undo them, since the record of what was done goes with the process that did it. That is accepted: the changes themselves survive on disk, which is what the work was for, and this is already what happens whenever a process stops for any other reason. The unasked write is disclosed by the record that already exists for exactly that purpose.
+Changes the process holds are carried across rather than treated as a reason to refuse. They exist nowhere else, so they must not be discarded; but writing them is enough to preserve them, and a renewal that writes first loses nothing that matters. What it does lose is the ability to undo them, since the mutation history goes with the process that made it. That is accepted: the changes themselves survive on disk, which is what the work was for, and this is already what happens whenever a process stops for any other reason. The unasked write is disclosed by the *Automatic Save Record*, which already exists for exactly that purpose.
 
 D acts without being asked because the client that most needs it is the one that will never ask. Whether the tree comes to be served by a replacement process or by the same one renewed is not fixed here; what matters is that a client which had a working process still has one.
 
@@ -706,6 +709,8 @@ Assertion E exists because a change is rarely one file. An editor writing out a 
 
 ### Changelog
 
+- 2026-10-02 | 3488ba9c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the automatic save record and the mutation history in the Rationale
 - 2026-08-24 | 3488ba9c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | 2dfa09e9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | b6acd5d0 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash

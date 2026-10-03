@@ -396,7 +396,7 @@ def test_a_run_of_passing_targets_records_their_results_and_exits_zero(
     tmp_path, monkeypatch, capsys
 ):
     from elspais.cli import main
-    from elspais.utilities.fingerprint import RECORD_NAME, judge
+    from elspais.utilities.fingerprint import FINGERPRINT_NAME, judge
 
     root = _cli_project(tmp_path, monkeypatch, _target_toml("unit", _WRITES_RESULTS))
 
@@ -405,7 +405,7 @@ def test_a_run_of_passing_targets_records_their_results_and_exits_zero(
     out = capsys.readouterr().out
     assert "1 target(s) passed" in out
     folder = root / ".results" / "unit"
-    assert sorted(p.name for p in folder.iterdir()) == sorted([RECORD_NAME, "junit.xml"])
+    assert sorted(p.name for p in folder.iterdir()) == sorted([FINGERPRINT_NAME, "junit.xml"])
     from elspais.config import load_config
 
     assert judge(root, load_config(root / ".elspais.toml"), "unit").state == "fresh"
