@@ -7359,10 +7359,11 @@ def create_server(
           stays allocated, no other label moves, and a citation of it keeps
           its text and reads as unresolved.
         - provisional or aspirational: the assertion is removed and each
-          later label moves down one place; citations from requirements and
-          journeys follow. Refused, naming the references, where the deleted
-          assertion is cited or a moved one is cited from code, a test or an
-          unresolved reference -- remove or retarget those first.
+          later label moves down one place; citations from requirements,
+          journeys, code and tests follow. Refused, naming the references,
+          where the deleted assertion is cited or a moved one is cited from an
+          unresolved reference -- remove or retarget those first -- and where
+          a respelled code or test citation would not read back as intended.
         - retired: refused; the requirement is read-only.
         On success, returns the parent requirement's resulting `version`
         (REQ-o00062-K).
@@ -7665,6 +7666,9 @@ def create_server(
 
         source_id is the child (the requirement doing the implementing/refining).
         target_id is the parent (the requirement being implemented/refined).
+        A source that is a citation in a code or test file is refused: its
+        relationships are the comment written in that file, so edit the
+        comment instead. The same holds for every edge mutation.
 
         Args:
             edge_kind: 'IMPLEMENTS' or 'REFINES'.

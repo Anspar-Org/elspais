@@ -364,6 +364,7 @@ class FileDispatcher:
             reader=self._reader,
             quoted_lines=self._quoted_line_numbers(content, file_path),
             comment_markers=comment_markers_for_path(file_path),
+            line_count=content.count("\n"),
         )
         results = transformer.transform(tree)
         results.extend(_fault_and_style_content(transformer))
@@ -420,6 +421,7 @@ class FileDispatcher:
             reader=self._reader,
             quoted_lines=self._quoted_line_numbers(content, file_path),
             comment_markers=comment_markers_for_path(file_path),
+            line_count=content.count("\n"),
         )
         results = transformer.transform(tree)
         results.extend(_fault_and_style_content(transformer))

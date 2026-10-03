@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from elspais.graph.citation_respelling import restore_respellings
 from elspais.graph.GraphNode import (
     FileType,
     GraphNode,
@@ -1126,6 +1127,76 @@ class FederatedGraph:
             raise KeyError(f"Node '{node_id}' not found in any repo")
         return self._repos[repo_name].graph
 
+    # Implements: REQ-p00017-B, REQ-d00269-C
+    def _citation_context(self, repo_name: str) -> tuple[Any, tuple[GraphNode, ...]]:
+        """What a member needs to respell the citations other members hold.
+
+        The reader alternates every member's grammar with the owning
+        member's first, so a citation in any member's file reads as it read
+        when the federation was built. A test citation that binds to no test
+        is joined to nothing, so the other members' are handed over.
+        """
+        from elspais.utilities.patterns import FederatedIdReader
+
+        owner = self._repos[repo_name].graph
+        others = [graph for name, graph in self._live_graphs() if name != repo_name]
+        reader = None
+        if owner._resolver is not None:
+            reader = FederatedIdReader(
+                owner._resolver,
+                [graph._resolver for graph in others if graph._resolver is not None],
+            )
+        foreign = tuple(
+            test
+            for graph in others
+            for test in graph.iter_by_kind(NodeKind.TEST)
+            if test.get_field("binds_to_test") is False
+        )
+        return reader, foreign
+
+    # Implements: REQ-p00017-M, REQ-p00017-P
+    def _foreign_faults(self, repo_name: str) -> tuple[tuple[Any, GraphNode | None], ...]:
+        """The unresolved references the other members hold, each with its holder.
+
+        A reference another member wrote and the federation could not wire
+        stays unresolved in that member's graph, where the owning graph
+        cannot see it.
+        """
+        return tuple(
+            (fault, graph._index.get(fault.source_id))
+            for name, graph in self._live_graphs()
+            if name != repo_name
+            for fault in graph._unresolved_references
+        )
+
+    # Implements: REQ-p00017-B
+    def _follow_unbound(self, records: list[dict] | None) -> None:
+        """Bring every member's list of unbound citations into line with respelled text."""
+        if not records:
+            return
+        for _name, graph in self._live_graphs():
+            graph.follow_unbound_citations(records)
+
+    # Implements: REQ-o00062-U
+    def _refuse_unrendered_relationship(self, source_id: str) -> None:
+        """Refuse a relationship change whose source is a citation in code or a test.
+
+        A relationship from code or a test is declared by a comment in its
+        file, and the file is written back from that comment as its author
+        wrote it. A change made to the relationship alone would never reach
+        the file, and the next build would read the old relationship back.
+        """
+        source = self.find_by_id(source_id)
+        if source is not None and source.kind in (NodeKind.CODE, NodeKind.TEST):
+            keyword = "Verifies" if source.kind == NodeKind.TEST else "Implements"
+            raise ValueError(
+                f"{source_id} is a citation in a {source.kind.value} file, and its "
+                f"relationships are declared by the comment written there, so this "
+                f"change would not reach the file. Edit the `{keyword}:` comment in the "
+                f"file instead (or apply a link suggestion with `elspais link suggest "
+                f"--apply`), then refresh the graph."
+            )
+
     # Implements: REQ-d00201-B
     def _record_mutation(self, repo_name: str, entry: MutationEntry) -> None:
         """Record a mutation in the federated log."""
@@ -1143,7 +1214,15 @@ class FederatedGraph:
         """
         repo_name = self._ownership[old_id]
         graph = self._graph_for(old_id)
-        result = graph.rename_node(old_id, new_id)
+        reader, foreign = self._citation_context(repo_name)
+        result = graph.rename_node(
+            old_id,
+            new_id,
+            citation_reader=reader,
+            foreign_citers=foreign,
+            foreign_references=self._foreign_faults(repo_name),
+        )
+        self._follow_unbound(result.after_state.get("respelled_citations"))
         # Update ownership: remove old, add new
         del self._ownership[old_id]
         self._ownership[new_id] = repo_name
@@ -1258,16 +1337,16 @@ class FederatedGraph:
         # wire stays unresolved in that member's graph, where the owning
         # graph cannot see it. It is handed over with the node holding it,
         # so the owning graph judges it with its own before anything moves.
-        foreign = tuple(
-            (fault, graph._index.get(fault.source_id))
-            for name, graph in self._live_graphs()
-            if name != repo_name
-            for fault in graph._unresolved_references
-        )
+        foreign = self._foreign_faults(repo_name)
+        reader, foreign_citers = self._citation_context(repo_name)
         result = self._graph_for(assertion_id).delete_assertion(
-            assertion_id, foreign_references=foreign
+            assertion_id,
+            foreign_references=foreign,
+            citation_reader=reader,
+            foreign_citers=foreign_citers,
         )
         self._follow_retirement(repo_name, assertion_id, result)
+        self._follow_unbound(result.after_state.get("respelled_citations"))
         if result.before_state.get("disposition") == "removed":
             self._ownership.pop(assertion_id, None)
             for rename in result.before_state.get("renames", []):
@@ -1369,9 +1448,9 @@ class FederatedGraph:
                 citer = graph._index.get(fault.source_id)
                 if citer is None:
                     continue
-                if owner._names_assertion(fault, node):
+                if owner._fault_names_assertion(fault, node):
                     record = graph._bind_citation(citer, node, fault)
-                elif owner._names_assertion(fault, node, EdgeKind.SATISFIES):
+                elif owner._fault_names_assertion(fault, node, EdgeKind.SATISFIES):
                     record = graph._make_satisfies_copy(
                         citer,
                         node,
@@ -1507,7 +1586,15 @@ class FederatedGraph:
         # Strategy: by_id
         """
         repo_name = self._ownership[old_id]
-        result = self._graph_for(old_id).rename_assertion(old_id, new_label)
+        reader, foreign = self._citation_context(repo_name)
+        result = self._graph_for(old_id).rename_assertion(
+            old_id,
+            new_label,
+            citation_reader=reader,
+            foreign_citers=foreign,
+            foreign_references=self._foreign_faults(repo_name),
+        )
+        self._follow_unbound(result.after_state.get("respelled_citations"))
         # Update ownership with new ID
         new_id = result.after_state.get("id", old_id)
         if new_id != old_id:
@@ -1666,6 +1753,7 @@ class FederatedGraph:
 
         # Strategy: cross-graph
         """
+        self._refuse_unrendered_relationship(source_id)
         repo_name = self._ownership[source_id]
         graph = self._graph_for(source_id)
         result = graph.add_edge(source_id, target_id, edge_kind, assertion_targets)
@@ -1678,6 +1766,7 @@ class FederatedGraph:
 
         # Strategy: cross-graph
         """
+        self._refuse_unrendered_relationship(source_id)
         repo_name = self._ownership[source_id]
         result = self._graph_for(source_id).delete_edge(source_id, target_id)
         self._record_mutation(repo_name, result)
@@ -1694,6 +1783,7 @@ class FederatedGraph:
 
         # Strategy: cross-graph
         """
+        self._refuse_unrendered_relationship(source_id)
         repo_name = self._ownership[source_id]
         result = self._graph_for(source_id).change_edge_kind(source_id, target_id, new_kind)
         self._record_mutation(repo_name, result)
@@ -1710,6 +1800,7 @@ class FederatedGraph:
 
         # Strategy: cross-graph
         """
+        self._refuse_unrendered_relationship(source_id)
         repo_name = self._ownership[source_id]
         result = self._graph_for(source_id).change_edge_targets(
             source_id, target_id, assertion_targets
@@ -2837,6 +2928,11 @@ class FederatedGraph:
                     self._undo_followed_retirement(entry.graph, result)
                 # Reverse any ownership changes
                 self._rebuild_ownership()
+                # Implements: REQ-p00017-B, REQ-o00062-G
+                # A citation respelled in another member's file is put back
+                # here, where every member's files can be found.
+                restore_respellings(result.before_state.get("respelled_citations"), self.find_by_id)
+                self._follow_unbound(result.before_state.get("respelled_citations"))
             return result
         return None
 

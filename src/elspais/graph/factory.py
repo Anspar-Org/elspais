@@ -647,7 +647,38 @@ def create_file_node(
         "git_branch": git_branch,
         "git_commit": git_commit,
     }
+    # Implements: REQ-d00132-M
+    # A code or test file is written back as its author wrote it, so how its
+    # lines end is recorded when it is read: the parser reads every line
+    # ending as a newline and keeps none of that.
+    if file_type in (FileType.CODE, FileType.TEST):
+        node._content.update(line_convention(file_path))
     return node
+
+
+# Implements: REQ-d00132-M
+def line_convention(file_path: Path) -> dict[str, Any]:
+    """How the lines of *file_path* end, and whether its last line does.
+
+    One convention is recorded where the file keeps to one. A file mixing
+    them records none, so it cannot be written back as it is and a save that
+    reaches it is refused rather than normalising it.
+    """
+    try:
+        data = file_path.read_bytes()
+    except OSError:
+        return {}
+    breaks = data.count(b"\n")
+    crlf = data.count(b"\r\n")
+    if b"\r" in data.replace(b"\r\n", b""):
+        ending = None
+    elif breaks and crlf == breaks:
+        ending = "\r\n"
+    elif crlf == 0:
+        ending = "\n"
+    else:
+        ending = None
+    return {"line_ending": ending, "final_newline": not data or data.endswith(b"\n")}
 
 
 # Implements: REQ-d00254-L+M

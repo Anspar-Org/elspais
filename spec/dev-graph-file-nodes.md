@@ -330,6 +330,8 @@ K. The checks SHALL report each requirement and each file-level text section who
 
 L. When a save writes a file, the save SHALL leave the hash of each requirement in that file that no pending mutation changed equal to the hash that requirement had before the save.
 
+M. If a save would change a line of a code or test file other than a line of a citation that a pending mutation changed, then the save SHALL write no file and report that file and line.
+
 ### Rationale
 
 Render-based save replaces the brittle text surgery in persistence.py with graph-native serialization. Each FILE node renders its content from the graph, making the graph the single source of truth. The consistency check (rebuild + compare) proves round-trip fidelity.
@@ -340,8 +342,11 @@ Inside a file that a save does write, the file is rendered whole, so text that i
 
 Canonical form applies whenever elspais writes a requirement, and a change that leaves the hash where it was, such as spacing, layout or the depth of a heading, is fair game for any write. A change that moves the hash is material: it changes what the requirement is recorded as saying. Marking a *Defined Term* in an *Assertion* is such a change, because the emphasis says the word carries its defined meaning. L keeps a material change a deliberate act. A save makes it to a requirement somebody edited, and the fix operation makes it to any requirement on purpose, but a save never makes it to a requirement nobody edited. The hash L speaks of is the one the requirement's text yields. A recorded hash that no longer matches that text is a separate condition with its own check, and a save that records the hash the text already has changes no requirement's hash.
 
+A code or test file belongs to its authors. The tool changes one only to respell a citation of an identifier that a mutation renamed. M keeps every other byte of such a file as the author wrote it. A save produces the whole file from the graph, so where that cannot reproduce a line, or the file changed on disk after the graph read it, the save writes nothing rather than overwrite that line.
+
 ### Changelog
 
+- 2026-10-03 | 16a9564a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-01 | b7f05ffb | - | Michael Lewis (<michael@anspar.org>) | Add assertion L: a save leaves the hash of each requirement it did not edit unchanged
 - 2026-10-01 | 6eb9b930 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-01 | bd3e0684 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -351,7 +356,7 @@ Canonical form applies whenever elspais writes a requirement, and a change that 
 - 2026-05-11 | 7043f7af | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 7043f7af | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Render-Based Save Operation* | **Hash**: b7f05ffb
+*End* *Render-Based Save Operation* | **Hash**: 16a9564a
 ---
 
 ## REQ-d00325: Changelog Reason for a Saved Change

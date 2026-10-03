@@ -436,9 +436,9 @@ text becomes `<RETIRED>`, the label stays allocated and is never given to
 another assertion, no other label moves, and a citation of it reads as
 unresolved. For the provisional and aspirational roles it removes the
 assertion and moves each later label down one place; citations from
-requirements and journeys follow their assertion and are written on save.
-That deletion is refused, naming the references, when the deleted assertion
-is cited or a moved assertion is cited from code, a test or an unresolved
+requirements, journeys, code and tests follow their assertion and are written
+on save. That deletion is refused, naming the references, when the deleted
+assertion is cited or a moved assertion is cited from an unresolved
 reference; remove or retarget them first. A requirement in the retired role
 is read-only: every mutation of its content or identifier is refused until
 its status changes. `mutate_delete_requirement` on a requirement in the
@@ -473,6 +473,33 @@ A save writes the files its pending changes reach and no other: the file
 holding each changed node, and, for a rename, each file whose citations name
 the renamed identifier. A file that only needs its formatting tidied stays as
 it is on disk until `elspais fix` tidies it.
+
+A rename -- of a requirement, of an assertion, or the relabelling a
+provisional deletion makes -- respells each `Implements:`/`Verifies:` comment
+in a code or test file that names the renamed identifier, in its canonical
+spelling, leaving the rest of the comment and of the file as written. Every
+respelled comment is read back the way a build reads it; where it would not
+read as the same references under their new identifiers, the mutation is
+refused naming the file and line, and nothing changes. A comment whose
+keyword the file kind does not admit, and an item that did not read, are
+left alone. Renaming a journey respells the `Verifies: JNY-...` items
+naming it or one of its steps the same way. A save writes a code or test file
+back with its own line endings and its own final-newline state; a save that
+would change any other line -- because the file changed on disk after it was
+read, or mixes line endings -- writes nothing, names the file and line, and
+keeps the changes pending. Undo restores the respelled comments with the rest
+of the mutation.
+
+A rename onto an identifier that an unresolved reference already names is
+refused, listing each such reference with its file and line: the rename would
+otherwise make that reference designate the renamed entity. Remove or correct
+the reference first, or choose another identifier.
+
+An edge mutation (`mutate_add_edge`, `mutate_delete_edge`,
+`mutate_change_edge_kind`, `mutate_change_edge_targets`) whose source is a
+citation in a code or test file is refused: that relationship is the comment
+written in the file, so edit the `Implements:`/`Verifies:` comment (or apply a
+link suggestion with `elspais link suggest --apply`) and refresh the graph.
 
 A file a save does write is written whole, in canonical form, so text in it
 that no change reached can change form too. The result's

@@ -311,7 +311,8 @@ def node_version(node: GraphNode) -> str:
     elif node.kind in (NodeKind.CODE, NodeKind.TEST):
         # A CODE node's ID embeds an absolute path, so it must never reach the
         # digest — versions would otherwise differ between machines.
-        text = node.get_field("raw_text") or ""
+        # Every citation the node holds is part of what it renders as.
+        text = "\x1e".join(text for _line, text in sorted(citation_texts(node).items()))
     else:
         try:
             text = render_node(node, resolver=_digest_grammar())
@@ -506,7 +507,10 @@ def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
             if heading == "preamble":
                 in_assertions = False
                 if content:
-                    lines.append("")
+                    # One blank line separates it from what precedes it; a
+                    # section already ends on one (markdownlint MD012).
+                    if not lines or lines[-1] != "":
+                        lines.append("")
                     lines.append(content)
             elif heading_style:
                 # Assertion sub-heading. Two flavors:
@@ -660,12 +664,74 @@ def _render_test(node: GraphNode) -> str:
     return node.get_field("raw_text") or ""
 
 
-def _render_composed_file(node: GraphNode, resolver: Any | None = None) -> str:
-    """Render a file whose content is composed from the nodes it holds.
+def _composed_parts(node: GraphNode, resolver: Any | None = None) -> list[str]:
+    """The text of each part a FILE node holds, in the order it was written.
 
-    Walks CONTAINS children sorted by render_order edge metadata,
-    calls render_node on each, and concatenates the results. This is the
-    renderer the spec, journey, code and test file types declare.
+    Walks CONTAINS children sorted by render_order edge metadata and renders
+    each one. A code or test node is rendered through the edge that holds it,
+    because one test can be cited from more than one place in its file.
+    """
+    children_with_order: list[tuple[float, Any, GraphNode]] = []
+    for edge in node.iter_outgoing_edges():
+        if edge.kind == EdgeKind.CONTAINS:
+            order = edge.metadata.get("render_order", 0.0)
+            children_with_order.append((order, edge, edge.target))
+    children_with_order.sort(key=lambda x: x[0])
+
+    parts: list[str] = []
+    for _order, edge, _child in children_with_order:
+        rendered = _contained_text(edge, resolver)
+        if rendered is not None:
+            parts.append(rendered)
+    return parts
+
+
+def _contained_text(edge: Any, resolver: Any | None = None) -> str | None:
+    """The text the part a CONTAINS edge holds renders as, or None for none."""
+    child = edge.target
+    if child.kind in (NodeKind.CODE, NodeKind.TEST):
+        return citation_text_at(child, edge.metadata.get("start_line"))
+    return render_node(child, resolver=resolver)
+
+
+# Implements: REQ-d00131-F, REQ-d00131-G
+def citation_text_at(node: GraphNode, start_line: int | None) -> str | None:
+    """The citation comment a CODE or TEST node holds at *start_line*.
+
+    A test cited from two places holds both comments, each under the line
+    it starts on. A test function no citation names holds no comment, and
+    so contributes no line of its own to its file.
+    """
+    further = node.get_field("further_citations") or {}
+    if start_line in further:
+        return further[start_line]
+    return node.get_field("raw_text") or None
+
+
+# Implements: REQ-d00131-F, REQ-d00131-G
+def citation_texts(node: GraphNode) -> dict[int, str]:
+    """Every citation comment a CODE or TEST node holds, by the line it starts on."""
+    texts: dict[int, str] = {}
+    raw = node.get_field("raw_text")
+    if raw:
+        line = None
+        for edge in node.iter_incoming_edges():
+            if edge.kind == EdgeKind.CONTAINS:
+                start = edge.metadata.get("start_line")
+                if start is not None and start not in (node.get_field("further_citations") or {}):
+                    line = start
+                    break
+        texts[line if line is not None else node.get_field("parse_line") or 0] = raw
+    texts.update(node.get_field("further_citations") or {})
+    return texts
+
+
+def _render_composed_file(node: GraphNode, resolver: Any | None = None) -> str:
+    """Render a spec or journey file from the nodes it holds.
+
+    Blank lines between content blocks are captured as REMAINDER nodes by
+    the parser, so joining the parts reproduces the file. When blocks are
+    deleted, their REMAINDER separators go too, giving automatic compaction.
 
     Args:
         node: A FILE node.
@@ -675,36 +741,31 @@ def _render_composed_file(node: GraphNode, resolver: Any | None = None) -> str:
     Returns:
         The complete file content as a string.
     """
-    # Collect CONTAINS children with their render_order
-    children_with_order: list[tuple[float, GraphNode]] = []
-
-    for edge in node.iter_outgoing_edges():
-        if edge.kind == EdgeKind.CONTAINS:
-            order = edge.metadata.get("render_order", 0.0)
-            children_with_order.append((order, edge.target))
-
-    if not children_with_order:
-        return ""
-
-    # Sort by render_order
-    children_with_order.sort(key=lambda x: x[0])
-
-    # Render each child and concatenate.
-    # Blank lines between content blocks are captured as REMAINDER nodes
-    # by the parser, so simple join produces faithful output.
-    # When blocks are deleted, their REMAINDER separators go too,
-    # giving automatic compaction.
-    parts: list[str] = []
-    for _order, child in children_with_order:
-        rendered = render_node(child, resolver=resolver)
-        if rendered is not None:
-            parts.append(rendered)
-
-    result = "\n".join(parts)
+    result = "\n".join(_composed_parts(node, resolver))
     # Preserve trailing newline (files end with newline)
     if result and not result.endswith("\n"):
         result += "\n"
     return result
+
+
+# Implements: REQ-d00132-M
+def _render_source_file(node: GraphNode, resolver: Any | None = None) -> str:
+    """Render a code or test file from the nodes it holds.
+
+    Every line of such a file is held by exactly one part, an empty line
+    included, so the file is its parts' lines, each ended the way the file
+    ends its lines, the last one only where the file's last line was.
+    """
+    parts = _composed_parts(node, resolver)
+    if not parts:
+        return ""
+    text = "\n".join(parts)
+    if node.get_field("final_newline", True):
+        text += "\n"
+    ending = node.get_field("line_ending", "\n")
+    if ending and ending != "\n":
+        text = text.replace("\n", ending)
+    return text
 
 
 # Implements: REQ-d00299-A
@@ -741,8 +802,8 @@ def _render_config_file(node: GraphNode, resolver: Any | None = None) -> str:
 FILE_RENDERERS: dict[FileType, Callable[[GraphNode, Any | None], str]] = {
     FileType.SPEC: _render_composed_file,
     FileType.JOURNEY: _render_composed_file,
-    FileType.CODE: _render_composed_file,
-    FileType.TEST: _render_composed_file,
+    FileType.CODE: _render_source_file,
+    FileType.TEST: _render_source_file,
     FileType.CONFIG: _render_config_file,
 }
 
@@ -974,6 +1035,7 @@ def _mutation_reach(
         reached content nodes keyed by identity, and the requirements the
         mutations changed.
     """
+    from elspais.graph.citation_respelling import holder_in
     from elspais.graph.declarations import DECLARATION_OPERATIONS
 
     dirty_files: dict[int, Any] = {}
@@ -1068,6 +1130,17 @@ def _mutation_reach(
         for journey_id in entry.after_state.get("journeys_reconciled", ()) or ():
             _mark_node_file(journey_id)
 
+        # Implements: REQ-p00017-B, REQ-d00132-H
+        # A rename respells each citation in code or a test that designates
+        # what it renamed. The file is named by its id, which carries its
+        # repository's namespace; a citing node's own id need not.
+        for record in entry.after_state.get("respelled_citations", ()) or ():
+            citing_file = graph.find_by_id(record["file_id"])
+            _mark(citing_file)
+            holder = holder_in(citing_file, record["node_id"])
+            if holder is not None:
+                reached[id(holder)] = holder
+
         # For remainder mutations, find the parent requirement's file
         if entry.operation in (
             "update_remainder",
@@ -1100,16 +1173,17 @@ def _mutation_reach(
             if parent_id:
                 _mark_file_of(parent_id)
 
+        # Implements: REQ-d00132-I
         # For delete_requirement, use the FILE id stored at delete time.
         # The path stored beside it cannot name the repository, so it is
-        # not a fallback here -- it is display data.
+        # not a fallback here -- it is display data. The requirements the
+        # removed one cited are its parents in the graph, and their text
+        # does not change: a requirement renders the references it makes,
+        # never the references made to it.
         if entry.operation == "delete_requirement":
             source_file_id = entry.before_state.get("source_file_id")
             if source_file_id:
                 _mark(graph.find_by_id(source_file_id))
-            # Also try parent IDs from before_state
-            for pid in entry.before_state.get("parent_ids", []):
-                _mark_file_of(pid)
 
         # For rename_node, both old and new locations
         if entry.operation == "rename_node":
@@ -1258,6 +1332,69 @@ def _find_dirty_files(graph: FederatedGraph, *, tidy: bool = False) -> list[Any]
     return list(dirty_files.values())
 
 
+def _owned_path(graph: FederatedGraph, file_node: GraphNode, repo_root: Path) -> tuple[Path, Any]:
+    """The file a FILE node names, resolved in the repository holding it."""
+    owning_entry = None
+    try:
+        owning_entry = graph.repo_for_node(file_node)
+    except (KeyError, AttributeError):
+        pass
+    path = Path(file_node.get_field("relative_path") or "")
+    if not path.is_absolute():
+        root = owning_entry.repo_root if owning_entry is not None else repo_root
+        path = root / path
+    return path, owning_entry
+
+
+# Implements: REQ-d00132-M
+def _source_file_violations(
+    graph: FederatedGraph,
+    dirty_files: list[Any],
+    reached: dict[int, Any],
+    repo_root: Path,
+    resolver: Any | None,
+) -> list[str]:
+    """Each line of a code or test file a save would change and may not.
+
+    The lines a save may change are those of the citations its mutations
+    respelled. The file is compared with its bytes on disk, read without
+    translating line endings, so a file the graph cannot reproduce, or one
+    changed on disk since it was read, is named rather than overwritten.
+    """
+    violations: list[str] = []
+    for file_node in sorted(dirty_files, key=lambda n: n.id):
+        if _file_type_of(file_node) not in (FileType.CODE, FileType.TEST):
+            continue
+        path, owning_entry = _owned_path(graph, file_node, repo_root)
+        if not path.is_file():
+            continue
+        allowed: set[int] = set()
+        for edge in file_node.iter_outgoing_edges():
+            if edge.kind == EdgeKind.CONTAINS and id(edge.target) in reached:
+                start = edge.metadata.get("start_line") or 0
+                end = edge.metadata.get("end_line") or start
+                allowed.update(range(start, end + 1))
+        file_resolver = getattr(getattr(owning_entry, "graph", None), "_resolver", None) or resolver
+        rendered = render_file(file_node, resolver=file_resolver).split("\n")
+        with open(path, encoding="utf-8", newline="") as handle:
+            on_disk = handle.read().split("\n")
+        rel = file_node.get_field("relative_path")
+        for number in range(1, max(len(rendered), len(on_disk)) + 1):
+            if number in allowed:
+                continue
+            left = on_disk[number - 1] if number <= len(on_disk) else None
+            right = rendered[number - 1] if number <= len(rendered) else None
+            if left != right:
+                violations.append(
+                    f"{rel}:{number}: saving would change this line of a code or test "
+                    f"file, which no pending mutation changed, so nothing was written. "
+                    f"The file may have changed on disk since it was read, or the tool "
+                    f"cannot write it back as it is. The changes are still pending."
+                )
+                break
+    return violations
+
+
 # Implements: REQ-d00132-J
 def _changed_beyond_edits(
     file_node: GraphNode,
@@ -1293,7 +1430,7 @@ def _changed_beyond_edits(
         end = edge.metadata.get("end_line")
         if not isinstance(start, int) or not isinstance(end, int) or start < 1:
             continue
-        rendered = render_node(child, resolver=resolver)
+        rendered = _contained_text(edge, resolver)
         if rendered is None or rendered == "\n".join(lines[start - 1 : end]):
             continue
         changed.append(
@@ -1513,6 +1650,23 @@ def render_save(
 
     _reached_files, reached, edited = _mutation_reach(graph)
 
+    # Implements: REQ-d00132-M
+    # A code or test file belongs to its authors; the save may change only
+    # the citations its mutations respelled. Every such file is checked
+    # before any file is written, so a refusal leaves every file as it was
+    # and the work pending.
+    untouchable = _source_file_violations(graph, dirty_files, reached, repo_root, resolver)
+    if untouchable:
+        return {
+            "success": False,
+            "saved_count": 0,
+            "files_modified": [],
+            "conflicts": [],
+            "errors": untouchable,
+            "skipped": skipped,
+            "changed_beyond_edits": [],
+        }
+
     # Implements: REQ-d00132-L
     # Canonical form for a requirement somebody edited includes the term
     # markup in the text its hash covers. Every other requirement keeps that
@@ -1557,8 +1711,10 @@ def render_save(
             if file_resolver is None:
                 file_resolver = resolver
             content = render_file(file_node, resolver=file_resolver)
-            # Ensure file ends with newline
-            if content and not content.endswith("\n"):
+            source_file = _file_type_of(file_node) in (FileType.CODE, FileType.TEST)
+            # Ensure file ends with newline. A code or test file ends as its
+            # author ended it (REQ-d00132-M).
+            if content and not content.endswith("\n") and not source_file:
                 content += "\n"
             if abs_path.is_file():
                 changed_beyond_edits.extend(
@@ -1569,7 +1725,9 @@ def render_save(
                         file_resolver,
                     )
                 )
-            abs_path.write_text(content, encoding="utf-8")
+            # A code or test file's own line endings are already in the
+            # content, so they are written without translation.
+            abs_path.write_text(content, encoding="utf-8", newline="" if source_file else None)
             files_modified.add(str(abs_path))
             saved_count += 1
         except Exception as e:

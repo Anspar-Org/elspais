@@ -380,6 +380,10 @@ The failure shapes this requirement guards against:
 
 A refusal under M names where each reference is held. A citation in code or a test is held on its own line. A citation in a requirement's metadata is held by that requirement, so it is located at the requirement's *Requirement Location*.
 
+B reaches a citation in code or a test as it reaches any other reference, so the tool respells the identifier in the citation's own text. A respelling that reads wrong would be silent in the same way as a stale label: the citation still parses, and it designates something else. O makes that failure loud. The respelled citation is read again in the same way that a build reads it, and the mutation is applied only where the citation designates what it designated before, under the new identifiers.
+
+P guards the same invariant from the other side. A reference that resolves to nothing designates nothing. If a rename gave its identifier to a requirement or an *Assertion*, the reference would start to designate that entity, and nobody would have chosen that. The author decides instead: remove or correct the reference, or choose another identifier.
+
 N exists because status roles are configured per project. Retiring in place under D needs one status to give the requirement, and a project may declare several statuses in the retired role, or none. Choosing one would be a guess about what the author means, so the deletion is refused and the author sets the status.
 
 Interplay with existing requirements: this requirement governs what an *applied* mutation must preserve. When a mutation cannot be applied — or can be applied only partially — reporting the unapplied change and its cause is REQ-p00015-B's obligation, cited here rather than restated. REQ-d00201 and REQ-d00065 specify *which layer executes* mutations (delegation of mutation logic to the graph); they are complementary plumbing and say nothing about designation integrity, which is this requirement's subject. Protection against concurrent writers (lost updates, conflict detection) is the concern of the MCP mutation tooling spec under REQ-o00062, not of this requirement — scope here is designation integrity of the mutations that are applied.
@@ -417,8 +421,14 @@ M. If deleting an *Assertion* of a requirement whose status is in the provisiona
 
 N. If a mutation would delete a requirement whose status is in the active role, and the configuration does not declare exactly one status in the retired role, then the tool SHALL refuse the deletion and report the statuses that the configuration declares in the retired role.
 
+O. If a mutation would respell a citation in code or a test so that the citation no longer reads as the references it designated before, each under its new identifier, then the tool SHALL refuse the mutation and report the file and line of that citation.
+
+P. If a mutation would rename a requirement or an *Assertion* to an identifier that an unresolved reference held in the graph names, then the tool SHALL refuse the mutation and report each such reference and where it is held.
+
 ## Changelog
 
+- 2026-10-03 | e4e7f863 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-03 | 2523a47c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-02 | bc9e593e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-02 | 8c800926 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-02 | cfcacc28 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -430,7 +440,7 @@ N. If a mutation would delete a requirement whose status is in the active role, 
 - 2026-07-31 | c0aae59d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-20: author reference-integrity-under-mutation invariant (GI-3)
 
-*End* *Reference Integrity Under Mutation* | **Hash**: bc9e593e
+*End* *Reference Integrity Under Mutation* | **Hash**: e4e7f863
 ---
 
 # REQ-p00018: Compiled Risk Register
