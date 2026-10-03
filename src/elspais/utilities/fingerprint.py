@@ -126,13 +126,28 @@ def _digest_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def compute_manifest(repo_root: Path, config: Any, target: Any) -> dict[str, str]:
-    """Map the repo-relative path of each input of *target* to its content digest."""
+def compute_manifest(
+    repo_root: Path,
+    config: Any,
+    target: Any,
+    digest_cache: dict[Path, str] | None = None,
+) -> dict[str, str]:
+    """Map the repo-relative path of each input of *target* to its content digest.
+
+    *digest_cache* maps a path to its digest. Targets often share inputs, so a
+    caller judging several targets against one tree passes one cache to
+    every call and each file is read once. A cache is valid only while no file
+    changes, so a run never reads one.
+    """
     root = Path(repo_root).resolve()
     manifest: dict[str, str] = {}
     for path in input_files(root, config, target):
         try:
-            manifest[path.relative_to(root).as_posix()] = _digest_file(path)
+            if digest_cache is None:
+                digest = _digest_file(path)
+            elif (digest := digest_cache.get(path)) is None:
+                digest = digest_cache[path] = _digest_file(path)
+            manifest[path.relative_to(root).as_posix()] = digest
         except OSError:
             # A file that disappears after the walk is not an input.
             continue
@@ -305,10 +320,17 @@ def results_present(repo_root: Path, config: Any, target: Any) -> bool:
     return any(Path(f).is_file() for f in glob(str(folder / target.results), recursive=True))
 
 
-def judge(repo_root: Path, config: Any, target_name: str) -> Freshness:
+def judge(
+    repo_root: Path,
+    config: Any,
+    target_name: str,
+    *,
+    digest_cache: dict[Path, str] | None = None,
+) -> Freshness:
     """Return the freshness of a target's results on disk.
 
-    A stale verdict includes its reason.
+    A stale verdict includes its reason. *digest_cache* is passed to
+    :func:`compute_manifest`.
     """
     root = Path(repo_root).resolve()
     target = _find_target(config, target_name)
@@ -333,7 +355,8 @@ def judge(repo_root: Path, config: Any, target_name: str) -> Freshness:
             changed=during,
             record=record,
         )
-    changed = tuple(differences(record["manifest"], compute_manifest(root, config, target)))
+    current = compute_manifest(root, config, target, digest_cache)
+    changed = tuple(differences(record["manifest"], current))
     if changed:
         return Freshness(
             target=target_name, state="stale", reason="changed", changed=changed, record=record

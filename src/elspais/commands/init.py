@@ -249,6 +249,14 @@ _FIELD_COMMENTS: dict[str, str] = {
     "scanning.test.groups": (
         "Declared test groups: keyword = description. `all`, `default` and `none` are reserved"
     ),
+    "scanning.test.resources": (
+        "Declared shared resources: name = description. Two targets naming a"
+        " common resource never run at the same time"
+    ),
+    "scanning.test.concurrency": (
+        "Most test targets one run executes at the same time (default 1:"
+        " one at a time, in declaration order)"
+    ),
     "scanning.test.output_root": (
         "Directory holding one folder per test target; a target writes its results"
         " and coverage into its own folder (default .results)"
@@ -282,6 +290,9 @@ _FIELD_COMMENTS: dict[str, str] = {
     ),
     "scanning.test.targets.groups": (
         "Groups this target belongs to (default: the `default` group)"
+    ),
+    "scanning.test.targets.resources": (
+        "Declared shared resources this target uses (default: none)"
     ),
     "scanning.test.targets.classname": (
         '"python-module" | "source-file" -- how results name their test'
@@ -837,32 +848,50 @@ def generate_config(
         "Uncomment and repeat for each package/suite.",
         "See: elspais docs test-targets",
         "",
+        "A target writes into its own folder, <output_root>/<name>, read from",
+        "ELSPAIS_TARGET_OUTPUT; `results` and `coverage` are relative to it.",
+        "",
         "-- Flutter/Dart package example --",
         "[[scanning.test.targets]]",
         'name    = "app"',
         'cwd     = "app"',
-        'command = "flutter test --machine --coverage"',
+        (
+            'command = "flutter test --machine --coverage'
+            ' --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"'
+        ),
         'reporter = "flutter-machine"',
-        'coverage = "coverage/lcov.info"',
+        'coverage = "lcov.info"',
         'match   = "source"',
         'credit_coverage = "verified"',
         "",
-        "-- Package with a shared DB (serialise test files) --",
+        "-- Package with a shared DB --",
+        "--concurrency=1 serialises the test files inside this package.",
+        "`resources` keeps every other target naming `db` from running beside it",
+        "when [scanning.test] concurrency is above 1. Declare the resource in the",
+        "[scanning.test.resources] table above first:",
+        '  db = "The local Postgres instance the backend suites share"',
         "[[scanning.test.targets]]",
         'name    = "backend"',
         'cwd     = "backend"',
-        'command = "flutter test --machine --coverage --concurrency=1"',
+        (
+            'command = "flutter test --machine --coverage --concurrency=1'
+            ' --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"'
+        ),
         'reporter = "flutter-machine"',
-        'coverage = "coverage/lcov.info"',
+        'coverage = "lcov.info"',
         'match   = "source"',
         'credit_coverage = "verified"',
+        'resources = ["db"]',
         "",
         "-- Python/pytest example --",
         "[[scanning.test.targets]]",
         'name    = "unit"',
-        'command = "pytest tests/ --json-report --json-report-file=.elspais/results/pytest.json"',
+        (
+            'command = "pytest tests/ --json-report'
+            ' --json-report-file=$ELSPAIS_TARGET_OUTPUT/pytest.json"'
+        ),
         'reporter = "pytest-json"',
-        'results = ".elspais/results/pytest.json"',
+        'results = "pytest.json"',
         "",
         "-- Playwright/JUnit example (feeds journey + step UAT coverage) --",
         "[[scanning.test.targets]]",

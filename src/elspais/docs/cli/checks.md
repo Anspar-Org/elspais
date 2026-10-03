@@ -1021,7 +1021,7 @@ source of truth for flag names and descriptions.
 `elspais checks --run-tests` executes each configured
 `[[scanning.test.targets]]` entry before evaluating checks. `--targets NAME
 ...` restricts `--run-tests` to a named subset; without `--run-tests` it is
-refused (exit 2), as `--fail-fast` is. An unknown name is exit code 2. A
+refused (exit 2), as `--fail-fast` and `--stale-only` are. An unknown name is exit code 2. A
 selection standing for no target is also exit code 2. The flag only affects
 execution here. `--targets none` selects nothing to run.
 Consequently, `--run-tests` refuses it. A bare `--run-tests` selects the
@@ -1030,6 +1030,20 @@ run (exit 2). Name targets or groups instead. Per-PR selectivity rendering
 (`(baseline)` for carried results, `—` for no baseline) is produced by
 `summary --targets` / `trace --targets`, not by `checks`. See `elspais docs
 test-targets` for the full model.
+
+`--stale-only` narrows what `--run-tests` executes to the selected targets
+whose results are not fresh by the judgement `tests.results_stale` reports:
+stale, missing, or left by a run that recorded a start and no end. It carries
+the results of the rest, and every selected target is still expected, so a
+carried failing result still fails the run. It prints the division to stderr
+(`stale-only: executing a, b; carrying fresh results of c`). A selection that
+is all fresh executes nothing, and the checks then run over the results on
+disk.
+
+With `[scanning.test] concurrency` above 1, `--run-tests` runs several targets
+at the same time and marks each output line with its target's name. Under
+`--fail-fast`, no further target starts after a failure, the targets already
+running finish, and the checks pass is skipped.
 
 `--expect NAME ...` names the targets whose results the run requires without
 executing them -- results an earlier job left on disk. It is a separate

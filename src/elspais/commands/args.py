@@ -174,7 +174,16 @@ class ChecksArgs:
     """
 
     fail_fast: bool = False
-    """Stop at the first target failure and skip the checks pass. Requires --run-tests."""
+    """Stop at the first target failure and skip the checks pass. Requires --run-tests.
+    With `concurrency` above 1, no further target starts and the targets
+    already running finish."""
+
+    # Implements: REQ-d00315-A
+    stale_only: bool = False
+    """Execute only the selected targets whose results are not fresh -- stale,
+    missing, or left by a run that never finished -- and carry the fresh
+    results of the rest. The selection is --targets, or `default`. Every
+    selected target stays expected. Requires --run-tests."""
 
     targets: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
         default_factory=list
@@ -1190,7 +1199,16 @@ class TestArgs:
     --targets` selects, and refuses the same selections."""
 
     fail_fast: bool = False
-    """Stop at the first target that fails."""
+    """Stop at the first target that fails. With `concurrency` above 1, no
+    further target starts and the targets already running finish."""
+
+    # Implements: REQ-d00315-A
+    stale_only: bool = False
+    """Execute only the selected targets whose results are not fresh -- stale,
+    missing, or left by a run that never finished -- and leave the fresh
+    results of the rest in place. The selection is --targets, or `default`.
+    A run in which every selected target is fresh executes nothing and
+    passes."""
 
 
 @dataclasses.dataclass

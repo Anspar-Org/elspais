@@ -145,7 +145,9 @@ lists them in `stale_files`, and the MCP `get_graph_status` tool lists them in
 
 The word *fresh* in [Per-PR selectivity](#per-pr-selectivity) has another
 meaning. There it names the targets that the caller tells a reporting command
-ran in this invocation.
+ran in this invocation. `--stale-only` joins the two: it uses the fingerprint
+judgement to decide which targets to execute, and those targets are the ones a
+later `summary` or `trace` names as fresh.
 
 ## Target Fields
 
@@ -162,6 +164,7 @@ ran in this invocation.
 | `classname` | string | `""` (the reporter's own) | `"python-module"` or `"source-file"` -- how this target's results name the test that produced them |
 | `environment` | string | `""` (the reporter's own) | `"results-path"` or `"suite-hostname"` -- where the environment a result was recorded in is read from |
 | `groups` | list | `[]` (the `default` group) | Which groups this target belongs to |
+| `resources` | list | `[]` | Declared shared resources this target uses; two targets naming a common one never run at the same time (see [Concurrent Targets](#concurrent-targets)) |
 | `credit_coverage` | string | `"off"` | `"off"`, `"tested"`, or `"verified"` -- lcov_tested credit |
 | `min_coverage_fraction` | float | `0.0` | Fraction of impl lines that must be covered (0.0-1.0) |
 
@@ -294,6 +297,12 @@ them from `cwd`.
 ### Two-package example (one with a shared DB)
 
 ```toml
+[scanning.test]
+concurrency = 2
+
+[scanning.test.resources]
+db = "The local Postgres instance the backend suites share"
+
 [[scanning.test.targets]]
 name        = "app"
 cwd         = "app"
@@ -311,11 +320,14 @@ reporter    = "flutter-machine"
 coverage    = "lcov.info"
 match       = "source"
 credit_coverage = "verified"
+resources   = ["db"]
 ```
 
 Use one `[[scanning.test.targets]]` block per package.  The `cwd` field
 runs each package's tests in its own directory. Each target's folder keeps
-its coverage apart from the other's.
+its coverage apart from the other's. With `concurrency = 2` the two packages
+run at the same time. `backend` names the `db` resource, so any other target
+that names `db` waits until `backend` finishes, and `backend` waits for it.
 
 ### Gotchas
 
@@ -335,6 +347,12 @@ parallel test execution causes flakes.  Add `--concurrency=1` to the
 ```toml
 command = "flutter test --machine --coverage --concurrency=1 --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"
 ```
+
+Flutter's `--concurrency` and elspais's `[scanning.test] concurrency` govern
+different things. Flutter's flag sets how many test files run at once inside
+one target. elspais's setting sets how many targets run at once. When two
+targets share the database, name it in `resources` on both, so that elspais
+never runs them at the same time.
 
 **Coverage file location.**  `flutter test --coverage` without
 `--coverage-path` writes to `<package-root>/coverage/lcov.info`. That path is
@@ -581,6 +599,12 @@ results = "*.xml"
 # scanning kind's file selection.
 # inputs = { directories = ["packages/my-package"] }
 
+# Shared resources this target uses, each declared under
+# [scanning.test.resources] with a description. Two targets naming a common
+# resource never run at the same time. Matters only where
+# [scanning.test] concurrency is above 1.
+# resources = ["db"]
+
 # "source" (default): source-location attribution (requires file paths in results).
 # "aggregate" (opt-in): whole-suite green/red; use when results lack file paths.
 match = "source"
@@ -626,7 +650,9 @@ elspais checks
 
 `elspais test` executes test targets and records their results. It evaluates
 no check. Its exit code is 1 if any target it executed failed, and 0 if all
-passed. It selects with `--targets` exactly as `checks --run-tests` does.
+passed. It selects with `--targets` exactly as `checks --run-tests` does, and
+`elspais test --stale-only` executes only the selected targets whose results
+are not fresh (see [Executing only what is stale](#executing-only-what-is-stale)).
 
 Split the suite across jobs with `elspais test`, collect each job's target
 folders, and evaluate the checks once:
@@ -649,6 +675,118 @@ that matches what the command writes into `$ELSPAIS_TARGET_OUTPUT`. A stdout
 reporter's output is not recorded on its own. The command refuses (exit 2),
 before it runs anything, a selection that holds such a target with no
 `results` pattern. A coverage target is not affected.
+
+Separate jobs divide a suite across machines. On one machine, `[scanning.test]
+concurrency` runs several targets of one run at the same time (see
+[Concurrent Targets](#concurrent-targets)).
+
+## Concurrent Targets
+
+`[scanning.test] concurrency` is the most targets one run executes at the same
+time. It is a whole number of 1 or more, and it applies to
+`elspais checks --run-tests` and `elspais test` alike.
+
+```toml
+[scanning.test]
+concurrency = 4
+```
+
+With `concurrency = 1`, the default, targets run one at a time in declaration
+order. Their output passes straight through to the terminal.
+
+With a larger value, a run schedules its targets as follows:
+
+- Targets start in declaration order as places free up.
+- Two targets that name a common shared resource never run at the same time.
+  All other targets may overlap.
+- A target held back by a resource does not hold back the targets after it.
+  The next target that can start, starts.
+
+elspais schedules targets, not tests. A target's own runner owns the
+parallelism inside that target, such as `pytest -n` or
+`flutter test --concurrency`.
+
+### Output of targets that run together
+
+Lines from targets that run together arrive interleaved. Consequently, every
+line a target writes, on stdout and on stderr, is shown with the target's name
+in front of it. A banner names each target as it starts, and a tally line
+states its outcome and elapsed time:
+
+```text
+>>> Running 'unit' target: pytest tests/unit --junitxml=$ELSPAIS_TARGET_OUTPUT/junit.xml
+>>> Running 'backend' target: flutter test --machine --coverage ...
+[unit] ============================= test session starts ==============================
+[backend] {"protocolVersion":"0.1.1","runnerVersion":"1.25.0","type":"start"}
+<<< unit: passed (1.2s)
+<<< backend: FAILED (exit 3) (4.7s)
+```
+
+The stdout of a file-channel target goes to elspais's stdout, and its stderr
+goes to elspais's stderr. The stdout of a stdout-channel target is its results,
+so elspais shows it on stderr and captures it for that target alone. A target
+never reads another target's output as its results. No target reads stdin:
+each one runs with its stdin at `/dev/null`.
+
+### Shared resources
+
+Each target already writes into a folder of its own, so two targets never
+write the same report. What two targets can still share is outside elspais: a
+database, a network port, a device or emulator, a local service stack. Declare
+each such resource with a description of what it is, and have each target name
+the resources it uses:
+
+```toml
+[scanning.test.resources]
+db          = "The local Postgres instance the integration suites share"
+"port-8080" = "The port the local API server listens on"
+
+[[scanning.test.targets]]
+name      = "api"
+command   = "pytest tests/api --junitxml=$ELSPAIS_TARGET_OUTPUT/junit.xml"
+reporter  = "junit"
+results   = "junit.xml"
+resources = ["db", "port-8080"]
+
+[[scanning.test.targets]]
+name      = "migrations"
+command   = "pytest tests/migrations --junitxml=$ELSPAIS_TARGET_OUTPUT/junit.xml"
+reporter  = "junit"
+results   = "junit.xml"
+resources = ["db"]
+```
+
+Here `api` and `migrations` never overlap, and every other target may run
+beside either of them. The description is required, because the declaration
+is the only place a reader learns what the name stands for. Names are matched
+without regard to case. A configuration that declares two names differing only
+in case is refused. A target that names a resource the project does not
+declare is refused when the configuration is read. A misspelled name would
+otherwise let two conflicting targets overlap without any warning.
+
+Concurrency is off by default for this reason. Targets that share something no
+declaration names, such as a database, would corrupt each other's runs.
+
+### Writing outside the target's folder
+
+A target's inputs default to every file in the repository (see
+[Target Folders and Fresh Results](#target-folders-and-fresh-results)). A
+target that writes outside its own folder while another target runs changes
+that other target's inputs. Examples are a tool cache, or a coverage file in
+the repository root. The other target's results then read as stale:
+`tests.results_stale` reports that its inputs changed while it ran, and names
+the file. Put such paths in the global
+`[scanning] skip` list, or narrow the other target's `inputs`.
+
+### Stopping at the first failure
+
+`--fail-fast` stops a run at the first target that fails. With
+`concurrency = 1`, no target after the failing one runs. With a larger value,
+no further target starts, and the targets already running finish. elspais does
+not stop a running target, because a stopped target leaves a run that records
+a start and no end. Its results would then read as in progress. In
+`elspais checks --run-tests`, a failure under `--fail-fast` also skips the
+checks pass.
 
 ## Groups
 
@@ -806,8 +944,9 @@ footnote appears — output is unchanged from before this flag existed. The
 `elspais checks` itself (the health-report / gate command) only consumes
 `--targets` for *execution* under `--run-tests`; it does not render
 `(baseline)`/`—`/`*` — that provenance rendering is `summary`/`trace`'s job.
-Without `--run-tests`, `checks` executes nothing, so it refuses `--targets`
-and `--fail-fast` (exit 2) rather than accept a selection nothing reads; to
+Without `--run-tests`, `checks` executes nothing, so it refuses `--targets`,
+`--fail-fast` and `--stale-only` (exit 2) rather than accept a selection
+nothing reads; to
 require results a run did not execute, name them with `--expect` (see below).
 `checks --run-tests --targets none` selects nothing to run. Consequently, the
 command refuses it.
@@ -837,6 +976,52 @@ every configured target runs and renders fresh:
 
 ```bash
 elspais checks --run-tests
+```
+
+### Executing only what is stale
+
+`--stale-only`, on `elspais checks --run-tests` and on `elspais test`, executes
+only the selected targets whose results are not fresh. The selection is the
+`--targets` selection, or the `default` group. Freshness is the judgement
+`tests.results_stale` reports (see
+[Target Folders and Fresh Results](#target-folders-and-fresh-results)). A
+selected target is executed when any of these holds:
+
+- Its results are stale: an input changed since its run began, or no run
+  recorded a fingerprint for them.
+- It has no results on disk. A target with no `results` pattern therefore
+  always runs. A coverage-only target is one example. A stdout reporter with
+  no `results` pattern is another under `checks --run-tests`; `elspais test`
+  refuses such a target (see
+  [Parallel jobs and one gate](#parallel-jobs-and-one-gate)).
+- Its last run recorded a start and no end.
+
+Every other selected target's results are carried forward, exactly as in a
+selective run with `--targets`. In `checks`, every selected target is still
+expected. A carried failing result still fails the gate, because fresh means
+the inputs are unchanged, not that the tests passed.
+
+```bash
+elspais checks --run-tests --stale-only
+```
+
+The run states its division on stderr before anything runs:
+
+```text
+stale-only: executing api, unit; carrying fresh results of backend
+```
+
+If every selected target is fresh, nothing executes and the run succeeds.
+`elspais test --stale-only` then prints
+`no target executed: the results of every selected target are fresh` and
+exits 0. A run without `--stale-only` executes every target it names, fresh
+or not.
+
+To render `summary` or `trace` afterwards with the rest marked as carried,
+pass the executed targets from the stale-only line to `--targets`:
+
+```bash
+elspais trace --targets api unit --format markdown
 ```
 
 ### Expected results

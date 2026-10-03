@@ -128,11 +128,19 @@ To see malformed references, use: `elspais malformed`
                    The run then records a fingerprint of its inputs there.
                    Exits 2 if no target has a command.
   `--fail-fast`    Stop at the first target failure and skip the checks pass.
+                   With `concurrency` above 1, no further target starts and
+                   the targets already running finish.
                    Requires `--run-tests`; refused without it (exit 2).
   `--targets T...` Run and ingest only these test targets rather than the
                    `default` group. The command refuses a selection
                    standing for no target, `none` included (exit 2). It also
                    refuses a bare run if `default` holds no target.
+                   Requires `--run-tests`; refused without it (exit 2).
+  `--stale-only`   Execute only the selected targets whose results are not
+                   fresh (stale, missing, or left by a run that never
+                   finished) and carry the results of the rest. Every
+                   selected target stays expected, and a carried failure
+                   still fails. A selection that is all fresh executes nothing.
                    Requires `--run-tests`; refused without it (exit 2).
   `--expect T...`  Require the results of these test targets (or groups)
                    without executing them, e.g. results an earlier job left.
@@ -156,6 +164,7 @@ Execute test targets and record their results. Evaluate no check.
 
   $ elspais test                       # the `default` group
   $ elspais test --targets unit        # a target or a group
+  $ elspais test --stale-only          # only targets whose results are not fresh
   $ elspais checks --expect unit       # later, once: judge every result
 
 The exit code reflects only the targets: 1 if any target failed, 0 if all
@@ -164,7 +173,14 @@ passed. Each run empties the target's folder and records a fingerprint, as
 
   `--targets T...` Execute only these targets or groups. The selection and its
                    refusals are those of `checks --run-tests` (exit 2).
-  `--fail-fast`    Stop at the first target that fails.
+  `--fail-fast`    Stop at the first target that fails. With `concurrency`
+                   above 1, no further target starts and the targets already
+                   running finish.
+  `--stale-only`   Execute only the selected targets whose results are not
+                   fresh (stale, missing, or left by a run that never
+                   finished) and leave the fresh results of the rest in
+                   place. A selection that is all fresh executes nothing and
+                   exits 0.
 
 Every executed target whose reporter reads test results must declare a
 `results` pattern, because this command reads nothing while a command runs. A

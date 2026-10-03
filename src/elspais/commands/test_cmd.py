@@ -1,4 +1,4 @@
-# Implements: REQ-d00249-H+I+J+K
+# Implements: REQ-d00249-H+I+J+K, REQ-d00315-A+G+H
 """``elspais test``: execute test targets and record their results, evaluating no check.
 
 A project that splits its suite across parallel jobs runs ``elspais test``
@@ -24,7 +24,9 @@ def run(args: argparse.Namespace) -> int:
     from elspais.commands._scope import flag_values
     from elspais.commands.test_runner import (
         SelectionRefused,
+        describe_stale_only,
         executable_selection,
+        not_fresh_targets,
         run_configured_targets,
         unrecorded_targets,
     )
@@ -55,6 +57,13 @@ def run(args: argparse.Namespace) -> int:
         )
         return 2
 
+    # Implements: REQ-d00315-B+G+H
+    # A stale-only run narrows the selection to the targets whose results are
+    # not fresh. When all are fresh it executes nothing, and that is a success.
+    if getattr(args, "stale_only", False):
+        only, carry = not_fresh_targets(config, repo_root, only)
+        print(describe_stale_only(only, carry), file=sys.stderr)
+
     results, _captured = run_configured_targets(
         config, repo_root, fail_fast=bool(getattr(args, "fail_fast", False)), only=only
     )
@@ -64,5 +73,8 @@ def run(args: argparse.Namespace) -> int:
     if failed:
         print(f"{len(failed)} of {len(results)} target(s) failed: {', '.join(failed)}")
         return 1
+    if not results:
+        print("no target executed: the results of every selected target are fresh")
+        return 0
     print(f"{len(results)} target(s) passed")
     return 0

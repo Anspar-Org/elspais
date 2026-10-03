@@ -258,6 +258,7 @@ skip_files = []
 skip_dirs = []
 reference_keyword = "Verifies"   # Keyword for test-to-req references
 reference_patterns = []          # Additional reference patterns
+concurrency = 1                  # Most test targets one run executes at once
 prescan_command = ""             # External test discovery command
 # prescan_command receives file paths on stdin, outputs JSON on stdout:
 #   [{"file": "path", "function": "name", "class": "Name|null", "line": N,
@@ -273,7 +274,9 @@ prescan_command = ""             # External test discovery command
 # ID spelled into the function name references nothing, whatever separators
 # are configured.
 
-# Test result ingestion is configured via [[scanning.test.targets]].
+# Test result ingestion is configured via [[scanning.test.targets]], and
+# the shared resources that keep two targets from overlapping under
+# [scanning.test.resources].
 # See: elspais docs test-targets
 
 [scanning.journey]

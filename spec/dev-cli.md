@@ -603,7 +603,7 @@ D. When no UAT results CSV file exists, the uat.results check SHALL report as sk
 
 ### Assertions
 
-A. The system SHALL execute each entry in `[[scanning.test.targets]]` in declaration order when invoked with `elspais checks --run-tests`, resolving each entry's `cwd` relative to the repository root and rejecting any `cwd` that resolves outside the repository root.
+A. <RETIRED> executed every test target in declaration order. REQ-d00249-L+M govern the working directory of a test target, and REQ-d00314 governs the order in which test targets run.
 
 B. The system SHALL stream runner stdout and stderr live to the invoking terminal, emit a per-runner banner before invocation, and a tally line with elapsed seconds and the exit code after invocation.
 
@@ -624,6 +624,10 @@ I. A run that evaluates no check SHALL select its targets by the same target and
 J. A run that evaluates no check SHALL return a non-zero exit code if any target it executed failed, and 0 only if every target it executed succeeded.
 
 K. A run that evaluates no check SHALL refuse, before it executes any target, a selection that holds a target whose results it would not record.
+
+L. The system SHALL run the command of a test target in the working directory of that target, resolved relative to the repository root.
+
+M. If the working directory of a test target resolves outside the repository root, then the system SHALL refuse to run the command of that target.
 
 ### Rationale
 
@@ -651,8 +655,12 @@ no results artifact, leaves no result for a later run to read. Such a
 run would succeed and leave the gate with nothing, so it is refused
 before any time is spent.
 
+L and M confine a target's command to the repository it belongs to. Which targets run, in which order and at the same time as which others is REQ-d00314.
+
 ### Changelog
 
+- 2026-10-02 | 3a252869 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-138: the order of test target runs moves to REQ-d00314; the working directory of a target is L and M (A retired)
 - 2026-10-02 | eaae2588 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-125: test targets can be executed and their results recorded without evaluating checks (H, I, J, K)
 - 2026-10-01 | fcac603a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -663,7 +671,7 @@ before any time is spent.
 - 2026-09-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: point the no-runners error at the document carrying target configuration examples (F)
 - 2026-09-12 | 784f8350 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Configured test runner execution* | **Hash**: eaae2588
+*End* *Configured test runner execution* | **Hash**: 3a252869
 
 ## REQ-d00259: Requirement Format Reference Command
 

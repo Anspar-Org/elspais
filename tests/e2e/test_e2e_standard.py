@@ -2106,10 +2106,9 @@ class TestRunTestsFlag:
 
     Uses isolated scratch copies of the shared project to avoid interference
     from earlier mutation tests that may leave spec files in an unhealthy state.
-
-    Verifies: REQ-d00249-A, REQ-d00249-B, REQ-d00249-F, REQ-d00249-G
     """
 
+    # Verifies: REQ-d00249-G
     def test_run_tests_happy_path(self, tmp_path, project):
 
         scratch = tmp_path / "happy"
@@ -2124,6 +2123,7 @@ class TestRunTestsFlag:
         )
         assert result_path.exists(), "stub runner did not write expected result file"
 
+    # Verifies: REQ-d00249-B
     def test_run_tests_banner_in_output(self, tmp_path, project):
 
         scratch = tmp_path / "banner"
@@ -2133,6 +2133,7 @@ class TestRunTestsFlag:
         combined = (out.stdout or "") + (out.stderr or "")
         assert "Running 'stub' target" in combined
 
+    # Verifies: REQ-d00249-F
     def test_run_tests_no_targets_configured_exits_2(self, tmp_path, project):
 
         scratch = tmp_path / "no_targets"
