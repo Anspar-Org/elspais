@@ -12,5 +12,9 @@ The system SHALL take payment at checkout.
 
 A. The system SHALL accept a valid card.
 
+## Changelog
+
+- 2026-01-01 | - | - | Fixture Author (<fixture@example.com>) | Initial version
+
 *End* *Checkout*
 ---

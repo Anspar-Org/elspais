@@ -950,7 +950,7 @@ async def api_attach_client(request: Request) -> JSONResponse:
     if attached and not state.shared.is_shutting_down:
         # Same rule as every other write once this process has committed to
         # stopping: it does not update its own advertisement, because the
-        # record now says it is stopping and a client needs to read that.
+        # daemon record now says it is stopping and a client needs to read that.
         from elspais.mcp.daemon import record_daemon_clients
 
         record_daemon_clients(state.repo_root, clients, held)
@@ -972,9 +972,9 @@ async def api_dirty(request: Request) -> JSONResponse:
         "mutation_count": len(entries),
         "tip": entries[-1].id if entries else None,
     }
-    record = _automatic_save_record(state.repo_root)
-    if record is not None:
-        body["automatic_save"] = record
+    automatic_save = _automatic_save_record(state.repo_root)
+    if automatic_save is not None:
+        body["automatic_save"] = automatic_save
     # Implements: REQ-o00077-A
     difference = _executable_difference()
     if difference is not None:
@@ -2377,7 +2377,7 @@ async def _history_json(request: Request) -> dict:
         return {}
 
 
-# Implements: REQ-d00132-A, REQ-p00083-H, REQ-d00296-A, REQ-o00062-O, REQ-p00015-B
+# Implements: REQ-d00132-A, REQ-p00083-H, REQ-d00296-A, REQ-o00062-O, REQ-p00015-B, REQ-d00325-F
 # Implements: REQ-o00062-O, REQ-d00253-B
 # What a caller can do about a refused save, by the code the save reports.
 # Anything not named here is a write that failed, which is a 500: the request
@@ -2396,7 +2396,7 @@ async def api_save(request: Request) -> JSONResponse:
 
     The write itself is the one shared with the MCP save tool and the
     daemon's own save, so a save requested here enforces the same
-    changelog rule and retires the same record as one requested there.
+    changelog rule and retires the same automatic save record as one requested there.
     So is the rebuild that follows a successful write: the changelog rows
     a save owes are written to the files outside the graph, and a served
     graph that still rendered from memory would write the next save over

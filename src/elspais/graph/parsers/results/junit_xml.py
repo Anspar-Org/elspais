@@ -127,7 +127,7 @@ class JUnitXMLParser(DiagnosticRecorder):
 
         Returns:
             List of test result dictionaries with keys:
-            - ordinal: Position of the record in this artifact
+            - ordinal: Position of the result record in this artifact
             - name: Test name
             - classname: Test class name
             - status: passed, failed, skipped, or error
@@ -151,7 +151,7 @@ class JUnitXMLParser(DiagnosticRecorder):
             )
             return results
 
-        # Results-file provenance: each record points back at the artifact
+        # Results-file provenance: each result record points back at the artifact
         # that recorded it (`result_file` = the results file itself, distinct
         # from `source_path`, which names the TEST'S source file and is the
         # RESULT->TEST match key). `result_line` is the `<testcase>` line
@@ -174,7 +174,7 @@ class JUnitXMLParser(DiagnosticRecorder):
 
         for testsuite in testsuites:
             # Implements: REQ-d00294-C
-            # The `hostname` attribute of the suite that holds the record.
+            # The `hostname` attribute of the suite that holds the result record.
             # It is carried, never read as an environment here: what it
             # means depends on the producer, and only a target that declares
             # `environment = "suite-hostname"` says it means one.
@@ -189,7 +189,7 @@ class JUnitXMLParser(DiagnosticRecorder):
                 except ValueError:
                     # Suppressed deliberately: a duration is a measurement of
                     # the run, not a fact about traceability. An unreadable
-                    # one costs the record nothing that binds it to a test,
+                    # one costs the result record nothing that binds it to a test,
                     # so the result is kept and the timing reads as zero.
                     duration = 0.0
 
@@ -230,10 +230,10 @@ class JUnitXMLParser(DiagnosticRecorder):
 
                 result = {
                     # Implements: REQ-d00294-A
-                    # The position of this record among the records read from
+                    # The position of this result record among those read from
                     # this artifact. Ingestion builds the result id from it.
                     # Two runs of one test in two environments write two
-                    # records that agree about everything else.
+                    # result records that agree about everything else.
                     "ordinal": len(results) + 1,
                     "name": name,
                     "classname": classname,

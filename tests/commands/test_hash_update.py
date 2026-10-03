@@ -406,63 +406,11 @@ class TestUpdateHashesCommand:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Test: Hash computed from raw body text (per spec)
+# Test: Hash covers the Assertions alone, not the requirement's prose
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class TestHashComputedFromRawBody:
-    """Tests that full-text mode hash is computed from raw body text per spec.
-
-    Per spec/requirements-spec.md (full-text mode):
-    > The hash SHALL be calculated from:
-    > - every line AFTER the Header line
-    > - every line BEFORE the Footer line
-
-    These tests explicitly set hash_mode = "full-text" since the default is
-    now "normalized-text". In full-text mode, the hash includes ALL body
-    content (metadata, intro text, assertions).
-    """
-
-    # Verifies: REQ-p00004-A
-    def test_REQ_p00004_A_hash_includes_intro_text(self, tmp_path):
-        """In full-text mode, hash should change when intro text changes.
-
-        This test verifies the full-text hash is computed from raw body text,
-        not just from assertion text. Requires explicit hash_mode = "full-text".
-        """
-        import subprocess
-
-        from elspais.utilities.hasher import calculate_hash
-
-        env = os.environ.copy()
-        env.pop("GIT_DIR", None)
-        env.pop("GIT_WORK_TREE", None)
-
-        # Initialize git repo
-        subprocess.run(
-            ["git", "init", "-b", "main"], cwd=tmp_path, env=env, capture_output=True, check=True
-        )
-        subprocess.run(
-            ["git", "config", "user.email", "test@test.com"],
-            cwd=tmp_path,
-            env=env,
-            capture_output=True,
-            check=True,
-        )
-        subprocess.run(
-            ["git", "config", "user.name", "Test"],
-            cwd=tmp_path,
-            env=env,
-            capture_output=True,
-            check=True,
-        )
-
-        spec_dir = tmp_path / "spec"
-        spec_dir.mkdir()
-
-        config = tmp_path / ".elspais.toml"
-        config.write_text(
-            """
+_PROSE_CONFIG = """
 version = 5
 
 [project]
@@ -472,222 +420,103 @@ namespace = "REQ"
 [scanning.spec]
 directories = ["spec"]
 
-[validation]
-hash_mode = "full-text"
-
 [changelog]
 hash_current = false
 """
-        )
 
-        # The reconstructed body text includes REMAINDER and ASSERTION children
-        # (but not metadata line or ## Assertions header)
-        body_text = """
+_ASSERTION_TEXT = "The system SHALL do something."
+
+
+def _prose_spec(intro: str, rationale: str, stored_hash: str) -> str:
+    """One requirement with the given intro prose and Rationale section."""
+    return f"""# Requirements
+
+## REQ-p00001: Test Requirement
+
 **Level**: PRD | **Status**: Active | **Implements**: -
 
-This is IMPORTANT intro text that should be included in hash.
+{intro}
 
 ## Assertions
 
-A. The system SHALL do something.
+A. {_ASSERTION_TEXT}
+
+## Rationale
+
+{rationale}
+
+*End* *Test Requirement* | **Hash**: {stored_hash}
 """
-        # Compute expected hash from what reconstruct_body_text() would produce:
-        # intro text (REMAINDER) + assertion text (ASSERTION)
-        reconstructed = (
-            "This is IMPORTANT intro text that should be included in hash."
-            "\nA. The system SHALL do something."
-        )
-        expected_hash = calculate_hash(reconstructed)
 
-        spec_file = spec_dir / "requirements.md"
-        spec_file.write_text(
-            f"""# Requirements
 
-## REQ-p00001: Test Requirement
-{body_text}
-*End* *Test Requirement* | **Hash**: 00000000
-"""
-        )
+class TestHashIgnoresProse:
+    """`elspais fix` writes the digest of the Assertions alone, so editing a
+    requirement's intro prose or Rationale leaves its stored hash in place."""
 
-        subprocess.run(["git", "add", "."], cwd=tmp_path, env=env, capture_output=True, check=True)
-        subprocess.run(
-            ["git", "commit", "-m", "init"],
-            cwd=tmp_path,
-            env=env,
-            capture_output=True,
-            check=True,
-        )
-
-        # Run fix command
+    @staticmethod
+    def _fix_args(project):
         import argparse
 
-        from elspais.commands.fix_cmd import run
-
-        args = argparse.Namespace(
+        return argparse.Namespace(
             req_id=None,
             dry_run=False,
-            spec_dir=spec_dir,
-            config=config,
+            spec_dir=project / "spec",
+            config=project / ".elspais.toml",
             quiet=False,
             verbose=False,
             mode="combined",
         )
-        run(args)
 
-        # Verify hash matches expected (computed from full body, not just assertions)
-        content = spec_file.read_text()
-        assert f"**Hash**: {expected_hash}" in content, (
-            f"Expected hash {expected_hash} computed from full body text, "
-            f"but got different hash in content:\n{content}"
-        )
+    # Verifies: REQ-d00131-S
+    def test_REQ_d00131_S_prose_edit_leaves_hash_unmoved(self, tmp_path):
+        """After a prose-only edit, fix keeps the hash and finds nothing to fix."""
+        from elspais.commands.fix_cmd import _detect_fixable, run
+        from elspais.graph import NodeKind
+        from elspais.graph.factory import build_graph
+        from elspais.utilities.hasher import compute_normalized_hash
 
-    # Verifies: REQ-p00004-A
-    def test_REQ_p00004_A_hash_changes_when_intro_changes(self, tmp_path):
-        """In full-text mode, changing intro text should change the hash.
-
-        If hash was computed only from assertions, changing intro text
-        would NOT change the hash - this test ensures it does in full-text mode.
-        Requires explicit hash_mode = "full-text".
-        """
-        import subprocess
-
-        from elspais.utilities.hasher import calculate_hash
-
-        env = os.environ.copy()
-        env.pop("GIT_DIR", None)
-        env.pop("GIT_WORK_TREE", None)
-
-        subprocess.run(
-            ["git", "init", "-b", "main"], cwd=tmp_path, env=env, capture_output=True, check=True
-        )
-        subprocess.run(
+        env = _clean_git_env()
+        for cmd in (
+            ["git", "init", "-b", "main"],
             ["git", "config", "user.email", "test@test.com"],
-            cwd=tmp_path,
-            env=env,
-            capture_output=True,
-            check=True,
-        )
-        subprocess.run(
             ["git", "config", "user.name", "Test"],
-            cwd=tmp_path,
-            env=env,
-            capture_output=True,
-            check=True,
-        )
+        ):
+            subprocess.run(cmd, cwd=tmp_path, env=env, capture_output=True, check=True)
 
+        (tmp_path / ".elspais.toml").write_text(_PROSE_CONFIG)
         spec_dir = tmp_path / "spec"
         spec_dir.mkdir()
-
-        config = tmp_path / ".elspais.toml"
-        config.write_text(
-            """
-version = 5
-
-[project]
-name = "test"
-namespace = "REQ"
-
-[scanning.spec]
-directories = ["spec"]
-
-[validation]
-hash_mode = "full-text"
-
-[changelog]
-hash_current = false
-"""
-        )
-
-        # Two different body texts with SAME assertions but DIFFERENT intro
-        body_v1 = """
-**Level**: PRD | **Status**: Active | **Implements**: -
-
-Version ONE intro text.
-
-## Assertions
-
-A. The system SHALL do something.
-"""
-        body_v2 = """
-**Level**: PRD | **Status**: Active | **Implements**: -
-
-Version TWO intro text - CHANGED!
-
-## Assertions
-
-A. The system SHALL do something.
-"""
-
-        # Compute expected hashes from what reconstruct_body_text() would produce
-        # (REMAINDER + ASSERTION children, not raw body text)
-        reconstructed_v1 = "Version ONE intro text.\nA. The system SHALL do something."
-        reconstructed_v2 = "Version TWO intro text - CHANGED!\nA. The system SHALL do something."
-        hash_v1 = calculate_hash(reconstructed_v1)
-        hash_v2 = calculate_hash(reconstructed_v2)
-
-        # They should be different since intro text changed
-        assert hash_v1 != hash_v2, "Sanity check: different body text should produce different hash"
-
-        # Create spec file with v1 content
         spec_file = spec_dir / "requirements.md"
-        spec_file.write_text(
-            f"""# Requirements
-
-## REQ-p00001: Test Requirement
-{body_v1}
-*End* *Test Requirement* | **Hash**: 00000000
-"""
-        )
-
+        spec_file.write_text(_prose_spec("Version ONE intro.", "Reason one.", "00000000"))
         subprocess.run(["git", "add", "."], cwd=tmp_path, env=env, capture_output=True, check=True)
         subprocess.run(
-            ["git", "commit", "-m", "init"],
-            cwd=tmp_path,
-            env=env,
-            capture_output=True,
-            check=True,
+            ["git", "commit", "-m", "init"], cwd=tmp_path, env=env, capture_output=True, check=True
         )
 
-        # Run fix command to get correct hash for v1
-        import argparse
+        assertion_hash = compute_normalized_hash([("A", _ASSERTION_TEXT)])
+        run(self._fix_args(tmp_path))
+        assert f"**Hash**: {assertion_hash}" in spec_file.read_text()
 
-        from elspais.commands.fix_cmd import run
-
-        args = argparse.Namespace(
-            req_id=None,
-            dry_run=False,
-            spec_dir=spec_dir,
-            config=config,
-            quiet=False,
-            verbose=False,
-            mode="combined",
-        )
-        run(args)
-
-        # Check hash matches v1
-        content = spec_file.read_text()
-        assert f"**Hash**: {hash_v1}" in content, (
-            f"After update, hash should be {hash_v1} (computed from v1 body)"
-        )
-
-        # Now change to v2 (same assertions, different intro)
+        # Rewrite the intro and the Rationale; the Assertion is untouched.
         spec_file.write_text(
-            f"""# Requirements
-
-## REQ-p00001: Test Requirement
-{body_v2}
-*End* *Test Requirement* | **Hash**: {hash_v1}
-"""
+            _prose_spec("Version TWO intro - CHANGED!", "A wholly new reason.", assertion_hash)
         )
 
-        # Run fix command again
-        run(args)
+        graph = build_graph(
+            spec_dirs=[spec_dir],
+            config_path=tmp_path / ".elspais.toml",
+            repo_root=tmp_path,
+            scan_code=False,
+            scan_tests=False,
+        )
+        node = next(n for n in graph.nodes_by_kind(NodeKind.REQUIREMENT) if n.id == "REQ-p00001")
+        assert "hash_mismatch" not in _detect_fixable(node, changelog_enforce=False)
 
-        # Hash should have CHANGED because intro text changed
+        run(self._fix_args(tmp_path))
         content = spec_file.read_text()
-        assert f"**Hash**: {hash_v2}" in content, (
-            f"Hash should change to {hash_v2} when intro text changes, "
-            f"even if assertions are the same. Got:\n{content}"
+        assert "Version TWO intro - CHANGED!" in content
+        assert f"**Hash**: {assertion_hash}" in content, (
+            f"A prose-only edit must not move the hash from {assertion_hash}; got:\n{content}"
         )
 
 

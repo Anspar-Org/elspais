@@ -667,20 +667,85 @@ def resolve_elspais() -> str | None:
 
 _ELSPAIS = resolve_elspais()
 
-# Whether the resolved CLI is this checkout's own build. False means the tier
-# is exercising some other installation; say so rather than passing quietly.
-ELSPAIS_IS_LOCAL = bool(_ELSPAIS) and Path(_ELSPAIS).resolve().is_relative_to(REPO_ROOT)
 
-if _ELSPAIS is not None and not ELSPAIS_IS_LOCAL:
-    import warnings as _warnings
+def _interpreter_of(program: str) -> str | None:
+    """The Python interpreter a console-script launcher runs, or None.
 
-    _warnings.warn(
-        f"e2e tier is running {_ELSPAIS}, which is not this checkout "
-        f"({REPO_ROOT}). These tests are exercising a different build of "
-        f"elspais than the code under test. Create the checkout's editable "
-        f"venv (.venv/bin/elspais) or set ELSPAIS_BIN.",
-        RuntimeWarning,
-        stacklevel=2,
+    A launcher's shebang names its interpreter, either as the whole line or
+    through ``env`` with options; a bare name is resolved through PATH as
+    ``env`` would resolve it. ``.githooks/e2e-verdict`` reads launchers the
+    same way.
+    """
+    try:
+        with open(program, "rb") as handle:
+            first = handle.readline().decode(errors="replace").strip()
+    except OSError:
+        return None
+    if not first.startswith("#!"):
+        return None
+    rest = first[2:].strip()
+    if _os.path.isfile(rest) and _os.access(rest, _os.X_OK):
+        return rest
+    for word in rest.split():
+        if word.startswith("-") or _os.path.basename(word) == "env":
+            continue
+        found = word if _os.path.isabs(word) else _shutil.which(word)
+        if found and _os.access(found, _os.X_OK):
+            return found
+        return None
+    return None
+
+
+def program_source(program: str) -> str | None:
+    """The directory the elspais a program runs is imported from, or None.
+
+    The version cannot tell two checkouts at one version apart, so the
+    program's interpreter is asked where it imports elspais from -- the key
+    ``.githooks/e2e-verdict`` records a verdict under.
+    """
+    interpreter = _interpreter_of(program)
+    if interpreter is None:
+        return None
+    result = subprocess.run(
+        [
+            interpreter,
+            "-c",
+            "import elspais, os; print(os.path.realpath(os.path.dirname(elspais.__file__)))",
+        ],
+        capture_output=True,
+        text=True,
+        cwd="/",
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
+
+
+def build_identity_refusal(program: str | None = None) -> str | None:
+    """Why the e2e tier must not run against the program it would spawn, or None.
+
+    A tier exercising another build of elspais reports on code that is not
+    under test, and its green is indistinguishable from this checkout's.
+    """
+    program = _ELSPAIS if program is None else program
+    expected = _os.path.realpath(REPO_ROOT / "src" / "elspais")
+    if program is None:
+        return (
+            "the e2e tier found no elspais program to run. Build this "
+            "checkout's venv: python3 -m venv .venv && "
+            '.venv/bin/pip install -e ".[all,mcp,dev]"'
+        )
+    found = program_source(program)
+    if found == expected:
+        return None
+    return (
+        f"the e2e tier would run {program}, which imports elspais from "
+        f"{found or '<a place its interpreter could not report>'}, not from this "
+        f"checkout ({expected}). Its results would describe that build, not this "
+        f"one. Build this checkout's venv (python3 -m venv .venv && "
+        f'.venv/bin/pip install -e ".[all,mcp,dev]"), or point ELSPAIS_BIN at '
+        f"a launcher whose interpreter imports elspais from this checkout."
     )
 
 
@@ -700,15 +765,17 @@ def trace_rows(stdout: str) -> list[dict]:
 
 def run_elspais(
     *args: str,
-    cwd: str | Path | None = None,
+    cwd: str | Path,
     timeout: int = 120,
     env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess:
-    """Run the elspais CLI as a subprocess.
+    """Run the elspais CLI as a subprocess in ``cwd``.
 
-    ``cwd`` defaults to the repo root so tests don't have to repeat that
-    boilerplate. Pass an explicit ``cwd`` (typically a tmp_path project)
-    to override.
+    ``cwd`` is required. The CLI runs from the git root of the directory it
+    starts in, so a call without one would run against this checkout, its
+    daemon and its results, which every other test process shares. Pass a
+    project under pytest's temp directory -- a fixture copy, or the
+    ``repo_tree`` copy of this checkout.
     """
     if _ELSPAIS is None:
         import pytest
@@ -723,7 +790,7 @@ def run_elspais(
         [_ELSPAIS, *args],
         capture_output=True,
         text=True,
-        cwd=cwd or REPO_ROOT,
+        cwd=cwd,
         timeout=timeout,
         env=run_env,
     )

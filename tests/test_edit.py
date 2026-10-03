@@ -8,6 +8,14 @@ from pathlib import Path
 
 import pytest
 
+# A project that keeps no changelog: these tests are about references, moves
+# and the directories searched, not about the reason an Active change owes.
+_NO_CHANGELOG = {"changelog": {"hash_current": False}}
+
+# The reason given where a test edits an Active requirement through the
+# command and its subject is something else.
+_REASON = "edited by the test"
+
 # An identifier configuration whose namespace is not "REQ": FDA-style
 # `PRD-00001` / `DEV-00001` identifiers, as the e2e-fda-numeric fixture uses.
 _FDA_CONFIG = """
@@ -635,14 +643,14 @@ DEV body.
         changes_valid = [
             {"req_id": "REQ-d00001", "implements": ["p00001"]},
         ]
-        results = batch_edit(spec_dir, changes_valid, validate_refs=True)
+        results = batch_edit(spec_dir, changes_valid, validate_refs=True, config=_NO_CHANGELOG)
         assert results[0]["success"] is True
 
         # Invalid reference - should fail when validate_refs=True
         changes_invalid = [
             {"req_id": "REQ-d00001", "implements": ["p99999"]},
         ]
-        results = batch_edit(spec_dir, changes_invalid, validate_refs=True)
+        results = batch_edit(spec_dir, changes_invalid, validate_refs=True, config=_NO_CHANGELOG)
         assert results[0]["success"] is False
         assert (
             "invalid" in results[0]["error"].lower() or "not found" in results[0]["error"].lower()
@@ -673,7 +681,9 @@ DEV body.
         changes = [
             {"req_id": "REQ-d00001", "implements": ["p99999"]},
         ]
-        results = batch_edit(spec_dir, changes)  # validate_refs defaults to False
+        results = batch_edit(
+            spec_dir, changes, config=_NO_CHANGELOG
+        )  # validate_refs defaults to False
         assert results[0]["success"] is True
 
 
@@ -715,7 +725,7 @@ Second body.
             {"req_id": "REQ-d00002", "status": "Active"},
         ]
 
-        results = batch_edit(spec_dir, changes)
+        results = batch_edit(spec_dir, changes, config=_NO_CHANGELOG)
 
         assert len(results) == 2
         assert all(r["success"] for r in results)
@@ -751,7 +761,7 @@ Body text.
             {"req_id": "REQ-d00001", "move_to": "dev-features.md"},
         ]
 
-        results = batch_edit(spec_dir, changes)
+        results = batch_edit(spec_dir, changes, config=_NO_CHANGELOG)
 
         assert len(results) == 1
         assert results[0]["success"] is True
@@ -784,7 +794,7 @@ Body text.
             {"req_id": "REQ-d00001", "status": "Active"},
         ]
 
-        results = batch_edit(spec_dir, changes, dry_run=True)
+        results = batch_edit(spec_dir, changes, dry_run=True, config=_NO_CHANGELOG)
 
         assert len(results) == 1
         assert results[0]["success"] is True
@@ -833,6 +843,7 @@ class TestValidateRefsUnderForeignNamespace:
             [{"req_id": "DEV-00001", "implements": ["PRD-00001"]}],
             validate_refs=True,
             resolver=resolver,
+            config=_NO_CHANGELOG,
         )
 
         assert results[0]["success"] is True
@@ -850,6 +861,7 @@ class TestValidateRefsUnderForeignNamespace:
             [{"req_id": "DEV-00001", "implements": ["PRD-99999"]}],
             validate_refs=True,
             resolver=resolver,
+            config=_NO_CHANGELOG,
         )
 
         assert results[0]["success"] is False
@@ -1214,6 +1226,7 @@ class TestEditSearchesEveryDeclaredDirectory:
                     req_id=req_id,
                     status="Draft",
                     dry_run=False,
+                    message=_REASON,
                 )
             )
 
@@ -1249,6 +1262,7 @@ class TestEditSearchesEveryDeclaredDirectory:
                 req_id="REQ-d00002",
                 move_to="moved.md",
                 dry_run=False,
+                message=_REASON,
             )
         )
 
@@ -1312,6 +1326,7 @@ class TestEditSearchesEveryDeclaredDirectory:
             first,
             [{"req_id": "REQ-d00002", "move_to": "moved.md"}],
             search_dirs=[first, second],
+            config=_NO_CHANGELOG,
         )
 
         assert results[0]["success"] is True, results[0]

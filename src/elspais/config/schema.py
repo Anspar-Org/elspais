@@ -524,11 +524,34 @@ class KeywordsSearchConfig(_StrictModel):
     min_length: int = 3
 
 
+# Implements: REQ-d00324-A
+def _retired_hash_mode_message(value: str) -> str:
+    """Build the refusal for a hash mode the tool no longer offers."""
+    return (
+        f'[validation] hash_mode = "{value}" is no longer supported.\n\n'
+        "A requirement's hash covers its Assertions alone, normalized as the\n"
+        "Hash section of `elspais docs format` describes. No setting selects\n"
+        "another digest.\n\n"
+        "Remove the hash_mode line from [validation], or write:\n"
+        '  hash_mode = "normalized-text"\n\n'
+        "The next `elspais fix` then rewrites the stored hash of every\n"
+        "requirement to the normalized digest. Commit that change on its own,\n"
+        "so reviewers can tell it from an edit to what a requirement says."
+    )
+
+
 class ValidationConfig(_StrictModel):
-    hash_mode: str = "normalized-text"
+    hash_mode: Literal["normalized-text"] = "normalized-text"
     hash_algorithm: str = "sha256"
     hash_length: int = 8
     strict_hierarchy: bool = False
+
+    @field_validator("hash_mode", mode="before")
+    @classmethod
+    def _refuse_retired_hash_mode(cls, value):
+        if value == "full-text":
+            raise ValueError(_retired_hash_mode_message(value))
+        return value
 
 
 # Implements: REQ-d00212-Y
@@ -642,7 +665,11 @@ class CodeScanningConfig(ScanningKindConfig):
 GROUP_ALL = "all"
 GROUP_DEFAULT = "default"
 GROUP_NONE = "none"
-RESERVED_GROUPS = frozenset({GROUP_ALL, GROUP_DEFAULT, GROUP_NONE})
+# Implements: REQ-d00316-E
+# `last-run` stands for the targets the last recorded run executed. It is read
+# from that run's record, so no target may claim it either.
+GROUP_LAST_RUN = "last-run"
+RESERVED_GROUPS = frozenset({GROUP_ALL, GROUP_DEFAULT, GROUP_NONE, GROUP_LAST_RUN})
 
 # Implements: REQ-d00312-A
 # The name of a target is also the name of its output area under the output root.
@@ -659,7 +686,7 @@ CLASSNAME_FORMS = ("python-module", "source-file")
 # The sources a target may declare for the environment a result was recorded
 # in. "results-path" reads the part of the path that the wildcard in the
 # target's results glob matched; "suite-hostname" reads the `hostname`
-# attribute of the `<testsuite>` that holds the record.
+# attribute of the `<testsuite>` that holds the result record.
 ENVIRONMENT_SOURCES = ("results-path", "suite-hostname")
 
 
@@ -701,6 +728,10 @@ class TestTargetConfig(_StrictModel):
     # departs from the format's convention. Unset means the reporter's own
     # declared origin.
     line_base: int | None = None
+    # Implements: REQ-d00314-F
+    # The shared resources this target uses. Two targets naming a common
+    # resource never run at the same time.
+    resources: list[str] = Field(default_factory=list)
     # Implements: REQ-d00311-J+K+L
     # inputs selects the files that the results of this target depend on.
     # inputs uses the same file-selection settings as a scan. Directories and
@@ -783,6 +814,14 @@ class TestScanningConfig(ScanningKindConfig):
     # about whether a change should have run it, and this is the only place
     # that explanation has to live.
     groups: dict[str, str] = Field(default_factory=dict)
+    # Implements: REQ-d00314-E
+    # Each declared shared resource binds a name to a description of what the
+    # resource is: a database, a network port, a device, a local service stack.
+    resources: dict[str, str] = Field(default_factory=dict)
+    # Implements: REQ-d00314-A+B
+    # The maximum number of targets one run executes at the same time. One
+    # runs them one at a time, in declaration order.
+    concurrency: int = 1
     targets: list[TestTargetConfig] = Field(default_factory=list)
     # Implements: REQ-d00312-B
     # output_root names the directory that holds the output area of each target.
@@ -803,6 +842,62 @@ class TestScanningConfig(ScanningKindConfig):
             raise ValueError(
                 f"output_root {v!r} must name a directory inside the repository, "
                 f'relative to its root, such as ".results"'
+            )
+        return normalized
+
+    # Implements: REQ-d00314-A
+    @field_validator("concurrency")
+    @classmethod
+    def _check_concurrency(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(
+                f"concurrency {v} must be a whole number of targets, 1 or more; "
+                f"1 runs the targets one at a time"
+            )
+        return v
+
+    # Implements: REQ-d00314-E+F+G
+    @model_validator(mode="after")
+    def _check_resources(self) -> TestScanningConfig:
+        seen: dict[str, str] = {}
+        for name, description in self.resources.items():
+            key = name.strip().lower()
+            if not key:
+                raise ValueError("a declared shared resource must have a name")
+            if key in seen:
+                raise ValueError(
+                    f'shared resources "{seen[key]}" and "{name}" differ only in case or spacing'
+                )
+            if not str(description).strip():
+                raise ValueError(f'shared resource "{name}" must have a description')
+            seen[key] = name
+        for target in self.targets:
+            for named in target.resources:
+                if named.strip().lower() not in seen:
+                    declared = ", ".join(sorted(seen.values())) or "none"
+                    raise ValueError(
+                        f'test target "{target.name}" names undeclared shared resource '
+                        f'"{named}"; declare it under [scanning.test.resources] with a '
+                        f"description. Declared resources: {declared}"
+                    )
+        return self
+
+    # Implements: REQ-d00322-J
+    # evidence names the directory that holds the project's Evidence Snapshot,
+    # relative to the repository root. Empty names none.
+    evidence: str = ""
+
+    # Implements: REQ-d00322-J
+    @field_validator("evidence")
+    @classmethod
+    def _check_evidence(cls, v: str) -> str:
+        if not v.strip():
+            return ""
+        normalized = posixpath.normpath(v.strip().replace("\\", "/"))
+        if normalized in (".", "..") or normalized.startswith("../") or posixpath.isabs(normalized):
+            raise ValueError(
+                f"scanning.test.evidence {v!r} must name a directory inside the repository, "
+                f'relative to its root, such as "test-evidence"'
             )
         return normalized
 
@@ -838,6 +933,13 @@ class TestScanningConfig(ScanningKindConfig):
                     raise ValueError(
                         f'test target "{target.name}" claims the group "{claimed}", '
                         f"which stands for no target; remove it from the target's groups"
+                    )
+                # Implements: REQ-d00316-E
+                if claimed.strip().lower() == GROUP_LAST_RUN:
+                    raise ValueError(
+                        f'test target "{target.name}" claims the group "{claimed}", '
+                        f"which stands for the targets the last recorded run executed; "
+                        f"remove it from the target's groups"
                     )
                 if claimed.strip().lower() not in known:
                     raise ValueError(

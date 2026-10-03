@@ -477,8 +477,8 @@ that no change reached can change form too. The result's
 `changed_beyond_edits` names each such part -- a requirement, a journey or a
 section of file-level prose -- as `{file, node_id, kind, label, line}`, and is
 empty where the save changed nothing beyond its edits. `save_mutations`, the
-viewer's `/api/save` and the record of a save the daemon made itself all
-carry the same list. `spec.needs_rewrite` reports the same parts before any
+viewer's `/api/save` and the automatic save record of a save the daemon made
+itself all carry the same list. `spec.needs_rewrite` reports the same parts before any
 save, so `elspais fix` can tidy them as a change of their own.
 
 Canonical form never moves the hash of a requirement no change reached. A
@@ -487,6 +487,17 @@ defined term in an assertion is a material change rather than tidying. A save
 marks terms in the requirements its changes reach and leaves every other
 requirement's hashed text as it is on disk; `spec.needs_rewrite` and
 `terms.unmarked` keep reporting the unmarked term until `elspais fix` marks it.
+
+Where `[changelog] hash_current` is on, a save that changes a requirement
+whose status is Active before or after it -- its text, title, status,
+identifier, assertions, sections or references -- needs a reason:
+`save_mutations(message=...)`. Each such requirement gains one changelog
+entry carrying that reason and its hash after the save. Without a reason,
+or with a blank one, the save writes nothing, keeps every pending change and
+returns `changelog_message_required`, listing the requirements in
+`requirement_ids`. The viewer asks the reader for the reason and saves again
+with it. A save the daemon makes with no client present records that no
+client asked for it and why it happened.
 
 A stale tip is not the only way a save comes back unsuccessful, and the
 `code` says which it was: `save_mutations` reports `write_scope_declined`

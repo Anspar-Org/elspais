@@ -224,11 +224,11 @@ class TestASkippedDirectoryIsPrunedRatherThanFiltered:
 
 
 class TestAFilePatternIsAGlobOverTheName:
-    """A file pattern says what a file is called, never where it sits.
+    """A single-name file pattern says what a file is called, not where it sits.
 
-    The two frames are deliberately not interchangeable, so a name written
-    into the directory list matches no file and a directory path written into
-    the file list matches no directory.
+    A name written into the directory list matches no file: there it names a
+    directory at the repository root. A file pattern holding a `/` is a path
+    from the repository root, read by the directory rules.
     """
 
     # Verifies: REQ-p00015-H
@@ -244,20 +244,31 @@ class TestAFilePatternIsAGlobOverTheName:
         selection = select_files(repo, ["spec"], ["README.md"], [], ["*.md"])
         assert "spec/README.md" in _relative(repo, selection.selected)
 
+    # Verifies: REQ-d00326-A
     @pytest.mark.parametrize(
-        ("name", "skip_files", "skipped"),
+        ("relative_path", "skip_files", "skipped"),
         [
-            pytest.param("README.md", ["README.md"], True, id="named-exactly"),
-            pytest.param("README.md", ["*.md"], True, id="a-glob-over-the-extension"),
-            pytest.param("README.md", ["spec/README.md"], False, id="a-path-is-not-a-name"),
-            pytest.param("reqs.md", ["README.md"], False, id="another-name"),
+            pytest.param("spec/README.md", ["README.md"], True, id="named-exactly"),
+            pytest.param("spec/README.md", ["*.md"], True, id="a-glob-over-the-extension"),
+            pytest.param("a/b/x.pyc", ["*.pyc"], True, id="a-name-glob-at-any-depth"),
+            pytest.param("spec/reqs.md", ["README.md"], False, id="another-name"),
+            pytest.param("spec/README.md", ["spec/README.md"], True, id="a-path-from-the-root"),
+            pytest.param(
+                "spec/api/README.md", ["spec/README.md"], False, id="a-path-names-one-file"
+            ),
+            pytest.param("gen/out.json", ["gen/out.json"], True, id="a-path-at-the-root"),
+            pytest.param(
+                "other/gen/out.json", ["gen/out.json"], False, id="a-path-is-not-at-any-depth"
+            ),
+            pytest.param("pkg/sub/.coverage", ["**/.coverage"], True, id="globstar-any-depth"),
+            pytest.param(".coverage", ["**/.coverage"], True, id="globstar-zero-directories"),
         ],
     )
-    def test_file_is_skipped_matches_the_name_alone(
-        self, name: str, skip_files: list[str], skipped: bool
+    def test_file_is_skipped_reads_a_name_or_a_path_from_the_root(
+        self, relative_path: str, skip_files: list[str], skipped: bool
     ) -> None:
-        """The predicate reads the name, so a path spelling matches nothing."""
-        assert file_is_skipped(name, skip_files) is skipped
+        """A single-name pattern reads the name; a pattern with `/` the whole path."""
+        assert file_is_skipped(relative_path, skip_files) is skipped
 
     # Verifies: REQ-d00212-W
     def test_a_kind_pattern_selects_within_the_directory_that_kind_scans(self, repo: Path) -> None:
@@ -379,7 +390,7 @@ class TestOneMechanismDecidesWhetherAFileIsScanned:
     def test_the_walk_agrees_with_the_predicates_it_is_composed_from(self, repo: Path) -> None:
         """Every file in the tree, judged both ways, judged alike."""
         skip_dirs = ["**/junk", "stuff/things"]
-        skip_files = ["secret.md"]
+        skip_files = ["secret.md", "spec/api/README.md"]
         include_files = ["*.md"]
 
         selection = select_files(
@@ -388,8 +399,7 @@ class TestOneMechanismDecidesWhetherAFileIsScanned:
 
         for relative in _TREE:
             path = repo / relative
-            name = Path(relative).name
-            if file_is_skipped(name, skip_files) or within_skipped_dir(relative, skip_dirs):
+            if file_is_skipped(relative, skip_files) or within_skipped_dir(relative, skip_dirs):
                 assert path not in _answered(selection), (
                     f"{relative} is skipped by the predicates but the walk answered for it"
                 )
@@ -435,3 +445,104 @@ class TestWhereARepositorySitsOnDiskDecidesNothing:
 
         assert vendored not in _answered(selection)
         assert "spec/reqs.md" in _relative(repo, selection.selected)
+
+
+class TestASkipPatternHoldingASlashIsAPathFromTheRoot:
+    """`**/.pytest_cache` and `**/.coverage` skip what they name at any depth.
+
+    The global skip list feeds both the directory and the file skip lists, so
+    one pattern must reach a nested directory and a nested file alike. Scans
+    and target inputs read the same lists, so both are checked.
+    """
+
+    _GLOBAL_SKIP = ["**/.pytest_cache", "**/.coverage"]
+
+    @staticmethod
+    def _tree(tmp_path: Path) -> Path:
+        root = tmp_path / "repo"
+        for relative in (
+            "pkg/mod.py",
+            "pkg/.pytest_cache/v/cache/lastfailed",
+            "pkg/sub/.coverage",
+            "pkg/sub/keep.py",
+            ".coverage",
+            "gen/out.json",
+            "other/gen/out.json",
+            "a/b/x.pyc",
+            ".pytest_cache/README.md",
+        ):
+            target = root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f"{relative}\n")
+        return root.resolve()
+
+    @staticmethod
+    def _input_files(root: Path, skip: list[str]) -> set[str]:
+        from elspais.config import config_defaults, validate_config
+        from elspais.utilities.fingerprint import input_files
+
+        cfg = config_defaults()
+        cfg["scanning"]["skip"] = skip
+        cfg["scanning"]["test"]["targets"] = [
+            {"name": "t", "reporter": "junit", "results": "r.xml"}
+        ]
+        typed = validate_config(cfg)
+        found = input_files(root, typed, typed.scanning.test.targets[0])
+        return {p.relative_to(root).as_posix() for p in found}
+
+    # Verifies: REQ-d00326-A
+    def test_select_files_skips_a_nested_directory_and_a_nested_file(self, tmp_path: Path) -> None:
+        """The same patterns, in both lists, reach both kinds of entry."""
+        root = self._tree(tmp_path)
+        skip = self._GLOBAL_SKIP
+
+        answered = _relative(root, _answered(select_files(root, ["."], skip, skip, ["*"])))
+
+        assert not any(".pytest_cache" in p for p in answered)
+        assert "pkg/sub/.coverage" not in answered
+        assert ".coverage" not in answered
+        assert {"pkg/mod.py", "pkg/sub/keep.py"} <= answered
+
+    # Verifies: REQ-d00326-A
+    def test_target_inputs_exclude_a_nested_cache_directory_and_coverage_file(
+        self, tmp_path: Path
+    ) -> None:
+        """A target's inputs read the global skip list the same way."""
+        root = self._tree(tmp_path)
+
+        inputs = self._input_files(root, self._GLOBAL_SKIP)
+
+        assert not any(".pytest_cache" in p for p in inputs)
+        assert "pkg/sub/.coverage" not in inputs
+        assert ".coverage" not in inputs
+        assert {"pkg/mod.py", "pkg/sub/keep.py"} <= inputs
+
+    # Verifies: REQ-d00326-A
+    def test_a_path_pattern_names_only_the_file_at_that_path(self, tmp_path: Path) -> None:
+        """`gen/out.json` is read from the root, not matched at any depth."""
+        root = self._tree(tmp_path)
+
+        inputs = self._input_files(root, ["gen/out.json"])
+
+        assert "gen/out.json" not in inputs
+        assert "other/gen/out.json" in inputs
+
+    # Verifies: REQ-d00326-A
+    def test_a_bare_name_glob_still_matches_at_any_depth(self, tmp_path: Path) -> None:
+        """`*.pyc` holds no `/`, so it is a glob over the name wherever it sits."""
+        root = self._tree(tmp_path)
+
+        inputs = self._input_files(root, ["*.pyc"])
+
+        assert "a/b/x.pyc" not in inputs
+        assert "pkg/mod.py" in inputs
+
+    # Verifies: REQ-d00326-A
+    def test_a_bare_directory_name_names_only_the_root_directory(self, tmp_path: Path) -> None:
+        """`.pytest_cache` without `**/` skips the root cache and keeps the nested one."""
+        root = self._tree(tmp_path)
+
+        inputs = self._input_files(root, [".pytest_cache"])
+
+        assert ".pytest_cache/README.md" not in inputs
+        assert "pkg/.pytest_cache/v/cache/lastfailed" in inputs

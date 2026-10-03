@@ -9,7 +9,6 @@ from elspais.utilities.hasher import (
     compute_normalized_hash,
     normalize_assertion_text,
     strip_changelog_section,
-    verify_hash,
 )
 
 
@@ -92,29 +91,8 @@ class TestCalculateHash:
             calculate_hash("content", algorithm="invalid")
 
 
-class TestVerifyHash:
-    """Tests for verify_hash function."""
-
-    # Verifies: REQ-p00002-C
-    def test_matching_hash_returns_true(self):
-        content = "Test content"
-        hash_val = calculate_hash(content)
-        assert verify_hash(content, hash_val) is True
-
-    # Verifies: REQ-p00002-C
-    def test_non_matching_hash_returns_false(self):
-        content = "Test content"
-        assert verify_hash(content, "00000000") is False
-
-    # Verifies: REQ-p00002-C
-    def test_case_insensitive(self):
-        content = "Test content"
-        hash_val = calculate_hash(content)
-        assert verify_hash(content, hash_val.upper()) is True
-
-
 class TestNormalizeAssertionText:
-    """Tests for normalize_assertion_text function (normalized-text hash mode)."""
+    """Tests for normalize_assertion_text function."""
 
     # Verifies: REQ-p00004-A
     def test_hash_mode_trailing_whitespace_stripped(self):
@@ -175,7 +153,7 @@ class TestNormalizeAssertionText:
 
 
 class TestComputeNormalizedHash:
-    """Tests for compute_normalized_hash function (normalized-text hash mode)."""
+    """Tests for compute_normalized_hash function."""
 
     # Verifies: REQ-p00004-A
     def test_hash_mode_returns_8_char_hex(self):
@@ -329,8 +307,8 @@ class TestChangelogStripping:
         result = strip_changelog_section(body)
         assert result == body
 
+    # Verifies: REQ-p00004-A
     def test_REQ_p00004_A_strip_changelog_strips_trailing_whitespace(self):
-        # Verifies: REQ-p00004-A
         """Whitespace before ## Changelog is trimmed."""
         body = "Some requirement text.\n\n\n## Changelog\n\n- 2026-01-01: Initial version"
         result = strip_changelog_section(body)

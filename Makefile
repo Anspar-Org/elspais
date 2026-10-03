@@ -31,20 +31,32 @@ setup: ## Set up development environment
 	@echo "  Git hooks installed from .githooks/"
 	@echo "  Run 'make test' to verify."
 
-test: ## Run unit/integration tests (~12m, coverage is on by default)
-	$(PYTEST)
+# The run the pre-commit hook makes, in parallel on half the processors and
+# fingerprinted into the `elspais-unit` target's output area.
+test: ## Run unit/integration tests in parallel, with per-test coverage
+	$(VENV_PATH) .githooks/with-fingerprint elspais-unit .githooks/run-unit-tier
 
-test-e2e: ## Run e2e subprocess tests (~11m)
-	$(PYTEST) -m e2e
+# The same two-pass run the pre-push hook makes, fingerprinted into the
+# `elspais-e2e` target's output area so `elspais checks` reads its results.
+test-e2e: ## Run e2e subprocess tests (parallel pass, then serial pass)
+	$(VENV_PATH) .githooks/with-fingerprint elspais-e2e .githooks/run-e2e-tier
 
-test-browser: ## Run browser tests (~3m)
-	$(PYTEST) -m browser
+# Without coverage, as their targets in .elspais.toml run: the unit tier
+# alone measures line coverage.
+test-browser: ## Run browser tests
+	$(PYTEST) -m browser --no-cov
 
-test-stress: ## Run the concurrency stress battery (~15s)
-	$(PYTEST) -m stress
+test-stress: ## Run the concurrency stress battery
+	$(PYTEST) -m stress --no-cov
 
-test-all: ## Run all tests (unit + e2e + browser + stress; ~25m)
-	$(PYTEST) -m ""
+# Each tier the way its own target runs it, one after another: two pytest
+# sessions in one worktree collide on coverage data, so this target never
+# runs them side by side, even under `make -j`.
+test-all: ## Run all tests (unit, e2e, browser, stress), one tier at a time
+	$(MAKE) -j1 test
+	$(MAKE) -j1 test-e2e
+	$(MAKE) -j1 test-browser
+	$(MAKE) -j1 test-stress
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'

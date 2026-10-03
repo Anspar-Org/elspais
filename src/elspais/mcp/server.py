@@ -43,7 +43,7 @@ from __future__ import annotations
 
 import functools
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -68,6 +68,7 @@ from elspais.graph.aggregation import (
     covered_labels,
     dimension_measures,
     is_covered,
+    iter_assertion_coverage,
     measure_by_label,
     measure_total,
 )
@@ -143,70 +144,6 @@ def _relative_source_path(node: Any, graph: FederatedGraph | None) -> str:
         except ValueError:
             return raw  # outside repo, keep as-is
     return raw
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Shared coverage traversal iterator (REQ-d00066-B, REQ-d00066-D)
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-# Implements: REQ-d00066-B, REQ-d00066-D
-def _iter_assertion_coverage(
-    req_node: Any,
-    kind_filter: NodeKind,
-    *,
-    edge_kinds: set[EdgeKind] | None = None,
-    direct_only: bool = False,
-) -> Iterator[tuple[Any, list[str]]]:
-    """Yield ``(node, labels)`` for each TEST or CODE node covering *req_node*.
-
-    Two-phase edge traversal:
-
-    Phase 1 — ``req_node.iter_outgoing_edges()``:
-      * If ``assertion_targets`` is set → those labels
-      * If absent → ALL assertion labels (indirect / blanket coverage)
-
-    Phase 2 — For each ASSERTION child → ``iter_outgoing_edges()``:
-      * Yields ``(node, [that_label])``
-
-    The same node may be yielded more than once (e.g. via both phases).
-    Callers are responsible for deduplication.
-
-    Args:
-        edge_kinds: If set, only consider edges whose kind is in this set.
-        direct_only: If True, skip Phase 1 edges that have no
-            ``assertion_targets`` (blanket coverage).
-    """
-    # Collect all assertion labels for the indirect-coverage case
-    all_labels: list[str] = []
-    assertion_children: list[tuple[Any, str]] = []  # (assertion_node, label)
-    for child in req_node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            label = child.get_field("label", "")
-            all_labels.append(label)
-            assertion_children.append((child, label))
-
-    # Phase 1: REQ → kind_filter edges
-    for edge in req_node.iter_outgoing_edges():
-        if edge_kinds and edge.kind not in edge_kinds:
-            continue
-        target = edge.target
-        if target.kind != kind_filter:
-            continue
-        if edge.assertion_targets:
-            yield target, list(edge.assertion_targets)
-        elif not direct_only:
-            yield target, list(all_labels)
-
-    # Phase 2: ASSERTION → kind_filter edges
-    for assertion_node, label in assertion_children:
-        for edge in assertion_node.iter_outgoing_edges():
-            if edge_kinds and edge.kind not in edge_kinds:
-                continue
-            target = edge.target
-            if target.kind != kind_filter:
-                continue
-            yield target, [label]
 
 
 # Implements: REQ-d00064-C, REQ-d00064-D
@@ -613,7 +550,7 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
         }
     elif kind == NodeKind.RESULT:
         # Implements: REQ-d00294-F
-        # Where the record was written, and the environment where one was
+        # Where the result record was written, and the environment where one was
         # read, so a reader can tell apart the several results of one test.
         # Each is there only where the result carries it.
         properties = {
@@ -710,7 +647,7 @@ def _serialize_node_summary(node: Any) -> dict[str, Any]:
     elif kind == NodeKind.RESULT:
         summary["status"] = node.get_field("status", "")
         # Implements: REQ-d00294-F
-        # A list of results holds several records of one test, which the
+        # A list of results holds several result records of one test, which the
         # titles alone do not tell apart.
         environment = node.get_field("environment")
         if environment:
@@ -863,7 +800,7 @@ def _get_graph_status(
     REQ-d00060-B: Returns node_counts by calling nodes_by_kind().
     REQ-d00060-D: Returns root_count using graph.root_count().
     REQ-d00060-E: Does NOT iterate full graph for counts.
-    REQ-p00083-C: Reports an outstanding automatic-save record, so the
+    REQ-p00083-C: Reports an outstanding automatic save record, so the
     quick status question also answers "how did these files get here".
     """
     # Count nodes by kind using the efficient nodes_by_kind iterator
@@ -882,9 +819,9 @@ def _get_graph_status(
         "has_malformed_references": bool(preset_reference_faults(graph, "malformed")),
         "terms_dirty": _has_dirty_terms(graph),
     }
-    record = _automatic_save_record(working_dir)
-    if record is not None:
-        status["automatic_save"] = record
+    automatic_save = _automatic_save_record(working_dir)
+    if automatic_save is not None:
+        status["automatic_save"] = automatic_save
     difference = _executable_difference()
     if difference is not None:
         status["executable_difference"] = difference
@@ -903,28 +840,34 @@ def _has_dirty_terms(graph: FederatedGraph) -> bool:
     return False
 
 
+# Implements: REQ-d00325-A, REQ-d00325-B
 def _get_active_mutated_reqs(graph: FederatedGraph) -> set[str]:
-    """Return IDs of Active requirements that have pending mutations."""
-    from elspais.graph import NodeKind
+    """The ids of the requirements a save owes a changelog row.
 
-    mutated_ids: set[str] = set()
+    Those are the requirements whose text the pending mutations change and
+    whose status is Active either now or before those mutations. The second
+    half is read from the log, because a status change or a retirement has
+    already moved the node off Active. An entry names a requirement by the
+    id it had then, so later renames are followed to the id it has now.
+    """
+    from elspais.graph.render import requirements_changed
+
+    was_active: set[str] = set()
     for entry in graph.mutation_log.iter_entries():
-        target = entry.target_id
-        # Check if target or its parent is an Active requirement
-        node = graph.find_by_id(target)
-        if node is None:
+        if entry.operation == "rename_node":
+            new_id = entry.after_state.get("id", "")
+            if entry.target_id in was_active and new_id:
+                was_active.discard(entry.target_id)
+                was_active.add(new_id)
             continue
-        if node.kind == NodeKind.REQUIREMENT:
-            if (node.status or "").lower() == "active":
-                mutated_ids.add(node.id)
-        elif node.kind == NodeKind.ASSERTION:
-            for parent in node.iter_parents():
-                if (
-                    parent.kind == NodeKind.REQUIREMENT
-                    and (parent.status or "").lower() == "active"
-                ):
-                    mutated_ids.add(parent.id)
-    return mutated_ids
+        if (entry.before_state.get("status") or "").lower() == "active":
+            was_active.add(entry.target_id)
+
+    return {
+        node.id
+        for node in requirements_changed(graph)
+        if (node.status or "").lower() == "active" or node.id in was_active
+    }
 
 
 # Implements: REQ-d00296-A
@@ -959,7 +902,7 @@ def _add_changelog_for_active_mutations(
         _fn = node.file_node()
         if _fn is None:
             continue
-        computed = compute_hash_for_node(node, graph.hash_mode)
+        computed = compute_hash_for_node(node)
         file_path = repo_root / _fn.get_field("relative_path")
         entry = {
             "date": date.today().isoformat(),
@@ -1812,9 +1755,9 @@ def _build_base_workspace_info(working_dir: Path, config: dict[str, Any]) -> dic
     # Carried on the base profile, not a detail level, so a client that
     # asks the ordinary orientation question is told how the files it is
     # about to read reached their current form.
-    record = _automatic_save_record(working_dir)
-    if record is not None:
-        info["automatic_save"] = record
+    automatic_save = _automatic_save_record(working_dir)
+    if automatic_save is not None:
+        info["automatic_save"] = automatic_save
     # Implements: REQ-o00077-A
     difference = _executable_difference()
     if difference is not None:
@@ -1842,7 +1785,7 @@ def _executable_difference() -> dict[str, str] | None:
 
 # Implements: REQ-p00083-C
 def _automatic_save_record(working_dir: Path | str | None) -> dict[str, Any] | None:
-    """The outstanding record of a save the daemon performed, if any.
+    """The outstanding automatic save record of a save the daemon performed, if any.
 
     Facts only — who saved, when, how many changes, what triggered it.
     Nothing here says whether the work is finished or wanted; the daemon
@@ -3119,13 +3062,13 @@ def renew_for_installed_program(
 
     Changes held here exist nowhere else, so they are written before the
     process is replaced. Writing them is enough to preserve them; the
-    record of what was done goes with the process that did it, so they
+    mutation history goes with the process that made it, so they
     can no longer be undone, which is the same thing that happens
     whenever a process stops for any other reason. The unasked write
-    leaves the record that exists for exactly that purpose.
+    leaves the automatic save record that exists for exactly that purpose.
 
     Replacing the process image keeps its identity -- same pid, so the
-    state record still describes it, and the reserved address is bound
+    daemon record still describes it, and the reserved address is bound
     again by the same act. In-flight requests are lost, which over a
     transport where each request stands alone reaches the client as a
     failure it retries rather than as an answer that never comes.
@@ -3173,7 +3116,7 @@ def _replace_process_image() -> None:
     ``-m elspais`` rather than the argv this process was launched with,
     because a console script and a module invocation reach here alike and
     only the module form is certain to exist. The environment carries
-    over untouched, so the successor keeps the same state record and the
+    over untouched, so the successor keeps the same daemon record and the
     same client binding.
     """
     import os as _os
@@ -4736,14 +4679,14 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     # whole-requirement test -- it is real evidence and the caller should see
     # it. The covered/uncovered verdict is strict: a blanket `Verifies:` names
     # no assertion, so it covers none of them.
-    for test_node, _labels in _iter_assertion_coverage(node, NodeKind.TEST):
+    for test_node, _labels in iter_assertion_coverage(node, NodeKind.TEST):
         if test_node.id in seen_test_ids:
             continue
         seen_test_ids.add(test_node.id)
 
         test_nodes.append(_serialize_test_info(test_node, graph))
 
-    for _test_node, labels in _iter_assertion_coverage(node, NodeKind.TEST, direct_only=True):
+    for _test_node, labels in iter_assertion_coverage(node, NodeKind.TEST, direct_only=True):
         for label in labels:
             if label in label_to_id:
                 covered_assertion_ids.add(label_to_id[label])
@@ -4795,7 +4738,7 @@ def _get_test_coverage(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
     jny_nodes: list[dict[str, Any]] = []
     covered_uat_assertion_ids: set[str] = set()
 
-    for jny_node, labels in _iter_assertion_coverage(node, NodeKind.USER_JOURNEY):
+    for jny_node, labels in iter_assertion_coverage(node, NodeKind.USER_JOURNEY):
         # Track covered assertions
         for label in labels:
             if label in label_to_id:
@@ -4924,7 +4867,7 @@ def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
     Returns a structure mapping each assertion label to its tests and their
     results, enabling the UI to show validation buttons per assertion.
 
-    Uses ``_iter_assertion_coverage`` for the shared two-phase traversal
+    Uses ``iter_assertion_coverage`` for the shared two-phase traversal
     and ``_serialize_test_info`` for the unified serializer.
 
     Args:
@@ -4953,7 +4896,7 @@ def _get_assertion_test_map(graph: FederatedGraph, req_id: str) -> dict[str, Any
 
     seen_per_assertion: dict[str, set[str]] = {label: set() for _, label in assertions}
 
-    for test_node, labels in _iter_assertion_coverage(node, NodeKind.TEST):
+    for test_node, labels in iter_assertion_coverage(node, NodeKind.TEST):
         info = _serialize_test_info(test_node, graph)
         for label in labels:
             if label not in assertion_tests:
@@ -4978,7 +4921,7 @@ def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]
     Returns a structure mapping each assertion label to its USER_JOURNEY nodes
     and their results, enabling the UI to show UAT Covered/UAT Passed buttons.
 
-    Uses ``_iter_assertion_coverage`` for the shared two-phase traversal
+    Uses ``iter_assertion_coverage`` for the shared two-phase traversal
     and ``_serialize_journey_info`` for the serializer (a journey's results
     hang off its step-verifying TESTs, not the JNY node itself).
 
@@ -5008,7 +4951,7 @@ def _get_assertion_uat_map(graph: FederatedGraph, req_id: str) -> dict[str, Any]
 
     seen_per_assertion: dict[str, set[str]] = {label: set() for _, label in assertions}
 
-    for jny_node, labels in _iter_assertion_coverage(node, NodeKind.USER_JOURNEY):
+    for jny_node, labels in iter_assertion_coverage(node, NodeKind.USER_JOURNEY):
         info = _serialize_journey_info(jny_node, graph)
         for label in labels:
             if label not in assertion_journeys:
@@ -5035,7 +4978,7 @@ def _get_assertion_code_map(
     Returns a structure mapping each assertion label to its CODE nodes,
     enabling the UI to show "Implemented" buttons per assertion.
 
-    Uses ``_iter_assertion_coverage`` for the shared two-phase traversal
+    Uses ``iter_assertion_coverage`` for the shared two-phase traversal
     and ``_serialize_code_info`` for the unified serializer.
 
     Args:
@@ -5078,7 +5021,7 @@ def _get_assertion_code_map(
             iter_kwargs["edge_kinds"] = {ek}
             iter_kwargs["direct_only"] = True
 
-    for code_node, labels in _iter_assertion_coverage(node, NodeKind.CODE, **iter_kwargs):
+    for code_node, labels in iter_assertion_coverage(node, NodeKind.CODE, **iter_kwargs):
         info = _serialize_code_info(code_node, graph)
         for label in labels:
             if label not in assertion_code:
@@ -5169,7 +5112,7 @@ def _get_assertion_refines_map(graph: FederatedGraph, req_id: str) -> dict[str, 
 
     seen_per_assertion: dict[str, set[str]] = {label: set() for _, label in assertions}
 
-    for req_node, labels in _iter_assertion_coverage(
+    for req_node, labels in iter_assertion_coverage(
         node,
         NodeKind.REQUIREMENT,
         edge_kinds={EdgeKind.REFINES},
@@ -5219,7 +5162,7 @@ def _get_uncovered_assertions(
     REQ-d00067-F: SHALL limit results to prevent unbounded response sizes.
     REQ-d00069-A: SHALL accept source parameter ('test', 'uat', 'both') to filter coverage source.
 
-    Uses ``_iter_assertion_coverage`` to build the covered-labels set,
+    Uses ``iter_assertion_coverage`` to build the covered-labels set,
     which correctly handles whole-requirement evidence (tests with no
     ``assertion_targets`` covering ALL assertions).
 
@@ -5246,7 +5189,7 @@ def _get_uncovered_assertions(
         one stays a gap.
         """
         covered: set[str] = set()
-        for _node, labels in _iter_assertion_coverage(req_node, kind, direct_only=True):
+        for _node, labels in iter_assertion_coverage(req_node, kind, direct_only=True):
             covered.update(labels)
         rollup = req_node.get_metric("rollup_metrics")
         if rollup is not None:
@@ -8395,7 +8338,7 @@ def create_server(
         """
         return _list_safety_branches_impl(_state["working_dir"])
 
-    # Implements: REQ-d00132-A, REQ-d00132-B
+    # Implements: REQ-d00132-A, REQ-d00132-B, REQ-d00325-F
     @mcp.tool()
     @_locked
     def save_mutations(
@@ -8421,9 +8364,13 @@ def create_server(
                 every writer's pending work, so you cannot commit a mutation
                 set you have never looked at.
             save_branch: If True, create a git safety branch before writing.
-            message: Changelog reason for Active requirement changes.
-                Required when mutations affect Active requirements
-                (when changelog enforcement is enabled).
+            message: Why the change was made. Where changelog tracking is
+                enabled and a pending change reaches a requirement that is
+                Active before or after the save -- its text, title, status,
+                identifier, assertions, sections or references -- the save
+                is refused without one (``changelog_message_required``,
+                naming those requirements in ``requirement_ids``), and the
+                reason is written to each such requirement's changelog.
         """
         graph = _state["graph"]
         if graph is None:
@@ -8709,7 +8656,7 @@ def run_server(
         # server is the one kind that can run beside another server in
         # the same repo: it would read the daemon's sentinel as evidence
         # of a dead process and clear it, reporting a loss that never
-        # happened and erasing the record of one that might. The HTTP
+        # happened and erasing the marker of one that might. The HTTP
         # servers are one per repo and can own it unambiguously.
         # Implements: REQ-o00077-A
         # A stdio server is the longest-lived reader of a superseded
@@ -8770,7 +8717,9 @@ def run_server(
                 s.bind(("127.0.0.1", 0))
                 return int(s.getsockname()[1])
 
-        # Resolve ephemeral port if port=0
+        # Implements: REQ-o00076-N, REQ-o00076-O
+        # Port 0 asks for any free port; the record written below names the
+        # one taken.
         if port == 0:
             port = _free_port()
         else:
@@ -8779,7 +8728,7 @@ def run_server(
             # reason to refuse to serve: the tool must work whether or
             # not this process can be reached where a client expected.
             # Serving somewhere else and saying so leaves the CLI and the
-            # viewer unaffected -- they read the record -- and tells a
+            # viewer unaffected -- they read the daemon record -- and tells a
             # client that resolved the old address why it will not answer.
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
@@ -8917,7 +8866,7 @@ def run_server(
             # This is the handler a stop signal actually reaches while the
             # server is serving — uvicorn installs it for the duration of
             # serve(). Starting the save comes FIRST, before anything else
-            # here: marking the state record writes a file and can print,
+            # here: marking the daemon record writes a file and can print,
             # and this runs in true signal context on whatever the main
             # thread was doing, so a write that blocks there blocks here.
             # A handler that never reaches the save leaves the work in a

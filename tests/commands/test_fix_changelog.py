@@ -11,6 +11,8 @@ import re
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
@@ -108,6 +110,7 @@ class TestFixChangelog:
     Active requirements and silently updates Draft requirements.
     """
 
+    # Verifies: REQ-p00004-A
     @patch("sys.stdin")
     @patch(
         "elspais.utilities.changelog_author.resolve_changelog_author",
@@ -145,6 +148,7 @@ class TestFixChangelog:
         assert "## Changelog" in content, "Changelog section should be added"
         assert "Auto-fix:" in content, "Auto-generated reason should be present"
 
+    # Verifies: REQ-p00004-A
     @patch(
         "elspais.utilities.changelog_author.resolve_changelog_author",
         return_value=MOCK_AUTHOR,
@@ -180,6 +184,7 @@ class TestFixChangelog:
         assert "Updated assertion wording" in content
         assert "Test User" in content
 
+    # Verifies: REQ-p00004-A
     @patch(
         "elspais.utilities.changelog_author.resolve_changelog_author",
         return_value=MOCK_AUTHOR,
@@ -213,6 +218,7 @@ class TestFixChangelog:
         # No changelog section should be added for Draft reqs
         assert "## Changelog" not in content
 
+    # Verifies: REQ-p00004-A
     @patch(
         "elspais.utilities.changelog_author.resolve_changelog_author",
         return_value=MOCK_AUTHOR,
@@ -245,9 +251,8 @@ class TestFixChangelog:
             scan_tests=False,
         )
 
-        hash_mode = getattr(graph, "hash_mode", "full-text")
         node = next(n for n in graph.nodes_by_kind(NodeKind.REQUIREMENT) if n.id == "REQ-d00001")
-        correct_hash = compute_hash_for_node(node, hash_mode)
+        correct_hash = compute_hash_for_node(node)
 
         # Step 2: Write the req with the correct hash but NO Changelog section
         active_req_correct_hash = f"""\
@@ -288,6 +293,7 @@ A. The system SHALL do X.
         # Hash should remain correct (not changed)
         assert correct_hash in content
 
+    # Verifies: REQ-p00004-A
     @patch(
         "elspais.utilities.changelog_author.resolve_changelog_author",
         return_value=MOCK_AUTHOR,
@@ -319,9 +325,8 @@ A. The system SHALL do X.
             scan_code=False,
             scan_tests=False,
         )
-        hash_mode = getattr(graph, "hash_mode", "full-text")
         node = next(n for n in graph.nodes_by_kind(NodeKind.REQUIREMENT) if n.id == "REQ-d00001")
-        correct_hash = compute_hash_for_node(node, hash_mode)
+        correct_hash = compute_hash_for_node(node)
 
         (project / "spec" / "requirements.md").write_text(
             f"""\
@@ -365,6 +370,59 @@ A. The system SHALL do X.
         assert correct_hash in content
 
 
+@pytest.mark.parametrize(
+    "message, expected_reason",
+    [
+        ("Reworded per audit review", "Reworded per audit review"),
+        (None, "Auto-fix:"),
+        ("   ", "Auto-fix:"),
+    ],
+    ids=["with-message", "without-message", "blank-message"],
+)
+@patch(
+    "elspais.utilities.changelog_author.resolve_changelog_author",
+    return_value=MOCK_AUTHOR,
+)
+# Verifies: REQ-p00004-N
+def test_REQ_p00004_N_whole_repo_fix_records_the_operators_reason(
+    mock_author, tmp_path: Path, message, expected_reason
+):
+    """A whole-repository fix of an Active requirement whose hash changed
+    records the reason given with -m, and its own reason where none is given."""
+    from elspais.commands.fix_cmd import run
+
+    project = _make_project(tmp_path, _req_with_changelog("<old@test.org>"))
+    args = argparse.Namespace(
+        req_id=None,
+        dry_run=False,
+        spec_dir=project / "spec",
+        config=project / ".elspais.toml",
+        verbose=False,
+        quiet=False,
+        git_root=project,
+        message=message,
+    )
+
+    old_cwd = os.getcwd()
+    os.chdir(project)
+    try:
+        result = run(args)
+    finally:
+        os.chdir(old_cwd)
+
+    assert result == 0
+    content = (project / "spec" / "requirements.md").read_text()
+    rows = [line for line in content.splitlines() if line.startswith("- ") and " | " in line]
+    new_rows = [row for row in rows if "Initial authoring" not in row]
+    assert len(new_rows) == 1, content
+    row = new_rows[0]
+    reason = row.rsplit(" | ", 1)[1]
+    assert reason.startswith(expected_reason), row
+    stored = re.search(r"\*\*Hash\*\*: (\w+)", content).group(1)
+    assert stored != "00000000", content
+    assert f" | {stored} | " in row, row
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Changelog email bracketing (round-trip through fix)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -398,6 +456,7 @@ _BARE_EMAIL_CHANGELOG = re.compile(r"\| [^|]+ \((?!<)[^)|]+@[^)|]+\) \|")
 class TestChangelogEmailBrackets:
     """Verifies: REQ-d00131-K — rendered changelog emails are MD034-clean."""
 
+    # Verifies: REQ-d00131-K
     @patch(
         "elspais.utilities.changelog_author.resolve_changelog_author",
         return_value=MOCK_AUTHOR,
@@ -419,6 +478,7 @@ class TestChangelogEmailBrackets:
         assert "(<test@test.org>)" in content
         assert not _BARE_EMAIL_CHANGELOG.search(content)
 
+    # Verifies: REQ-d00131-K
     @patch(
         "elspais.utilities.changelog_author.resolve_changelog_author",
         return_value=MOCK_AUTHOR,
@@ -440,6 +500,7 @@ class TestChangelogEmailBrackets:
         assert "(<old@example.com>)" in content, "brackets must round-trip"
         assert not _BARE_EMAIL_CHANGELOG.search(content)
 
+    # Verifies: REQ-d00131-K
     @patch(
         "elspais.utilities.changelog_author.resolve_changelog_author",
         return_value=MOCK_AUTHOR,

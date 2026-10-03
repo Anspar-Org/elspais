@@ -21,6 +21,10 @@ D. The system SHALL run automated smoke tests post-deployment.
 
 Business continuity requires uninterrupted service.
 
+## Changelog
+
+- 2026-01-01 | 14f50e4d | - | Fixture Author (<fixture@example.com>) | Initial version
+
 *End* *Production Deployment* | **Hash**: 14f50e4d
 ---
 
@@ -40,6 +44,10 @@ D. The system SHALL meet a recovery time objective of 4 hours.
 ## Rationale
 
 Data protection requires reliable backup mechanisms.
+
+## Changelog
+
+- 2026-01-01 | c4e85cd1 | - | Fixture Author (<fixture@example.com>) | Initial version
 
 *End* *Backup Strategy* | **Hash**: c4e85cd1
 ---

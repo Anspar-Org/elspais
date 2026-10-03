@@ -17,6 +17,7 @@ Complete reference for all elspais commands.
 | `search` | Reports | Search requirements by keyword |
 | `test` | Reports | Execute test targets and record their results, evaluating no check |
 | `fingerprint` | Reports | Record the fingerprint of a test run elspais did not execute |
+| `evidence` | Reports | Write or verify the Evidence Snapshot: one test run's results, bound to the tree |
 | `gaps` | Gaps & Issues | List which requirements fall short of each coverage dimension |
 | `uncovered` | Gaps & Issues | List requirements without code coverage |
 | `untested` | Gaps & Issues | List requirements without test coverage |
@@ -128,11 +129,24 @@ To see malformed references, use: `elspais malformed`
                    The run then records a fingerprint of its inputs there.
                    Exits 2 if no target has a command.
   `--fail-fast`    Stop at the first target failure and skip the checks pass.
+                   With `concurrency` above 1, no further target starts and
+                   the targets already running finish.
                    Requires `--run-tests`; refused without it (exit 2).
   `--targets T...` Run and ingest only these test targets rather than the
                    `default` group. The command refuses a selection
-                   standing for no target, `none` included (exit 2). It also
+                   standing for no target, `none` included (exit 2), and
+                   `last-run`, which names an earlier run's targets. It also
                    refuses a bare run if `default` holds no target.
+                   Requires `--run-tests`; refused without it (exit 2).
+  `--stale-only`   Execute only the selected targets whose results are not
+                   fresh (stale, missing, or left by a run that never
+                   finished) and carry the results of the rest. Every
+                   selected target stays expected, and a carried failure
+                   still fails. A selection that is all fresh executes nothing.
+                   Requires `--run-tests`; refused without it (exit 2).
+  `--concurrency N` The most targets this run executes at the same time, in
+                   place of `[scanning.test] concurrency`. 1 runs them one at
+                   a time, in declaration order. Below 1 is refused (exit 2).
                    Requires `--run-tests`; refused without it (exit 2).
   `--expect T...`  Require the results of these test targets (or groups)
                    without executing them, e.g. results an earlier job left.
@@ -140,9 +154,9 @@ To see malformed references, use: `elspais malformed`
                    `tests.ingestion_fault`; a target neither executed nor
                    expected with no results is `tests.not_run` (info).
                    Accepted with and without `--run-tests`; `none` expects
-                   nothing beyond what runs. NAMESPACE:NAME names a
-                   target or group another federation member declares.
-                   Unknown names and namespaces exit 2.
+                   nothing beyond what runs, and `last-run` is refused.
+                   NAMESPACE:NAME names a target or group another federation
+                   member declares. Unknown names and namespaces exit 2.
   `-o, --output PATH`  Write output to file instead of stdout
 
 `-v, --verbose` and `-q, --quiet` are global options (see Global Options
@@ -156,15 +170,28 @@ Execute test targets and record their results. Evaluate no check.
 
   $ elspais test                       # the `default` group
   $ elspais test --targets unit        # a target or a group
+  $ elspais test --stale-only          # only targets whose results are not fresh
   $ elspais checks --expect unit       # later, once: judge every result
 
 The exit code reflects only the targets: 1 if any target failed, 0 if all
 passed. Each run empties the target's folder and records a fingerprint, as
-`checks --run-tests` does.
+`checks --run-tests` does. Each run also records the targets it executed in
+`<output_root>/.elspais-last-run.json`, which `summary` and `trace` read as
+`--targets last-run`.
 
   `--targets T...` Execute only these targets or groups. The selection and its
                    refusals are those of `checks --run-tests` (exit 2).
-  `--fail-fast`    Stop at the first target that fails.
+  `--fail-fast`    Stop at the first target that fails. With `concurrency`
+                   above 1, no further target starts and the targets already
+                   running finish.
+  `--stale-only`   Execute only the selected targets whose results are not
+                   fresh (stale, missing, or left by a run that never
+                   finished) and leave the fresh results of the rest in
+                   place. A selection that is all fresh executes nothing and
+                   exits 0.
+  `--concurrency N` The most targets this run executes at the same time, in
+                   place of `[scanning.test] concurrency`. 1 runs them one at
+                   a time, in declaration order. Below 1 is refused (exit 2).
 
 Every executed target whose reporter reads test results must declare a
 `results` pattern, because this command reads nothing while a command runs. A
@@ -189,6 +216,48 @@ refuses a `finish` that no `start` began, with exit 1. The reason is that
 `start` empties the folder. Without `start`, the results that an earlier run
 left there would carry the fingerprint of this run. An unknown target name exits 2. See
 `elspais docs test-targets`, *Target Folders and Fresh Results*.
+
+## evidence
+
+Write or verify the *Evidence Snapshot*: the normalized results of one test
+run of one tree, stored in the repository with the traceability report
+derived from it. `[scanning.test] evidence` names its directory.
+
+  $ elspais test                                    # run the targets
+  $ elspais evidence write --fact backends=vm       # store their results
+  $ elspais evidence verify --run --fact backends=vm  # CI: run again, compare
+
+`write` derives the snapshot from the selected targets' own results and
+writes `results.jsonl`, `snapshot.json`, `timings.jsonl` and
+`TRACEABILITY.md` into that directory. The report is rendered from the
+snapshot and the specification alone. A target whose results are absent,
+stale or still being written is refused by name (exit 2). A tree that holds
+uncommitted or untracked changes is named on stderr, and the snapshot is
+still written, but it then matches no commit.
+
+`verify` derives the same snapshot in memory and compares it with the one
+in the directory. It lists each test whose outcome differs, each result on
+one side only, a tree that differs, a declared fact or a target that
+differs, and a report that differs. Durations and printed output are never
+compared.
+
+  `--targets T...`     The targets or groups to hold. The selection and its
+                       refusals are those of `checks --run-tests`. A target
+                       with no command is accepted when another job left
+                       its results in the target's folder. `NAMESPACE:NAME`
+                       selects a federation member's targets, and the
+                       command then writes or verifies that member's
+                       snapshot. A selection spans one repository.
+  `--fact NAME=VALUE`  A fact about the run, held in `snapshot.json`
+                       (repeatable).
+  `--run`              (`verify` only) Execute the selected targets first, as
+                       `elspais test` does. Every selected target then needs
+                       a command.
+
+Exit codes: 0 when written or when the two snapshots agree, 1 when they
+differ, 2 for a refusal or an unreadable snapshot. What the snapshot holds,
+how a build reads it back, and the CI workflow are in `elspais docs
+test-targets`, section Evidence Snapshot.
 
 ## errors
 
@@ -508,12 +577,17 @@ Generate traceability matrix and reports.
 **Options:**
 
   `--format {text,markdown,html,json,csv}`  Output format (default: markdown)
-  `--preset {minimal,standard,full}`        Named default value set
+  `--preset {minimal,standard,full,evidence}` Named default value set; `evidence` adds each assertion's code and tests with outcomes
   `--values KEY,KEY,...` State exactly these values, in this order. A coverage figure is also selectable as the numbers behind it -- `implemented.count`, `implemented.total`, `implemented.ratio` -- and `verified.carried` states whether the Passing verdict was carried from a baseline (see `elspais docs traceability`)
   `--body`               Show requirement body text
   `--assertions`         Show individual assertions
   `--tests`              Show test references
   `--output PATH`        Output file path
+  `--targets T...`       Mark these test targets or groups fresh and render
+                         every other result carried. `none` marks no target
+                         fresh; `last-run` marks the targets the last run of
+                         `elspais test` or `checks --run-tests` executed (see
+                         `elspais docs test-targets`)
 
 **Scoping the report** (see `elspais docs scoping`):
 
@@ -579,7 +653,8 @@ also serves MCP tools at `/mcp` for AI agent integration.
 
   `--static`             Generate static HTML file instead of live server
   `--server`             Start server without opening browser
-  `--port PORT`          Server port (default: 5001)
+  `--port PORT`          Server port (default: 5001; 0 picks any free
+                         port, which `.elspais/daemon.json` records)
   `--base-path PATH`     URL prefix the server sits under (default: none)
   `--embed-content`      Embed requirement content and every traced source
                          file, highlighted and compressed, for offline
@@ -654,9 +729,9 @@ name different paths under it. The flag applies to
 the server alone: with `--static` it is refused, since a generated file
 requests nothing under a prefix. With no prefix the server is exactly what
 it is without the flag.
-The viewer's record in `.elspais/daemon.json` names the prefix as
+The viewer's daemon record, `.elspais/daemon.json`, names the prefix as
 `base_path`, so every command that reaches a running server through the
-record — the CLI's graph queries, `elspais doctor`, `elspais mcp env`
+daemon record — the CLI's graph queries, `elspais doctor`, `elspais mcp env`
 — reaches a prefixed viewer where it answers. The state the page keeps in
 the browser is scoped to the prefix too, so viewers under different
 prefixes on one host keep state of their own.
@@ -741,6 +816,11 @@ Generate coverage summary reports.
   bit), nor the line-coverage ones (a level has no line figure). A table
   states a figure as one cell; `--format json` states it as an object of its
   numbers, in the same row shape `trace` uses. See `elspais docs scoping`.
+  `--targets T...`       Mark these test targets or groups fresh and render
+                         every other result carried. `none` marks no target
+                         fresh; `last-run` marks the targets the last run of
+                         `elspais test` or `checks --run-tests` executed (see
+                         `elspais docs test-targets`)
 
 When `Integrates:` references are present, `summary` adds an "External
 integrations (by associate)" section listing inherited coverage grouped by the
@@ -809,8 +889,8 @@ Analyze foundational requirement importance using graph metrics.
 
 Edit requirements in-place.
 
-  $ elspais edit REQ-d00001 --status Draft
-  $ elspais edit REQ-d00001 --implements REQ-p00001,REQ-p00002
+  $ elspais edit REQ-d00001 --status Draft -m "Reopened for review"
+  $ elspais edit REQ-d00001 --implements REQ-p00001,REQ-p00002 -m "Trace to privacy"
   $ elspais edit REQ-d00001 --move-to roadmap/future.md
   $ elspais edit --from-json edits.json
 
@@ -823,13 +903,25 @@ Edit requirements in-place.
   `--from-json FILE`    Batch edit from JSON (- for stdin)
   `--dry-run`           Show changes without applying
   `--validate-refs`     Validate implements references exist
+  `-m, --message TEXT`  Changelog reason for an edit to an Active requirement
+
+Where `[changelog] hash_current` is on, an edit that changes a requirement
+whose status is Active before or after the edit needs a reason. The edit adds
+one changelog entry to that requirement carrying the reason and its hash.
+Without a reason, or with a blank one, nothing is edited and the command
+names the requirement. Setting the status a requirement already has changes
+nothing and needs no reason.
 
 **Batch JSON Format:**
 
     [
-      {"req_id": "REQ-d00001", "status": "Draft"},
+      {"req_id": "REQ-d00001", "status": "Draft", "message": "Reopened for review"},
       {"req_id": "REQ-d00002", "implements": ["REQ-p00001"]}
     ]
+
+A change's `message` is its reason; a change without one takes `--message`.
+A batch in which any change of an Active requirement has no reason is refused
+before any change is applied.
 
 ## config
 
@@ -1261,14 +1353,14 @@ dropping them.
 deadline above is not the only way a daemon stops, and the others hold
 the same work. An idle timeout firing on a daemon with no client left, and an
 external stop — `elspais daemon`, a `kill`, a container shutting down —
-both persist pending mutations and leave the same record before the
-process ends. Being told to stop says nothing about what the daemon
+both persist pending mutations and leave the same automatic save record
+before the process ends. Being told to stop says nothing about what the daemon
 happens to be holding. Being told to discard does:
 
     idle timeout expires, work pending -> SAVE to disk, record it, stop
     stop signal arrives, work pending  -> SAVE to disk, record it, stop
     told to discard, work pending      -> drop it, write nothing, stop
-    stopping with nothing pending      -> stop, and write no record
+    stopping with nothing pending      -> stop, and leave no automatic save record
 
 If the save fails on either of the first two, the mutations are kept.
 The idle timeout then declines to stop and waits out another idle period,
@@ -1286,9 +1378,9 @@ the process outright. The deadline belongs to whoever asked for the stop,
 which is why the work is written first: by the time it passes there is
 nothing left in the process to lose.
 
-**How you find out.** A save the daemon performed is recorded in
-`.elspais/automatic-save.json` and reported to the next client in the
-ordinary metadata it already reads: `get_workspace_info`,
+**How you find out.** A save the daemon performed leaves an automatic save
+record in `.elspais/automatic-save.json`, which is reported to the next
+client in the ordinary metadata it already reads: `get_workspace_info`,
 `get_graph_status`, `/api/dirty` and `/api/check-freshness` all carry an
 `automatic_save` block while one is outstanding. It states who saved
 (the daemon), when, how many mutations it covered, and what triggered it.
@@ -1297,8 +1389,8 @@ can disappear because it finished, because it crashed, or because a
 connection dropped, and the daemon cannot tell those apart. You decide;
 it reports.
 
-The record is retired the moment any client saves at its own request
-(`save_mutations` over MCP, Save in the viewer, or
+The automatic save record is retired the moment any client saves at its
+own request (`save_mutations` over MCP, Save in the viewer, or
 `elspais daemon --persist`). A later automatic save replaces it.
 Committing or reverting the files does not clear it — the daemon is not
 watching your working tree — so save deliberately, or delete the file, if
@@ -1315,7 +1407,7 @@ If a server starts and finds that file, the process that wrote it is gone
 and never wrote what it held — a SIGKILL, a machine that slept, a
 supervisor with a shorter patience than the save took. The finding
 becomes `.elspais/lost-changes` and is reported as a `lost_changes` block
-on the same surfaces the automatic-save record uses, so what you learn is
+on the same surfaces the automatic save record uses, so what you learn is
 that something was lost, not what. It is retired the next time a client
 saves at its own request. A discard you asked for is not a loss and
 leaves nothing behind.

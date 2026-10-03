@@ -62,7 +62,7 @@ class SharedServerState(dict):
         #
         # Registration is also what scopes those effects to the process that
         # owns them. A stdio MCP server holds a private graph of its own and
-        # registers nothing, so it never writes freshness records belonging to
+        # registers nothing, so it never writes freshness state belonging to
         # a daemon running in the same repo — a fingerprint stamped by a
         # process that did not rebuild the daemon's graph would suppress a
         # restart that is genuinely needed.
@@ -94,12 +94,12 @@ class SharedServerState(dict):
     def begin_shutdown(self) -> None:
         """Mark this process as shutting down. Irreversible by design.
 
-        The state record clients read to find this process is marked too,
+        The daemon record clients read to find this process is marked too,
         because from here on it describes a server that answers and
         refuses: every write is turned away with a message telling the
         caller to reconnect to a server started on demand, which is untrue
         while this one is the server a client locates. Marked rather than
-        removed — a record removed while its process still serves is what
+        removed — a daemon record removed while its process still serves is what
         lets a second daemon boot alongside it.
 
         Marking is best effort and never raises: a stop that cannot write
@@ -110,7 +110,7 @@ class SharedServerState(dict):
         self._shutting_down.set()
         if already:
             # Reached from every stop path, and more than one can run. The
-            # record already says what this would write.
+            # daemon record already says what this would write.
             return
         working_dir = self.get("working_dir")
         if working_dir is None:
@@ -365,9 +365,9 @@ def persist_pending(
     because the daemon is stopping with no client left to ask. The two
     differ in exactly two places: a save the daemon performs itself
     supplies its own changelog reason (there is no client to prompt),
-    and it leaves a record of who saved, when, how much and why, so a
+    and it leaves an automatic save record of who saved, when, how much and why, so a
     later client can see how the files reached their current form. A
-    client-requested save retires that record instead.
+    client-requested save retires that automatic save record instead.
 
     Failure is reported, never raised: the caller with pending work in
     hand has to be able to keep it rather than lose it to an exception.
@@ -402,24 +402,36 @@ def persist_pending(
 
     typed_config = _validate_config(config) if isinstance(config, dict) else config
     changelog_enforce = typed_config.changelog.hash_current
+    # A blank reason says nothing about why, so it is no reason.
+    message = (message or "").strip() or None
     if changelog_enforce and not message:
         if active_mutated:
             if not automatic:
-                ids = ", ".join(sorted(active_mutated))
+                # Implements: REQ-d00325-B, REQ-d00325-C, REQ-d00325-F
+                ids = sorted(active_mutated)
                 return {
                     "success": False,
                     # Not a conflict and not an infrastructure failure: the
                     # caller has to supply something before this can succeed.
                     "code": "changelog_message_required",
+                    "requirement_ids": ids,
                     "error": (
-                        f"Active requirement(s) modified: {ids}. "
-                        "Provide a 'message' parameter with the changelog reason."
+                        f"Active requirement(s) changed: {', '.join(ids)}. Each "
+                        "needs a changelog entry saying why it changed, so nothing "
+                        "was saved. Save again with the reason as the save's "
+                        "message: the viewer asks for it, the save_mutations tool "
+                        "takes it as 'message', and a daemon restart that persists "
+                        "takes it as --message."
                     ),
                 }
+            # Implements: REQ-d00325-E
             # A save the daemon performs has no client to prompt, and
             # leaving an Active requirement changed on disk with no
             # changelog row would leave the tree failing its own checks.
-            message = f"Saved automatically by the daemon ({trigger or 'no client present'})"
+            message = (
+                "Saved automatically; no client requested this save "
+                f"({trigger or 'no client present'})"
+            )
 
     # The rows those requirements are owed are written after the files,
     # but whoever signs them has to be known before: a successful write

@@ -1,4 +1,4 @@
-# Implements: REQ-o00066-A+B+C+D+E
+# Implements: REQ-o00066-B+C+D+E+I+J+K
 name: CI
 
 on:
@@ -89,7 +89,40 @@ jobs:
         run: pip install -e ".[dev,all]"
 
       - name: Run tests
-        run: pytest --tb=short -q
+        run: .githooks/run-unit-tier .results/elspais-unit
+
+  e2e-test:
+    # The e2e tier, run the way the pre-push hook runs it: through
+    # .githooks/run-e2e-tier, which spawns the real `elspais` program for every
+    # CLI, MCP and viewer path. It covers the CLI broadly, so it runs on every
+    # change rather than behind a path filter. Browser tests carrying the e2e
+    # marker run here too, so the browser extra and chromium are installed.
+    # A pull request runs it on the newest supported Python only; the unit
+    # tier already runs on every supported version. A push to main runs it
+    # on every supported version.
+    name: E2E (Python ${{ matrix.python-version }})
+    needs: [compute-hash, prepare-image]
+    runs-on: ubuntu-latest
+    container: ghcr.io/anspar-org/elspais-ci:py${{ matrix.python-version }}-sha-${{ needs.compute-hash.outputs.hash }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.13"]' || '["3.10", "3.11", "3.12", "3.13"]') }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mark workspace safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install package with e2e test dependencies
+        run: pip install -e ".[dev,all,browser]"
+
+      - name: Install chromium
+        run: playwright install --with-deps chromium
+
+      - name: Run e2e tier
+        run: .githooks/run-e2e-tier .results/elspais-e2e
 
   stress-test:
     # Concurrency stress battery (pytest -m stress): races live daemon
@@ -163,7 +196,7 @@ jobs:
               - 'src/elspais/html/**'
               - 'src/elspais/server/**'
               - 'src/elspais/commands/viewer*.py'
-              - 'tests/e2e/test_viewer_browser.py'
+              - 'tests/e2e/viewer_browser/**'
               - 'tests/conftest.py'
               - 'pyproject.toml'
               - '.github/workflows/ci.yml'
@@ -186,7 +219,7 @@ jobs:
 
   promote-image:
     name: Promote CI Image (Python ${{ matrix.python-version }})
-    needs: [compute-hash, test, stress-test, browser-test]
+    needs: [compute-hash, test, e2e-test, stress-test, browser-test]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:

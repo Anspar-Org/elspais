@@ -156,9 +156,9 @@ class DomainFile:
             # A caller who names one file has already made the selection;
             # patterns are for choosing among the files in a directory. The
             # skip lists still answer, so naming a skipped file reads nothing.
-            if not file_is_skipped(self.path.name, self.skip_files) and not within_skipped_dir(
-                relative, self.skip_dirs
-            ):
+            if not file_is_skipped(
+                relative if relative != "." else self.path.name, self.skip_files
+            ) and not within_skipped_dir(relative, self.skip_dirs):
                 found.append((self.path, True))
         elif self.path.is_dir():
             selection = select_files(

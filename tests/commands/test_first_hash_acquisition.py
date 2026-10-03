@@ -217,6 +217,7 @@ def _end_line(text: str) -> str:
 class TestFirstHashAcquisition:
     """Pins the bulk fix path's treatment of an absent stored hash."""
 
+    # Verifies: REQ-p00004-A
     def test_detect_fixable_flags_requirement_with_no_stored_hash(self, tmp_path):
         """_detect_fixable must report 'hash_mismatch' for a requirement
         that has hashable content but no hash in its End marker.
@@ -232,8 +233,7 @@ class TestFirstHashAcquisition:
             node = _find_node(graph, "REQ-d00001")
             assert node is not None, "REQ-d00001 not found in graph"
             assert not node.hash, f"Fixture must have no stored hash, got {node.hash!r}"
-            hash_mode = getattr(graph, "hash_mode", "full-text")
-            reasons = _detect_fixable(node, hash_mode, False)
+            reasons = _detect_fixable(node, False)
         finally:
             os.chdir(old_cwd)
 
@@ -241,6 +241,7 @@ class TestFirstHashAcquisition:
             f"An absent stored hash must register as fixable; got reasons={reasons}"
         )
 
+    # Verifies: REQ-p00004-A
     def test_bulk_fix_dry_run_reports_requirement_with_no_stored_hash(self, tmp_path, capsys):
         """Bulk fix --dry-run must name a hashless requirement in its
         output, and must not write to the spec file.
@@ -260,6 +261,7 @@ class TestFirstHashAcquisition:
             f"Bulk dry-run must report the hashless requirement; output was:\n{out}"
         )
 
+    # Verifies: REQ-p00004-A
     def test_bulk_fix_dry_run_shows_hash_value_that_will_be_written(self, tmp_path, capsys):
         """Bulk fix --dry-run must show the hash value it is about to
         write, not merely name the condition — the same transition the
@@ -291,6 +293,7 @@ class TestFirstHashAcquisition:
             f"{preview_out}"
         )
 
+    # Verifies: REQ-p00004-A
     def test_bulk_fix_writes_computed_hash_for_requirement_with_no_stored_hash(self, tmp_path):
         """Bulk fix must stamp a real 8-hex-char hash on a requirement
         that has assertions but no stored hash.
@@ -308,6 +311,7 @@ class TestFirstHashAcquisition:
             f"End line was: {_end_line(content)!r}"
         )
 
+    # Verifies: REQ-p00004-A, REQ-d00131-P
     def test_bulk_fix_writes_sentinel_for_requirement_with_nothing_to_hash(self, tmp_path):
         """Bulk fix must stamp the reserved N/A sentinel on a requirement
         with no hashable content and no stored hash (REQ-d00131-P).
@@ -324,6 +328,7 @@ class TestFirstHashAcquisition:
             f"End line was: {_end_line(content)!r}"
         )
 
+    # Verifies: REQ-p00004-A
     def test_bulk_and_single_agree_on_requirement_with_no_stored_hash(self, tmp_path):
         """The bulk and single fix paths must produce an identical End
         marker for the same hashless requirement.
@@ -346,6 +351,7 @@ class TestFirstHashAcquisition:
             f"  single: {single_end!r}"
         )
 
+    # Verifies: REQ-p00004-A
     def test_first_hash_acquisition_records_computed_hash_in_changelog(self, tmp_path, monkeypatch):
         """The changelog entry written on first hash acquisition must be
         anchored to the newly computed hash, not left blank or stale.

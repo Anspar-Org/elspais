@@ -22,10 +22,20 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 from elspais.mcp.daemon import StopOutcome, _daemon_json_path, stop_daemon, wait_for_daemon_exit
 
 
-def _write_record(repo_root: Path, pid: int, port: int = 65000) -> Path:
+def _proc_state(pid: int) -> str | None:
+    """The state letter ``/proc/<pid>/stat`` reports, or None once it is gone."""
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+    except (OSError, IndexError):
+        return None
+
+
+def _write_daemon_record(repo_root: Path, pid: int, port: int = 65000) -> Path:
     path = _daemon_json_path(repo_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"pid": pid, "port": port, "version": "test"}))
@@ -85,7 +95,7 @@ class TestStopWaitsForTheProcess:
         # reaps a pid it owns as part of its liveness check (see its
         # docstring), which is what lets this assertion hold without a
         # background reaper of its own.
-        record = _write_record(tmp_path, proc.pid)
+        record = _write_daemon_record(tmp_path, proc.pid)
 
         assert stop_daemon(tmp_path) is StopOutcome.STOPPED
         assert proc.poll() is not None, "stop_daemon returned while the process was alive"
@@ -99,7 +109,7 @@ class TestStopWaitsForTheProcess:
         it cannot decline, so one working tree is not left with a process
         that neither stops nor can be replaced."""
         proc = _spawn_stand_in(_IGNORE_SIGTERM, wait_for_ready=True)
-        record = _write_record(tmp_path, proc.pid)
+        record = _write_daemon_record(tmp_path, proc.pid)
         try:
             assert stop_daemon(tmp_path, timeout=1.0) is StopOutcome.STOPPED
             assert proc.poll() is not None, "stop_daemon returned while the process was alive"
@@ -136,22 +146,35 @@ class TestStopWaitsForTheProcess:
         )
 
     # Verifies: REQ-o00075-B
-    def test_REQ_o00075_B_unreaped_child_counts_as_stopped(self, tmp_path, monkeypatch):
+    def test_REQ_o00075_B_unreaped_child_counts_as_not_running(self, tmp_path, monkeypatch):
         """Validates REQ-o00075-B: stop_daemon must not mistake a zombie
         for a still-serving process -- that would refuse a restart, or a
-        viewer takeover, over a daemon that has actually already gone."""
+        viewer takeover, over a daemon that has actually already gone. A
+        zombie was not running when the stop was asked, so nothing is
+        stopped and the record naming it is removed."""
+        if sys.platform != "linux":
+            pytest.skip("a zombie is observed through /proc, which only Linux provides")
         proc = subprocess.Popen([sys.executable, "-c", "pass"])
-        time.sleep(0.3)  # let it exit and sit unreaped
-        # A zombie has no argv left to spoof -- the kernel frees the cmdline
-        # at exit, so /proc/<pid>/cmdline reads empty for any process, daemon
-        # or not. Identity is not this test's question; whether the wait sees
-        # an unreaped exit as gone is. Answering the identity question for it
-        # is what lets the wait be reached at all.
-        monkeypatch.setattr("elspais.mcp.daemon.process_is_daemon", lambda pid: True)
-        record = _write_record(tmp_path, proc.pid)
+        try:
+            # Left unreaped: no proc.wait()/poll() until the finally.
+            deadline = time.monotonic() + 30.0
+            while _proc_state(proc.pid) != "Z":
+                assert time.monotonic() < deadline, f"child {proc.pid} never became a zombie"
+                time.sleep(0.01)
+            # A zombie has no argv left -- the kernel frees the cmdline at
+            # exit -- so the identity check would also decline it. Answering
+            # the identity question for it leaves liveness as the only thing
+            # that can keep the stop from reaching the process.
+            monkeypatch.setattr("elspais.mcp.daemon.process_is_daemon", lambda pid: True)
+            record = _write_daemon_record(tmp_path, proc.pid)
 
-        assert stop_daemon(tmp_path) is StopOutcome.STOPPED
-        assert not record.exists()
+            outcome = stop_daemon(tmp_path)
+
+            assert outcome is StopOutcome.NOT_RUNNING
+            assert outcome.is_gone
+            assert not record.exists(), "the record naming a zombie was kept"
+        finally:
+            proc.wait()
 
 
 class TestTheStopperOwnsTheDeadline:
@@ -180,7 +203,7 @@ class TestTheStopperOwnsTheDeadline:
 
         monkeypatch.setattr(daemon_module.os, "kill", _record)
         proc = _spawn_stand_in(_SLEEP)
-        _write_record(tmp_path, proc.pid)
+        _write_daemon_record(tmp_path, proc.pid)
 
         assert stop_daemon(tmp_path) is StopOutcome.STOPPED
         assert signal_module.SIGKILL not in sent, f"a cooperative daemon was killed: {sent}"
@@ -202,7 +225,7 @@ class TestTheStopperOwnsTheDeadline:
         start = time_module.monotonic()
 
         proc = _spawn_stand_in(_IGNORE_SIGTERM, wait_for_ready=True)
-        _write_record(tmp_path, proc.pid)
+        _write_daemon_record(tmp_path, proc.pid)
 
         real_kill = daemon_module.os.kill
 
@@ -282,7 +305,7 @@ class TestStopDistinguishesGoneFromRefusing:
         race a single boolean could not express."""
         proc = subprocess.Popen([sys.executable, "-c", "pass"])
         proc.wait()
-        _write_record(tmp_path, proc.pid)
+        _write_daemon_record(tmp_path, proc.pid)
 
         outcome = stop_daemon(tmp_path)
 
@@ -303,7 +326,7 @@ class TestStopDistinguishesGoneFromRefusing:
         uninterruptible wait in the kernel can, which is why the outcome
         exists), so the wait reports what such a process would."""
         proc = _spawn_stand_in(_IGNORE_SIGTERM, wait_for_ready=True)
-        record = _write_record(tmp_path, proc.pid)
+        record = _write_daemon_record(tmp_path, proc.pid)
         monkeypatch.setattr("elspais.mcp.daemon.wait_for_daemon_exit", lambda *a, **k: False)
         try:
             outcome = stop_daemon(tmp_path, timeout=1.0)
@@ -330,7 +353,7 @@ class TestStartRefusesToJoinALiveDaemon:
         from elspais.mcp.daemon import start_daemon
 
         proc = _spawn_stand_in(_IGNORE_SIGTERM, wait_for_ready=True)
-        record = _write_record(tmp_path, proc.pid)
+        record = _write_daemon_record(tmp_path, proc.pid)
         # A process nothing can remove: the stop escalates to a kill, and
         # the predecessor is still there afterwards.
         monkeypatch.setattr("elspais.mcp.daemon.wait_for_daemon_exit", lambda *a, **k: False)
@@ -373,7 +396,7 @@ class TestStopSignalsOnlyADaemon:
         # exactly what makes it a stranger. It is also maximally killable --
         # it declines no signal -- so surviving means nothing was sent.
         proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
-        record = _write_record(tmp_path, proc.pid)
+        record = _write_daemon_record(tmp_path, proc.pid)
         monkeypatch.setattr(daemon_module.os, "kill", _record_signal)
         try:
             assert stop_daemon(tmp_path, timeout=1.0) is StopOutcome.NOT_RUNNING

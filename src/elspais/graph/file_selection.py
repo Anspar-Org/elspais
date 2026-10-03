@@ -14,8 +14,12 @@ The rules, in full:
   root of the repository, NOT a directory called ``junk`` at some depth.
 * ``**`` stands for zero or more directories, so ``**/junk`` names a directory
   called ``junk`` anywhere, and ``stuff/**`` names everything under ``stuff``.
-* A file is named by a glob over its NAME: ``*.md``, ``README.md``. A file
-  pattern says nothing about where the file sits; the directory rules say that.
+* A pattern holding a ``/`` is a path from the REPOSITORY ROOT whether it
+  reaches a file or a directory, so ``**/junk`` names a file called ``junk``
+  anywhere as surely as a directory, and ``gen/out.json`` names that one file.
+* A pattern of a single name is a glob over a file's NAME at any depth:
+  ``*.md``, ``README.md``. Against a directory it names that directory at the
+  repository root, as the first rule says.
 * A directory a skip pattern names is not descended into. Nothing inside it is
   opened, so nothing downstream can report on it (REQ-p00015-H).
 """
@@ -67,14 +71,27 @@ def within_skipped_dir(relative_path: str, skip_dirs: Iterable[str]) -> bool:
     return any(dir_is_skipped("/".join(parts[:i]), skip_dirs) for i in range(1, len(parts)))
 
 
-def file_is_skipped(name: str, skip_files: Iterable[str]) -> bool:
-    """Whether a file's NAME is one the configuration skips.
+# Implements: REQ-d00326-A
+def file_is_skipped(relative_path: str, skip_files: Iterable[str]) -> bool:
+    """Whether a repo-relative file is one the configuration skips.
+
+    A pattern holding a ``/`` is read as a path from the repository root, by
+    the rule a directory pattern is read by. A pattern of one name is a glob
+    over the file's name, wherever the file sits.
 
     A skipped file is passed over in SILENCE. Nothing downstream may report it
     (REQ-d00241-G), which is what makes this a different question from whether
     the kind's patterns select it.
     """
-    return any(fnmatch.fnmatch(name, pattern) for pattern in skip_files)
+    parts = _segments(relative_path)
+    name = parts[-1] if parts else relative_path
+    for pattern in skip_files:
+        if "/" in pattern:
+            if _match_segments(_segments(pattern), parts):
+                return True
+        elif fnmatch.fnmatch(name, pattern):
+            return True
+    return False
 
 
 def file_is_included(name: str, relative_to_scan_dir: str, include_files: Iterable[str]) -> bool:
@@ -135,7 +152,9 @@ def select_files(
         repo_root: The repository. Every directory pattern is read from here.
         scan_dirs: The directories this kind scans, repo-relative.
         skip_dirs: Directories not to enter, repo-relative.
-        skip_files: Globs over a file's name. A file matching one is not read.
+        skip_files: Patterns over a file's name, or, where one holds a ``/``,
+            over its path from the repository root. A file matching one is
+            not read.
         include_files: Globs selecting among what the scanned directories
             hold, matched against a file's name and its path within the
             directory being scanned.
@@ -179,7 +198,7 @@ def select_files(
                 # Asked in this order deliberately. A skip pattern answers
                 # first and ends the question: such a file is neither read nor
                 # reported. Only what survives it can be declined.
-                if file_is_skipped(name, skip_files):
+                if file_is_skipped(f"{here_rel}/{name}", skip_files):
                     continue
                 rel_to_scan = (here / name).relative_to(start).as_posix()
                 if file_is_included(name, rel_to_scan, include_files):

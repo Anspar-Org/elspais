@@ -87,7 +87,7 @@ def validate_new_spec_path(relative_path: str, config: dict[str, Any]) -> str | 
     if within_skipped_dir(relative_path, all_skip_dirs):
         return f"Path '{relative_path}' is under a directory the configuration skips"
 
-    if file_is_skipped(filename, all_skip_files):
+    if file_is_skipped(relative_path, all_skip_files):
         return f"Filename '{filename}' matches a skip pattern"
 
     return None

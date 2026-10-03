@@ -285,7 +285,7 @@ that changes to cross-cutting requirements are propagated to their consumers.
 | --- | --- | --- | --- | --- |
 | `tests.uncited_file` | A scanned test file in which no test cites anything -- either no test functions found, or no test in the file links to any requirement (a file with at least one linked test is not flagged). Not the same population as the unlinked NODES the graph API and the MCP `get_unlinked_nodes` tool answer about | info | `[rules.severity]` | `elspais uncited` |
 | `tests.results` | The pass/fail status of every ingested result. One test that runs in several environments writes one result in each of them, so the count is a count of results, not of tests | warning | `[rules.severity]` | `elspais failing` |
-| `tests.results_stale` | Test results whose inputs changed since they ran, or that carry no fingerprint | warning | `[rules.severity]` | `elspais checks --run-tests` |
+| `tests.results_stale` | Test results whose inputs changed since they ran, that carry no fingerprint, or that an Evidence Snapshot of another tree holds | warning | `[rules.severity]` | `elspais checks --run-tests` |
 | `tests.unmatched_results` | Results matching no known test | warning | `[rules.severity]` | `elspais -v checks --tests` |
 | `tests.tested` | The `tested` coverage dimension (TEST nodes linked to assertions) | error | `[rules.severity]` | `elspais untested` |
 | `tests.verified` | The `verified` (Passing) coverage dimension | error | `[rules.severity]` | `elspais failing` |
@@ -1021,15 +1021,37 @@ source of truth for flag names and descriptions.
 `elspais checks --run-tests` executes each configured
 `[[scanning.test.targets]]` entry before evaluating checks. `--targets NAME
 ...` restricts `--run-tests` to a named subset; without `--run-tests` it is
-refused (exit 2), as `--fail-fast` is. An unknown name is exit code 2. A
+refused (exit 2), as `--fail-fast`, `--stale-only` and `--concurrency` are. An unknown name is exit code 2. A
 selection standing for no target is also exit code 2. The flag only affects
 execution here. `--targets none` selects nothing to run.
-Consequently, `--run-tests` refuses it. A bare `--run-tests` selects the
+Consequently, `--run-tests` refuses it. `--targets last-run` names the targets
+an earlier run executed, not what this run executes, so `--run-tests` refuses
+it too (exit 2). A bare `--run-tests` selects the
 `default` group. If that group holds no target, then the command refuses the
 run (exit 2). Name targets or groups instead. Per-PR selectivity rendering
 (`(baseline)` for carried results, `—` for no baseline) is produced by
-`summary --targets` / `trace --targets`, not by `checks`. See `elspais docs
-test-targets` for the full model.
+`summary --targets` / `trace --targets`, not by `checks`. Every run of
+`--run-tests` records the targets it executed in
+`<output_root>/.elspais-last-run.json`, and `summary --targets last-run` /
+`trace --targets last-run` read that record to mark those results fresh. See
+`elspais docs test-targets` for the full model.
+
+`--stale-only` narrows what `--run-tests` executes to the selected targets
+whose results are not fresh by the judgement `tests.results_stale` reports:
+stale, missing, or left by a run that recorded a start and no end. It carries
+the results of the rest, and every selected target is still expected, so a
+carried failing result still fails the run. It prints the division to stderr
+(`stale-only: executing a, b; carrying fresh results of c`), and records the
+executed targets for a later `--targets last-run`. A selection that
+is all fresh executes nothing, and the checks then run over the results on
+disk.
+
+With `[scanning.test] concurrency` above 1, `--run-tests` runs several targets
+at the same time and marks each output line with its target's name. Under
+`--fail-fast`, no further target starts after a failure, the targets already
+running finish, and the checks pass is skipped. `--concurrency N` replaces
+`[scanning.test] concurrency` for one run; `--concurrency 1` runs the targets
+one at a time. A value below 1 is refused (exit 2).
 
 `--expect NAME ...` names the targets whose results the run requires without
 executing them -- results an earlier job left on disk. It is a separate
@@ -1037,7 +1059,8 @@ question from `--targets`, which selects what `--run-tests` executes, and it
 is accepted with and without `--run-tests`. A name stands for a target or a
 group, as with `--targets`; an unknown name is exit code 2, and so is a
 selection standing for no target. `--expect none` expects nothing beyond what
-the run executes. Every target `--run-tests` executes is expected as well.
+the run executes. `--expect last-run` is refused (exit 2): the run names what it
+expects of itself, not what an earlier run executed. Every target `--run-tests` executes is expected as well.
 
 What a target with no results is reported as depends on that:
 

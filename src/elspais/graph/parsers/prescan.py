@@ -1113,9 +1113,10 @@ def external_prescan(
 ]:
     """Build prescan data from externally-provided test structure.
 
-    The extent of a test (its span of lines) ends at the end line its record
-    reports.  If the record reports none, then the extent ends at the last
-    line before the next test that is neither blank nor a comment.
+    The extent of a test (its span of lines) ends at the end line its
+    attribution record reports.  If the attribution record reports none, then
+    the extent ends at the last line before the next test that is neither
+    blank nor a comment.
     Consequently, the comment block above the next test binds to that test.
     This function does not read that block as the body of this test.
 
@@ -1139,8 +1140,8 @@ def external_prescan(
         fname = entry["function"]
         cname = entry.get("class")
         # Implements: REQ-d00254-K+M
-        # A record names one test, so a record IS a test. Reading a naming
-        # convention here asked every framework to spell its tests the way
+        # An attribution record names one test, so an attribution record IS a
+        # test. Reading a naming convention here asked every framework to spell its tests the way
         # pytest does, and a test named otherwise reached no node at all --
         # which then stripped the citation above it of its relationship and
         # reported the author for writing one.

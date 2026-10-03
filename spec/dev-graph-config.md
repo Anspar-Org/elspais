@@ -250,6 +250,51 @@ R is a condition on resolving, never on writing, which is what keeps a reference
 *End* *Configuration Schema* | **Hash**: 492083b5
 ---
 
+## REQ-d00324: Refusal of a Retired Configuration Value
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00002
+
+A setting the configuration schema still defines can stop admitting one of the values it admitted before. A configuration that selects such a value is refused when it is read, and the message tells the reader how to change the configuration and what that change does to content the tool has already written.
+
+### Assertions
+
+A. A configuration that selects a value this version no longer admits SHALL be refused when the configuration is read, with a message naming the setting, what to write instead, and each change the replacement makes to content the tool has stored.
+
+### Rationale
+
+A is the counterpart for a value of REQ-d00212-X, which refuses a setting this version does not read. A configuration that selects a retired value is refused for the same reason a retired setting is: reading the value as something else would change what the tool does without telling anyone. A retired value can also have shaped what the tool wrote to disk, such as the hash in each requirement's footer, so the message says what the replacement will change there before anyone runs the operation that changes it.
+
+### Changelog
+
+- 2026-10-03 | 530fb06a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-03 | - | - | Michael Lewis (<michael@anspar.org>) | Author A: a value this version no longer admits is refused, naming the setting and what replacing it changes on disk
+
+*End* *Refusal of a Retired Configuration Value* | **Hash**: 530fb06a
+---
+
+## REQ-d00326: Path-Shaped Skip Patterns
+
+**Level**: dev | **Status**: Active | **Implements**: -
+**Refines**: REQ-d00212-W
+
+A skip pattern that spells a path names that one path from the repository root, whether the path reaches a file or a directory, so one spelling excludes generated files and generated directories alike.
+
+### Assertions
+
+A. Where a skip pattern holds a path separator, the system SHALL match the pattern against the path from the repository root of each file and each directory alike.
+
+### Rationale
+
+A gives a skip pattern that spells a path one meaning, whichever kind of path it reaches. A project writes `**/name` to mean a name at any depth, and that spelling then skips a generated file as surely as a generated directory. A pattern of a single name keeps its two readings, a file name at any depth and a directory at the repository root, and the documentation states both.
+
+### Changelog
+
+- 2026-10-03 | 797c3fe4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-03 | - | - | Michael Lewis (<michael@anspar.org>) | Author A: a skip pattern holding a path separator names one path from the repository root for a file and a directory alike
+
+*End* *Path-Shaped Skip Patterns* | **Hash**: 797c3fe4
+---
+
 ## REQ-d00251: A Repository's Identifier Grammar
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00002

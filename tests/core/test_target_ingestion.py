@@ -625,3 +625,144 @@ def test_a_failed_test_its_own_suite_ran_names_no_runner(tmp_path: Path):
     (finding,) = check_test_results(graph, config).findings
 
     assert "(run by" not in finding.message
+
+
+# ---------------------------------------------------------------------------
+# Results keep matching when the tree moves
+# ---------------------------------------------------------------------------
+
+
+def _recorded_run(root: Path, *, outcome: str = "success") -> None:
+    """Write the shared-scenario project at *root* and record one run of its target.
+
+    The run is started and finished as the runner does, so its Result
+    Fingerprint records the root it executed in. The reporter writes absolute
+    paths under that root.
+    """
+    from elspais.config import load_config
+    from elspais.utilities.fingerprint import finish_run, start_run
+
+    files = {
+        ".elspais.toml": _SHARED_CONFIG,
+        "spec/requirements.md": _SHARED_SPEC,
+        _SHARED_FILE: _SHARED_DART,
+        _RUNNER_A: _RUNNER_A_DART,
+        _RUNNER_B: _RUNNER_B_DART,
+    }
+    for rel, text in files.items():
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    config = load_config(root / ".elspais.toml")
+    folder = start_run(root, config, "flutter")
+    (folder / "machine.jsonl").write_text(
+        _machine_run(root, _RUNNER_A, _SHARED_FILE, outcome, 1) + "\n", encoding="utf-8"
+    )
+    finish_run(root, config, "flutter")
+
+
+def _relocate(source: Path, destination: Path, how: str) -> None:
+    import shutil
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if how == "copy":
+        shutil.copytree(source, destination, symlinks=True)
+    else:
+        source.rename(destination)
+
+
+def _rewrite_fingerprint(folder: Path, change) -> None:
+    import json
+
+    from elspais.utilities.fingerprint import FINGERPRINT_NAME
+
+    path = folder / FINGERPRINT_NAME
+    data = json.loads(path.read_text(encoding="utf-8"))
+    change(data)
+    path.write_text(json.dumps(data, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _build_at(root: Path):
+    from elspais.config import load_config
+    from elspais.graph.factory import build_graph as _factory_build_graph
+
+    return _factory_build_graph(repo_root=root), load_config(root / ".elspais.toml")
+
+
+# Verifies: REQ-d00311-P
+def test_the_result_fingerprint_records_the_root_its_run_executed_in(tmp_path: Path):
+    from elspais.utilities.fingerprint import read_fingerprint
+
+    root = tmp_path / "proj"
+    _recorded_run(root)
+
+    fingerprint = read_fingerprint(root / ".results" / "flutter")
+
+    assert fingerprint["root"] == str(root.resolve())
+
+
+# Verifies: REQ-d00311-P
+@pytest.mark.parametrize("how", ["copy", "move"])
+def test_results_of_a_moved_tree_bind_to_their_tests(tmp_path: Path, how: str):
+    from elspais.commands.health import check_unmatched_results
+    from elspais.graph.metrics import tested_and_passing
+
+    original = tmp_path / "first" / "proj"
+    _recorded_run(original)
+    before, _ = _build_at(original)
+    passing_before = tested_and_passing(
+        before.find_by_id("REQ-d00001").get_metric("rollup_metrics")
+    ).covered
+
+    moved = tmp_path / "second" / "elsewhere"
+    _relocate(original, moved, how)
+    graph, config = _build_at(moved)
+
+    (result,) = list(graph.iter_by_kind(NodeKind.RESULT))
+    assert result.get_field("match_scope") == "test"
+    assert result.get_field("source_file") == _SHARED_FILE
+    assert result.get_field("runner_file") == _RUNNER_A
+    assert check_unmatched_results(graph, config).passed is True
+    rollup = graph.find_by_id("REQ-d00001").get_metric("rollup_metrics")
+    assert passing_before == 1.0
+    assert tested_and_passing(rollup).covered == passing_before
+
+
+# Verifies: REQ-d00311-P
+def test_a_fingerprint_recording_no_root_reads_paths_against_the_current_root(tmp_path: Path):
+    """Without a recorded root, a path from the old tree is outside the repository."""
+    from elspais.commands.health import check_unmatched_results
+
+    original = tmp_path / "first" / "proj"
+    _recorded_run(original)
+    moved = tmp_path / "second" / "proj"
+    _relocate(original, moved, "copy")
+    _rewrite_fingerprint(moved / ".results" / "flutter", lambda data: data.pop("root", None))
+
+    graph, config = _build_at(moved)
+
+    (result,) = list(graph.iter_by_kind(NodeKind.RESULT))
+    assert result.get_field("source_file") == str(original / _SHARED_FILE)
+    assert result.get_field("match_scope") != "test"
+    assert check_unmatched_results(graph, config).passed is False
+
+
+# Verifies: REQ-d00311-P
+def test_a_path_under_neither_root_stays_absolute_and_unmatched(tmp_path: Path):
+    from elspais.commands.health import check_unmatched_results
+
+    original = tmp_path / "first" / "proj"
+    _recorded_run(original)
+    moved = tmp_path / "second" / "proj"
+    _relocate(original, moved, "copy")
+    elsewhere = tmp_path / "third"
+    _rewrite_fingerprint(
+        moved / ".results" / "flutter", lambda data: data.update(root=str(elsewhere))
+    )
+
+    graph, config = _build_at(moved)
+
+    (result,) = list(graph.iter_by_kind(NodeKind.RESULT))
+    assert result.get_field("source_file") == str(original / _SHARED_FILE)
+    assert result.get_field("match_scope") != "test"
+    assert check_unmatched_results(graph, config).passed is False

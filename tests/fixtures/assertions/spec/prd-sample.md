@@ -12,6 +12,10 @@ C. The system SHALL NOT allow unauthenticated access to protected resources.
 
 Security and compliance require verified user identity.
 
+## Changelog
+
+- 2026-01-01 | e6e78a7b | - | Fixture Author (<fixture@example.com>) | Initial version
+
 *End* *User Authentication* | **Hash**: e6e78a7b
 ---
 
@@ -23,6 +27,10 @@ Security and compliance require verified user identity.
 
 A. The system SHALL maintain user sessions.
 B. The system SHALL expire sessions after 30 minutes of inactivity.
+
+## Changelog
+
+- 2026-01-01 | 0610fb6c | - | Fixture Author (<fixture@example.com>) | Initial version
 
 *End* *Session Management* | **Hash**: 0610fb6c
 ---

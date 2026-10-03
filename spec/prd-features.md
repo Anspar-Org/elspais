@@ -411,7 +411,7 @@ A. Anchor parsing SHALL handle bare requirement IDs, *Assertion* fragments, sect
 
 B. Comment ID generation SHALL produce format c-YYYYMMDD-6hexchars using utilities/hasher.py.
 
-C. JSONL load and append SHALL read/write CommentEvent records as one JSON object per line.
+C. JSONL load and append SHALL read and write each CommentEvent as one JSON object per line.
 
 D. Thread assembly SHALL group events by root, attach replies, apply resolve/promote events, and filter resolved threads.
 
@@ -419,11 +419,13 @@ E. Comment file path resolution SHALL mirror repo structure under .elspais/comme
 
 ### Changelog
 
+- 2026-10-02 | c3b024cf | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: state the storage format of a comment event without the word record (C)
 - 2026-07-31 | 7415991a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | cdaa4044 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | cdaa4044 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Comment JSONL Storage* | **Hash**: 7415991a
+*End* *Comment JSONL Storage* | **Hash**: c3b024cf
 
 ## REQ-d00229: Comment Promotion Engine
 

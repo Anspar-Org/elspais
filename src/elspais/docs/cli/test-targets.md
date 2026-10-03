@@ -64,15 +64,30 @@ as good as new ones against the same inputs. `elspais checks` reports nothing
 about fresh results. The results are **stale** when an input changed or when
 no run recorded a fingerprint for them. If an input changed, then the finding
 names it. `tests.results_stale` states which reason applies. File timestamps
-play no part.
+play no part. Results read from an *Evidence Snapshot* are judged by the
+snapshot's tree digest instead: a snapshot whose digest differs from that of
+the tree of the repository naming it is stale, and the finding names the
+snapshot directory. A federation member's snapshot is judged against that
+member's tree.
 
 A target's **inputs** are every file in the repository by default, whether or
-not git tracks it. Two sets of paths are never inputs: the output root, and
-the paths that the global `[scanning] skip` list names. The per-kind
+not git tracks it. Three sets of paths are never inputs: the output root, the
+*Evidence Snapshot* directory that `[scanning.test] evidence` names, and the
+paths that the global `[scanning] skip` list names. The per-kind
 `skip_dirs`/`skip_files` of `[scanning.spec]`, `[scanning.code]` and the rest
 do not apply here. Put anything that changes during every run in that global
 list. Examples are `.git`, `.elspais/`, and caches that a test tool writes
-while it runs, such as `.pytest_cache`. `elspais init` writes the common ones.
+while it runs, such as `**/.pytest_cache` and `.coverage`. `elspais init`
+writes the common ones.
+
+Write a skip entry so that it reaches every place the file or directory can
+appear. An entry holding a `/` is a path from the repository root, for a file
+and a directory alike, so `**/.pytest_cache` skips that directory at any depth
+and `**/.coverage` skips that file at any depth. An entry of a single name
+skips a file of that name at any depth, but a directory of that name only at
+the repository root: a bare `.pytest_cache` leaves `pkg/.pytest_cache` among
+the inputs, and every run that writes it reads as stale. See
+`elspais docs ignore` for the full rule.
 A target narrows its inputs with `inputs`. `inputs` has exactly the same form
 as a scanning kind's file selection:
 
@@ -110,13 +125,22 @@ not evidence of where results came from.
 
 Copy results from elsewhere with their folder, fingerprint included. An
 example is a baseline that another job produced. Such results read as fresh
-exactly while the inputs here match the inputs they ran against.
+exactly while the inputs here match the inputs they ran against. The
+fingerprint records the root of the tree the run executed in, and elspais
+reads an absolute path a reporter wrote under that root relative to it.
+Consequently, results keep matching their tests after the tree moves or is
+copied to another directory.
+
+`elspais fingerprint` writes no [record of the last run](#the-record-of-the-last-run).
+That record lists only the targets elspais itself executed, so a report after
+a bracketed run names the target with `--targets` rather than `last-run`.
 
 ### The fingerprint file
 
 The fingerprint is the JSON file `.elspais-run.json` in the target's folder.
-Its `version` field states the format. Its `inputs` field lists one object for
-each input file, with a `path` field and a `digest` field. The digest is the
+Its `version` field states the format. Its `root` field names the directory
+the run executed in. Its `inputs` field lists one object for each input file,
+with a `path` field and a `digest` field. The digest is the
 SHA-256 of the file's content. No path is ever a JSON key. Consequently, a
 secret scanner that looks for a secret-like key beside a long hex value finds
 nothing in the file. The file is safe to include in build output that a
@@ -130,10 +154,41 @@ A run is in progress from the time its fingerprint is written by `start` until
 `finish` records its end. While it is, its folder holds results and coverage
 that are partial or not yet written, so elspais reads nothing from that folder.
 `elspais checks` reports the target under `tests.run_in_progress` (info),
-stating when the run started, and judges neither its freshness nor whether its
-results are missing. A run that stopped without `finish` reads the same way:
-the record cannot tell a run that is still going from one that died, so the
+stating when the run started, and does not judge its freshness. A target the
+run expects (`--expect`) needs its results, so a run of it in progress also
+fails `tests.ingestion_fault`: its results are missing. A run that stopped without `finish` reads the same way:
+the fingerprint cannot tell a run that is still going from one that died, so the
 report states the start time and leaves that judgement to the reader.
+
+### The record of the last run
+
+Every run that executes targets, `elspais test` or
+`elspais checks --run-tests`, records which targets it executed. The record is
+the JSON file `.elspais-last-run.json` in the output root, by default
+`.results/.elspais-last-run.json`. It sits beside the target folders and never
+inside one, because a target's folder is emptied when that target runs. A
+target name cannot start with `.`, so no target folder can take the record's
+name.
+
+```json
+{
+ "executed": ["api", "unit"],
+ "finished_at": "2026-01-01T12:00:00+00:00",
+ "version": 1
+}
+```
+
+`version` states the format. `executed` lists the names of the targets the
+run executed, sorted. `finished_at` is the time the run ended, in ISO 8601
+UTC. Each run replaces the record of the run before it. A target is listed
+only if its run began: a target refused before it started, such as one whose
+`cwd` resolves outside the repository, is not listed, and neither is a target
+that `--fail-fast` kept from starting. A run that executed nothing, such as a
+`--stale-only` run whose selected targets were all fresh, records an empty
+list.
+
+A later `summary` or `trace` names the record with `--targets last-run` (see
+[Groups](#groups)), so it marks fresh exactly the results that run produced.
 
 ### Results written while a daemon is serving
 
@@ -157,7 +212,9 @@ lists them in `stale_files`, and the MCP `get_graph_status` tool lists them in
 
 The word *fresh* in [Per-PR selectivity](#per-pr-selectivity) has another
 meaning. There it names the targets that the caller tells a reporting command
-ran in this invocation.
+ran in this invocation. `--stale-only` joins the two: it uses the fingerprint
+judgement to decide which targets to execute, and those targets are the ones a
+later `summary` or `trace` names as fresh, with `--targets last-run`.
 
 ## Target Fields
 
@@ -174,6 +231,7 @@ ran in this invocation.
 | `classname` | string | `""` (the reporter's own) | `"python-module"` or `"source-file"` -- how this target's results name the test that produced them |
 | `environment` | string | `""` (the reporter's own) | `"results-path"` or `"suite-hostname"` -- where the environment a result was recorded in is read from |
 | `groups` | list | `[]` (the `default` group) | Which groups this target belongs to |
+| `resources` | list | `[]` | Declared shared resources this target uses; two targets naming a common one never run at the same time (see [Concurrent Targets](#concurrent-targets)) |
 | `credit_coverage` | string | `"off"` | `"off"`, `"tested"`, or `"verified"` -- lcov_tested credit |
 | `min_coverage_fraction` | float | `0.0` | Fraction of impl lines that must be covered (0.0-1.0) |
 
@@ -201,7 +259,8 @@ under that base credits nothing.
 | --- | --- | --- | --- |
 | `coverage-json` | file | coverage | Parses the JSON report `coverage json` (coverage.py) writes, in either its aggregate or its per-context form, into per-file line coverage. |
 | `coverage-sqlite` | file | coverage | Reads coverage.py's own `.coverage` SQLite data file through coverage.py's public API, so per-test contexts are read compactly rather than through a JSON expansion of them. Needs the `coverage` package (`elspais[coverage]`) importable, and degrades to unattributed coverage where it is not. |
-| `flutter-machine` | stdout | results | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the file and line where each test is declared, and the file that executed it, so `match = "source"` binds each result to its test, including a test declared in a shared file that a runner file executes. |
+| `evidence-snapshot` | file | results | Reads the `results.jsonl` of an Evidence Snapshot. A build reads it for each target that has not run in the tree and that the run does not execute, from the directory `[scanning.test] evidence` names, tagging those results carried. |
+| `flutter-machine` | stdout | results | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the file and line where each test is declared, and the file that executed it, so `match = "source"` binds each result to its test, including a test declared in a shared file that a runner file executes. Each result also carries its duration and the output its test printed. |
 | `junit` | file | results | Parses JUnit XML result files matched by the `results` glob. Honours an optional per-`<testcase>` `file` attribute (a real source path) and `line` attribute, so `match = "source"` can bind to a scanned test node. |
 | `lcov` | file | coverage | Parses an LCOV report -- the `lcov.info` that `flutter test --coverage` and most language toolchains write -- into per-file line coverage. |
 | `pytest-json` | file | results | Parses the report pytest's `--json-report` writes, matched by the `results` glob. |
@@ -306,6 +365,12 @@ them from `cwd`.
 ### Two-package example (one with a shared DB)
 
 ```toml
+[scanning.test]
+concurrency = 2
+
+[scanning.test.resources]
+db = "The local Postgres instance the backend suites share"
+
 [[scanning.test.targets]]
 name        = "app"
 cwd         = "app"
@@ -323,11 +388,14 @@ reporter    = "flutter-machine"
 coverage    = "lcov.info"
 match       = "source"
 credit_coverage = "verified"
+resources   = ["db"]
 ```
 
 Use one `[[scanning.test.targets]]` block per package.  The `cwd` field
 runs each package's tests in its own directory. Each target's folder keeps
-its coverage apart from the other's.
+its coverage apart from the other's. With `concurrency = 2` the two packages
+run at the same time. `backend` names the `db` resource, so any other target
+that names `db` waits until `backend` finishes, and `backend` waits for it.
 
 ### Gotchas
 
@@ -347,6 +415,12 @@ parallel test execution causes flakes.  Add `--concurrency=1` to the
 ```toml
 command = "flutter test --machine --coverage --concurrency=1 --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"
 ```
+
+Flutter's `--concurrency` and elspais's `[scanning.test] concurrency` govern
+different things. Flutter's flag sets how many test files run at once inside
+one target. elspais's setting sets how many targets run at once. When two
+targets share the database, name it in `resources` on both, so that elspais
+never runs them at the same time.
 
 **Coverage file location.**  `flutter test --coverage` without
 `--coverage-path` writes to `<package-root>/coverage/lcov.info`. That path is
@@ -473,14 +547,15 @@ Three things must be true:
 1. **Specs are scanned as TEST nodes.**  elspais cannot parse TypeScript
    natively, so point `[scanning.test].prescan_command` at an external scanner
    that reports each `test(...)` call, and add the spec directories /
-   `*.spec.ts` to the test `directories` / `file_patterns`.  Each record
-   carries `file`, `function`, `line`, an optional `class` and an optional
-   `end_line`.  The name is the test's own -- a record names one test, so its
-   spelling decides nothing -- and `line` is the line the test is declared
-   on.  A citation written above that line belongs to the test below it, as
-   it does in every language elspais scans itself.  This rule also holds
-   where a record carries no `end_line`.  elspais never reads the comments
-   directly above a test as the body of the test before it.
+   `*.spec.ts` to the test `directories` / `file_patterns`.  Each
+   attribution record carries `file`, `function`, `line`, an optional `class`
+   and an optional `end_line`.  The name is the test's own -- an attribution
+   record names one test, so its spelling decides nothing -- and `line` is
+   the line the test is declared on.  A citation written above that line
+   belongs to the test below it, as it does in every language elspais scans
+   itself.  This rule also holds where an attribution record carries no
+   `end_line`.  elspais never reads the comments directly above a test as
+   the body of the test before it.
 2. **elspais knows what the recorded name means.**  Playwright's JUnit reporter
    omits the per-`<testcase>` `file` attribute and writes the spec's basename
    into `classname`.  Left to itself elspais reads a `classname` as a Python
@@ -548,7 +623,7 @@ target says so. Without it every line arrives one too high and no result finds
 its test.
 
 The reporter keeps `hostname` on each suite, so one report serves both
-readings: each project's records are told apart, and each result names the
+readings: each project's result records are told apart, and each result names the
 project it came from.
 
 Because JUnit `line` values are not true source lines, binding is
@@ -592,6 +667,12 @@ results = "*.xml"
 # default is every file in the repository. inputs has the same form as a
 # scanning kind's file selection.
 # inputs = { directories = ["packages/my-package"] }
+
+# Shared resources this target uses, each declared under
+# [scanning.test.resources] with a description. Two targets naming a common
+# resource never run at the same time. Matters only where
+# [scanning.test] concurrency is above 1.
+# resources = ["db"]
 
 # "source" (default): source-location attribution (requires file paths in results).
 # "aggregate" (opt-in): whole-suite green/red; use when results lack file paths.
@@ -638,7 +719,9 @@ elspais checks
 
 `elspais test` executes test targets and records their results. It evaluates
 no check. Its exit code is 1 if any target it executed failed, and 0 if all
-passed. It selects with `--targets` exactly as `checks --run-tests` does.
+passed. It selects with `--targets` exactly as `checks --run-tests` does, and
+`elspais test --stale-only` executes only the selected targets whose results
+are not fresh (see [Executing only what is stale](#executing-only-what-is-stale)).
 
 Split the suite across jobs with `elspais test`, collect each job's target
 folders, and evaluate the checks once:
@@ -661,6 +744,132 @@ that matches what the command writes into `$ELSPAIS_TARGET_OUTPUT`. A stdout
 reporter's output is not recorded on its own. The command refuses (exit 2),
 before it runs anything, a selection that holds such a target with no
 `results` pattern. A coverage target is not affected.
+
+Separate jobs divide a suite across machines. On one machine, `[scanning.test]
+concurrency` runs several targets of one run at the same time, and
+`--concurrency N` sets that number for one run (see
+[Concurrent Targets](#concurrent-targets)).
+
+## Concurrent Targets
+
+`[scanning.test] concurrency` is the most targets one run executes at the same
+time. It is a whole number of 1 or more, and it applies to
+`elspais checks --run-tests` and `elspais test` alike.
+
+```toml
+[scanning.test]
+concurrency = 4
+```
+
+With `concurrency = 1`, the default, targets run one at a time in declaration
+order. Their output passes straight through to the terminal.
+
+With a larger value, a run schedules its targets as follows:
+
+- Targets start in declaration order as places free up.
+- Two targets that name a common shared resource never run at the same time.
+  All other targets may overlap.
+- A target held back by a resource does not hold back the targets after it.
+  The next target that can start, starts.
+
+elspais schedules targets, not tests. A target's own runner owns the
+parallelism inside that target, such as `pytest -n` or
+`flutter test --concurrency`.
+
+`--concurrency N`, on `elspais test` and on `elspais checks --run-tests`,
+replaces `[scanning.test] concurrency` for that run alone. A CI job on a
+larger machine raises it; `--concurrency 1` runs the targets one at a time, so
+their output reads one target after another. A value below 1 is refused
+(exit 2):
+
+```text
+error: --concurrency 0 must be a whole number of targets, 1 or more; 1 runs the targets one at a time
+```
+
+`elspais checks` without `--run-tests` executes nothing, so it refuses
+`--concurrency` as it refuses `--targets`.
+
+### Output of targets that run together
+
+Lines from targets that run together arrive interleaved. Consequently, every
+line a target writes, on stdout and on stderr, is shown with the target's name
+in front of it. A banner names each target as it starts, and a tally line
+states its outcome and elapsed time:
+
+```text
+>>> Running 'unit' target: pytest tests/unit --junitxml=$ELSPAIS_TARGET_OUTPUT/junit.xml
+>>> Running 'backend' target: flutter test --machine --coverage ...
+[unit] ============================= test session starts ==============================
+[backend] {"protocolVersion":"0.1.1","runnerVersion":"1.25.0","type":"start"}
+<<< unit: passed (1.2s)
+<<< backend: FAILED (exit 3) (4.7s)
+```
+
+The stdout of a file-channel target goes to elspais's stdout, and its stderr
+goes to elspais's stderr. The stdout of a stdout-channel target is its results,
+so elspais shows it on stderr and captures it for that target alone. A target
+never reads another target's output as its results. No target reads stdin:
+each one runs with its stdin at `/dev/null`.
+
+### Shared resources
+
+Each target already writes into a folder of its own, so two targets never
+write the same report. What two targets can still share is outside elspais: a
+database, a network port, a device or emulator, a local service stack. Declare
+each such resource with a description of what it is, and have each target name
+the resources it uses:
+
+```toml
+[scanning.test.resources]
+db          = "The local Postgres instance the integration suites share"
+"port-8080" = "The port the local API server listens on"
+
+[[scanning.test.targets]]
+name      = "api"
+command   = "pytest tests/api --junitxml=$ELSPAIS_TARGET_OUTPUT/junit.xml"
+reporter  = "junit"
+results   = "junit.xml"
+resources = ["db", "port-8080"]
+
+[[scanning.test.targets]]
+name      = "migrations"
+command   = "pytest tests/migrations --junitxml=$ELSPAIS_TARGET_OUTPUT/junit.xml"
+reporter  = "junit"
+results   = "junit.xml"
+resources = ["db"]
+```
+
+Here `api` and `migrations` never overlap, and every other target may run
+beside either of them. The description is required, because the declaration
+is the only place a reader learns what the name stands for. Names are matched
+without regard to case. A configuration that declares two names differing only
+in case is refused. A target that names a resource the project does not
+declare is refused when the configuration is read. A misspelled name would
+otherwise let two conflicting targets overlap without any warning.
+
+Concurrency is off by default for this reason. Targets that share something no
+declaration names, such as a database, would corrupt each other's runs.
+
+### Writing outside the target's folder
+
+A target's inputs default to every file in the repository (see
+[Target Folders and Fresh Results](#target-folders-and-fresh-results)). A
+target that writes outside its own folder while another target runs changes
+that other target's inputs. Examples are a tool cache, or a coverage file in
+the repository root. The other target's results then read as stale:
+`tests.results_stale` reports that its inputs changed while it ran, and names
+the file. Put such paths in the global
+`[scanning] skip` list, or narrow the other target's `inputs`.
+
+### Stopping at the first failure
+
+`--fail-fast` stops a run at the first target that fails. With
+`concurrency = 1`, no target after the failing one runs. With a larger value,
+no further target starts, and the targets already running finish. elspais does
+not stop a running target, because a stopped target leaves a run that records
+a start and no end. Its results would then read as in progress. In
+`elspais checks --run-tests`, a failure under `--fail-fast` also skips the
+checks pass.
 
 ## Groups
 
@@ -685,7 +894,7 @@ groups = ["uat"]
 command = "./scripts/run-enroll-e2e.sh"
 ```
 
-Three names are reserved. A project cannot declare them, give them to a
+Four names are reserved. A project cannot declare them, give them to a
 target, or have a target claim them:
 
 - **`default`** — what a run executes when it names nothing. A target that
@@ -698,7 +907,14 @@ target, or have a target claim them:
   not, so naming `all` names everything.
 - **`none`** — no target. A run naming it marks no target fresh.
   Consequently, `summary` and `trace` render every result read from disk as
-  carried from an earlier run.
+  carried from an earlier run, an associate's results included.
+- **`last-run`** — the targets that the last run of `elspais test` or
+  `elspais checks --run-tests` executed, read from its record (see
+  [The record of the last run](#the-record-of-the-last-run)). It is read by
+  `summary`, `trace` and composed reports holding either, so a report marks
+  those results fresh and every other result carried, with no names passed
+  by hand. It combines with other names like any group. If the record lists
+  no target, then `last-run` means what `none` means.
 
 A group is an **alias for a set of targets**, so it is named where a target is
 named — there is no separate flag:
@@ -710,6 +926,7 @@ elspais checks --run-tests --targets all    # everything
 elspais checks --run-tests --targets uat elspais-unit   # the group, plus one more
 elspais checks --run-tests --targets uat --targets elspais-unit   # the same
 elspais trace --targets none                # every result carried
+elspais trace --targets last-run            # fresh: what the last run executed
 ```
 
 A run executes every target it names, whether it named it directly or through a
@@ -743,10 +960,51 @@ error: --targets none selects no test target, so there is nothing to run. Config
 error: the `default` group holds no test target, so a run naming no targets selects none. Name targets or groups with --targets, or have a target claim the `default` group. Configured targets: .... Groups: ....
 ```
 
+`last-run` is refused (exit 2) where it cannot say which results ran fresh.
+With no readable record, the refusal names the record's absolute path and how to write
+one. With a record that names a target the configuration no longer holds, it
+names that target:
+
+```text
+error: --targets last-run names the targets the last recorded run executed, and no readable record exists at <repo>/.results/.elspais-last-run.json. Run `elspais test` or `elspais checks --run-tests` to write one, or name the targets with --targets.
+error: --targets last-run: the last recorded run (<repo>/.results/.elspais-last-run.json) executed <names>, which the configuration no longer holds. Run the targets again to replace the record, or name the targets with --targets. Configured targets: ....
+```
+
+A run that executes targets, and `--expect`, each ask about the run in
+progress, so both refuse `last-run` (exit 2). The refusal names the flag that
+carried it, `--targets` or `--expect`:
+
+```text
+error: --targets last-run names the targets an earlier run executed, and --targets here names what this run itself covers. Name the targets or groups instead; `last-run` is read by `summary` and `trace` to mark the last run's results fresh.
+```
+
 Because targets and groups are named in one place, they share one namespace: a
 configuration declaring a group with the same name as a test target is refused
 when it is read, rather than resolved by a precedence rule every reader of that
 configuration would then have to know.
+
+### Targets of a federation member
+
+A run that executes targets reaches another federation member only where it
+names that member's target or group as `NAMESPACE:NAME`. The name resolves by
+that member's own configuration. The target executes with that member's
+configuration and repository root, and writes into that member's output area.
+A bare name, a run naming nothing, and the `default` group select only the
+invoking repository's targets:
+
+```text
+elspais test --targets LIB:unit              # the member LIB's `unit` target, in LIB
+elspais checks --run-tests --targets unit LIB:unit   # one in each repository
+```
+
+A member's target executes a command that the member's configuration declares.
+Consequently, the reader names it explicitly. A namespace no member declares,
+and a name the member does not declare, are refused (exit 2) before anything
+runs. `checks --run-tests` reads a member's results from its output area, so it
+refuses a member's target whose reporter reads test results and that declares
+no `results` pattern. `summary` and `trace` execute no target. Their
+`--targets` names only the invoking repository's targets, and they refuse a
+`NAMESPACE:NAME` as an unknown name.
 
 ## Per-PR selectivity
 
@@ -771,7 +1029,11 @@ The flag means something slightly different depending on the command:
   invocation* (normally by a preceding `checks --run-tests --targets ...`
   with the same names) versus which targets' results are left over from an
   earlier run. `--targets none` marks no target fresh. Consequently, every
-  result read from disk renders as carried.
+  result read from disk renders as carried. `--targets last-run` marks fresh
+  the targets the last executing run recorded, so the names need not be
+  repeated. The names are the invoking repository's targets. A run of those
+  executes no target of an associate, so wherever `--targets` is given, every
+  result an associate holds renders as carried.
 
 On `trace`, the complement (non-named) targets render one of two ways in the
 per-requirement `verified` value, depending on whether prior result data
@@ -779,7 +1041,10 @@ exists for them:
 
 - **`(baseline)`** — carried. The target has existing RESULT data from a
   previous run; that verdict is reused and rendered with a `(baseline)`
-  suffix (e.g. `4/4 100% (baseline)`). A carried **failing** target still
+  suffix (e.g. `4/4 100% (baseline)`). A requirement credited through the
+  requirements that refine it carries the suffix when every result behind
+  its figure, its own and those conducted to it, was carried, and loses it
+  as soon as one fresh result contributes. A carried **failing** target still
   fails/gates — carrying only skips re-execution, it never launders a
   failure into a pass. The same provenance is selectable on its own as
   `verified.carried`, which states `baseline` or `fresh` in a cell and a
@@ -792,10 +1057,11 @@ exists for them:
   `verified.ratio` and `verified.carried` each state `null` in json and
   `n/a` in a cell.
 
-A `> Legend: ...` line explaining both markers is appended to `trace`'s
-markdown output whenever at least one row actually used one (never shown on
-a full run, and never shown for `--dimension uat`, which does not state
-`verified`).
+A `> Legend: ...` line is appended to `trace`'s markdown table whenever at
+least one row actually used a marker, explaining only the markers used
+(never shown on a full run, and never shown for `--dimension uat`, which
+does not state `verified`). The report an Evidence Snapshot holds describes
+that snapshot's own run, so its results carry no `(baseline)` marker.
 
 `summary` is level-aggregated, not per-requirement, so it can't show
 `(baseline)`/`—` inline. Instead, when any RESULT target was carried, the
@@ -807,8 +1073,9 @@ appended:
 * 1/2 test results from previous runs
 ```
 
-The `N/M` counts are distinct RESULT target names: `M` targets have any
-result data at all, `N` of those were carried (not freshly produced this
+The `N/M` counts are distinct RESULT targets, a target of each federation
+member counted separately even where two members use one name: `M` targets
+have any result data at all, `N` of those were carried (not freshly produced this
 invocation). A full run (no `--targets`, or `--targets` covering every
 result-bearing target) has zero carried targets, so neither the `*` nor the
 footnote appears — output is unchanged from before this flag existed. The
@@ -818,8 +1085,9 @@ footnote appears — output is unchanged from before this flag existed. The
 `elspais checks` itself (the health-report / gate command) only consumes
 `--targets` for *execution* under `--run-tests`; it does not render
 `(baseline)`/`—`/`*` — that provenance rendering is `summary`/`trace`'s job.
-Without `--run-tests`, `checks` executes nothing, so it refuses `--targets`
-and `--fail-fast` (exit 2) rather than accept a selection nothing reads; to
+Without `--run-tests`, `checks` executes nothing, so it refuses `--targets`,
+`--fail-fast`, `--stale-only` and `--concurrency` (exit 2) rather than accept
+a selection nothing reads; to
 require results a run did not execute, name them with `--expect` (see below).
 `checks --run-tests --targets none` selects nothing to run. Consequently, the
 command refuses it.
@@ -832,17 +1100,28 @@ provenance, so it refuses `--targets`.
 
 ### Worked example
 
-Per-PR: run only the targets touched by this change, then render the full
-matrix with the rest carried as baselines:
+Per-PR: run only the targets whose results this change made stale, then
+render the full matrix with the rest carried as baselines:
+
+```bash
+elspais checks --run-tests --stale-only
+elspais trace --targets last-run --format markdown
+```
+
+The targets the first command executed show fresh, just-run results. The
+first command records them (see
+[The record of the last run](#the-record-of-the-last-run)), and
+`--targets last-run` reads that record. Every other configured target shows
+`(baseline)` (carried from its last run) or `—` (no prior result data for that
+target).
+
+To choose the targets by hand instead, name them on the run. The report still
+reads the record, so the names are written once:
 
 ```bash
 elspais checks --run-tests --targets clinical_diary portal_ui_evs
-elspais trace --targets clinical_diary portal_ui_evs --format markdown
+elspais trace --targets last-run --format markdown
 ```
-
-`clinical_diary` and `portal_ui_evs` show fresh, just-run results.  Every
-other configured target shows `(baseline)` (carried from its last run) or
-`—` (no prior result data for that target).
 
 Full regression (e.g. promoting a build from qa to uat): omit `--targets` so
 every configured target runs and renders fresh:
@@ -850,6 +1129,56 @@ every configured target runs and renders fresh:
 ```bash
 elspais checks --run-tests
 ```
+
+### Executing only what is stale
+
+`--stale-only`, on `elspais checks --run-tests` and on `elspais test`, executes
+only the selected targets whose results are not fresh. The selection is the
+`--targets` selection, or the `default` group. Freshness is the judgement
+`tests.results_stale` reports (see
+[Target Folders and Fresh Results](#target-folders-and-fresh-results)). A
+selected target is executed when any of these holds:
+
+- Its results are stale: an input changed since its run began, or no run
+  recorded a fingerprint for them.
+- It has no results on disk. A target with no `results` pattern therefore
+  always runs. A coverage-only target is one example. A stdout reporter with
+  no `results` pattern is another under `checks --run-tests`; `elspais test`
+  refuses such a target (see
+  [Parallel jobs and one gate](#parallel-jobs-and-one-gate)).
+- Its last run recorded a start and no end.
+
+Every other selected target's results are carried forward, exactly as in a
+selective run with `--targets`. In `checks`, every selected target is still
+expected. A carried failing result still fails the gate, because fresh means
+the inputs are unchanged, not that the tests passed.
+
+```bash
+elspais checks --run-tests --stale-only
+```
+
+The run states its division on stderr before anything runs:
+
+```text
+stale-only: executing api, unit; carrying fresh results of backend
+```
+
+If every selected target is fresh, nothing executes and the run succeeds.
+`elspais test --stale-only` then prints
+`no target executed: the results of every selected target are fresh` and
+exits 0. A run without `--stale-only` executes every target it names, fresh
+or not.
+
+To render `summary` or `trace` afterwards with the rest marked as carried,
+name the record the run left:
+
+```bash
+elspais trace --targets last-run --format markdown
+```
+
+The stale-only line is for a reader. The record is how a later report learns
+which targets ran fresh. If every selected target was fresh, then the record
+lists no target, and `last-run` marks every result carried.
 
 ### Expected results
 
@@ -885,6 +1214,137 @@ elspais checks --run-tests --targets unit --expect e2e lib:unit
 
 See also: `elspais docs checks`
 
+## Evidence Snapshot
+
+An *Evidence Snapshot* is the normalized results of one test run of one tree.
+It is bound to that tree by its digest, and it is stored in the repository
+with the traceability report derived from it. A project commits it with the
+change it describes. CI then confirms that the snapshot describes that
+change. A consumer that pins the commit can cite its report without running
+the suites.
+
+A target's folder and the snapshot have different roles:
+
+| | `<output_root>/<target>/` | *Evidence Snapshot* |
+| --- | --- | --- |
+| Holds | The raw output of the target's last run, its coverage and its fingerprint | The normalized results of every selected target, and the report |
+| Lifetime | Local; emptied when a run starts | Committed with the change it describes |
+| Valid while | Its fingerprint matches the current inputs | Its tree digest matches the current tree |
+
+Name the snapshot's directory, from the repository root:
+
+```toml
+[scanning.test]
+evidence = "test-evidence"
+```
+
+The directory is never an input of a target. Consequently, writing a
+snapshot does not make a target's results stale.
+
+### What the snapshot holds
+
+- `results.jsonl` holds one line for each result of the selected targets.
+  Each line names the target, the repo-relative file and line that declare
+  the test, the test name, the file that executed the test where that file
+  differs, the outcome (`passed`, `failed` or `skipped`), and the skip reason
+  where the test gives one. Two runs of one test with one outcome are two
+  lines.
+- `snapshot.json` holds the digest of the tree, each selected target with the
+  digest of its inputs, the facts declared about the run, and the elspais
+  version that wrote it. No name is a JSON key beside a digest.
+- `timings.jsonl` holds each result's duration and the output the test
+  printed. `flutter-machine` supplies the printed output.
+- `TRACEABILITY.md` is `elspais trace --format markdown --preset evidence`,
+  rendered from the snapshot and the specification alone. For each assertion
+  it names the code that implements it and the tests that verify it, with
+  each test's outcome, by repo-relative file and line.
+
+Every file except `timings.jsonl` holds no duration, timestamp, absolute
+path, machine name or failure message. Consequently, two runs of one tree
+with the same outcomes and the same facts write the same bytes.
+
+The tree digest covers every file git tracks or has staged, except the
+snapshot directory. The same digest results in a working tree before a
+commit and in a checkout of that commit in CI. A target's digest covers the
+same files: an input that git ignores, such as a build cache, exists only
+where the run executed, so it never reaches the snapshot.
+
+### Writing and verifying
+
+```text
+elspais test                                       # run the targets
+elspais evidence write --fact backends=vm,postgres # hold their results
+elspais evidence verify --fact backends=vm,postgres
+```
+
+`evidence write` holds the results that the selected targets left in their
+folders. It refuses (exit 2), naming the target, a selected target whose
+results are absent, stale or in a run that is still in progress: a snapshot
+describes a finished run of the tree. It also refuses a selected target
+whose results the build could not read in full: a reporter that no parser
+reads, a results file that does not parse, or a stream that ends inside a
+test. A snapshot of those results would hold a shorter run as a finished
+one. A member's target is named as `NAMESPACE:NAME`, as it was selected.
+Where the tree holds changes that no
+commit holds, `write` names them on stderr and still writes. That snapshot
+then matches no checkout of any commit.
+
+`evidence verify` derives the same snapshot in memory and compares it with
+the snapshot in the directory. It lists each test whose outcome differs,
+each result on one side only, a tree digest that differs, a fact or a target
+that differs, and a report that differs. Durations and printed output are
+never compared. It exits 0 when the two agree and 1 when they differ.
+`--run` first executes the selected targets, as `elspais test` does.
+
+`--targets` selects as `checks --run-tests` does. elspais takes the facts
+from `--fact NAME=VALUE`, because only the project knows which toolchain
+or backend a target's command used. Pass the same facts to `verify` that
+the snapshot holds.
+
+### Reading a snapshot back
+
+A target that has not run in this tree, and that the run does not execute,
+reads its results from the snapshot. These results are tagged carried.
+Consequently, `trace`, `summary` and `checks` report from a checkout that
+has run nothing. A target that has results of its own reads only those. A
+target that ran and left no results is missing them.
+
+A snapshot whose tree digest differs from the digest of the current tree
+describes another tree. Its results are still read, and
+`tests.results_stale` names the snapshot directory. A snapshot is judged
+whenever a target is read from it, also where that target's run produced no
+result. For a federation member's snapshot, the finding names
+`elspais evidence write --targets NAMESPACE:NAME`, because a bare `write`
+reaches only the invoking repository.
+
+### A federation member's snapshot
+
+A federation member that names a snapshot, and that holds no results of its
+own, reads its results from its snapshot. The snapshot is judged against
+the member's own tree. A consumer that integrates the member then credits
+the tests of the member's recorded run.
+
+`--targets NAMESPACE:NAME` writes or verifies the member's snapshot, in the
+member's repository, with the member's configuration. A snapshot describes
+one repository, so a selection that names targets of two repositories is
+refused (exit 2).
+
+### The consumer's workflow
+
+```text
+# developer
+elspais test --targets all
+elspais evidence write --targets all --fact backends=vm,postgres
+git add test-evidence && git commit
+
+# CI: jobs run the targets in parallel and the gate job collects their folders
+elspais evidence verify --targets all --fact backends=vm,postgres
+```
+
+CI passes the facts the snapshot claims, so CI runs every backend that the
+snapshot names. A gate job that collects no folders runs
+`elspais evidence verify --run` instead.
+
 ## The Environment a Result Was Recorded In
 
 One test suite run across several devices or browsers writes one result for
@@ -903,7 +1363,7 @@ Two sources are available:
 | Source | Reads |
 |--------|-------|
 | `results-path` | The part of the path that the wildcard in this target's `results` glob matched |
-| `suite-hostname` | The `hostname` attribute of the `<testsuite>` holding the record |
+| `suite-hostname` | The `hostname` attribute of the `<testsuite>` holding the result record |
 
 Use `results-path` where each environment writes its own artifact:
 
@@ -937,10 +1397,10 @@ environment = "suite-hostname"          # <testsuite hostname="firefox">
 A declared source does not always give an answer. A `results` glob holding
 `**`, holding more than one wildcard segment, or holding more than one
 wildcard within its wildcard segment, does not say which part of the path is
-the environment. A record may also hold no hostname at all. In each of these
-the result carries no environment and `elspais checks` reports that none was
-derived. The tool does not guess, because a guess reads exactly like a
-reading in every figure that follows.
+the environment. A result record may also sit in a suite that names no
+hostname. In each of these the result carries no environment and
+`elspais checks` reports that none was derived. The tool does not guess,
+because a guess reads exactly like a reading in every figure that follows.
 
 ### Where the Environment Is Shown
 

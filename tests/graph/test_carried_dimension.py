@@ -12,7 +12,10 @@ Freshness is orthogonal to verdict -- a carried failing result still yields
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
+
+import pytest
 
 from elspais.graph.aggregation import absolute_tier
 
@@ -123,17 +126,56 @@ _RESULTS_B = """\
 """
 
 
-def _make_project(tmp_path: Path) -> Path:
+_PARENT = """
+### REQ-d00010: Parent
+
+The system SHALL do P.
+
+## Assertions
+
+A. The system SHALL do P.
+
+*End* *Parent*
+---
+"""
+
+_RESULTS_PARENT_IN_B = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="suite-b" tests="3">
+  <testcase name="test_b" classname="tests.test_b" time="0.01"/>
+  <testcase name="test_c" classname="tests.test_c" time="0.01">
+    <failure message="assertion failed">boom</failure>
+  </testcase>
+  <testcase name="test_p" classname="tests.test_p" time="0.01"/>
+</testsuite>
+"""
+
+
+def _make_project(
+    tmp_path: Path,
+    *,
+    refiner: str | None = None,
+    parent_own_result: bool = False,
+) -> Path:
     """Build an on-disk project with two targets ('a' fresh, 'b' carried).
 
     - REQ-d00001-A is verified only by target 'a' (test_a, passing).
     - REQ-d00002-A is verified only by target 'b' (test_b, passing).
     - REQ-d00003-A is verified only by target 'b' (test_c, FAILING) -- used to
       confirm carried-ness doesn't change verdict/tier.
+
+    With ``refiner``, that requirement declares ``Refines: REQ-d00010-A`` and
+    the parent REQ-d00010 is added, so the parent is credited through the
+    refiner's results. With ``parent_own_result``, the parent also carries a
+    passing test of its own in target 'b' (test_p).
     """
     project = tmp_path / "project"
     (project / "spec").mkdir(parents=True)
-    (project / "spec" / "reqs.md").write_text(_SPEC, encoding="utf-8")
+    spec = _SPEC
+    if refiner is not None:
+        heading = next(line for line in spec.splitlines() if line.startswith(f"### {refiner}:"))
+        spec = spec.replace(heading, f"{heading}\n\n**Refines**: REQ-d00010-A", 1) + _PARENT
+    (project / "spec" / "reqs.md").write_text(spec, encoding="utf-8")
 
     (project / "tests").mkdir(parents=True)
     (project / "tests" / "test_a.py").write_text(
@@ -149,9 +191,16 @@ def _make_project(tmp_path: Path) -> Path:
     (project / ".results" / "a").mkdir(parents=True)
     (project / ".results" / "a" / "results.xml").write_text(_RESULTS_A, encoding="utf-8")
     (project / ".results" / "b").mkdir(parents=True)
-    (project / ".results" / "b" / "results.xml").write_text(_RESULTS_B, encoding="utf-8")
+    (project / ".results" / "b" / "results.xml").write_text(
+        _RESULTS_PARENT_IN_B if parent_own_result else _RESULTS_B, encoding="utf-8"
+    )
+    if parent_own_result:
+        (project / "tests" / "test_p.py").write_text(
+            "# Verifies: REQ-d00010-A\ndef test_p():\n    pass\n", encoding="utf-8"
+        )
 
     (project / ".elspais.toml").write_text(_CONFIG, encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
     return project
 
 
@@ -218,3 +267,142 @@ def test_verified_dimension_carried_defaults_false_without_fresh_targets(tmp_pat
 
     assert req_a.get_metric("rollup_metrics").verified.carried is False
     assert req_b.get_metric("rollup_metrics").verified.carried is False
+
+
+def _build(project: Path, fresh_targets: set[str] | None):
+    from elspais.graph.factory import build_graph
+
+    return build_graph(
+        config_path=project / ".elspais.toml",
+        repo_root=project,
+        fresh_targets=fresh_targets,
+    )
+
+
+# Verifies: REQ-d00323-A+C
+@pytest.mark.parametrize(
+    "fresh_targets",
+    [
+        pytest.param(set(), id="no-target-fresh"),
+        pytest.param({"a"}, id="refiner-target-not-named"),
+    ],
+)
+def test_a_parent_credited_only_through_a_carried_refiner_is_carried(
+    tmp_path: Path, fresh_targets: set[str]
+) -> None:
+    """REQ-d00002 (target 'b') refines the parent, which has no results of its
+    own; the conducted credit brings the refiner's carried provenance with it."""
+    project = _make_project(tmp_path, refiner="REQ-d00002")
+
+    verified = _build(project, fresh_targets).find_by_id("REQ-d00010")
+    verified = verified.get_metric("rollup_metrics").verified
+
+    assert verified.rolled_direct_by_label.get("A", 0.0) > 0
+    assert not verified.immediate_direct_by_label
+    assert verified.carried is True
+
+
+# Verifies: REQ-d00323-B+C
+@pytest.mark.parametrize(
+    "fresh_targets",
+    [
+        pytest.param({"b"}, id="refiner-target-alone"),
+        pytest.param({"a", "b"}, id="every-target"),
+    ],
+)
+def test_a_parent_credited_through_a_fresh_refiner_is_not_carried(
+    tmp_path: Path, fresh_targets: set[str]
+) -> None:
+    """The refiner's target ran fresh, so the conducted figure is fresh."""
+    project = _make_project(tmp_path, refiner="REQ-d00002")
+
+    verified = _build(project, fresh_targets).find_by_id("REQ-d00010")
+    verified = verified.get_metric("rollup_metrics").verified
+
+    assert verified.rolled_direct_by_label.get("A", 0.0) > 0
+    assert verified.carried is False
+
+
+# Verifies: REQ-d00323-A+B+C
+@pytest.mark.parametrize(
+    ("fresh_targets", "carried"),
+    [
+        # Own result (b) carried, refiner (a) fresh: one fresh vote is enough.
+        pytest.param({"a"}, False, id="own-carried-refiner-fresh"),
+        # Own result (b) fresh, refiner (a) carried.
+        pytest.param({"b"}, False, id="own-fresh-refiner-carried"),
+        # Both carried: every contribution is old evidence.
+        pytest.param(set(), True, id="both-carried"),
+    ],
+)
+def test_a_parent_with_its_own_result_and_a_refiner_is_carried_only_when_both_are(
+    tmp_path: Path, fresh_targets: set[str], carried: bool
+) -> None:
+    """The parent's own result and the conducted one both vote."""
+    project = _make_project(tmp_path, refiner="REQ-d00001", parent_own_result=True)
+
+    verified = _build(project, fresh_targets).find_by_id("REQ-d00010")
+    verified = verified.get_metric("rollup_metrics").verified
+
+    assert verified.immediate_direct_by_label.get("A", 0.0) > 0
+    assert verified.rolled_direct_by_label.get("A", 0.0) > 0
+    assert verified.carried is carried
+
+
+# Verifies: REQ-d00323-B+C
+def test_no_parent_is_carried_without_a_fresh_target_selection(tmp_path: Path) -> None:
+    """With no selection, nothing is carried, conducted credit included."""
+    project = _make_project(tmp_path, refiner="REQ-d00002")
+
+    verified = _build(project, None).find_by_id("REQ-d00010")
+    verified = verified.get_metric("rollup_metrics").verified
+
+    assert verified.rolled_direct_by_label.get("A", 0.0) > 0
+    assert verified.carried is False
+
+
+def _passing_cell(markdown: str, req_id: str) -> str:
+    """The 'Passing' cell of the trace row for *req_id*."""
+    lines = markdown.splitlines()
+    header = next(line for line in lines if line.startswith("| ID"))
+    column = [h.strip() for h in header.strip("|").split("|")].index("Passing")
+    row = next(line for line in lines if line.startswith(f"| {req_id} "))
+    return [c.strip() for c in row.strip("|").split("|")][column]
+
+
+# Verifies: REQ-d00323-A+B+C
+@pytest.mark.parametrize(
+    ("targets", "marked"),
+    [
+        pytest.param(["none"], True, id="targets-none"),
+        pytest.param(["b"], False, id="refiner-target-fresh"),
+    ],
+)
+def test_trace_marks_a_parent_credited_by_carried_refiner_results_as_baseline(
+    tmp_path: Path, monkeypatch, capsys, targets: list[str], marked: bool
+) -> None:
+    """`trace --targets none` shows the conducted figure with `(baseline)`."""
+    import argparse
+
+    from elspais.commands import trace
+
+    project = _make_project(tmp_path, refiner="REQ-d00002")
+    monkeypatch.chdir(project)
+    args = argparse.Namespace(
+        targets=targets,
+        format="markdown",
+        config=project / ".elspais.toml",
+        spec_dir=None,
+        preset=None,
+        body=False,
+        show_assertions=False,
+        show_tests=False,
+        dimension="",
+        output=None,
+    )
+
+    trace.run(args)
+
+    cell = _passing_cell(capsys.readouterr().out, "REQ-d00010")
+    assert cell.startswith("1/1 (100%)")
+    assert ("(baseline)" in cell) is marked

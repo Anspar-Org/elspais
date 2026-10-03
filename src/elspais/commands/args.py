@@ -174,7 +174,22 @@ class ChecksArgs:
     """
 
     fail_fast: bool = False
-    """Stop at the first target failure and skip the checks pass. Requires --run-tests."""
+    """Stop at the first target failure and skip the checks pass. Requires --run-tests.
+    With `concurrency` above 1, no further target starts and the targets
+    already running finish."""
+
+    # Implements: REQ-d00315-A
+    stale_only: bool = False
+    """Execute only the selected targets whose results are not fresh -- stale,
+    missing, or left by a run that never finished -- and carry the fresh
+    results of the rest. The selection is --targets, or `default`. Every
+    selected target stays expected. Requires --run-tests."""
+
+    # Implements: REQ-d00314-O
+    concurrency: int | None = None
+    """The most targets this run executes at the same time, in place of
+    [scanning.test] concurrency. 1 runs them one at a time, in declaration
+    order. Requires --run-tests."""
 
     targets: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
         default_factory=list
@@ -183,11 +198,14 @@ class ChecksArgs:
     name of a group they claim (space-separated, repeatable). A group is an
     alias for the targets in it, so both are named here. Default: the targets of
     the `default` group. With --run-tests, executes only this subset; on
-    summary/trace, marks the rest as carried baselines; checks refuses it
+    summary/trace, marks the rest as carried baselines, and `last-run` stands
+    for the targets the last recorded run executed; checks refuses it
     without --run-tests. A selection standing
     for no target is refused; `none` is refused here too: it selects nothing to
-    run. A run naming nothing selects `default`, refused where that group holds
-    no target."""
+    run, and so is `last-run`, which names an earlier run's targets. A run
+    naming nothing selects `default`, refused where that group holds no
+    target. With --run-tests, NAMESPACE:NAME executes a federation member's
+    target or group in that member; a bare name never reaches a member."""
 
     expect: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
         default_factory=list
@@ -432,7 +450,7 @@ class TraceArgs(ScopeOptions):
     and .attributed the lines a verifying test can be named for (absent where
     the coverage data carries no per-test contexts)."""
 
-    preset: Literal["minimal", "standard", "full"] | None = None
+    preset: Literal["minimal", "standard", "full", "evidence"] | None = None
     """Named default value set."""
 
     body: bool = False
@@ -457,8 +475,10 @@ class TraceArgs(ScopeOptions):
     """Mark only these [[scanning.test.targets]] as freshly-run, by target name
     or by the name of a group they claim; render the rest as carried
     baselines. `none` marks no target fresh, rendering every result as a
-    carried baseline. A run naming nothing selects `default`, and is refused
-    where that group holds no target."""
+    carried baseline. `last-run` stands for the targets the last run of
+    `elspais test` or `checks --run-tests` recorded as executed. A run naming
+    nothing selects `default`, and is refused where that group holds no
+    target."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -481,7 +501,7 @@ class ViewerArgs:
     """Embed requirement content and every traced source file, compressed, for offline viewing."""
 
     port: int | None = None
-    """Port number for the server (default: 5001)."""
+    """Port number for the server (default: 5001; 0 picks any free port)."""
 
     base_path: str = ""
     """URL prefix the server and page sit under (e.g. /w/abc); empty is the root. Server only."""
@@ -600,8 +620,10 @@ class SummaryArgs(ScopeOptions):
     """Mark only these [[scanning.test.targets]] as freshly-run, by target name
     or by the name of a group they claim; render the rest as carried
     baselines. `none` marks no target fresh, rendering every result as a
-    carried baseline. A run naming nothing selects `default`, and is refused
-    where that group holds no target."""
+    carried baseline. `last-run` stands for the targets the last run of
+    `elspais test` or `checks --run-tests` recorded as executed. A run naming
+    nothing selects `default`, and is refused where that group holds no
+    target."""
 
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
@@ -734,7 +756,11 @@ class ExampleArgs:
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
 class EditArgs:
-    """Edit requirements in-place (implements, status, move)."""
+    """Edit requirements in-place (implements, status, move).
+
+    An edit that changes an Active requirement needs a reason (-m), which is
+    recorded in its changelog.
+    """
 
     req_id: tyro.conf.Positional[str | None] = None
     """Requirement ID to edit."""
@@ -756,6 +782,9 @@ class EditArgs:
 
     validate_refs: bool = False
     """Validate that implements references exist."""
+
+    message: Annotated[str | None, tyro.conf.arg(aliases=["-m"])] = None
+    """Changelog reason, required when the edit changes an Active requirement."""
 
 
 # ---------------------------------------------------------------------------
@@ -1181,16 +1210,35 @@ class TestArgs:
     while it runs.
     """
 
+    __test__ = False  # a CLI argument model, not a pytest test class
+
     targets: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
         default_factory=list
     )
     """Execute only these [[scanning.test.targets]], by target name or by the
     name of a group they claim (space-separated, repeatable). Default: the
     targets of the `default` group. Selects exactly what `checks --run-tests
-    --targets` selects, and refuses the same selections."""
+    --targets` selects, and refuses the same selections. NAMESPACE:NAME
+    executes a federation member's target or group in that member; a bare name
+    never reaches a member."""
 
     fail_fast: bool = False
-    """Stop at the first target that fails."""
+    """Stop at the first target that fails. With `concurrency` above 1, no
+    further target starts and the targets already running finish."""
+
+    # Implements: REQ-d00315-A
+    stale_only: bool = False
+    """Execute only the selected targets whose results are not fresh -- stale,
+    missing, or left by a run that never finished -- and leave the fresh
+    results of the rest in place. The selection is --targets, or `default`.
+    A run in which every selected target is fresh executes nothing and
+    passes."""
+
+    # Implements: REQ-d00314-O
+    concurrency: int | None = None
+    """The most targets this run executes at the same time, in place of
+    [scanning.test] concurrency. 1 runs them one at a time, in declaration
+    order."""
 
 
 @dataclasses.dataclass
@@ -1204,6 +1252,75 @@ class FingerprintArgs:
 
     action: tyro.conf.OmitSubcommandPrefixes[tyro.conf.OmitArgPrefixes[FingerprintAction]]
     """Fingerprint subcommand (start, finish)."""
+
+
+# ---------------------------------------------------------------------------
+# Evidence subcommands
+# ---------------------------------------------------------------------------
+# Implements: REQ-d00322-A+H
+@dataclasses.dataclass
+class EvidenceWriteArgs:
+    """Write the Evidence Snapshot from the selected targets' current results.
+
+    Refuses, naming the target, while a selected target's results are absent,
+    stale or still being written.
+    """
+
+    targets: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
+    """Targets or groups to include, by name (space-separated, repeatable), as
+    `checks --run-tests --targets` reads them. Default: the `default` group.
+    NAMESPACE:NAME selects a federation member's targets, and the command then
+    works on that member's Evidence Snapshot; one repository per run."""
+
+    fact: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
+    """NAME=VALUE facts about the run, such as backends=vm,postgres (repeatable)."""
+
+
+@dataclasses.dataclass
+class EvidenceVerifyArgs:
+    """Compare the committed Evidence Snapshot with one derived from the current results.
+
+    Exits 0 when the two agree and 1 when they differ, listing each difference.
+    """
+
+    targets: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
+    """Targets or groups to include, by name (space-separated, repeatable), as
+    `checks --run-tests --targets` reads them. Default: the `default` group.
+    NAMESPACE:NAME selects a federation member's targets, and the command then
+    works on that member's Evidence Snapshot; one repository per run."""
+
+    fact: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
+    """NAME=VALUE facts about the run, such as backends=vm,postgres (repeatable)."""
+
+    run: bool = False
+    """Execute the selected targets first, as `elspais test` does."""
+
+
+EvidenceAction = (
+    Annotated[EvidenceWriteArgs, tyro.conf.subcommand("write")]
+    | Annotated[EvidenceVerifyArgs, tyro.conf.subcommand("verify")]
+)
+
+
+@dataclasses.dataclass
+class EvidenceArgs:
+    """Write or verify the Evidence Snapshot: one test run's results, bound to the tree.
+
+    `write` stores the selected targets' results and the traceability report
+    in the directory `[scanning.test] evidence` names. `verify` compares that
+    snapshot with one derived from the current results.
+    """
+
+    action: tyro.conf.OmitSubcommandPrefixes[tyro.conf.OmitArgPrefixes[EvidenceAction]]
+    """Evidence subcommand (write, verify)."""
 
 
 # ---------------------------------------------------------------------------
@@ -1318,6 +1435,7 @@ Command = (
     | Annotated[DaemonArgs, tyro.conf.subcommand("daemon")]
     | Annotated[TestArgs, tyro.conf.subcommand("test")]
     | Annotated[FingerprintArgs, tyro.conf.subcommand("fingerprint")]
+    | Annotated[EvidenceArgs, tyro.conf.subcommand("evidence")]
     | Annotated[LinkArgs, tyro.conf.subcommand("link")]
     | Annotated[CompletionArgs, tyro.conf.subcommand("completion")]
     | Annotated[GlossaryArgs, tyro.conf.subcommand("glossary")]
@@ -1391,6 +1509,7 @@ COMMAND_GROUPS: dict[str, str] = {
     "daemon": "Install",
     "test": "Reports",
     "fingerprint": "Reports",
+    "evidence": "Reports",
     "install": "Install",
     "uninstall": "Install",
     "completion": "Install",

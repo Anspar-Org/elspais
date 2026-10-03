@@ -382,7 +382,8 @@ _DESCRIPTIONS: dict[str, str] = {
         "is a count of results, not of tests"
     ),
     "tests.results_stale": (
-        "Test results whose inputs changed since they ran, or that carry no fingerprint"
+        "Test results whose inputs changed since they ran, that carry no fingerprint, "
+        "or that an Evidence Snapshot of another tree holds"
     ),
     "tests.unmatched_results": "Results matching no known test",
     "tests.tested": "The `tested` coverage dimension (TEST nodes linked to assertions)",

@@ -330,6 +330,56 @@ def get_modified_files(repo_root: Path) -> tuple[set[str], set[str]]:
         return set(), set()
 
 
+# Implements: REQ-d00322-D
+def list_index_files(repo_root: Path) -> list[str]:
+    """Return the repo-relative path of every file the index holds.
+
+    These are the files git tracks plus those staged since the last commit.
+    It raises when git cannot answer, because an empty answer would read as
+    an empty tree.
+    """
+    result = subprocess.run(
+        ["git", "ls-files", "-z", "--cached"],
+        cwd=repo_root,
+        env=_clean_git_env(),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return [path for path in result.stdout.split("\0") if path]
+
+
+# Implements: REQ-d00322-D
+def list_uncommitted_files(repo_root: Path) -> list[str]:
+    """Return the repo-relative path of every file holding a change no commit holds.
+
+    These are the modified, staged, deleted and untracked files. A renamed
+    or copied file is named by its new path. Paths are read unquoted from
+    git's NUL-separated status, so any character a path holds survives. It
+    raises when git cannot answer, because an empty answer would read as a
+    clean tree.
+    """
+    result = subprocess.run(
+        ["git", "status", "--porcelain", "-z", "--untracked-files=all"],
+        cwd=repo_root,
+        env=_clean_git_env(),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    entries = iter(result.stdout.split("\0"))
+    paths: list[str] = []
+    for entry in entries:
+        if len(entry) < 4:
+            continue
+        status, path = entry[:2], entry[3:]
+        paths.append(path)
+        if "R" in status or "C" in status:
+            # The entry after a rename or copy is the path it came from.
+            next(entries, None)
+    return paths
+
+
 # Implements: REQ-p00004-B
 def get_changed_vs_branch(repo_root: Path, base_branch: str = "main") -> set[str]:
     """Get set of files changed between current branch and base branch.

@@ -581,7 +581,7 @@ Test verification evidence SHALL be attributed per test as it is scanned and ing
 
 ### Assertions
 
-A. Where no result record binds to a test, that test SHALL contribute no verdict, and the assertions it declares SHALL be reported as awaiting a result. No verdict SHALL be inferred for a test from the results of other tests -- neither from the file it is written in nor from the application it belongs to.
+A. Where no *Result Record* binds to a test, that test SHALL contribute no verdict, and the assertions it declares SHALL be reported as awaiting a result. No verdict SHALL be inferred for a test from the results of other tests -- neither from the file it is written in nor from the application it belongs to.
 
 B. The annotator SHALL compute a separate `lcov_tested` dimension by measuring the fraction of implementation lines (from `Implements:` edges) covered by execution data. When the fraction meets or exceeds the configured minimum, the relevant assertions SHALL be credited in `lcov_tested`. That dimension SHALL be reported in its own right and SHALL NOT credit any *Traceability* coverage dimension.
 
@@ -589,7 +589,7 @@ C. The configuration surface SHALL express test result and coverage ingestion vi
 
 D. A run of citations with no executable line between them SHALL attribute the lines of the function it is written above, or else the executable lines following it up to the next citation, the end of its enclosing function or -- where no function encloses it -- the start of the next function declaration (its first decorator line, where it has decorators), or the end of the file, whichever comes first.
 
-E. A reporter registry SHALL map each `reporter` format name to a parser and an input channel (`stdout` or `file`). The registry SHALL include a native `flutter test --machine` reporter that parses the machine JSON event stream into result records carrying the file and line at which each test is declared, the file that executed it, and its pass/fail/skip status -- without an external JUnit converter.
+E. A reporter registry SHALL map each `reporter` format name to a parser and an input channel (`stdout` or `file`). The registry SHALL include a native `flutter test --machine` reporter that parses the machine JSON event stream into *Result Records* carrying the file and line at which each test is declared, the file that executed it, and its pass/fail/skip status -- without an external JUnit converter.
 
 F. For each configured target, the system SHALL obtain the reporter's output (captured from the command's stdout for stdout-channel reporters, or read from the `results` glob for file-channel reporters), build RESULT nodes carrying the real test-file path (`source_file`, repo-relative) and the target's `match` mode, and ingest the target's `coverage` file. Coverage crediting SHALL be derived from the targets' `credit_coverage`/`min_coverage_fraction`. File-channel results SHALL additionally record where each result was recorded — the results artifact's repo-relative path and, when derivable from the artifact (e.g. one JUnit `<testcase>` per line), the per-result line — as provenance distinct from the test's source path, and result links in reporting surfaces SHALL point at that artifact location.
 
@@ -599,15 +599,15 @@ H. `elspais checks --run-tests` SHALL accept a `--targets` selector naming a sub
 
 I. A configured target a run did not execute, whose results are ingested from disk, SHALL be tagged *carried*; its verdict SHALL be honored faithfully (a carried failing result still flags the requirement as failing), and the `verified` dimension SHALL carry a `carried` flag orthogonal to its pass/fail tier so the matrix can render it as `(baseline)`.
 
-J. In a selective run (a run that did not execute every configured target), a requirement with test references but zero result records SHALL render as not-run (`—`), distinct from a run-but-uncovered `0%`; in a full run zero results SHALL keep the existing rendering. Which of the two a run is SHALL follow from the targets it executed and not from how its selection was expressed.
+J. In a selective run (a run that did not execute every configured target), a requirement with test references but zero *Result Records* SHALL render as not-run (`—`), distinct from a run-but-uncovered `0%`; in a full run zero results SHALL keep the existing rendering. Which of the two a run is SHALL follow from the targets it executed and not from how its selection was expressed.
 
 K. For every configured test framework, the system SHALL bind each scanned test to its own identity within its source file and to that test's line extent, regardless of the framework's implementation language.
 
 L. Where an external test-prescan command is configured, the system SHALL obtain per-test attribution for the candidate test files from that command.
 
-M. The system SHALL exchange prescan data with a configured external test-prescan command by writing the candidate test file paths to the command's standard input and reading attribution records from its standard output, each record binding one test to its source file, its identity within that file, and its starting line.
+M. The system SHALL exchange prescan data with a configured external test-prescan command by writing the candidate test file paths to the command's standard input and reading *Attribution Records* from its standard output, each binding one test to its source file, its identity within that file, and its starting line.
 
-N. Where an external test-prescan command returns attribution records for a scanned test file, the system SHALL bind that file's tests from those records in preference to the system's built-in attribution.
+N. Where an external test-prescan command returns *Attribution Records* for a scanned test file, the system SHALL bind that file's tests from those *Attribution Records* in preference to the system's built-in attribution.
 
 O. A line number a reporter records SHALL be read in the origin that reporter counts from. That origin SHALL be declared with the reporter and SHALL be overridable per target, and a recorded line SHALL be normalised to the numbering the tool uses for source lines before it is matched against a test or shown to a reader.
 
@@ -643,11 +643,11 @@ I weighs a carried result as it weighs a fresh one, because a reporting command 
 
 K states the outcome the scanning side owes the crediting side: without per-test identity and extent, the line-level dimensions computed here have nothing to intersect implementation ranges against, and a framework's tests can only ever be credited at file granularity. The obligation is deliberately language-neutral — it fixes what attribution must yield, not whether a given language earns built-in support or is served through an external command.
 
-L, M and N cut the external route into a capability, a mechanism, and a precedence rule so each can change independently. L and M differ in kind: L survives a reimplementation that swaps the transport, while M memorializes the transport itself — file paths on standard input, attribution records on standard output. M is frozen not because it is an invariant but because it is a published integration point that third-party prescan scripts already implement, so breaking it breaks consumers outside this repository. Recording it as its own letter keeps that compatibility obligation targeted: a future transport change, or an added record field, edits M and leaves the capability and precedence untouched, and M can be retired without withdrawing either.
+L, M and N cut the external route into a capability, a mechanism, and a precedence rule so each can change independently. L and M differ in kind: L survives a reimplementation that swaps the transport, while M memorializes the transport itself — file paths on standard input, *Attribution Records* on standard output. M is frozen not because it is an invariant but because it is a published integration point that third-party prescan scripts already implement, so breaking it breaks consumers outside this repository. Recording it as its own letter keeps that compatibility obligation targeted: a future transport change, or an added record field, edits M and leaves the capability and precedence untouched, and M can be retired without withdrawing either.
 
-M binds each record to a starting line. A record may also carry the test's end line, and that line then ends the test's extent; otherwise the extent is derived from the surrounding records, V bounds the derivation, and K's extent obligation holds for tests attributed either way.
+M binds each *Attribution Record* to a starting line. An *Attribution Record* may also carry the test's end line, and that line then ends the test's extent; otherwise the extent is derived from the surrounding *Attribution Records*, V bounds the derivation, and K's extent obligation holds for tests attributed either way.
 
-N resolves per file, not per configuration, because both routes are routinely live in a single run: a project may configure a command that returns records for one file type while every other scanned test file falls to built-in attribution.
+N resolves per file, not per configuration, because both routes are routinely live in a single run: a project may configure a command that returns *Attribution Records* for one file type while every other scanned test file falls to built-in attribution.
 
 P and Q are about what a partial read produces, not about how it is announced. A file that will not parse in full is common and usually benign -- a coverage tool that cannot re-analyse a template still knows which of its lines ran -- and discarding what was read would lose evidence over a defect in a part of it.
 
@@ -663,6 +663,8 @@ Z places a result where its citations are. A project that runs one scenario agai
 
 ### Changelog
 
+- 2026-10-02 | ec793007 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the result record and the attribution record with Defined Terms (A, E, J, M, N)
 - 2026-10-02 | b9bda3b5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-125: a result binds to the test at the file and line where the test is declared, and records the file that executed it (E, G, Z)
 - 2026-10-01 | 192b9bb4 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -703,7 +705,7 @@ Z places a result where its citations are. A project that runs one scenario agai
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: b9bda3b5
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: ec793007
 
 ---
 
@@ -1242,11 +1244,15 @@ E and I are one idea stated from both ends, and the idea is that a group is an A
 
 P is not a second selector of the kind E rules out. E concerns which targets a run executes; P concerns which results a run requires to be there, and the two are separate questions. A tier can produce its results in an earlier job and leave them for a later run to read, and that later run has to be able to say it requires them without executing them again. A name in P stands for targets exactly as a name in E does, and a name that stands for nothing is refused as H refuses it. Q is the link between the two: a run that executes a target requires what that execution produces.
 
-R and S divide one fact, a target with no results, by the question the run asked. A target nobody executed or asked for has not run, which is information; a target the run executed or required that left nothing is a fault somebody must fix. Without the division the fault fires for every tier a run did not touch, so no project declaring tiers can treat it as a failure, and then it catches nothing. V applies the same division to coverage, and adds one case: a target whose results are present has run, so coverage it declares and did not leave is missing whatever the run expected. T keeps the division the same however a target delivers its results. U keeps a repository's run from failing on targets another repository declares for its own runs. W is how a run names one of those targets when it does require it: the member that declares a target is the only one that knows which targets a name of its stands for, so a group of that member expands by that member's declarations and never by the invoking repository's. X keeps such a name readable: `:` separates the parts of a node identifier and a namespace never holds one, so a run can write a member's namespace before the name it qualifies only while no target or group name can hold one either.
+R and S divide one fact, a target with no results, by the question the run asked. A target nobody executed or asked for has not run, which is information; a target the run executed or required that left nothing is a fault somebody must fix. Without the division the fault fires for every tier a run did not touch, so no project declaring tiers can treat it as a failure, and then it catches nothing. V applies the same division to coverage, and adds one case: a target whose results are present has run, so coverage it declares and did not leave is missing whatever the run expected. T keeps the division the same however a target delivers its results. U keeps a repository's run from failing on targets another repository declares for its own runs. W is how a run names one of those targets when it does require it: the member that declares a target is the only one that knows which targets a name of its stands for, so a group of that member expands by that member's declarations and never by the invoking repository's. X keeps such a name readable: `:` separates the parts of a node identifier and a namespace never holds one, so a run can write a member's namespace before the name it qualifies only while no target or group name can hold one either. A target whose run has not ended has no results a reader can rely on, so R reports an expected one as missing: a job that died leaves a *Result Fingerprint* with no end, and a gate that expects its target fails rather than passing over it.
 
 Y is H's discipline applied to a run that executes nothing. A selection of targets to execute and a request to stop at the first failing one are read only by a run that executes, so a run that does not execute would accept them and read nothing; refusing them is the only answer the reader cannot mistake for a selection that took effect. A run of that kind that needs to say which results it requires says so with P.
 
 G carries the cost of that aliasing, and it is the whole cost. One namespace means a name cannot be a target's and a group's at once, so a configuration holding both is refused when it is read rather than resolved by a precedence rule — a precedence rule being a thing every reader of that configuration would afterwards have to know. What makes the aliasing safe beyond that is that a run says which targets it executed, so what an invocation resolved to is answerable by looking at the run rather than by knowing any of this.
+
+### Changelog
+
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a target whose run has not ended has no results, so an expected one reports them missing (R Rationale)
 
 *End* *Test Target Groups* | **Hash**: 2e819a81
 
@@ -1278,17 +1284,17 @@ C makes the failure visible. A result matching nothing is not an error where it 
 
 *End* *How a Result Names Its Test* | **Hash**: 7baae0b0
 
-## REQ-d00294: A Result Is Its Own Record
+## REQ-d00294: Each Result Record Is a Result of Its Own
 
 **Level**: dev | **Status**: Draft | **Implements**: REQ-o00051
 
 A test that runs in more than one environment produces more than one result. Each
-of those results is a record in its own right, and each one says something the
+of those results is a *Result Record* in its own right, and each one says something the
 others do not. This says how one result is told from another.
 
 ### Assertions
 
-A. Every result record a producer wrote SHALL be held as a result of its own, identified by the place the record was recorded in and the record's position among the records in that place.
+A. Every *Result Record* a producer wrote SHALL be held as a result of its own, identified by the place it was recorded in and its position among the *Result Records* in that place.
 
 B. A result a producer reported through its output, with no artifact holding it, SHALL be identified by the target it was read from and the result's position among that target's results.
 
@@ -1304,30 +1310,30 @@ G. Where a failing result was executed by a file other than the file that declar
 
 ### Rationale
 
-One test run across twenty devices writes twenty records, and until each one is
+One test run across twenty devices writes twenty *Result Records*, and until each one is
 held apart from the rest they are one result. Nineteen verdicts then go missing
 with nothing said about them, and a test that failed on one device reads as
 passing. An environment on the result and a discriminator in its identity are the
 whole of the answer.
 
-A puts identity in the record rather than in what the record met on arrival. The
-place of record is known for every result an artifact holds, and the position
-within that place separates records that agree about everything else. A scheme
-that separated records only where two of them clashed would make identity depend
-on the order the records were read, which is not a fact about the result. The
-rule speaks of records because that is what a producer writes. Whether a producer
-writes one record for each try of a test is the producer's business, and A holds
+A puts identity in the *Result Record* rather than in what it met on arrival. The
+place a *Result Record* was written is known for every result an artifact holds, and the position
+within that place separates *Result Records* that agree about everything else. A scheme
+that separated them only where two of them clashed would make identity depend
+on the order they were read, which is not a fact about the result. The
+rule speaks of *Result Records* because that is what a producer writes. Whether a producer
+writes one *Result Record* for each try of a test is the producer's business, and A holds
 either way.
 
 B covers the results that reach the tool through a command's output. There is no
-artifact for them, so the place of record A names does not exist and the identity
+artifact for them, so the place A names does not exist and the identity
 has to come from somewhere else. The target is what the tool read them from, and
 the position within that target's results separates them from each other. Stating
 this case on its own keeps a reader from having to read it out of A.
 
 C asks the project to say where the environment is written, because it is written
 in a different place in each grid: a path an artifact sits under in one, a field
-the record carries in another. The reporter says what its format usually does and
+the *Result Record* carries in another. The reporter says what its format usually does and
 a target may say otherwise, which is the arrangement REQ-d00284-A already makes
 for the name a result gives its test. A source has to be declared before a result
 carries an environment at all, because the same field means the machine that ran
@@ -1344,7 +1350,7 @@ E is about one test's own results. A test run in twenty places has twenty
 verdicts and the pessimistic one governs, because a test that fails anywhere has
 found something. REQ-d00254-A answers a different question, barring a verdict
 read off other tests' results; this one is about a test's own, so the two stand
-together. It is stated because holding each record apart makes it newly
+together. It is stated because holding each *Result Record* apart makes it newly
 visible: a test passing in nineteen places and failing in one now reads as
 failing, and a reader should meet that rule here rather than discover it.
 
@@ -1355,7 +1361,65 @@ results record no environment is named exactly as it is named now.
 
 G applies the same principle to one scenario that several runner files execute. Each run is a result of the one declared test, and E makes any failure govern. A reader who sees that the test failed cannot fix it without knowing which run failed. The file that executed the run is that fact, so the report names it.
 
-*End* *A Result Is Its Own Record* | **Hash**: d3e70367
+### Changelog
+
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the result record with the Defined Term Result Record, and retitle the requirement after it
+
+*End* *Each Result Record Is a Result of Its Own* | **Hash**: cd9ff4c9
+
+## REQ-d00322: Evidence Snapshot
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-o00051
+
+A project stores the results of its test suites with each change, and a reader verifies that those results describe that change.
+
+### Assertions
+
+A. The system SHALL write an *Evidence Snapshot* from the results of a selection of test targets.
+
+B. The system SHALL refuse to write an *Evidence Snapshot* while a selected target's results are absent, stale or in progress, and SHALL name each such target.
+
+C. An *Evidence Snapshot* SHALL hold, for each result, the target, the file and line that declare the test, the test name, the file that executed it where that file differs, the outcome, and the skip reason where one is given.
+
+D. An *Evidence Snapshot* SHALL hold the digest of the tree its results describe, each selected target with the digest of its inputs, and the facts the project declared about the run.
+
+E. Two *Evidence Snapshots* written from runs of the same tree with the same outcomes and the same declared facts SHALL be identical, byte for byte, apart from the file that holds durations and printed output.
+
+F. An *Evidence Snapshot* SHALL hold the *Traceability* report, rendered from the *Evidence Snapshot* and the *Specification* alone.
+
+G. For each assertion, the *Traceability* report SHALL name the code that implements it, the tests that verify it, and each test's outcome, by repository-relative file and line.
+
+H. The system SHALL compare an *Evidence Snapshot* with one derived from the current results and SHALL report each test whose outcome differs, each result present on one side only, a tree digest that differs, a declared fact that differs, and a *Traceability* report that differs.
+
+I. The comparison SHALL return a non-zero exit code when any difference exists, and 0 when none exists.
+
+J. Where a target has no results of its own, the system SHALL read that target's results from the *Evidence Snapshot* the project names, and SHALL tag them carried.
+
+K. Where an *Evidence Snapshot*'s tree digest differs from the digest of the current tree, the system SHALL report the *Evidence Snapshot* as stale.
+
+L. Where a federation member names an *Evidence Snapshot* and holds no results of its own, the system SHALL read that member's results from that member's *Evidence Snapshot*, judged against that member's tree.
+
+M. The system SHALL keep each result's duration and printed output beside the *Evidence Snapshot*, and SHALL exclude them from the comparison.
+
+N. No name SHALL appear as a JSON key beside a digest in an *Evidence Snapshot*.
+
+### Rationale
+
+An *Evidence Snapshot* lets a reader cite a commit's test results without running the suites, and lets CI confirm that the results committed with a change describe that change. H is the primary use: a new run is compared with the committed snapshot, test by test.
+
+C excludes durations, timestamps, absolute paths, invocation identifiers and failure messages because each varies between runs of an unchanged tree. E depends on that exclusion. M keeps the measurements a timing guard prints, so they are not lost, and keeps them out of the comparison, so a measurement never fails a verification.
+
+D binds the results to a tree. The digest covers every file git tracks or has staged, apart from the snapshot itself, so a snapshot written over uncommitted work does not match the commit CI checks out. A target's digest covers the same files, because a file git ignores exists only where the run executed, and E would fail between a working tree and a clone.
+
+J and L make the snapshot the source of a member's results in a federation, where a member checkout has run nothing. A target that ran in the tree, or that the current run executes, has results of its own even where it left none, so the snapshot never stands in for a run that produced nothing. K stops a snapshot of another tree from reading as current.
+
+N follows the rule the *Result Fingerprint* follows: a secret scanner reads a secret-like key beside a long hexadecimal value as a leaked credential.
+
+### Changelog
+
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: an Evidence Snapshot records a tree's test results and is verified against a new run
+
+*End* *Evidence Snapshot* | **Hash**: 5885653b
 
 ## REQ-d00281: Level Vocabulary of a Reported Graph
 
@@ -1403,7 +1467,7 @@ B. While no input of a test target has changed since the run that produced its r
 
 C. If an input of a test target has changed since the run that produced its results began, then the system SHALL treat those results as stale.
 
-D. If the system has no record of the inputs from which test results were produced, then the system SHALL treat those results as stale.
+D. If the system has no *Result Fingerprint* of the run that produced test results, then the system SHALL treat those results as stale.
 
 E. When the system reports test results as stale, the system SHALL state the reason.
 
@@ -1421,19 +1485,30 @@ K. Where a test target declares an include set, the system SHALL use as its inpu
 
 L. Where a test target declares an exclude set, the system SHALL exclude from its inputs every file that the exclude set selects.
 
-M. The system SHALL exclude from the inputs of every test target the test output location and every path that the global skip list of the project names.
+M. The system SHALL exclude from the inputs of every test target the test output location, the directory that holds the *Evidence Snapshot*, and every path that the global skip list of the project names.
 
-N. While a run of a test target has started and has not recorded its end, the system SHALL report the run of that target as in progress in place of any judgement of its results or its coverage.
+N. While a run of a test target has started and has not recorded its end, the system SHALL report the run of that target as in progress in place of any judgement of the freshness of its results or its coverage.
 
 O. When the system reports a run of a test target as in progress, the system SHALL state when the run started.
 
+P. A result SHALL keep binding to the test it names after the tree its run executed in moves to another directory.
+
 ### Rationale
 
-The inputs of a test target are the files whose content can change what its run reports, so results stay current exactly as long as those files are unchanged, and reuse of results from an earlier run is legitimate. The default takes every file because a missed dependency makes old results look current, which is worse than a needless run. What a run writes, and what tools keep for themselves while it runs, changes during every run, so the project names those paths in its global skip list.
+The inputs of a test target are the files whose content can change what its run reports, so results stay current exactly as long as those files are unchanged, and reuse of results from an earlier run is legitimate. The default takes every file because a missed dependency makes old results look current, which is worse than a needless run. What a run writes, and what tools keep for themselves while it runs, changes during every run, so the project names those paths in its global skip list. An *Evidence Snapshot* is written from a run's results after the run ends, so it is never an input of that run.
 
-A run empties its output area when it starts and writes its results while it runs, so an area whose run has not finished holds results that are partial or not yet written. Judging them would report a run that is still going as one that produced nothing, or as one that is complete. N reports the fact instead, and O gives the time it started so a reader can decide for themselves whether the run is still going.
+A run empties its output area when it starts and writes its results while it runs, so an area whose run has not finished holds results that are partial or not yet written. Judging their freshness would report a run that is still going as one that produced nothing, or as one that is complete. N reports the fact instead, and O gives the time it started so a reader can decide for themselves whether the run is still going. Whether a run that expects the target is owed those results is a separate question, which REQ-d00283-R answers.
 
-*End* *Test Result Freshness* | **Hash**: 4fe7db4a
+A tree that moves after its tests ran keeps its results. A reporter often records absolute paths, and reading such a path against the new root alone matches no test, so the results read as fresh while crediting nothing. P states that property. The *Result Fingerprint* records where its run executed, so a recorded path can be read against that place.
+
+### Changelog
+
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a run in progress replaces the freshness judgement of its results, and leaves to REQ-d00283-R whether an expected target is missing them (N)
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a result keeps binding to its test after the tree its run executed in moves (P)
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the run fingerprint with the Defined Term Result Fingerprint (D)
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: the Evidence Snapshot directory is never an input of a test target (M)
+
+*End* *Test Result Freshness* | **Hash**: 4a31d912
 
 ## REQ-d00312: Test Target Output Areas
 
@@ -1456,3 +1531,166 @@ D. When a run of a test target starts, the system SHALL provide that target with
 Targets that share an output location can overwrite each other, and results that an earlier run left behind can pass for the results of a later run. An area for each target, empty whenever a run of that target starts, prevents both, and one location for every area gives the freshness judgement one place to exclude from its inputs.
 
 *End* *Test Target Output Areas* | **Hash**: a0788b2a
+
+## REQ-d00314: Concurrent Test Target Runs
+
+**Level**: dev | **Status**: Draft | **Implements**: -
+
+A run that executes several test targets can execute some of them at the same time. This requirement states which targets may overlap, which never do, and how a reader tells the output of one target from the output of another.
+
+### Assertions
+
+A. A project SHALL be able to set the maximum number of test targets that one run executes at the same time.
+
+B. Where a project sets no maximum, the system SHALL use a maximum of one.
+
+C. While the maximum is one, the system SHALL execute the selected test targets one at a time, in declaration order.
+
+D. While the maximum is one, the system SHALL show the live output of each test target as that target produced it.
+
+E. A project SHALL be able to declare shared resources, each with a name and a description of what the resource is.
+
+F. A test target SHALL be able to name any declared shared resource as a resource that it uses.
+
+G. The system SHALL reject at configuration-validation time a test target that names a shared resource that the project does not declare.
+
+H. The system SHALL execute at different times any two test targets that name a common shared resource.
+
+I. While fewer test targets run than the maximum, the system SHALL start each waiting test target that names no shared resource that a running test target names.
+
+J. While the maximum is more than one, the system SHALL mark each line of live output with the name of the test target that produced the line.
+
+K. The system SHALL report the outcome and the elapsed time of each test target together with the name of that target.
+
+L. The system SHALL keep the output that it captures from a test target apart from the output of every other test target.
+
+M. When a run that stops at the first failing test target meets a failure, the system SHALL start no further test target.
+
+N. When a run that stops at the first failing test target meets a failure, the system SHALL let each test target that is already running finish.
+
+O. A run SHALL be able to set, for that run alone, a maximum that replaces the maximum the project sets.
+
+P. The system SHALL refuse a maximum below one, whether the project or the run sets it.
+
+### Rationale
+
+A project with many independent targets waits for the sum of their run times when they run one at a time, although most of them share nothing. Each target already writes into an output area of its own (REQ-d00312), so two targets never write the same file. What two targets can still share is outside the tool: a database, a network port, a device or emulator, a local service stack. Only the project knows which targets use which of these, so the project says so, and the tool never overlaps two targets that name a common one.
+
+B keeps the capability inert until a project turns it on. A project whose targets share a database that no declaration names would otherwise see two targets corrupt each other's data on the day the tool is upgraded. C and D state what a run with a maximum of one does, which is what every run did before a maximum existed.
+
+E, F and G follow the discipline of test target groups (REQ-d00283-F+G). A resource is declared with a description, because the declaration is the only place a reader learns what the name stands for. A target naming an undeclared resource is refused, because a misspelled resource name would otherwise silently let two conflicting targets overlap. That failure appears only as an intermittent fault in a test, far from its cause.
+
+I makes the schedule use the room it has. A target waiting only for a free place starts as soon as one is free, and a target waiting for a resource does not hold back the targets behind it. A target's own runner owns the parallelism inside that target; this requirement schedules targets, not the tests within them.
+
+J and K keep a concurrent run readable. Lines from targets that run at the same time arrive interleaved, so each line carries the name of the target that wrote it, and the outcome and time of each target are reported against its name. L keeps the output that a reporter reads as results apart for each target, because a reporter reading another target's lines would attribute their results to the wrong tests.
+
+M and N define stopping at the first failure when several targets run. A target that has started is allowed to finish rather than being stopped, because a stopped target leaves a run that records a start and no end, and its results then read as in progress (REQ-d00311-N).
+
+O lets one run depart from the project's setting without editing the configuration: a continuous-integration job on a larger machine, or a developer who needs the targets one at a time to read their output. P refuses a maximum that would execute nothing.
+
+*End* *Concurrent Test Target Runs* | **Hash**: 228b3b98
+
+## REQ-d00315: Stale-Only Test Target Runs
+
+**Level**: dev | **Status**: Draft | **Implements**: -
+
+A run can execute only the test targets whose results the current tree has made stale, and carry the results of every other target forward. This requirement states which targets such a run executes and what it does with the rest.
+
+### Assertions
+
+A. A run that executes test targets SHALL be able to ask to execute only the selected test targets whose results are not fresh.
+
+B. A run that asks to execute only the targets whose results are not fresh SHALL execute exactly the selected test targets whose results are not fresh.
+
+C. The system SHALL decide whether the results of a test target are fresh by the judgement that it reports under REQ-d00311.
+
+D. The system SHALL treat a test target that has no results as a target whose results are not fresh.
+
+E. The system SHALL treat a run of a test target that is in progress as a run whose results are not fresh.
+
+F. A run that asks to execute only the targets whose results are not fresh SHALL treat the results of each selected test target that it does not execute as results carried from an earlier run.
+
+G. If every selected test target of a run that asks to execute only the targets whose results are not fresh has fresh results, then the system SHALL complete the run without executing a test target.
+
+H. A run that asks to execute only the targets whose results are not fresh SHALL state which selected test targets it executed and which it carried.
+
+I. If a run that does not execute test targets asks to execute only the targets whose results are not fresh, then the system SHALL refuse the run.
+
+### Rationale
+
+The fingerprint of a target records the inputs its results were produced from, and the tool already judges from those inputs whether the results are stale. A project that wants to execute only what a change affects would otherwise write its own classifier of changes, which duplicates knowledge the tool holds and drifts from it. The project, or its continuous integration, decides when to ask for such a run; the tool supplies the decision.
+
+A narrows the selection a run already makes rather than adding a second way to select targets. The selection still says which targets the run is about, and every target it reaches is expected (REQ-d00283-Q); freshness then decides only which of them need executing. A run that names its targets and does not ask for this executes every target it names (REQ-d00283-I).
+
+C keeps one judgement. A target that a report calls stale is a target this run executes, and a target that a report calls fresh is one it carries. D and E answer the cases the judgement leaves open. A target with no results has nothing to carry, and a run that started and recorded no end left results that are partial or missing, so both are executed.
+
+F makes the carried results read as they read after a selective run: they are honoured, a carried failure still fails (REQ-d00254-I), and they render as carried. G treats a run that has nothing to execute as a run that succeeded, because a tree that changed no input of any selected target is the case this run exists to make cheap. H tells the reader which targets ran fresh. REQ-d00316 records the same set for a report rendered afterwards.
+
+I applies the discipline of REQ-d00283-Y: a request read only by a run that executes targets is refused by a run that executes none, rather than accepted and ignored.
+
+*End* *Stale-Only Test Target Runs* | **Hash**: 890ea4b2
+
+## REQ-d00316: Record of the Test Targets a Run Executed
+
+**Level**: dev | **Status**: Draft | **Implements**: -
+
+A run that executes test targets leaves a record of which targets it executed. A later run that reads results names that record to mark those results as fresh and every other result as carried.
+
+### Assertions
+
+A. A run that executes test targets SHALL record the names of the test targets that it executed.
+
+B. The system SHALL keep the record in the test output location, outside the output area of every test target.
+
+C. The system SHALL write the record in a machine-readable form that the test-target documentation describes.
+
+D. A record SHALL replace the record of every earlier run.
+
+E. A run that reads results without executing test targets SHALL be able to name the test targets of the last recorded run wherever it names a test target.
+
+F. If a run names the test targets of the last recorded run and no readable record exists, then the system SHALL refuse the run and tell how to produce a record.
+
+G. If a run names the test targets of the last recorded run and the record names a test target that the project does not configure, then the system SHALL refuse the run and name that target.
+
+H. Where the last recorded run executed no test target, a run that names its test targets SHALL treat that name as an explicit statement that it selects no test target.
+
+I. If a run that executes test targets, or a run that names the test targets whose results it expects, names the test targets of the last recorded run, then the system SHALL refuse the run.
+
+### Rationale
+
+A report that marks results as fresh or carried needs to know which targets ran fresh. Without a record, the reader passes those names by hand or reads them out of the output of an earlier command, and a name typed wrong marks the wrong results as fresh.
+
+A, B and D keep one record, written by every run that executes targets, in the location that already holds each target's output area. The output area of a target is emptied whenever that target runs (REQ-d00312-D), so the record lives beside the areas and never inside one. C lets a program other than the tool read the record.
+
+E puts the record's name in the vocabulary that already names targets and groups (REQ-d00283-E), so a reader learns no second way to select. F and G refuse rather than guess. A run with no record, or a record naming a target the configuration no longer holds, cannot say which results ran fresh, and a report that assumed an answer would mark results with a provenance nobody established. H covers a run that executed nothing, such as a stale-only run whose targets were all fresh (REQ-d00315-G): every result it left was carried, which is what an explicit selection of no target states (REQ-d00283-J).
+
+I keeps the name to the one question it answers. A run that executes targets, and a run that states which results it expects, each ask about the run in progress, and a name standing for what an earlier run did would answer a different question.
+
+*End* *Record of the Test Targets a Run Executed* | **Hash**: c5639977
+
+## REQ-d00323: Carried Result Provenance
+
+**Level**: dev | **Status**: Draft | **Implements**: -
+**Refines**: REQ-d00254-I
+
+A report that reads results from disk marks each verified figure that comes only from results of an earlier run, so a reader can tell fresh evidence from old evidence.
+
+### Assertions
+
+A. When every result that contributes to the verified figure of a requirement is carried from an earlier run, the system SHALL mark that figure as carried.
+
+B. When a fresh result contributes to the verified figure of a requirement, the system SHALL show that figure without the carried mark.
+
+C. A result whose credit a `Refines:` relationship conducts to a requirement SHALL count as a contribution to the verified figure of that requirement.
+
+D. Where a run names the test targets that ran fresh, the system SHALL treat as carried every result of a test target of another federation member that the run does not name.
+
+E. When the system states how many test targets with results were carried, the system SHALL count each test target of each federation member separately.
+
+### Rationale
+
+The carried mark exists for the reader who must not mistake old evidence for new. A figure built from carried results and shown without the mark makes that mistake for them, so the mark follows the evidence wherever the evidence is counted. C names the conducted case because a requirement credited only through the requirements that refine it has no results of its own, and the mark must not depend on where the results are attached.
+
+A run of the invoking repository's test targets executes no target of another member, so a selection of fresh targets cannot have made another member's results fresh. Two members can each declare a target with the same name, so E keeps two targets from being counted as one.
+
+*End* *Carried Result Provenance* | **Hash**: 67d6d8ea

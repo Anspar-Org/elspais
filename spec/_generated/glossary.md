@@ -8,10 +8,28 @@
 : A testable statement within a requirement that declares a single, verifiable behavior the system must exhibit.
 *Defined in: file:REQ:spec/glossary.md (REQ)*
 
+**Attribution Record**
+: One entry that an external test-prescan command writes, which binds one test to its source file, its identity in that file and its starting line.
+*Defined in: file:REQ:spec/glossary.md (REQ)*
+
+**Automatic Save Record**
+: A statement that the tool persisted held changes on its own initiative, which gives who persisted them, when, how many changes it persisted, and the condition that caused it.
+*Defined in: file:REQ:spec/glossary.md (REQ)*
+
 ## D
+
+**Daemon Record**
+: The statement that a server process keeps in a working tree to tell clients which process serves that tree, where it serves, and which clients it serves.
+*Defined in: file:REQ:spec/glossary.md (REQ)*
 
 **Defined Term**
 : A domain-specific word or phrase whose meaning is formally declared in a definition block and tracked across the specification corpus.
+*Defined in: file:REQ:spec/glossary.md (REQ)*
+
+## E
+
+**Evidence Snapshot**
+: The normalized results of one test run of one tree, bound to that tree by its digest and stored in the repository with the traceability report derived from them.
 *Defined in: file:REQ:spec/glossary.md (REQ)*
 
 ## P
@@ -29,6 +47,14 @@
 **Requirement Location**
 : The file and line that declare a requirement's identifier.
 *Defined in: REQ-p00017 (REQ)*
+
+**Result Fingerprint**
+: A statement of one run of a test target that gives the inputs the run read, the content digest of each input, the root of the tree the run executed in, and the times the run started and finished.
+*Defined in: file:REQ:spec/glossary.md (REQ)*
+
+**Result Record**
+: One outcome of one test that a results producer wrote, such as one test case in a JUnit XML file or one test entry in a pytest JSON report.
+*Defined in: file:REQ:spec/glossary.md (REQ)*
 
 ## S
 

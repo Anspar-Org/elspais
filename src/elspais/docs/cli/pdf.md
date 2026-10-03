@@ -209,7 +209,7 @@ Warning: 1 reference could not be placed in the document.
 ```
 
 The document is still produced, and the repositories that did resolve still
-render in full. It is degraded, and the degradation is on the record.
+render in full. It is degraded, and the degradation is reported.
 
 When anything was omitted, the completion line is qualified: a document missing
 content it was asked to carry is not reported as an unqualified success. The

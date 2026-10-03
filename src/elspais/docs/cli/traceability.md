@@ -111,7 +111,7 @@ this requires.
 ## trace Command Options
 
   `--format {text,markdown,html,json,csv}`  Output format (default: markdown)
-  `--preset {minimal,standard,full}`        Named default value set
+  `--preset {minimal,standard,full,evidence}` Named default value set; `evidence` adds each assertion's code and tests with outcomes
   `--values KEY,KEY,...`  State exactly these values, in this order
   `--body`                Show requirement body text
   `--assertions`          Show individual assertions
@@ -260,7 +260,8 @@ Journey verdicts: `pass` (all steps have a passing test, none failed), `fail`
 
   `--static`              Generate static HTML file instead of live server
   `--server`              Start server without opening browser
-  `--port PORT`           Server port (default: 5001)
+  `--port PORT`           Server port (default: 5001; 0 picks any free
+                          port, which `.elspais/daemon.json` records)
   `--base-path PATH`      URL prefix the server sits under (default: none)
   `--embed-content`       Embed requirement content and every traced source
                           file, highlighted and compressed, for offline

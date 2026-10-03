@@ -1,0 +1,37 @@
+#!/bin/bash
+# run-unit-tier [output-dir]
+#
+# Runs the unit tier and writes its results and coverage into the output
+# directory: junit.xml, the .coverage data file elspais ingests, and
+# coverage.json.
+#
+# The tier runs in parallel with pytest-xdist, with the worker count
+# .githooks/test-workers gives. `--dist loadfile` keeps each test file on one
+# worker, in order: an incremental class's steps share the graph its fixture
+# built. Coverage records which test ran each line (`--cov-context=test`, from
+# addopts); pytest-cov combines the workers' data into the one .coverage file
+# when the run ends, so the file elspais reads is the one a serial run writes.
+#
+# The output directory defaults to $ELSPAIS_TARGET_OUTPUT, which
+# with-fingerprint sets. Further arguments are passed to pytest.
+
+_out="${1:-$ELSPAIS_TARGET_OUTPUT}"
+if [ -z "$_out" ]; then
+    echo "ERROR: run-unit-tier needs an output directory (argument or ELSPAIS_TARGET_OUTPUT)" >&2
+    exit 2
+fi
+if [ "$#" -gt 0 ]; then shift; fi
+mkdir -p "$_out"
+_here=$(cd "$(dirname "$0")" && pwd)
+if ! _workers=$("$_here/test-workers"); then
+    echo "ERROR: could not compute the worker count" >&2
+    exit 2
+fi
+
+echo "== unit tier (-n $_workers --dist loadfile)"
+COVERAGE_FILE="$_out/.coverage" pytest tests/ --tb=short -q \
+    -n "$_workers" --dist loadfile \
+    --junitxml="$_out/junit.xml" -o junit_family=xunit1 \
+    --cov=src/elspais --cov-context=test \
+    --cov-report=json:"$_out/coverage.json" --cov-report= \
+    "$@"

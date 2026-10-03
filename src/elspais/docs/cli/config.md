@@ -204,9 +204,10 @@ it is decided:
    scanned directory, so `*.py` selects at any depth and `api/*.py`
    selects within a subdirectory.
 
-Patterns are `fnmatch` globs, matched the same way the ignore lists are:
-`*` matches any characters **including** `/`, and `**` is not special (it
-behaves as `*`). So `*.sql` selects a `.sql` file at any depth, while
+`file_patterns` entries are `fnmatch` globs: `*` matches any characters
+**including** `/`, and `**` is not special (it behaves as `*`). The ignore
+lists are matched differently, with `**` standing for zero or more
+directories; see `elspais docs ignore`. So `*.sql` selects a `.sql` file at any depth, while
 `database/**/*.sql` requires a literal `database/` prefix and at least one
 more `/` -- it does NOT match `database/schema.sql`. A pattern that reached
 files through the retired repository-root glob usually wants rewriting: name
@@ -223,7 +224,10 @@ visible and editable rather than implied.
 
 ```toml
 [scanning]
-skip = ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"]
+# A pattern holding a `/` is a path from the repository root, for a file and a
+# directory alike. A single name matches a file at any depth and a directory
+# only at the root, so `**/` says "at any depth". See `elspais docs ignore`.
+skip = ["**/node_modules", "**/.git", "**/__pycache__", "*.pyc", "**/.venv", ".env"]
 
 [scanning.spec]
 directories = ["spec"]
@@ -258,22 +262,36 @@ skip_files = []
 skip_dirs = []
 reference_keyword = "Verifies"   # Keyword for test-to-req references
 reference_patterns = []          # Additional reference patterns
+concurrency = 1                  # Most test targets one run executes at once
+# concurrency defaults to 1 because targets that share something no
+# declaration names (a database, a network port, a device or emulator, a
+# local service stack) would corrupt each other's runs. Declare each such
+# resource under [scanning.test.resources] and list it in the `resources` of
+# every target that uses it before raising concurrency. `--concurrency N` on
+# `elspais test` and `elspais checks --run-tests` replaces it for one run.
 prescan_command = ""             # External test discovery command
 # prescan_command receives file paths on stdin, outputs JSON on stdout:
 #   [{"file": "path", "function": "name", "class": "Name|null", "line": N,
 #     "end_line": M}]
 # `line` is the line the test is declared on, counted from one. `end_line`
-# is optional. If a record has no `end_line`, then the test ends at its last
-# line before the next test that is neither blank nor a comment.
-# Consequently, the comments written directly above a test belong to that
-# test. A record names one test. Consequently, the name may be the test's
-# own and need not be spelled any particular way.
+# is optional. If an attribution record has no `end_line`, then the test
+# ends at its last line before the next test that is neither blank nor a
+# comment. Consequently, the comments written directly above a test belong
+# to that test. An attribution record names one test. Consequently, the name
+# may be the test's own and need not be spelled any particular way.
 #
 # A test is linked by a comment above it and by nothing else. A requirement
 # ID spelled into the function name references nothing, whatever separators
 # are configured.
 
-# Test result ingestion is configured via [[scanning.test.targets]].
+# Test result ingestion is configured via [[scanning.test.targets]], and
+# the shared resources that keep two targets from overlapping under
+# [scanning.test.resources]:
+# [scanning.test.resources]
+# db = "The local Postgres instance the backend suites share"
+# Every run that executes targets records the targets it executed in
+# <output_root>/.elspais-last-run.json; `--targets last-run` on `summary`
+# and `trace` reads it.
 # See: elspais docs test-targets
 
 [scanning.journey]
@@ -327,7 +345,7 @@ retired = ["Deprecated", "Superseded"]  # Excluded from everything
 
 ```toml
 [validation]
-hash_mode = "normalized-text"       # "full-text" | "normalized-text"
+hash_mode = "normalized-text"       # The only value; the hash covers Assertions alone
 # hash_algorithm = "sha256"         # Hash algorithm
 # hash_length = 8                   # Hash truncation length
 # strict_hierarchy = false          # Strict hierarchy validation

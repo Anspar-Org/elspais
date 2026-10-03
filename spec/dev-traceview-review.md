@@ -169,11 +169,11 @@ A process that serves a graph to many requests answers from a graph it built ear
 
 A. The system SHALL judge whether a served graph is current against every file that graph was built from, in every member of the federation.
 
-B. The files a served graph is built from SHALL include the results, the coverage and the run record of every test target that a member of the federation declares.
+B. The files a served graph is built from SHALL include the results, the coverage and the *Result Fingerprint* of every test target that a member of the federation declares.
 
 C. While a served graph predates a file it was built from, the system SHALL disclose with each answer it serves from that graph that the graph predates that file, naming the file.
 
-D. While a run of a test target is in progress, the system SHALL treat a change in the output area of that target as a change to the files a served graph was built from only where the change is to the record of that run.
+D. While a run of a test target is in progress, the system SHALL treat a change in the output area of that target as a change to the files a served graph was built from only where the change is to the *Result Fingerprint* of that run.
 
 ### Rationale
 
@@ -181,13 +181,15 @@ A served graph is current only against the files it was compared with. Results a
 
 A serving process does not rebuild over changes somebody has not saved, so a graph can stay behind the files on disk while it is served. C makes that state visible on the answer itself rather than in a separate place a reader has to know to look.
 
-A run writes into its output area for as long as it runs. Rebuilding on each write would read an area that is half written and repeat the work on every request. The record of the run changes when a run starts and when it finishes, and those are the two changes that say something about what the area holds.
+A run writes into its output area for as long as it runs. Rebuilding on each write would read an area that is half written and repeat the work on every request. The *Result Fingerprint* of the run changes when a run starts and when it finishes, and those are the two changes that say something about what the area holds.
 
 ### Changelog
 
+- 2026-10-02 | 8822f2a7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the run fingerprint with the Defined Term Result Fingerprint (B, D)
 - 2026-10-01 | e791c1a1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
 
-*End* *Served Graph Currency* | **Hash**: e791c1a1
+*End* *Served Graph Currency* | **Hash**: 8822f2a7
 
 ---
 

@@ -658,7 +658,7 @@ def mark_terms_in_hashed_text(graph, requirements) -> None:  # noqa: ANN001
             continue
         styles = list(terms_cfg.get("markup_styles") or _DEFAULT_MARKUP_STYLES)
         styles_set = set(styles)
-        for part in iter_hashed_parts(req, getattr(graph, "hash_mode", None)):
+        for part in iter_hashed_parts(req):
             found = _canonical_term_text(part, td, styles[0], styles_set)
             if found is not None:
                 field, new, _repls = found

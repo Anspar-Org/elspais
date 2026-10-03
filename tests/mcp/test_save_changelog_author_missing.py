@@ -93,9 +93,7 @@ class TestSaveRefusedWhenProcessAuthorUnresolvable:
 
         assert spec_path.read_bytes() == before, "a refused save changed the spec file"
         assert len(state.graph.mutation_log) == 1, "a refused save dropped the pending work"
-        after = spec_path.read_text()
-        assert "## Changelog" not in after
-        assert "(retitled)" not in after
+        assert "(retitled)" not in spec_path.read_text()
         assert read_automatic_save(hht_project) is None, (
             "a save that did not happen left a record of itself"
         )

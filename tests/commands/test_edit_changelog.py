@@ -1,8 +1,8 @@
 # Verifies: REQ-p00004-A
 """Tests for edit command Draft->Active changelog entry.
 
-When ``elspais edit --status Active`` is applied to a Draft requirement,
-a changelog entry with reason "First approved version" must be added.
+When ``elspais edit --status Active`` is applied to a Draft requirement, the
+changelog gains an entry carrying the reason given with ``-m``.
 """
 
 import argparse
@@ -81,6 +81,7 @@ def _make_edit_args(
     *,
     status: str | None = None,
     dry_run: bool = False,
+    message: str | None = None,
 ) -> argparse.Namespace:
     """Build an argparse.Namespace matching what edit.run expects."""
     return argparse.Namespace(
@@ -93,6 +94,7 @@ def _make_edit_args(
         config=project / ".elspais.toml",
         from_json=None,
         validate_refs=False,
+        message=message,
     )
 
 
@@ -110,13 +112,15 @@ class TestEditChangelog:
 
     @patch("elspais.utilities.git.get_author_info", return_value=MOCK_AUTHOR)
     def test_REQ_p00004_A_edit_draft_to_active_adds_changelog(self, mock_author, tmp_path: Path):
-        """Changing status from Draft to Active must add a ## Changelog
-        section with "First approved version" entry.
+        """Changing status from Draft to Active adds a ## Changelog section
+        whose entry carries the reason given with the edit.
 
         Validates REQ-p00004-A.
         """
         project = _make_project(tmp_path, DRAFT_REQ)
-        args = _make_edit_args(project, "REQ-d00001", status="Active")
+        args = _make_edit_args(
+            project, "REQ-d00001", status="Active", message="Approved at design review"
+        )
 
         from elspais.commands.edit import run
 
@@ -135,11 +139,12 @@ class TestEditChangelog:
         # Status should have been changed
         assert "**Status**: Active" in content
 
-        # Changelog section must exist with the initial entry
+        # Changelog section must exist with the reason given
         assert "## Changelog" in content, "Draft->Active transition must add a ## Changelog section"
-        assert "First approved version" in content, (
-            "Draft->Active changelog entry must contain 'First approved version'"
+        assert "Approved at design review" in content, (
+            "Draft->Active changelog entry must carry the reason given with the edit"
         )
+        assert "First approved version" not in content
 
     @patch("elspais.utilities.git.get_author_info", return_value=MOCK_AUTHOR)
     def test_REQ_p00004_A_edit_active_to_active_no_changelog(self, mock_author, tmp_path: Path):

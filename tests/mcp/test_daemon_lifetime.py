@@ -20,8 +20,9 @@ REQ-p00083-C), retires that record when a client saves at its own request
 (REQ-p00083-H), and keeps the work rather than dropping it when the save
 itself fails (REQ-p00083-D).
 
-Unit-level only: process liveness is faked (``alive_fn``) and the clock
-is a counter, so the decision matrix and the watchdog transitions are
+Unit-level only: process liveness is faked (``alive_fn``), except where a
+test asks the real liveness source about a real zombie, and the clock is a
+counter, so the decision matrix and the watchdog transitions are
 exercised deterministically with no sleeping. Assertion F -- that the
 obligation holds under every idle-timeout configuration and is not
 discharged by client request traffic -- is a property of the running
@@ -36,16 +37,17 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from elspais.mcp.daemon import pid_alive
 from elspais.server.client_watch import (
     DEFAULT_GRACE_SECONDS,
     ClientWatchdog,
     Decision,
     pending_snapshot,
-    pid_alive,
     shutdown_decision,
 )
 
@@ -151,6 +153,38 @@ def _watchdog(
         stop_fn=stop_fn if stop_fn is not None else _ok_stop,
     )
     return wd, exits
+
+
+def _proc_state(pid: int) -> str | None:
+    """The state letter ``/proc/<pid>/stat`` reports, or None once it is gone."""
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+    except (OSError, IndexError):
+        return None
+
+
+@pytest.fixture
+def unreaped_child():
+    """A child process that has exited and that nothing has collected.
+
+    The kernel keeps such a process as a zombie: its pid still answers
+    ``kill(pid, 0)`` while nothing runs under it. This is what a daemon
+    becomes inside a container whose first process never collects orphans.
+    The fixture never polls or waits on the child before the test runs,
+    because either would collect it.
+    """
+    if sys.platform != "linux":
+        pytest.skip("a zombie is observed through /proc, which only Linux provides")
+    proc = subprocess.Popen([sys.executable, "-c", "pass"])
+    try:
+        deadline = time.monotonic() + 30.0
+        while _proc_state(proc.pid) != "Z":
+            if time.monotonic() > deadline:
+                pytest.fail(f"child {proc.pid} never became a zombie")
+            time.sleep(0.01)
+        yield proc.pid
+    finally:
+        proc.wait()
 
 
 def _map_watchdog(alive_map, clock, *, pending=(0, 5), grace=300.0, stop_fn=None):
@@ -281,6 +315,65 @@ class TestAbsentClientsTerminateDaemon:
         clock.now += 200  # t=1400; without reset, grace would have expired
         assert wd.check_once() is Decision.WAIT_GRACE
         assert exits == []
+
+
+class TestAZombieIsNotARunningProcess:
+    """Validates REQ-o00074-D, REQ-o00074-E and REQ-o00076-E: a process that
+    has exited but has not been collected by its parent is not running. Every
+    question about whether a client or a daemon still exists reads it as gone:
+    a recorded client, a declared client handle, and the state record clients
+    use to locate a daemon.
+    """
+
+    # Verifies: REQ-o00074-E
+    def test_REQ_o00074_E_pid_alive_reports_an_unreaped_exit_as_gone(self, unreaped_child):
+        assert _proc_state(unreaped_child) == "Z"
+        assert pid_alive(unreaped_child) is False
+
+    # Verifies: REQ-o00074-E
+    def test_REQ_o00074_E_watchdog_reads_a_zombie_client_as_gone(self, unreaped_child, capsys):
+        """The watchdog's own liveness source, not a fake one: a daemon whose
+        only recorded client is a zombie has no client and terminates."""
+        exits: list[str] = []
+        wd = ClientWatchdog(
+            client_pid=unreaped_child,
+            pending_fn=lambda: (0, None),
+            interval_seconds=0.01,
+            exit_fn=lambda: exits.append("exit"),
+            clock=_Clock(),
+            stop_fn=_ok_stop,
+        )
+        assert wd.check_once() is Decision.EXIT_CLEAN
+        assert exits == ["exit"]
+        assert "shutting down" in capsys.readouterr().err
+
+    # Verifies: REQ-o00074-D
+    def test_REQ_o00074_D_declared_zombie_pid_is_unusable(self, unreaped_child, monkeypatch):
+        """A declared client handle naming a zombie names no client: binding
+        the daemon to it would reap the daemon at its first check."""
+        from elspais.mcp import daemon
+
+        monkeypatch.setenv("ELSPAIS_CLIENT_PID", str(unreaped_child))
+
+        assert daemon._declared_client_pid() == daemon._UNUSABLE
+        with patch(
+            "elspais.mcp.daemon._iter_proc_ancestors",
+            side_effect=AssertionError("must not fall through to the claude-ancestor rung"),
+        ):
+            monkeypatch.setenv("CLAUDECODE", "1")
+            assert daemon.resolve_client_pid() is None
+
+    # Verifies: REQ-o00076-E
+    def test_REQ_o00076_E_record_naming_a_zombie_is_dropped(self, unreaped_child, tmp_path):
+        """A record naming a process that is not running describes nothing a
+        client can reach, so it is removed rather than returned."""
+        from elspais.mcp import daemon
+
+        record = daemon.write_daemon_json(tmp_path, pid=unreaped_child, port=4321)
+        assert record.exists()
+
+        assert daemon.get_daemon_info(tmp_path) is None
+        assert not record.exists(), "the record naming a zombie was kept"
 
 
 class TestAdoptingClientsJoinTheRecordedSet:

@@ -99,9 +99,9 @@ I. <RETIRED> named classes that do not exist; source-file reference matching der
 
 J. <RETIRED> named classes that do not exist; test-file reference matching derives from the identifier grammar authority.
 
-K. <RETIRED> a result record is matched to its test by recorded identity, not by reading requirement references out of a reported test name.
+K. <RETIRED> a *Result Record* is matched to its test by recorded identity, not by reading requirement references out of a reported test name.
 
-L. <RETIRED> a result record is matched to its test by recorded identity, not by reading requirement references out of a reported test name.
+L. <RETIRED> a *Result Record* is matched to its test by recorded identity, not by reading requirement references out of a reported test name.
 
 ### Rationale
 
@@ -109,6 +109,8 @@ Different projects use different ID conventions, comment styles, and directory s
 
 ### Changelog
 
+- 2026-10-02 | dea1ce9b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: mark the Defined Term Result Record in retired K and L
 - 2026-08-24 | edbd5d9a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | f0808bb9 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-10 | 268cdb9f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -120,7 +122,7 @@ Different projects use different ID conventions, comment styles, and directory s
 - 2026-05-11 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 89956cd7 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Unified Reference Configuration* | **Hash**: edbd5d9a
+*End* *Unified Reference Configuration* | **Hash**: dea1ce9b
 ---
 
 ## REQ-d00084: Trace Command
@@ -306,7 +308,7 @@ D and E separate two questions that are easy to merge. D is about coverage — n
 
 F concretizes REQ-p00019-J and -K in the direction those assertions do not reach. They oblige a description to be true of every finding it covers and a finding to be reported once; F obliges the converse, that a name not be reused for a second condition. Two conditions under one name make a count uninterpretable in the same way double-reporting does, and the reader has no way to see it.
 
-G concretizes REQ-p00019-H. Suppression is legitimate; silent suppression is not, and the difference is a record at the point the decision is made. Without it, a condition detected and dropped is indistinguishable from a condition never detected, and the code that drops it reads as if nothing were being decided.
+G concretizes REQ-p00019-H. Suppression is legitimate; silent suppression is not, and the difference is a note made at the point of the decision. Without it, a condition detected and dropped is indistinguishable from a condition never detected, and the code that drops it reads as if nothing were being decided.
 
 H and I govern a report narrowed to the findings a reader asked for, by severity, by category, by the code a finding carries or by where it is located. A verdict is what the run found, not what the reader chose to look at; taken over the surviving findings instead, a narrowing would become a way to pass a run that failed, and the narrower the question the healthier the answer. I is the disclosure REQ-p00084-D asks of a scoped report, reached by another route: a report holding fewer findings than the run produced is indistinguishable, from the output alone, from a run that found fewer. Naming the narrowing and the extent of what it withheld separates the two without listing the withheld findings, which would undo the narrowing the reader asked for. G is the same principle where the tool rather than the reader decides.
 
@@ -316,6 +318,8 @@ D and E are where a finding's severity is settled, for every finding the tool pr
 
 ### Changelog
 
+- 2026-10-02 | bedec247 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: state the Rationale of G without the word record
 - 2026-09-12 | bedec247 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: govern narrowing a report to selected findings — the verdict stays the run's, and the narrowing and the extent of what it withheld are disclosed
 - 2026-08-24 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-66: Initial authoring — a finding carries its location, its remedy and one severity decided in one place, and reads the same in every format
@@ -603,7 +607,7 @@ D. When no UAT results CSV file exists, the uat.results check SHALL report as sk
 
 ### Assertions
 
-A. The system SHALL execute each entry in `[[scanning.test.targets]]` in declaration order when invoked with `elspais checks --run-tests`, resolving each entry's `cwd` relative to the repository root and rejecting any `cwd` that resolves outside the repository root.
+A. <RETIRED> executed every test target in declaration order. REQ-d00249-L+M govern the working directory of a test target, and REQ-d00314 governs the order in which test targets run.
 
 B. The system SHALL stream runner stdout and stderr live to the invoking terminal, emit a per-runner banner before invocation, and a tally line with elapsed seconds and the exit code after invocation.
 
@@ -624,6 +628,12 @@ I. A run that evaluates no check SHALL select its targets by the same target and
 J. A run that evaluates no check SHALL return a non-zero exit code if any target it executed failed, and 0 only if every target it executed succeeded.
 
 K. A run that evaluates no check SHALL refuse, before it executes any target, a selection that holds a target whose results it would not record.
+
+L. The system SHALL run the command of a test target in the working directory of that target, resolved relative to the repository root.
+
+M. If the working directory of a test target resolves outside the repository root, then the system SHALL refuse to run the command of that target.
+
+N. A run that executes targets SHALL execute a federation member's target only where the selection names that member's namespace and the target, and SHALL execute it with that member's configuration, repository root and output area.
 
 ### Rationale
 
@@ -651,8 +661,16 @@ no results artifact, leaves no result for a later run to read. Such a
 run would succeed and leave the gate with nothing, so it is refused
 before any time is spent.
 
+L and M confine a target's command to the repository it belongs to. Which targets run, in which order and at the same time as which others is REQ-d00314.
+
+N keeps a run inside the repository that asked for it unless the reader names another member. Running a member's target executes a command that the member's configuration declares, so the reader names it explicitly.
+
 ### Changelog
 
+- 2026-10-03 | 9e2255c3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a run executes a federation member's target only where the selection names it (N)
+- 2026-10-02 | 3a252869 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-138: the order of test target runs moves to REQ-d00314; the working directory of a target is L and M (A retired)
 - 2026-10-02 | eaae2588 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-125: test targets can be executed and their results recorded without evaluating checks (H, I, J, K)
 - 2026-10-01 | fcac603a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -663,7 +681,7 @@ before any time is spent.
 - 2026-09-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: point the no-runners error at the document carrying target configuration examples (F)
 - 2026-09-12 | 784f8350 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Configured test runner execution* | **Hash**: eaae2588
+*End* *Configured test runner execution* | **Hash**: 9e2255c3
 
 ## REQ-d00259: Requirement Format Reference Command
 
@@ -912,7 +930,7 @@ D is what makes C usable, and it takes the opposite disposition from REQ-d00282-
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-p00005-C+E
 
-Registering an associate writes to a machine-local configuration file, often from a script, so the report the command makes is the only record of what it did. This requirement covers what a registration run states, what it does when the entry it would write already exists, and which conditions it refuses at.
+Registering an associate writes to a machine-local configuration file, often from a script, so the report the command makes is the only account of what it did. This requirement covers what a registration run states, what it does when the entry it would write already exists, and which conditions it refuses at.
 
 ### Assertions
 
@@ -959,6 +977,7 @@ L and M keep a declaration the one record of its associate. A declaration that a
 - 2026-10-02 | 61203e49 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-02 | 982964e6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-02 | 3c6593b6 | - | Michael Lewis (<michael@anspar.org>) | J and K added: a registration supplies the path an expected associate awaits
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: state the scope without the word record
 - 2026-09-12 | 008983e5 | - | Michael Lewis (<michael@anspar.org>) | Active; G and H narrowed to the namespace, the one identity
 
 *End* *Associate Registration Outcome* | **Hash**: 61203e49

@@ -16,6 +16,8 @@ REPORT PRESETS (--report):
 - minimal: ID, Title, Status only (quick overview)
 - standard: ID, Title, Level, Status, Implements (default)
 - full: All fields including Body, Assertions, Hash, Code/Test refs
+- evidence: standard's values, with each assertion's code and tests, and
+  each test's outcome
 
 INTERACTIVE VIEW (--view):
 - Uses elspais.html.HTMLGenerator
@@ -145,6 +147,29 @@ REPORT_PRESETS = {
             "code_tested",
             "lcov_tested",
         ],
+    ),
+    # Implements: REQ-d00322-F+G
+    # The report an Evidence Snapshot holds: the standard values, with each
+    # assertion's implementing code and verifying tests listed beneath its
+    # requirement, every test with its outcome.
+    "evidence": ReportPreset(
+        name="evidence",
+        values=[
+            "id",
+            "title",
+            "level",
+            "status",
+            "implemented",
+            "tested",
+            "verified",
+            "uat_coverage",
+            "uat_verified",
+            "code_tested",
+            "lcov_tested",
+        ],
+        include_assertions=True,
+        include_code_refs=True,
+        include_test_refs=True,
     ),
 }
 
@@ -438,7 +463,7 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         # Implements: REQ-d00254-J, REQ-d00282-M
         # Whether this requirement's verified figure was TAKEN AT ALL, decided
         # before any of it is recorded. "Not run" (REQ-d00254-J) means the
-        # referenced TEST nodes have zero RESULT records in a selective run --
+        # referenced TEST nodes have zero result records in a selective run --
         # the target was skipped and nothing was seeded. Keyed on RESULT
         # existence, not on "no pass/fail signal": results can exist yet
         # contribute no verified signal (all skipped, say), and those are a
@@ -719,6 +744,63 @@ def _scoped_requirements(graph: FederatedGraph, scope_ids: frozenset[str] | None
             yield node
 
 
+# Implements: REQ-d00322-G
+def _evidence_block(node) -> Iterator[str]:
+    """Each assertion's implementing code and verifying tests, with outcomes.
+
+    A code or test location is its repo-relative file and line, because a
+    `code:` or `test:` id holds an absolute path that differs per machine.
+    Every list is sorted, so the block depends on the graph alone.
+    """
+    from elspais.graph.aggregation import iter_assertion_coverage, location_of
+    from elspais.graph.relations import EdgeKind
+
+    code: dict[str, set[str]] = {}
+    for code_node, labels in iter_assertion_coverage(
+        node, NodeKind.CODE, edge_kinds={EdgeKind.IMPLEMENTS}
+    ):
+        for label in labels:
+            code.setdefault(label, set()).add(f"- {location_of(code_node)}")
+    tests: dict[str, set[str]] = {}
+    for test_node, labels in iter_assertion_coverage(node, NodeKind.TEST):
+        # A test is named as its results name it, and a test with several
+        # names (a parametrized one) is listed once per name.
+        outcomes: dict[str, list[str]] = {}
+        for child in test_node.iter_children():
+            if child.kind == NodeKind.RESULT:
+                name = str(child.get_field("name") or "")
+                outcomes.setdefault(name, []).append(str(child.get_field("status") or "unknown"))
+        place = location_of(test_node)
+        entries = [
+            f"- {place} {name} -- {', '.join(sorted(statuses))}"
+            for name, statuses in outcomes.items()
+        ] or [f"- {place} -- awaiting a result"]
+        for label in labels:
+            tests.setdefault(label, set()).update(entries)
+    labels = sorted(
+        str(child.get_field("label", ""))
+        for child in node.iter_children()
+        if child.kind == NodeKind.ASSERTION
+    )
+    if not labels:
+        return
+    yield ""
+    yield "<details><summary>Evidence</summary>"
+    yield ""
+    for label in labels:
+        yield f"**{label}**"
+        yield ""
+        yield "Code:"
+        yield ""
+        yield from sorted(code.get(label, ())) or ["- none"]
+        yield ""
+        yield "Tests:"
+        yield ""
+        yield from sorted(tests.get(label, ())) or ["- none"]
+        yield ""
+    yield "</details>"
+
+
 # Implements: REQ-p00084-C+D
 def format_markdown(
     graph: FederatedGraph,
@@ -750,20 +832,29 @@ def format_markdown(
     yield "|" + "|".join(["----"] * len(headers)) + "|"
 
     # Implements: REQ-d00254-I+J
-    # Track whether any rendered row actually produced a `(baseline)`/`—`
-    # marker in its verified cell, so the legend is only emitted when it's
-    # relevant (and full-run output stays byte-identical to before).
-    has_carry_marker = False
+    # Track which marker a rendered row actually produced in its verified
+    # cell, so the legend explains only the markers a reader can see (and a
+    # full run's output carries no legend at all).
+    has_baseline_marker = False
+    has_not_run_marker = False
     # Implements: REQ-d00258-U
     has_tested_breakdown = False
+
+    # Implements: REQ-d00322-G
+    # A detail block written between two rows ends the table there, so every
+    # requirement's detail is held back and written after the table, in the
+    # order of its rows.
+    details: list[tuple[str, list[str]]] = []
 
     for node in _scoped_requirements(graph, scope_ids):
         data = _get_node_data(node, graph, assertion_labels=preset.include_assertions)
 
         if "verified" in cols:
             verified_cell = data.get("verified", "")
-            if "(baseline)" in verified_cell or "—" in verified_cell:
-                has_carry_marker = True
+            if "(baseline)" in verified_cell:
+                has_baseline_marker = True
+            if "—" in verified_cell:
+                has_not_run_marker = True
         # Implements: REQ-d00258-U
         # The breakdown is already inside the Tested cell (one cell in every
         # format); this only decides whether the key explaining it is worth
@@ -775,42 +866,24 @@ def format_markdown(
         row_values = _format_row(data, cols)
         yield "| " + " | ".join(row_values) + " |"
 
-        # Detail rows (controlled by flags, independent of the values stated)
-        if preset.include_body and data["body"]:
-            yield ""
-            yield "<details><summary>Body</summary>"
-            yield ""
-            yield data["body"]
-            yield ""
-            yield "</details>"
-
-        if preset.include_test_refs and data["test_refs_grouped"]:
-            total = len(data["test_refs"])
-            yield ""
-            yield f"<details><summary>Test Refs ({total})</summary>"
-            yield ""
-            grouped = data["test_refs_grouped"]
-            # Whole-requirement tests first, then assertion labels sorted
-            for key in ["*"] + sorted(k for k in grouped if k != "*"):
-                if key not in grouped:
-                    continue
-                refs = grouped[key]
-                label = "Whole-requirement" if key == "*" else key
-                yield f"**{label}** ({len(refs)}):"
-                for ref in refs:
-                    yield f"- `{ref}`"
-                yield ""
-            yield "</details>"
+        # Detail blocks (controlled by flags, independent of the values stated)
+        block = list(_detail_blocks(node, data, preset))
+        if block:
+            details.append((f"{node.id}: {node.get_label() or ''}", block))
 
     # Implements: REQ-d00254-I+J
-    # Only surface the legend when a row actually used a marker it explains.
-    if has_carry_marker:
-        yield ""
-        yield (
-            "> Legend: `(baseline)` = carried from a prior run (not re-run this PR, "
-            "verdict still honored); `—` = target not run and no baseline "
-            "(skipped, not a regression)."
+    # Only surface the legend when a row actually used a marker it explains,
+    # and only the clauses for the markers used.
+    legend = []
+    if has_baseline_marker:
+        legend.append(
+            "`(baseline)` = carried from a prior run (not re-run this PR, verdict still honored)"
         )
+    if has_not_run_marker:
+        legend.append("`—` = target not run and no baseline (skipped, not a regression)")
+    if legend:
+        yield ""
+        yield "> Legend: " + "; ".join(legend) + "."
 
     # Implements: REQ-d00258-U
     # The breakdown is unreadable without its key, so the key appears whenever
@@ -822,6 +895,48 @@ def format_markdown(
             "(declared, and no verdict came back). The three account for every "
             "tested assertion."
         )
+
+    # Implements: REQ-d00322-G
+    # One section per requirement with detail, headed by its id and title so
+    # a reader finds the requirement a row names.
+    if details:
+        yield ""
+        yield "## Evidence" if preset.include_code_refs else "## Details"
+        for heading, block in details:
+            yield ""
+            yield f"### {heading}"
+            yield from block
+
+
+def _detail_blocks(node, data: dict, preset: ReportPreset) -> Iterator[str]:
+    """The detail one requirement carries under *preset*, each block opened by a blank line."""
+    if preset.include_body and data["body"]:
+        yield ""
+        yield "<details><summary>Body</summary>"
+        yield ""
+        yield data["body"]
+        yield ""
+        yield "</details>"
+
+    if preset.include_code_refs:
+        yield from _evidence_block(node)
+    elif preset.include_test_refs and data["test_refs_grouped"]:
+        total = len(data["test_refs"])
+        yield ""
+        yield f"<details><summary>Test Refs ({total})</summary>"
+        yield ""
+        grouped = data["test_refs_grouped"]
+        # Whole-requirement tests first, then assertion labels sorted
+        for key in ["*"] + sorted(k for k in grouped if k != "*"):
+            if key not in grouped:
+                continue
+            refs = grouped[key]
+            label = "Whole-requirement" if key == "*" else key
+            yield f"**{label}** ({len(refs)}):"
+            for ref in refs:
+                yield f"- `{ref}`"
+            yield ""
+        yield "</details>"
 
 
 # Implements: REQ-p00084-C+D
@@ -1117,12 +1232,19 @@ def preset_from_args(args: argparse.Namespace) -> ReportPreset:
     if preset_name not in REPORT_PRESETS:
         available = ", ".join(REPORT_PRESETS.keys())
         raise ValueError(f"Unknown preset '{preset_name}'. Available presets: {available}")
+    # A preset's own detail flags hold; the invocation's flags add to them.
+    named_preset = REPORT_PRESETS[preset_name]
     return ReportPreset(
         name=preset_name,
-        values=list(REPORT_PRESETS[preset_name].values),
-        include_body=verbose or getattr(args, "body", False),
-        include_assertions=verbose or getattr(args, "show_assertions", False),
-        include_test_refs=verbose or getattr(args, "show_tests", False),
+        values=list(named_preset.values),
+        include_body=named_preset.include_body or verbose or getattr(args, "body", False),
+        include_assertions=named_preset.include_assertions
+        or verbose
+        or getattr(args, "show_assertions", False),
+        include_code_refs=named_preset.include_code_refs,
+        include_test_refs=named_preset.include_test_refs
+        or verbose
+        or getattr(args, "show_tests", False),
     )
 
 

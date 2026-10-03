@@ -8,6 +8,7 @@ name = "named-reqs-fixture"
 namespace = "REQ"
 
 [levels.req]
+letter = "r"
 rank = 1
 implements = ["req"]
 

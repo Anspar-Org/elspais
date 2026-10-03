@@ -738,10 +738,22 @@ class TestMcpInstallE2E:
     corrupting the parent pytest process's file descriptors (the claude
     binary writes directly to /dev/tty, which disrupts pytest's output
     capture and causes all subsequent test output to vanish).
+
+    The subprocess has a home and a claude configuration directory of its
+    own, so the user-scope registration it adds and removes is in a
+    configuration nobody else reads, never the developer's.
     """
 
     # Verifies: REQ-d00214-A
-    def test_e2e_install_and_uninstall(self):
+    def test_e2e_install_and_uninstall(self, tmp_path):
+        home = tmp_path / "home"
+        home.mkdir()
+        env = {
+            **os.environ,
+            "HOME": str(home),
+            "CLAUDE_CONFIG_DIR": str(home / ".claude"),
+            "XDG_CONFIG_HOME": str(home / ".config"),
+        }
         result = subprocess.run(
             [
                 shutil.which("python") or "python",
@@ -752,6 +764,7 @@ class TestMcpInstallE2E:
             text=True,
             timeout=30,
             start_new_session=True,
+            env=env,
         )
         assert result.returncode == 0, (
             f"MCP install/uninstall e2e failed:\n{result.stdout}\n{result.stderr}"

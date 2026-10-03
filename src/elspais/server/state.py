@@ -214,9 +214,9 @@ class AppState:
 
         This is registered as a hook rather than performed by the rebuild
         routine so that it happens only for the process that actually owns the
-        record — the one serving the graph the daemon file describes. A
+        daemon record — the one serving the graph the daemon file describes. A
         different process rebuilding its own private graph in the same
-        repository must not stamp this record: a fingerprint that is falsely
+        repository must not stamp this daemon record: a fingerprint that is falsely
         current suppresses a restart that is needed, which is worse than the
         needless restart a stale one costs.
         """

@@ -127,6 +127,10 @@ async function mutate(endpoint, payload) {
         rememberVersion(guardedId, data.version);
         showToast('Change applied', 'success');
         await refreshDirtyCount();
+    } else if (data && data.code === 'changelog_message_required') {
+        // Not a failure: the save needs the reader's reason, and the caller
+        // asks for it (saveWithReason). A toast here would read as an error.
+        return data;
     } else if (data) {
         forgetVersion(guardedId);
         showToast(data.error || 'Mutation failed', 'error');
@@ -1562,10 +1566,82 @@ function reportChangesBeyondEdits(result) {
     overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
 }
 
+{# Implements: REQ-d00325-D #}
+// Ask the reader why the listed Active requirements changed. Resolves to the
+// reason entered, or null when the reader cancels.
+function askChangelogReason(requirementIds) {
+    return new Promise(function(resolve) {
+        var old = document.getElementById('changelog-reason-overlay');
+        if (old) old.remove();
+        var items = (requirementIds || []).map(function(id) {
+            return '<li class="modal-file">' + escapeHtml(id) + '</li>';
+        }).join('');
+        var overlay = document.createElement('div');
+        overlay.id = 'changelog-reason-overlay';
+        overlay.className = 'modal-overlay visible';
+        overlay.innerHTML =
+            '<div class="modal-dialog">' +
+                '<div class="modal-title">Why did these requirements change?</div>' +
+                '<p>These Active requirements changed. Each gets a changelog entry ' +
+                'that records the reason you enter:</p>' +
+                '<ul class="modal-file-list" id="changelog-reason-ids">' + items + '</ul>' +
+                '<label class="modal-label" for="changelog-reason-input">Reason:</label>' +
+                '<textarea class="modal-input" id="changelog-reason-input" rows="3"></textarea>' +
+                '<div class="modal-error hidden" id="changelog-reason-error"></div>' +
+                '<div class="modal-actions">' +
+                    '<button class="btn" id="changelog-reason-cancel">Cancel</button>' +
+                    '<button class="btn btn-primary" id="changelog-reason-submit">Save with this reason</button>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(overlay);
+
+        var input = document.getElementById('changelog-reason-input');
+        var errorEl = document.getElementById('changelog-reason-error');
+        input.focus();
+
+        function finish(value) { overlay.remove(); resolve(value); }
+        function submit() {
+            var reason = input.value.trim();
+            if (!reason) {
+                errorEl.textContent = 'A reason is required to save these changes';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+            finish(reason);
+        }
+        document.getElementById('changelog-reason-submit').onclick = submit;
+        document.getElementById('changelog-reason-cancel').onclick = function() { finish(null); };
+        overlay.addEventListener('click', function(e) { if (e.target === overlay) finish(null); });
+        overlay.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') finish(null);
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submit();
+        });
+    });
+}
+
+{# Implements: REQ-d00325-D #}
+// Save, asking the reader for a changelog reason whenever the server says the
+// save needs one. The server alone decides that, so nothing is asked when no
+// Active requirement changed. A cancelled prompt saves nothing.
+async function saveWithReason() {
+    var payload = {};
+    for (;;) {
+        showLoadingOverlay('Saving...');
+        var result = await mutate('/api/save', payload);
+        hideLoadingOverlay();
+        if (!result || result.code !== 'changelog_message_required') return result;
+        var reason = await askChangelogReason(result.requirement_ids);
+        if (reason === null) return { success: false, cancelled: true };
+        payload = { message: reason };
+    }
+}
+
 async function doSave() {
-    showLoadingOverlay('Saving...');
-    const result = await mutate('/api/save', {});
-    hideLoadingOverlay();
+    const result = await saveWithReason();
+    if (result && result.cancelled) {
+        showToast('Not saved: your changes are still pending', 'info');
+        return;
+    }
     if (result && result.success) {
         showToast('Saved to disk', 'success');
         reportRebuildAfterSave(result);
@@ -2061,7 +2137,11 @@ function showCheckpointModal() {
         if (!confirm('You have ' + editState.mutationCount + ' unsaved changes. Save before checkpointing?')) {
             return;
         }
-        mutate('/api/save', {}).then(function(saveResult) {
+        saveWithReason().then(function(saveResult) {
+            if (saveResult && saveResult.cancelled) {
+                showToast('Not saved: your changes are still pending', 'info');
+                return;
+            }
             if (saveResult && saveResult.success !== false) {
                 // The checkpoint commits what is on disk, which the save
                 // wrote, so a failed rebuild is reported and not a reason

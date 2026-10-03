@@ -217,11 +217,13 @@ N. The viewer SHALL construct requirement cards and journey cards through a sing
 
 O. Where a card capability — a coverage indicator, a source link, or a body section — is semantically meaningful for more than one card kind, the viewer SHALL present that capability uniformly across those kinds' cards.
 
-P. Where a requirement's content yields no hash under the configured hash mode, `REQUIREMENT` render SHALL emit in the `*End*` marker's hash position a reserved value that no hash computation can produce, marking the content as unhashable rather than as awaiting a hash.
+P. Where a requirement's content yields no hash, `REQUIREMENT` render SHALL emit in the `*End*` marker's hash position a reserved value that no hash computation can produce, marking the content as unhashable rather than as awaiting a hash.
 
 Q. A file type that declares no renderer SHALL be read-only, and a request for the content of a file of that type SHALL be refused naming the type.
 
 R. A walk over FILE nodes SHALL act only on the file types it names.
+
+S. A requirement's content hash SHALL cover the text of its *Assertions* and no other part of the requirement.
 
 ### Rationale
 
@@ -233,12 +235,16 @@ The render contract is elspais's to own: downstream document pipelines that need
 
 Assertions N and O extend the one-canonical-render-per-object principle to the viewer's card presentation. Duplicated per-kind card builders have already produced capability divergence in practice — journey cards lacked the UAT-coverage badge that requirement cards carried — which is the failure mode a single shared path prevents. N forbids the duplicated structure; O states the observable consequence, capability parity: a capability that makes sense for both kinds appears on both, and only genuinely kind-semantic differences (an actor/goal section is meaningful only on a journey card) may distinguish them. How the shared path is decomposed internally is mechanism and deliberately unspecified.
 
-A requirement carrying no *Assertion* offers normalized-text hashing nothing to consume, so its hash position cannot hold a computed value. Leaving that position empty would make such a requirement indistinguishable from one whose hash has never been written, and the two states call for different responses: the first is complete and needs nothing, the second is work an author still owes. Assertion P therefore requires a reserved value to occupy the position. Which token serves as that value is mechanism; what the assertion fixes is that it cannot collide with a computed hash, so that reading an *End* marker answers "unhashable" and "unhashed" differently. Whether format validation accepts the reserved value as discharging a requirement for a hash is the concern of the requirements governing validation, not of this render contract.
+A requirement carrying no *Assertion* offers the content hash nothing to consume, so its hash position cannot hold a computed value. Leaving that position empty would make such a requirement indistinguishable from one whose hash has never been written, and the two states call for different responses: the first is complete and needs nothing, the second is work an author still owes. Assertion P therefore requires a reserved value to occupy the position. Which token serves as that value is mechanism; what the assertion fixes is that it cannot collide with a computed hash, so that reading an *End* marker answers "unhashable" and "unhashed" differently. Whether format validation accepts the reserved value as discharging a requirement for a hash is the concern of the requirements governing validation, not of this render contract.
+
+Assertion S fixes what the hash is a record of. The *Assertions* are the requirement's obligations, so a change that moves the hash is a change to what the requirement obliges; prose, rationale and changelog can be edited freely without flagging anything downstream. One rule for what the digest covers is also what lets the tool decide, for any edit, whether it is material, which the save and the fix operation both depend on.
 
 Deriving the version from rendered output rather than from a counter means a rebuild that produces identical content produces identical versions, so refreshing the graph does not invalidate every outstanding version held by a client. It also makes the version content-addressed: if a node changes and then changes back, a version captured before the round trip still matches, and correctly so — the state is identical to what its holder observed. A file's version excludes its children's content so that editing prose inside one requirement does not invalidate a pending file-level operation.
 
 ### Changelog
 
+- 2026-10-03 | 21b9a92c | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-03 | - | - | Michael Lewis (<michael@anspar.org>) | Author S (the hash covers the Assertions alone); P no longer names a hash mode, there being one
 - 2026-09-20 | c81d018a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-09-20 | - | - | Michael Lewis (<michael@anspar.org>) | State rendering as the renderer a file type declares; author Q (a type declaring none is read-only) and R (a walk names the types it acts on)
 - 2026-08-15 | 4bd2b48b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -257,7 +263,7 @@ Deriving the version from rendered output rather than from a counter means a reb
 - 2026-05-11 | c004c62e | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-03-30 | c004c62e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *Render Protocol for Graph Nodes* | **Hash**: c81d018a
+*End* *Render Protocol for Graph Nodes* | **Hash**: 21b9a92c
 
 ## REQ-d00273: Requirement Metadata Block
 
@@ -347,6 +353,48 @@ Canonical form applies whenever elspais writes a requirement, and a change that 
 
 *End* *Render-Based Save Operation* | **Hash**: b7f05ffb
 ---
+
+## REQ-d00325: Changelog Reason for a Saved Change
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00004-N
+
+Where a project records a changelog for each Active requirement, a save that changes an Active requirement records why, in the words of whoever asked for the save.
+
+### Assertions
+
+A. Where changelog tracking is enabled, when a save changes a requirement whose status is Active before or after the save, the save SHALL add to the changelog of that requirement one entry that carries the reason supplied with the save and the hash that the requirement has after the save.
+
+B. If a save that a client requests changes a requirement whose status is Active before or after the save, and the client supplies no reason or a blank reason, then the save SHALL leave every file unwritten and every pending change in hand.
+
+C. A save refused for want of a reason SHALL name each requirement that needs the reason and the way to supply the reason.
+
+D. When a save from the viewer needs a reason, the viewer SHALL complete the save only with a reason that the reader who saves enters.
+
+E. A save that the tool performs when no client requested it SHALL record as its reason that no client requested the save, together with the condition that caused the save.
+
+F. A save requested through the viewer and a save requested through the agent interface SHALL need a reason under the same conditions and give the same refusal where the reason is absent.
+
+G. Where changelog tracking is enabled, when the edit command changes a requirement whose status is Active before or after the edit, the command SHALL add to the changelog of that requirement one entry that carries the reason given with the command and the hash that the requirement has after the edit.
+
+H. If the edit command would change a requirement whose status is Active before or after the edit, and no reason or a blank reason is given for that change, then the command SHALL leave every file unchanged and name each such requirement and the way to supply the reason.
+
+### Rationale
+
+A changelog entry answers why an Active requirement changed. Only the person who made the change knows why, so a save asks that person and refuses to guess. The tool cannot ask when it saves on its own, for example when a server stops while it holds changes, so it records that nobody asked for the save and what caused it.
+
+A change counts whatever part of the requirement it reaches: its title, status, identifier, assertions, sections or references. A change from Active to another status, and a retirement, are changes to an Active requirement, so they need a reason too.
+
+The edit command writes its change to the file at once rather than through a save, so it asks for the reason itself, under the same rule.
+
+---
+
+### Changelog
+
+- 2026-10-03 | 4ebffc32 | - | Michael Lewis (<michael@anspar.org>) | Require a reason for an edit command change to an Active requirement
+- 2026-10-03 | 1e1d0185 | - | Michael Lewis (<michael@anspar.org>) | State each assertion of the saved-change reason with one SHALL
+- 2026-10-03 | 1cc0ddbf | - | Michael Lewis (<michael@anspar.org>) | Require a reason for a saved change to an Active requirement
+
+*End* *Changelog Reason for a Saved Change* | **Hash**: 4ebffc32
 
 ## REQ-d00134: Mutation Round-Trip Fidelity
 

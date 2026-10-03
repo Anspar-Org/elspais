@@ -176,7 +176,7 @@ def _scan_and_report_unfixable(graph) -> int:  # noqa: ANN001
 
 
 # Implements: REQ-p00004-A, REQ-p00002-C
-def _detect_fixable(node, hash_mode: str, changelog_enforce: bool) -> list[str]:  # noqa: ANN001
+def _detect_fixable(node, changelog_enforce: bool) -> list[str]:  # noqa: ANN001
     """Detect all fixable conditions on a requirement node.
 
     Returns a list of reason strings describing what needs fixing.
@@ -204,7 +204,7 @@ def _detect_fixable(node, hash_mode: str, changelog_enforce: bool) -> list[str]:
     #    footing as one whose hash went stale. Content with nothing to hash
     #    acquires the reserved sentinel instead (REQ-d00131-P).
     stored = node.hash or ""
-    computed = compute_hash_for_node(node, hash_mode)
+    computed = compute_hash_for_node(node)
     effective = computed or "N/A"
     if stored != effective:
         reasons.append("hash_mismatch")
@@ -281,11 +281,13 @@ def _make_changelog_entry(
     }
 
 
+# Implements: REQ-p00004-N
 def _add_autofix_changelog_entries(
     graph,  # noqa: ANN001 — FederatedGraph
     node_reasons: list[tuple[Any, list[str]]],
     config: dict[str, Any],
     author: dict[str, str],
+    message: str | None = None,
 ) -> int:
     """Add changelog entries for auto-fixed requirements.
 
@@ -298,7 +300,9 @@ def _add_autofix_changelog_entries(
     reflected in the graph builder's parse-time flags.
 
     The caller is responsible for resolving ``author`` up-front (so a
-    missing identity aborts before any file write).
+    missing identity aborts before any file write). ``message`` is the
+    operator's reason; where given it is the entry's reason, since only the
+    operator knows why the requirement changed.
 
     Returns the number of entries added.
     """
@@ -308,7 +312,6 @@ def _add_autofix_changelog_entries(
 
     from elspais.graph.render import compute_hash_for_node
 
-    hash_mode = getattr(graph, "hash_mode", "full-text")
     added = 0
 
     for node, reasons in node_reasons:
@@ -331,9 +334,9 @@ def _add_autofix_changelog_entries(
         parts = [_REASON_LABELS.get(r, r) for r in non_drift if r != "stale_hash"]
         if not parts:
             parts = ["update hash"]
-        reason = "Auto-fix: " + ", ".join(parts)
+        reason = message or "Auto-fix: " + ", ".join(parts)
 
-        computed = compute_hash_for_node(node, hash_mode) or "N/A"
+        computed = compute_hash_for_node(node) or "N/A"
         entry = _make_changelog_entry(computed, reason, author)
         graph.add_changelog_entry(node.id, entry)
         added += 1
@@ -341,24 +344,27 @@ def _add_autofix_changelog_entries(
     return added
 
 
+# Implements: REQ-p00004-N
 def _add_drift_changelog_entries(
     graph,  # noqa: ANN001 — FederatedGraph
     drift_nodes: list,
     config: dict[str, Any],
     author: dict[str, str],
+    message: str | None = None,
 ) -> int:
     """Add changelog entries for requirements with stale changelog hashes.
 
     When a requirement's most recent changelog hash doesn't match the
     stored End marker hash (e.g. after a format migration), adds a new
     changelog entry with the current hash.  The caller resolves
-    ``author`` up-front. Returns the count added.
+    ``author`` up-front. ``message``, where given, is the entry's reason.
+    Returns the count added.
     """
     del config  # author is resolved by caller; signature kept for symmetry
     added = 0
     for node in drift_nodes:
         stored = node.hash or ""
-        entry = _make_changelog_entry(stored, "Auto-fix: sync changelog hash", author)
+        entry = _make_changelog_entry(stored, message or "Auto-fix: sync changelog hash", author)
         graph.add_changelog_entry(node.id, entry)
         # Mark dirty so render_save picks up the file
         node.mark_parse_dirty("changelog_drift")
@@ -409,8 +415,6 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
 
     typed_config = _validate_config(config)
     changelog_enforce = typed_config.changelog.hash_current
-    hash_mode = getattr(graph, "hash_mode", "full-text")
-
     # Detect all fixable issues using the unified detection function.
     # Skip nodes that have unfixable reasons — they will be reported via
     # _scan_and_report_unfixable() and must not be touched by render_save.
@@ -418,7 +422,7 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         if node.get_field("parse_unfixable_reasons"):
             continue
-        reasons = _detect_fixable(node, hash_mode, changelog_enforce)
+        reasons = _detect_fixable(node, changelog_enforce)
         if reasons:
             fixable_nodes.append((node, reasons))
 
@@ -493,7 +497,7 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
             elif r == "hash_mismatch":
                 # Name the value, not just the condition: a dry run is the
                 # author's chance to see what will be written before it is.
-                will_write = compute_hash_for_node(node, hash_mode) or "N/A"
+                will_write = compute_hash_for_node(node) or "N/A"
                 detail = f"hash {node.hash or '(none)'} -> {will_write}"
                 print(line.format(prefix=prefix, node_id=node.id, detail=detail))
             else:
@@ -543,8 +547,9 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
         for r in reasons:
             node.mark_parse_dirty(r)
 
-    _add_autofix_changelog_entries(graph, autofix_items, config, author)
-    _add_drift_changelog_entries(graph, drift_only_nodes, config, author)
+    message = (getattr(args, "message", None) or "").strip() or None
+    _add_autofix_changelog_entries(graph, autofix_items, config, author, message)
+    _add_drift_changelog_entries(graph, drift_only_nodes, config, author, message)
 
     result = render_save(
         graph,
@@ -599,8 +604,6 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     if rc:
         return rc
 
-    hash_mode = getattr(graph, "hash_mode", "full-text")
-
     # Find the target node
     node = None
     for n in graph.nodes_by_kind(NodeKind.REQUIREMENT):
@@ -617,7 +620,7 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
 
     mark_terms_in_hashed_text(graph, [node])
 
-    computed = compute_hash_for_node(node, hash_mode)
+    computed = compute_hash_for_node(node)
     stored = node.hash
 
     _fn = node.file_node()
@@ -753,9 +756,9 @@ def _ensure_changelog_section(
     line_start, _line_end, _parsed = end_marker
 
     block = content[start_pos:line_start]
-    from elspais.graph.parsers.patterns import CHANGELOG_HEADER_PATTERN
+    from elspais.graph.parsers.patterns import CHANGELOG_SECTION_PATTERN
 
-    if CHANGELOG_HEADER_PATTERN.search(block):
+    if CHANGELOG_SECTION_PATTERN.search(block):
         print(f"{req_id} hash is already up to date")
         return 0
 

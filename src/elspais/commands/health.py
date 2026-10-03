@@ -287,9 +287,9 @@ def check_spec_no_duplicates(
 ) -> HealthCheck:
     """Check for cross-file duplicate requirement IDs.
 
-    Reads the build-time collision record from the graph, since by the time
+    Reads the build-time collision list from the graph, since by the time
     this check runs the in-memory node index has already disambiguated
-    subsequent occurrences with synthetic IDs. The collision record preserves
+    subsequent occurrences with synthetic IDs. The collision list preserves
     every source file that defined each canonical ID.
     """
     severity = severity_for("spec.no_duplicates", config)
@@ -2484,6 +2484,8 @@ def check_unmatched_file_pattern(
     if severity == Severity.OFF:
         return skipped_check(check, "A named file pattern that selected nothing")
 
+    import posixpath
+
     from elspais.config import scan_exclusions
     from elspais.graph.file_selection import file_is_skipped
 
@@ -2496,19 +2498,28 @@ def check_unmatched_file_pattern(
         if not isinstance(kind_cfg, dict):
             continue
         patterns = [p for p in (kind_cfg.get("file_patterns") or []) if isinstance(p, str)]
+        directories = [d for d in (kind_cfg.get("directories") or []) if isinstance(d, str)]
         _, skip_files = scan_exclusions(cfg, kind)
         for pattern in patterns:
             # A wildcard means the entry describes a class of files, and some
             # of them being skipped is what a class is for.
             if any(ch in pattern for ch in "*?["):
                 continue
-            if file_is_skipped(pattern, skip_files):
+            # Implements: REQ-d00326-A
+            # A named file sits under a scanned directory, and a skip pattern
+            # is read against the path from the repository root, so the
+            # question is asked of that path.
+            named = [posixpath.normpath(posixpath.join(d, pattern)) for d in directories]
+            excluding = [
+                skip for skip in skip_files if any(file_is_skipped(path, [skip]) for path in named)
+            ]
+            if excluding:
                 findings.append(
                     HealthFinding(
                         message=(
-                            f"[scanning.{kind}] file_patterns names '{pattern}', and a skip "
-                            f"pattern excludes it. The file is not read. Remove it from one "
-                            f"of the two lists."
+                            f"[scanning.{kind}] file_patterns names '{pattern}', and the skip "
+                            f"pattern '{excluding[0]}' excludes it. The file is not read. "
+                            f"Remove it from one of the two lists."
                         ),
                     )
                 )
@@ -3661,8 +3672,8 @@ def check_unscanned_keyword_files(
             "code.unscanned_keyword_file", "Unscanned files carrying a Traceability keyword"
         )
 
-    records = graph.unscanned_keyword_files()
-    if not records:
+    unscanned = graph.unscanned_keyword_files()
+    if not unscanned:
         return HealthCheck(
             name="code.unscanned_keyword_file",
             passed=True,
@@ -3680,17 +3691,17 @@ def check_unscanned_keyword_files(
             file_path=r.path,
             line=r.line,
         )
-        for r in sorted(records, key=lambda r: (r.path, r.line))
+        for r in sorted(unscanned, key=lambda r: (r.path, r.line))
     ]
     return HealthCheck(
         name="code.unscanned_keyword_file",
         passed=False,
         message=(
-            f"{len(records)} file(s) carrying a Traceability keyword were not read by any scan"
+            f"{len(unscanned)} file(s) carrying a Traceability keyword were not read by any scan"
         ),
         category="code",
         severity=severity,
-        details={"count": len(records)},
+        details={"count": len(unscanned)},
         findings=findings,
     )
 
@@ -3777,15 +3788,6 @@ def run_checks(graph: FederatedGraph, config: dict[str, Any] | None = None) -> l
 # =============================================================================
 
 
-def _read_run_meta(config: dict | None) -> dict:
-    """Return test-run metadata defaults.
-
-    The run-metadata sidecar config source was removed in the greenfield
-    target-driven rework; this now always returns the defaults.
-    """
-    return {"deselected_count": 0, "runner": ""}
-
-
 # Implements: REQ-d00275-C
 def _configured_test_targets(graph: FederatedGraph, config: dict | None) -> list[tuple[str, Any]]:
     """``(repo name, target)`` for every federation member configuring one.
@@ -3837,8 +3839,6 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     from elspais.graph import NodeKind
 
     result_nodes = list(graph.nodes_by_kind(NodeKind.RESULT))
-    run_meta = _read_run_meta(config)
-    deselected = run_meta["deselected_count"]
 
     if not result_nodes:
         targets = _configured_test_targets(graph, config)
@@ -3890,12 +3890,11 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
 
     total = passed + failed + skipped
     pass_rate = (passed / total * 100) if total > 0 else 0
-    deselected_suffix = f", {deselected} deselected" if deselected else ""
 
     if failed > 0:
         # Implements: REQ-d00294-F
         # The environment stands beside the result, so several failures of
-        # one test read apart. A finding points at the record that failed
+        # one test read apart. A finding points at the result record that failed
         # where the reporter said where it wrote it, and at the test's own
         # source where it did not.
         findings = []
@@ -3929,7 +3928,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
             passed=False,
             message=(
                 f"Result failures: {failed} of {total} results failed "
-                f"({passed} passed, {skipped} skipped{deselected_suffix}, "
+                f"({passed} passed, {skipped} skipped, "
                 f"{pass_rate:.1f}% pass rate)"
             ),
             category="tests",
@@ -3938,7 +3937,6 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
                 "passed": passed,
                 "failed": failed,
                 "skipped": skipped,
-                "deselected": deselected,
                 "pass_rate": round(pass_rate, 1),
             },
             findings=findings,
@@ -3947,14 +3945,13 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     return HealthCheck(
         name="tests.results",
         passed=True,
-        message=f"All results passing: {passed} passed, {skipped} skipped{deselected_suffix}",
+        message=f"All results passing: {passed} passed, {skipped} skipped",
         category="tests",
         severity="info",
         details={
             "passed": passed,
             "failed": failed,
             "skipped": skipped,
-            "deselected": deselected,
             "pass_rate": round(pass_rate, 1),
         },
     )
@@ -3978,7 +3975,8 @@ def check_test_results_stale(
     if severity == Severity.OFF:
         return skipped_check(
             "tests.results_stale",
-            "Test results whose inputs changed since they ran, or that carry no fingerprint",
+            "Test results whose inputs changed since they ran, that carry no fingerprint, "
+            "or that an Evidence Snapshot of another tree holds",
         )
 
     from elspais.utilities.fingerprint import judge
@@ -3987,6 +3985,17 @@ def check_test_results_stale(
     judged = 0
     for entry in graph.iter_repos():
         member = _validate_config(entry.config)
+        # Implements: REQ-d00322-K+L
+        # A snapshot the build read is judged against the tree of the member
+        # that names it.
+        evidence = member.scanning.test.evidence
+        if evidence and _reads_snapshot(graph, entry.namespace, evidence):
+            judged += 1
+            finding = _snapshot_staleness(
+                entry, evidence, root=entry.namespace == graph.root_repo_namespace
+            )
+            if finding is not None:
+                findings.append(finding)
         for target in member.scanning.test.targets:
             verdict = judge(entry.repo_root, member, target.name)
             # Implements: REQ-d00311-N
@@ -4019,10 +4028,79 @@ def check_test_results_stale(
     return HealthCheck(
         name="tests.results_stale",
         passed=False,
-        message=f"Test results are stale for {len(findings)} target(s)",
+        message=f"Test results are stale: {len(findings)} finding(s)",
         category="tests",
         severity=severity,
         findings=findings,
+    )
+
+
+# Implements: REQ-d00322-K+L
+def _reads_snapshot(graph: FederatedGraph, namespace: str, evidence: str) -> bool:
+    """Whether the member *namespace* read a target from its *Evidence Snapshot*.
+
+    The build holds the snapshot's results file as a node once it reads any
+    target from it, whether or not that target's run produced a result. A
+    snapshot whose selected targets produced none is still the source of
+    those targets, so it is judged too.
+    """
+    from elspais.graph.GraphNode import make_file_id
+
+    results = f"{evidence.strip('/')}/results.jsonl"
+    return graph.find_by_id(make_file_id(namespace, results)) is not None
+
+
+# Implements: REQ-d00322-K+L
+def _snapshot_staleness(entry: Any, evidence: str, *, root: bool) -> HealthFinding | None:
+    """A finding where the member's *Evidence Snapshot* describes another tree.
+
+    The snapshot's tree digest is compared with the digest of the member's
+    own tree. A tree whose digest cannot be computed is reported with the
+    cause, because a snapshot that cannot be judged is not known to be fresh.
+    *root* says whether the member is the invoking repository. A bare
+    command reaches only that repository (REQ-d00249-N), so a member's
+    remedy names its targets by namespace.
+    """
+    import subprocess
+
+    from elspais.commands._targets import qualified_target
+    from elspais.utilities.evidence import SnapshotUnreadable, load_snapshot, tree_digest
+
+    directory = evidence.strip("/")
+    where = f"{directory}/snapshot.json"
+    try:
+        snapshot = load_snapshot(entry.repo_root / directory, require_report=False)
+        recorded = snapshot.tree
+        current = tree_digest(entry.repo_root, exclude=directory).digest
+    except SnapshotUnreadable as exc:
+        return HealthFinding(
+            message=f"Evidence Snapshot {directory} could not be judged: {exc}",
+            repo=entry.name,
+            file_path=where,
+        )
+    except (subprocess.CalledProcessError, OSError) as exc:
+        return HealthFinding(
+            message=(
+                f"Evidence Snapshot {directory} could not be judged: the digest of "
+                f"the tree could not be computed ({exc})"
+            ),
+            repo=entry.name,
+            file_path=where,
+        )
+    if recorded == current:
+        return None
+    command = "elspais evidence write"
+    if not root:
+        command += "".join(
+            f" --targets {qualified_target(entry.namespace, name)}" for name, _ in snapshot.targets
+        )
+    return HealthFinding(
+        message=(
+            f"Evidence Snapshot {directory} describes another tree; write it "
+            f"again from a run of this tree with `{command}`"
+        ),
+        repo=entry.name,
+        file_path=where,
     )
 
 
@@ -4687,7 +4765,7 @@ def check_file_bound_results(
 
     from elspais.graph.aggregation import iter_file_bound_results
 
-    records = iter_file_bound_results(graph)
+    bound = iter_file_bound_results(graph)
     repo_names = {entry.namespace: entry.name for entry in graph.iter_repos()}
     findings = [
         HealthFinding(
@@ -4702,7 +4780,7 @@ def check_file_bound_results(
             related=list(r.tests),
             repo=repo_names[r.namespace],
         )
-        for r in records
+        for r in bound
     ]
     if not findings:
         return HealthCheck(
@@ -4712,14 +4790,14 @@ def check_file_bound_results(
             category="tests",
             severity=severity,
         )
-    count = sum(len(r.result_ids) for r in records)
+    count = sum(len(r.result_ids) for r in bound)
     return HealthCheck(
         name="tests.file_bound_results",
         passed=False,
-        message=f"{count} ingested result(s) in {len(records)} artifact(s) name no test",
+        message=f"{count} ingested result(s) in {len(bound)} artifact(s) name no test",
         category="tests",
         severity=severity,
-        details={"count": count, "artifacts": len(records)},
+        details={"count": count, "artifacts": len(bound)},
         findings=findings,
     )
 
@@ -4749,9 +4827,9 @@ def check_unbound_citations(
     if severity == Severity.OFF:
         return skipped_check("tests.unbound_citation", "Citations attaching to no test")
 
-    # A record names a file relative to the repository holding it, and two
+    # A citation names a file relative to the repository holding it, and two
     # members of a federation may hold the same relative path, so the member
-    # is read from the graph the record came out of rather than looked up
+    # is read from the graph the citation came out of rather than looked up
     # afterwards from a path that answers for both.
     findings = [
         HealthFinding(
@@ -4800,8 +4878,9 @@ class _TargetOutcomes:
 
     Attributes:
         missing: ``(repo, artifact, cause)`` for each artifact a target the run
-            executed or expected did not leave, and for coverage a target with
-            results did not leave.
+            executed or expected did not leave, for coverage a target with
+            results did not leave, and once for each expected target whose
+            run is in progress.
         not_run: ``(repo, target, path)`` for each target with no results that
             the run neither executed nor expected.
         running: ``(repo, target, started_at)`` for each target whose run had
@@ -4830,9 +4909,27 @@ def _target_outcomes(graph: FederatedGraph, expected_targets: tuple[str, ...]) -
     running: dict[tuple[str, str], str] = {}
     for entry in graph.iter_repos():
         unread = graph.unread_artifacts(namespace=entry.namespace)
+        # The run of a target in progress, once per target: its results
+        # artifact where one was recorded, else its coverage.
+        in_progress: dict[str, Any] = {}
         for item in unread:
             if item.reason == "running":
                 running.setdefault((entry.name, item.target), item.started_at)
+                if item.target not in in_progress or item.artifact == "results":
+                    in_progress[item.target] = item
+        # Implements: REQ-d00283-R
+        # A run that has not ended left no results this run can read, so a
+        # target the run expects is missing its results.
+        for target_name, item in sorted(in_progress.items()):
+            if qualified_target(entry.namespace, target_name) in expected:
+                missing.append(
+                    (
+                        entry.name,
+                        item,
+                        "results unread because its run is in progress "
+                        f"(started {item.started_at or 'at an unrecorded time'})",
+                    )
+                )
         absent = [item for item in unread if item.reason == "absent"]
         results_absent = {item.target for item in absent if item.artifact == "results"}
         # A target whose reporter reads results, and whose results were not
@@ -4902,16 +4999,16 @@ def check_ingestion_faults(
     for opposite actions -- which is why the point that dropped the artifact
     recorded what it dropped (REQ-d00285-G). Recording it and never saying it
     is only marginally better than dropping it silently, so this is where the
-    record is spoken (REQ-p00019-H).
+    fault is spoken (REQ-p00019-H).
 
     Each finding NAMES its artifact: the path the configuration reached, the
     line where the condition has one, the target it arose under, and the cause
     in the words the recording site chose (REQ-d00285-A). A count without the
     names would leave the reader the search the tool already performed.
 
-    A record names its artifact relative to the repository holding it, and two
+    A fault names its artifact relative to the repository holding it, and two
     members of a federation may hold the same relative path, so the member is
-    read from the graph the record came out of rather than looked up
+    read from the graph the fault came out of rather than looked up
     afterwards from a path that answers for both.
     """
     severity = severity_for("tests.ingestion_fault", config)
@@ -4953,7 +5050,7 @@ def check_ingestion_faults(
         return HealthCheck(
             name="tests.ingestion_fault",
             passed=True,
-            message="Every artifact ingestion reached produced records",
+            message="Every artifact ingestion reached produced results or coverage",
             category="tests",
             severity=severity,
         )
@@ -5024,7 +5121,7 @@ def check_runs_in_progress(
     Nothing in that target's output area was read, so its results and its
     coverage are neither judged nor counted. The finding states when the run
     started and nothing more: a run that has not recorded its end may still be
-    going, or may have stopped, and the record cannot say which.
+    going, or may have stopped, and the result fingerprint cannot say which.
     """
     severity = severity_for("tests.run_in_progress", config)
     if severity == Severity.OFF:
@@ -5468,7 +5565,7 @@ def _report_from_dict(data: dict[str, Any]) -> HealthReport:
     return report
 
 
-# Implements: REQ-d00249-A+F+G, REQ-d00285-H
+# Implements: REQ-d00249-F+G, REQ-d00285-H
 # Implements: REQ-d00283-D+E+H+I
 def run(args: argparse.Namespace) -> int:
     """Run the health command.
@@ -5505,8 +5602,14 @@ def run(args: argparse.Namespace) -> int:
             inert.append("--targets")
         if fail_fast:
             inert.append("--fail-fast")
+        # Implements: REQ-d00315-I
+        if getattr(args, "stale_only", False):
+            inert.append("--stale-only")
+        # Implements: REQ-d00314-O
+        if getattr(args, "concurrency", None) is not None:
+            inert.append("--concurrency")
         if inert:
-            named = " and ".join(inert)
+            named = ", ".join(inert[:-1]) + " and " + inert[-1] if len(inert) > 1 else inert[0]
             verb = "choose" if len(inert) > 1 else "chooses"
             print(
                 f"error: {named} {verb} what --run-tests executes, and this run does "
@@ -5550,28 +5653,88 @@ def run(args: argparse.Namespace) -> int:
         from elspais.commands._scope import flag_values
 
         selected = list(flag_values(args, "targets"))
-        from elspais.commands.test_runner import SelectionRefused, executable_selection
+        from elspais.commands._targets import qualified_target
+        from elspais.commands.test_runner import (
+            SelectionRefused,
+            concurrency_refusal,
+            describe_stale_only,
+            not_fresh_targets,
+            plan_target_runs,
+            unrecorded_targets,
+        )
 
+        # Implements: REQ-d00314-P
+        concurrency = getattr(args, "concurrency", None)
+        if concurrency is not None and concurrency < 1:
+            print(f"error: {concurrency_refusal(concurrency)}", file=sys.stderr)
+            return 2
+
+        repo_root = find_git_root() or Path.cwd()
         try:
-            only = executable_selection(cfg, selected)
+            runs = plan_target_runs(cfg, repo_root, selected, raw_config=cfg_dict)
         except SelectionRefused as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
-        commandful = [
-            t for t in cfg.scanning.test.targets if t.command and (only is None or t.name in only)
+        # Implements: REQ-d00249-N
+        # A runner's captured output reaches the invoking repository's build
+        # alone, so a member's target that leaves no results on disk would
+        # run and credit nothing. It is refused before anything executes.
+        lost = [
+            run.spell(name)
+            for run in runs
+            if not run.is_root
+            for name in unrecorded_targets(run.config, run.only)
         ]
-        repo_root = find_git_root() or Path.cwd()
-        results, captured_map = run_configured_targets(
-            cfg, repo_root, fail_fast=fail_fast, only=only
-        )
-        runner_failed = any(r.returncode != 0 for r in results)
-        # Implements: REQ-d00283-Q
-        from elspais.commands._targets import qualified_target
-
-        expected |= {qualified_target(cfg.project.namespace, t.name) for t in commandful}
+        if lost:
+            print(
+                f"error: target(s) {', '.join(lost)} of another member declare no "
+                f"`results` pattern, so their results would reach nothing. Have each "
+                f"command write its results into $ELSPAIS_TARGET_OUTPUT and declare "
+                f"the `results` pattern that matches them.",
+                file=sys.stderr,
+            )
+            return 2
+        captured_map: dict[str, str] = {}
+        # Implements: REQ-d00254-I
+        # A run that executes no target of this repository ran none of its
+        # targets fresh.
+        fresh: set[str] | None = set()
+        for target_run in runs:
+            only = target_run.only
+            # Implements: REQ-d00315-B+F+G+H
+            # Every selected target stays expected; a stale-only run executes
+            # the ones whose results are not fresh and carries the rest.
+            if getattr(args, "stale_only", False):
+                execute, carry = not_fresh_targets(target_run.config, target_run.repo_root, only)
+                print(describe_stale_only(execute, carry), file=sys.stderr)
+                # The selection less what it carries, so a target with no
+                # command reads as it reads in the same run without --stale-only.
+                configured = {t.name for t in target_run.config.scanning.test.targets}
+                remaining = (configured if only is None else only) - carry
+                only = None if remaining == configured else remaining
+            # Implements: REQ-d00249-N
+            results, captured = run_configured_targets(
+                target_run.config,
+                target_run.repo_root,
+                fail_fast=fail_fast,
+                only=only,
+                concurrency=concurrency,
+            )
+            runner_failed = runner_failed or any(r.returncode != 0 for r in results)
+            # Implements: REQ-d00283-Q
+            expected |= {
+                qualified_target(target_run.namespace, t.name)
+                for t in target_run.config.scanning.test.targets
+                if t.command and (target_run.only is None or t.name in target_run.only)
+            }
+            if target_run.is_root:
+                captured_map = captured
+                fresh = only
+            if fail_fast and runner_failed:
+                break
         args._captured_results = captured_map
         # Implements: REQ-d00254-I
-        args._fresh_targets = only
+        args._fresh_targets = fresh
         if fail_fast and runner_failed:
             skip_due_to_fail_fast = True
 

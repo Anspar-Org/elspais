@@ -8,23 +8,27 @@ name = "fda-style-fixture"
 namespace = "FDA"
 
 [levels.PRD]
+letter = "P"
 rank = 1
 implements = ["PRD"]
 
 [levels.OPS]
+letter = "O"
 rank = 2
 implements = ["PRD"]
 
 [levels.DEV]
+letter = "D"
 rank = 3
 implements = ["OPS", "PRD"]
 
 [levels.TST]
+letter = "T"
 rank = 3
 implements = ["DEV", "PRD"]
 
 [id-patterns]
-canonical = "{level}-{component}"
+canonical = "{type}-{component}"
 
 [id-patterns.component]
 style = "numeric"

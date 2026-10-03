@@ -236,7 +236,7 @@ def _record_ingestion_fault(
     read as a count of two distinct conditions.
 
     Ingestion reaches an artifact both before the graph exists and after it
-    does, so the two holders of these records share this one rule rather than
+    does, so the two holders of these faults share this one rule rather than
     each deciding when a condition is the same one again.
     """
     fault = IngestionFault(
@@ -294,7 +294,7 @@ class UnscannedKeywordFile:
     the fact that the tool passed the file over is recorded here rather than
     left to be inferred from a requirement reading as uncovered.
 
-    This record belongs beside the other parse-time findings in
+    This finding belongs beside the other parse-time findings in
     ``reference_faults``; it is here because it is not a reference fault --
     nothing was read, so nothing failed to bind.
 
@@ -394,7 +394,6 @@ class TraceGraph:
     """
 
     repo_root: Path = field(default_factory=Path.cwd)
-    hash_mode: str = field(default="normalized-text")
     satellite_kinds: frozenset = field(default_factory=lambda: _DEFAULT_SATELLITE_KINDS)
 
     # The identifier grammar of the repository this graph holds, carried
@@ -503,7 +502,7 @@ class TraceGraph:
     # Implements: REQ-d00285-G
     # Artifacts ingestion reached and produced nothing from. Recorded rather
     # than dropped: an unreadable report and a suite that never ran are the
-    # same absence downstream, and only this record tells them apart.
+    # same absence downstream, and only this list tells them apart.
     _ingestion_faults: list[IngestionFault] = field(default_factory=list, init=False, repr=False)
     # Implements: REQ-d00283-R+S+T+V, REQ-d00311-N
     # Artifacts a test target names that the build did not read, because they
@@ -1967,8 +1966,6 @@ class TraceGraph:
             ValueError: If req_id already exists.
             KeyError: If parent_id is specified but not found.
         """
-        from elspais.utilities.hasher import calculate_hash
-
         _refuse_title_hostile(title)
         if req_id in self._index:
             raise ValueError(f"Node '{req_id}' already exists")
@@ -1982,8 +1979,9 @@ class TraceGraph:
             label=title,
         )
 
-        # Compute hash for empty body
-        empty_hash = calculate_hash("")
+        # A new requirement has no Assertion, so its hash is the reserved
+        # value marking content with nothing to hash (REQ-d00131-P+S).
+        empty_hash = "N/A"
 
         node._content = {
             "level": level,
@@ -2270,7 +2268,7 @@ class TraceGraph:
         """
         from elspais.graph.render import compute_hash_for_node
 
-        new_hash = compute_hash_for_node(req_node, self.hash_mode) or "N/A"
+        new_hash = compute_hash_for_node(req_node) or "N/A"
         req_node.set_field("hash", new_hash)
         return new_hash
 
@@ -4167,7 +4165,6 @@ class TraceGraph:
                 "heading": node.get_field("heading", ""),
                 "parent_hash": new_hash,
             },
-            affects_hash=True,
         )
         self._mutation_log.append(entry)
         return entry
@@ -4265,7 +4262,6 @@ class TraceGraph:
                 "render_order": render_order,
                 "parent_hash": new_hash,
             },
-            affects_hash=True,
         )
         self._mutation_log.append(entry)
         return entry
@@ -4334,7 +4330,6 @@ class TraceGraph:
             after_state={
                 "parent_hash": new_hash,
             },
-            affects_hash=True,
         )
         self._mutation_log.append(entry)
         return entry
@@ -4623,7 +4618,6 @@ class GraphBuilder:
         *,
         namespace: str,
         repo_root: Path | None = None,
-        hash_mode: str = "normalized-text",
         satellite_kinds: list[str] | None = None,
         resolver: Any,
         project_name: str = "",
@@ -4633,7 +4627,6 @@ class GraphBuilder:
 
         Args:
             repo_root: Repository root path.
-            hash_mode: Hash calculation mode ("full-text" or "normalized-text").
             satellite_kinds: NodeKind values (e.g. ["assertion", "result"])
                 that don't count as meaningful children for root/orphan
                 classification. Defaults to ASSERTION and RESULT.
@@ -4663,7 +4656,6 @@ class GraphBuilder:
                 never produce broken references.
         """
         self.repo_root = repo_root or Path.cwd()
-        self.hash_mode = hash_mode
         if not namespace:
             raise ValueError(
                 "GraphBuilder requires the namespace of the repository whose "
@@ -5065,7 +5057,6 @@ class GraphBuilder:
             "heading_level": data.get("heading_level", 2),
             "assertions_heading_level": data.get("assertions_heading_level"),
             "changelog_heading_level": data.get("changelog_heading_level"),
-            "hash_mode": self.hash_mode,
             # Track source file path so a subsequent collision can record where
             # this (first) definition came from.
             "source_file": source_path_rel,
@@ -5195,7 +5186,7 @@ class GraphBuilder:
         if stored_hash:
             from elspais.graph.render import compute_hash_for_node
 
-            computed = compute_hash_for_node(node, self.hash_mode)
+            computed = compute_hash_for_node(node)
             if computed and stored_hash != computed:
                 parse_dirty_reasons.append("stale_hash")
 
@@ -5652,6 +5643,9 @@ class GraphBuilder:
             "name": test_name,
             "classname": classname,
             "message": data.get("message"),
+            # Implements: REQ-d00322-M
+            # What the test printed, where its reporter carries it.
+            "output": data.get("output"),
             "parse_line": content.start_line,
             "parse_end_line": content.end_line,
             "source_path": source_path,
@@ -5670,7 +5664,7 @@ class GraphBuilder:
             "result_file": data.get("result_file"),
             "result_line": data.get("result_line"),
             # Implements: REQ-d00294-C+F
-            # The environment this record was written in, where the target
+            # The environment this result record was written in, where the target
             # declared where to read one. It is a field of its own and never
             # part of the label, so a test whose results carry no environment
             # is named exactly as it was before.
@@ -6515,7 +6509,6 @@ class GraphBuilder:
 
         graph = TraceGraph(
             repo_root=self.repo_root,
-            hash_mode=self.hash_mode,
             satellite_kinds=self.satellite_kinds,
             _resolver=self._resolver,
             _namespace=self._namespace,

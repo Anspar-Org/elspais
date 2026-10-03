@@ -193,7 +193,7 @@ def load_content_rules(
 
     A rule the configuration names and this call did not load is recorded,
     never dropped: an absent rule and a rule a project never configured
-    produce the same empty guidance, and only the record tells them apart.
+    produce the same empty guidance, and only that recorded fact tells them apart.
 
     Args:
         config: Configuration dictionary

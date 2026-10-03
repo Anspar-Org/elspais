@@ -142,9 +142,9 @@ def test_REQ_o00076_K_unusable_record_reads_as_no_reservation(tmp_path, payload)
     have been served on any free port instead fails to be served at all,
     which is a worse outcome than losing the reservation.
     """
-    from elspais.mcp.daemon import _port_record_path, reserved_port
+    from elspais.mcp.daemon import _port_reservation_path, reserved_port
 
-    path = _port_record_path(tmp_path)
+    path = _port_reservation_path(tmp_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(payload)
 
@@ -163,7 +163,7 @@ def test_REQ_o00076_K_address_outlives_the_record_of_what_is_serving(tmp_path):
     """
     from elspais.mcp.daemon import (
         _daemon_json_path,
-        _port_record_path,
+        _port_reservation_path,
         reserve_port,
         reserved_port,
         write_daemon_json,
@@ -173,7 +173,7 @@ def test_REQ_o00076_K_address_outlives_the_record_of_what_is_serving(tmp_path):
     reserve_port(tmp_path, 45678)
 
     daemon_json = _daemon_json_path(tmp_path)
-    assert _port_record_path(tmp_path) != daemon_json
+    assert _port_reservation_path(tmp_path) != daemon_json
 
     daemon_json.unlink()
 

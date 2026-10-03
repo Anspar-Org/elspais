@@ -1249,6 +1249,18 @@
           "title": "Groups",
           "type": "object"
         },
+        "resources": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Resources",
+          "type": "object"
+        },
+        "concurrency": {
+          "default": 1,
+          "title": "Concurrency",
+          "type": "integer"
+        },
         "targets": {
           "items": {
             "$ref": "#/$defs/TestTargetConfig"
@@ -1259,6 +1271,11 @@
         "output_root": {
           "default": ".results",
           "title": "Output Root",
+          "type": "string"
+        },
+        "evidence": {
+          "default": "",
+          "title": "Evidence",
           "type": "string"
         }
       },
@@ -1342,6 +1359,13 @@
           "default": null,
           "title": "Line Base"
         },
+        "resources": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Resources",
+          "type": "array"
+        },
         "inputs": {
           "$ref": "#/$defs/ScanningKindConfig"
         }
@@ -1356,6 +1380,7 @@
       "additionalProperties": false,
       "properties": {
         "hash_mode": {
+          "const": "normalized-text",
           "default": "normalized-text",
           "title": "Hash Mode",
           "type": "string"

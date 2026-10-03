@@ -7,10 +7,12 @@ namespace = "REQ"
 [levels.prd]
 rank = 1
 letter = "p"
+implements = ["prd"]
 
 [levels.dev]
 rank = 3
 letter = "d"
+implements = ["dev", "prd"]
 
 [id-patterns]
 canonical = "{namespace}-{level.letter}{component}"
@@ -33,8 +35,6 @@ directories = ["spec"]
 [rules.format]
 require_hash = true
 require_assertions = true
-acceptance_criteria = "warn"
 require_shall = true
 labels_sequential = true
 labels_unique = true
-placeholder_values = ["obsolete", "removed", "deprecated", "N/A", "n/a", "-", "reserved", "Removed"]

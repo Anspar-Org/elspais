@@ -28,7 +28,6 @@ from elspais.graph.GraphNode import FileType, GraphNode, NodeKind
 from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.utilities.hasher import (
     HASH_VALUE_PATTERN,
-    calculate_hash,
     compute_normalized_hash,
     compute_version_hash,
 )
@@ -113,8 +112,7 @@ def _effective_depth(stored: int | None, min_depth: int) -> int:
 def reconstruct_body_text(node: GraphNode) -> str:
     """Reconstruct body text from STRUCTURES children in render_order.
 
-    Used for full-text hash computation and search. Produces text equivalent
-    to what was previously stored in the body_text field.
+    Used for search and for presenting a requirement's body.
 
     Args:
         node: A REQUIREMENT node.
@@ -144,58 +142,42 @@ def reconstruct_body_text(node: GraphNode) -> str:
     return "\n".join(parts)
 
 
-# Implements: REQ-d00131-J
-def compute_hash_for_node(node: GraphNode, hash_mode: str) -> str | None:
-    """Compute the content hash for a requirement node.
-
-    Supports two modes (per spec/requirements-spec.md Hash Definition):
-    - full-text: hash every line between header and footer (body_text)
-    - normalized-text: hash normalized assertion text only
+# Implements: REQ-d00131-J+S
+def compute_hash_for_node(node: GraphNode) -> str | None:
+    """Compute the content hash of a requirement from its Assertions.
 
     Args:
         node: The requirement GraphNode.
-        hash_mode: Hash calculation mode ("full-text" or "normalized-text").
 
     Returns:
-        Computed hash string, or None if no hashable content.
+        Computed hash string, or None where it has no Assertion to hash.
     """
-    if hash_mode == "normalized-text":
-        assertions = []
-        for child in node.iter_children():
-            if child.kind == NodeKind.ASSERTION:
-                label = child.get_field("label", "")
-                text = child.get_label() or ""
-                if label and text:
-                    assertions.append((label, text))
-        if not assertions:
-            return None
-        return compute_normalized_hash(assertions)
-    else:
-        body = reconstruct_body_text(node)
-        if not body:
-            return None
-        return calculate_hash(body)
+    assertions = []
+    for child in node.iter_children():
+        if child.kind == NodeKind.ASSERTION:
+            label = child.get_field("label", "")
+            text = child.get_label() or ""
+            if label and text:
+                assertions.append((label, text))
+    if not assertions:
+        return None
+    return compute_normalized_hash(assertions)
 
 
-# Implements: REQ-d00131-J, REQ-d00132-L
-def iter_hashed_parts(node: GraphNode, hash_mode: str | None = None) -> Any:
+# Implements: REQ-d00131-S, REQ-d00132-L
+def iter_hashed_parts(node: GraphNode) -> Any:
     """Yield each part of a requirement whose text its hash covers.
 
-    The parts ``compute_hash_for_node`` reads: every *Assertion*, and under
-    full-text hashing every section of the requirement as well.
+    These are the parts ``compute_hash_for_node`` reads: its *Assertions*.
 
     Args:
         node: A REQUIREMENT node.
-        hash_mode: The hash mode; the requirement's own where not given.
 
     Yields:
-        The ASSERTION and REMAINDER children the hash covers.
+        The ASSERTION children the hash covers.
     """
-    mode = hash_mode or node.get_field("hash_mode") or "normalized-text"
     for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
         if child.kind == NodeKind.ASSERTION:
-            yield child
-        elif child.kind == NodeKind.REMAINDER and mode != "normalized-text":
             yield child
 
 
@@ -575,17 +557,12 @@ def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
             lines.append(format_changelog_entry(entry))
         lines.append("")
 
-    # Compute hash using configured mode (DRY: utilities/hasher.py).
+    # The hash covers the Assertions alone (DRY: utilities/hasher.py).
     # Content with nothing to hash takes the reserved "N/A" sentinel, which no
     # hash computation can produce, so an End marker distinguishes unhashable
     # content from content still awaiting its first hash.
     # Implements: REQ-d00131-P
-    hash_mode = node.get_field("hash_mode") or "normalized-text"
-    if hash_mode == "full-text":
-        body = reconstruct_body_text(node)
-        hash_val = calculate_hash(body) if body.strip() else "N/A"
-    else:
-        hash_val = compute_normalized_hash(assertions) if assertions else "N/A"
+    hash_val = compute_normalized_hash(assertions) if assertions else "N/A"
 
     # End marker (separator is a REMAINDER node, not part of the requirement)
     lines.append(render_end_marker(title, hash_val))
@@ -950,6 +927,17 @@ def _files_with_pending_mutations(graph: FederatedGraph) -> list[Any]:
     """
     files, _nodes, _edited = _mutation_reach(graph)
     return files
+
+
+# Implements: REQ-d00325-A
+def requirements_changed(graph: FederatedGraph) -> list[GraphNode]:
+    """The requirements whose own text the pending mutations change.
+
+    A requirement reached only because it cites a renamed identifier is not
+    one of them: its citation is respelled and nothing else of it changes.
+    """
+    _files, _nodes, edited = _mutation_reach(graph)
+    return edited
 
 
 # Implements: REQ-d00132-A, REQ-d00132-H, REQ-d00132-J, REQ-d00132-L

@@ -164,7 +164,9 @@ same helpers -- there is no softer path around the protocol:
 - 409 means a conflict and nothing else. A save that is refused for
   another reason says so with its own status and `code`: **400** with
   `changelog_message_required` when an Active requirement changed and no
-  changelog reason was given, **403** with `write_scope_declined` when
+  changelog reason was given (the body's `requirement_ids` names each one,
+  and the viewer asks the reader for the reason and saves again with it),
+  **403** with `write_scope_declined` when
   the save held back a file it was asked to write -- an associate's,
   with `write_associates` false -- in which case nothing at all was
   written and every pending change is still held, and **500** with
@@ -223,7 +225,7 @@ period; reads never do.
 That deadline is not the only way the process ends, and none of the
 others discards either. A daemon that stops because its idle timeout
 expired, or because something outside it signalled it, persists what it
-is holding first and leaves the same record. Whatever prompts the stop,
+is holding first and leaves the same automatic save record. Whatever prompts the stop,
 work you applied and never saved is on disk afterwards rather than gone
 — unless somebody said they did not want it, which is what
 `elspais daemon --discard-changes` says. A discard covers the
@@ -231,24 +233,24 @@ mutations that existed when it was asked for: one applied in between
 moves the tip and the whole request is refused, so nothing is thrown away
 that the person asking never saw.
 
-A save the daemon performed is recorded, and the record reaches you in
-the metadata you already read: `get_workspace_info` and
+A save the daemon performed leaves an automatic save record, which reaches
+you in the metadata you already read: `get_workspace_info` and
 `get_graph_status` carry an `automatic_save` block while one is
 outstanding, as do `/api/dirty` and `/api/check-freshness`. It states who
 saved, when, how many mutations, and what triggered it — and nothing
 else. It is not a verdict on the work: a client can vanish because it
 finished, crashed, or lost its connection, and nothing in the daemon can
 distinguish those. Read the diff and decide. Saving deliberately
-(`save_mutations(if_tip_mutation_id=<tip>)`) retires the record, and is
-still the right habit before your session ends. See `docs("commands")`
-for the full lifetime rules.
+(`save_mutations(if_tip_mutation_id=<tip>)`) retires the automatic save
+record, and is still the right habit before your session ends. See
+`docs("commands")` for the full lifetime rules.
 
 A process can also die without reaching any of that — killed outright,
 or with its machine. While a server holds unsaved changes it says so in a
-sentinel file beside its state record, written before the change is
-acknowledged; a server that starts and finds one left by a process that
+sentinel file beside its daemon record (`.elspais/daemon.json`), written
+before the change is acknowledged; a server that starts and finds one left by a process that
 is gone reports a `lost_changes` block on the same surfaces as the
-automatic-save record. It tells you that changes were held and never
+automatic save record. It tells you that changes were held and never
 written, and that is all it can tell you: nothing keeps the changes
 themselves, so this is a disclosure, not a recovery. Saving at your own
 request retires it.
@@ -273,8 +275,8 @@ now installed.
 A daemon in that state renews itself: it writes anything it is holding,
 replaces its own process image with the current program, and goes on
 serving at the same address. You will not normally see it happen. The
-write is unasked, so it leaves the same `automatic_save` record any
-unasked save leaves; what it cannot preserve is the ability to undo those
+write is unasked, so it leaves the same automatic save record (`automatic_save`)
+any unasked save leaves; what it cannot preserve is the ability to undo those
 changes, because the mutation log goes with the process that held it.
 
 A **stdio** MCP server cannot renew itself -- its client reaches it over
