@@ -144,7 +144,10 @@ def reconstruct_body_text(node: GraphNode) -> str:
 
 # Implements: REQ-d00131-J+S
 def compute_hash_for_node(node: GraphNode) -> str | None:
-    """Compute the content hash of a requirement from its Assertions.
+    """Compute the content hash of a requirement from its own Assertions.
+
+    The parts are the ones ``iter_hashed_parts`` names, so a copy another
+    requirement's ``Satisfies:`` hangs beneath this one is not among them.
 
     Args:
         node: The requirement GraphNode.
@@ -153,12 +156,11 @@ def compute_hash_for_node(node: GraphNode) -> str | None:
         Computed hash string, or None where it has no Assertion to hash.
     """
     assertions = []
-    for child in node.iter_children():
-        if child.kind == NodeKind.ASSERTION:
-            label = child.get_field("label", "")
-            text = child.get_label() or ""
-            if label and text:
-                assertions.append((label, text))
+    for child in iter_hashed_parts(node):
+        label = child.get_field("label", "")
+        text = child.get_label() or ""
+        if label and text:
+            assertions.append((label, text))
     if not assertions:
         return None
     return compute_normalized_hash(assertions)
@@ -168,7 +170,10 @@ def compute_hash_for_node(node: GraphNode) -> str | None:
 def iter_hashed_parts(node: GraphNode) -> Any:
     """Yield each part of a requirement whose text its hash covers.
 
-    These are the parts ``compute_hash_for_node`` reads: its *Assertions*.
+    These are the parts ``compute_hash_for_node`` reads: the *Assertions*
+    the requirement structures. A ``Satisfies:`` copy linked beneath a
+    declaring requirement is another requirement's *Assertion*, not one of
+    its own.
 
     Args:
         node: A REQUIREMENT node.

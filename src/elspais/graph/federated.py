@@ -1211,12 +1211,13 @@ class FederatedGraph:
         """
         repo_name = self._ownership[node_id]
         graph = self._graph_for(node_id)
-        # Collect assertion IDs before deletion
+        # Collect the ids of what the requirement structures, which leave with it
         node = graph.find_by_id(node_id)
         assertion_ids = []
         if node:
-            assertion_ids = [c.id for c in node.iter_children() if c.kind == NodeKind.ASSERTION]
+            assertion_ids = [c.id for c in node.iter_children(edge_kinds={EdgeKind.STRUCTURES})]
         result = graph.delete_requirement(node_id)
+        self._follow_retirement(repo_name, node_id, result)
         # A retired requirement stays in its graph; a removed one leaves it.
         if result.before_state.get("disposition") != "retired":
             self._ownership.pop(node_id, None)
@@ -1266,6 +1267,7 @@ class FederatedGraph:
         result = self._graph_for(assertion_id).delete_assertion(
             assertion_id, foreign_references=foreign
         )
+        self._follow_retirement(repo_name, assertion_id, result)
         if result.before_state.get("disposition") == "removed":
             self._ownership.pop(assertion_id, None)
             for rename in result.before_state.get("renames", []):
@@ -1282,8 +1284,221 @@ class FederatedGraph:
         """
         repo_name = self._ownership[assertion_id]
         result = self._graph_for(assertion_id).update_assertion(assertion_id, new_text)
+        self._follow_retirement(repo_name, assertion_id, result)
         self._record_mutation(repo_name, result)
         return result
+
+    # Implements: REQ-p00017-H, REQ-d00269-B
+    def _follow_retirement(self, repo_name: str, target_id: str, entry: MutationEntry) -> None:
+        """Carry a withdrawal to the citations and copies other members hold.
+
+        Retiring an *Assertion*, or removing a requirement, leaves its
+        citations naming nothing and its ``Satisfies:`` copies with nothing
+        to copy. The owning member reports what it holds; what another
+        member holds is reported in that member, where a build records it,
+        under the class reading it reached across the federation. Bringing
+        an *Assertion* back binds the citations other members hold, as the
+        cross-graph wiring would. Each record names the member that changed,
+        which undo reads.
+        """
+        owner = self._repos[repo_name].graph
+        records = [
+            *entry.after_state.get("severed_citations", []),
+            *entry.before_state.get("withdrawn_citations", []),
+            *entry.before_state.get("withdrawn_copies", []),
+        ]
+        for record in records:
+            if "member_ids" in record:
+                for member_id in record["member_ids"]:
+                    self._ownership.pop(member_id, None)
+                continue
+            if "fault" in record:
+                continue
+            if record.get("satisfies_copy"):
+                self._follow_copy(record)
+                continue
+            member = self._ownership.get(record["source_id"])
+            if member is None:
+                continue
+            graph = self._repos[member].graph
+            citer = graph._index.get(record["source_id"])
+            if citer is None:
+                continue
+            fault = self._class_reached(
+                ReferenceFault(
+                    source_id=citer.id,
+                    target_id=record.get("target_id", target_id),
+                    edge_kind=record["edge_kind"],
+                    fault_class=FaultClass.UNKNOWN_REQUIREMENT,
+                ),
+                member,
+            )
+            record.update(graph._withdraw_citation(citer, fault))
+            record["member"] = member
+        # Implements: REQ-p00017-H, REQ-d00274-H
+        # A test citation in another member that binds to no test produced
+        # no edge to find it by, so each member's record of them is read.
+        withdrawn: set[str] = set()
+        if "severed_citations" in entry.after_state:
+            withdrawn = {target_id}
+        elif "withdrawn_citations" in entry.before_state:
+            withdrawn = {target_id, *entry.before_state.get("structured_child_ids", [])}
+        if withdrawn:
+            for member, graph in self._live_graphs():
+                if member == repo_name:
+                    continue
+                for record in graph._withdraw_unbound_citations(
+                    withdrawn,
+                    resolver=owner.resolver,
+                    classify=lambda fault, member=member: self._class_reached(
+                        dataclasses.replace(fault, fault_class=FaultClass.UNKNOWN_REQUIREMENT),
+                        member,
+                    ),
+                ):
+                    record["member"] = member
+                    entry.after_state.setdefault("severed_citations", []).append(record)
+        if "resolved_citations" not in entry.after_state:
+            return
+        node = owner._index.get(target_id)
+        if node is None:
+            return
+        for member, graph in self._live_graphs():
+            if member == repo_name:
+                continue
+            for fault in list(graph._unresolved_references):
+                citer = graph._index.get(fault.source_id)
+                if citer is None:
+                    continue
+                if owner._names_assertion(fault, node):
+                    record = graph._bind_citation(citer, node, fault)
+                elif owner._names_assertion(fault, node, EdgeKind.SATISFIES):
+                    record = graph._make_satisfies_copy(
+                        citer,
+                        node,
+                        fault,
+                        lambda orig, here=member: (
+                            self._repo_name_owning(orig, repo_name),
+                            self._ownership.get(orig.id, repo_name) == here,
+                        ),
+                    )
+                else:
+                    continue
+                record["member"] = member
+                entry.after_state["resolved_citations"].append(record)
+        # A copy made here is owned by the member holding it.
+        for record in entry.after_state["resolved_citations"]:
+            holder = record.get("member", repo_name)
+            for member_id in record.get("member_ids", []):
+                self._ownership[member_id] = holder
+
+    # Implements: REQ-p00017-H, REQ-p00014-B
+    def _follow_copy(self, record: dict[str, Any]) -> None:
+        """Withdraw a copy another member holds, reporting the ``Satisfies:``
+        that made it where it made it directly."""
+        member = self._ownership.get(record["copy_id"])
+        if member is None:
+            return
+        graph = self._repos[member].graph
+        copy = graph._index.get(record["copy_id"])
+        if copy is None:
+            return
+        fault = None
+        if record.get("source_id"):
+            fault = self._class_reached(
+                ReferenceFault(
+                    source_id=record["source_id"],
+                    target_id=record["original_id"],
+                    edge_kind=EdgeKind.SATISFIES.value,
+                    fault_class=FaultClass.UNKNOWN_REQUIREMENT,
+                ),
+                member,
+            )
+        record.update(graph._withdraw_copy(copy, fault))
+        record["member"] = member
+        for member_id in record["member_ids"]:
+            self._ownership.pop(member_id, None)
+
+    @staticmethod
+    def _binds_to_no_test(source_entry: RepoEntry, br: ReferenceFault) -> bool:
+        """Whether *br* was written by a test citation that binds to no test."""
+        source = source_entry.graph._index.get(br.source_id)
+        return source is not None and source.get_field("binds_to_test") is False
+
+    # Implements: REQ-p00014-O
+    def _repo_name_owning(self, node: GraphNode, default: str) -> str:
+        """The name of the repository owning *node*, as a reader is shown it.
+
+        The name, because this is shown to a reader; the namespace
+        identifies the member but is not what it is called.
+        """
+        namespace = self._ownership.get(node.id, default)
+        entry = self._repos.get(namespace)
+        return entry.name if entry else namespace
+
+    def _find_in_members(self, node_id: str) -> GraphNode | None:
+        """The node *node_id* names in whichever member holds it."""
+        for _name, graph in self._live_graphs():
+            node = graph._index.get(node_id)
+            if node is not None:
+                return node
+        return None
+
+    # Implements: REQ-o00062-G
+    def _undo_followed_retirement(self, owner: TraceGraph, entry: MutationEntry) -> None:
+        """Undo what ``_follow_retirement`` changed in other members."""
+        from elspais.graph.builder import TraceGraph as _TraceGraph
+        from elspais.graph.builder import _reattach_citation
+
+        node = owner._index.get(entry.target_id)
+        if node is None:
+            return
+        parent = next((p for p in node.iter_parents() if p.kind == NodeKind.REQUIREMENT), None)
+        records = [
+            *entry.after_state.get("severed_citations", []),
+            *entry.before_state.get("withdrawn_citations", []),
+            *entry.before_state.get("withdrawn_copies", []),
+        ]
+        for record in reversed(records):
+            member = record.get("member")
+            if member is None or member not in self._repos:
+                continue
+            graph = self._repos[member].graph
+            if record.get("satisfies_copy"):
+                graph._restore_copy(record, self._find_in_members)
+                continue
+            citer = graph._index.get(record["source_id"])
+            if citer is None:
+                continue
+            graph._restore_citation(citer, record)
+            if "label" in record and parent is not None:
+                _reattach_citation(parent, citer, record)
+        # A removed requirement's own undo replays the edges it held to the
+        # nodes its graph holds; the edges to another member's nodes are
+        # replayed here, once those nodes are back.
+        if entry.operation == "delete_requirement":
+            for other_id, kind, metadata, targets in entry.before_state.get("parent_edges", []):
+                other = None if other_id in owner._index else self._find_in_members(other_id)
+                if other is not None:
+                    _TraceGraph._restore_edge_attrs(
+                        other.link(node, EdgeKind(kind), list(targets)), metadata, targets
+                    )
+            for other_id, kind, metadata, targets in entry.before_state.get("child_edges", []):
+                other = None if other_id in owner._index else self._find_in_members(other_id)
+                if other is not None:
+                    _TraceGraph._restore_edge_attrs(
+                        node.link(other, EdgeKind(kind), list(targets)), metadata, targets
+                    )
+        for record in reversed(entry.after_state.get("resolved_citations", [])):
+            member = record.get("member")
+            if member is None or member not in self._repos:
+                continue
+            graph = self._repos[member].graph
+            if record.get("satisfies_made"):
+                graph._unmake_satisfies_copy(record)
+                continue
+            citer = graph._index.get(record["source_id"])
+            if citer is not None:
+                graph._unbind_citation(citer, node, record)
 
     # Implements: REQ-d00201-A
     def rename_assertion(self, old_id: str, new_label: str) -> MutationEntry:
@@ -1915,6 +2130,11 @@ class FederatedGraph:
                     if reached is not br:
                         replacements[i] = [reached]
                     continue
+                # Implements: REQ-d00274-H
+                # A test citation that binds to no test is judged and links
+                # nothing, in every member as in its own: what it names is
+                # still reported where it names nothing.
+                judge_only = self._binds_to_no_test(source_entry, br)
                 target_repo_name = self._ownership.get(br.target_id)
                 if target_repo_name is None:
                     expansion = self._expand_foreign_multi_reference(br.target_id)
@@ -1956,6 +2176,8 @@ class FederatedGraph:
                                     )
                                 )
                                 continue
+                            if judge_only:
+                                continue
                             matrix_fault = self._matrix_fault(
                                 source_entry, self._repos[owner], br, label_id
                             )
@@ -1986,6 +2208,9 @@ class FederatedGraph:
                         reached = self._class_reached(br, source_entry.namespace)
                         if reached is not br:
                             replacements[i] = [reached]
+                        continue
+                    if judge_only:
+                        resolved.append(i)
                         continue
                     # Implements: REQ-p00014-G
                     # The validation matrix judges a target owned by an
@@ -2238,14 +2463,10 @@ class FederatedGraph:
         built by now, so its template-to-template REFINES edges are there
         to walk.
         """
-        from elspais.graph.GraphNode import GraphNode
-        from elspais.graph.relations import Stereotype
         from elspais.graph.template_subtree import (
-            UNCLONED_FIELDS,
             copy_name_diagnostic,
-            recreate_subtree_edges,
+            instantiate_subtree,
             satisfies_target_fault,
-            subtree_nodes,
         )
 
         for source_entry in self._repos.values():
@@ -2340,64 +2561,20 @@ class FederatedGraph:
                 if declaring_node is None:
                     continue
 
-                template_nodes = subtree_nodes(template_node)
-
-                clone_map: dict[str, GraphNode] = {}
-                for orig in template_nodes:
-                    clone_id = resolver.build_instance_id(br.source_id, orig.id)
-                    clone = GraphNode(
-                        id=clone_id,
-                        kind=orig.kind,
-                        label=orig.get_label(),
-                    )
-                    for key, value in orig.get_all_content().items():
-                        if key not in UNCLONED_FIELDS:
-                            clone.set_field(key, value)
-                    clone.set_field("stereotype", Stereotype.INSTANCE)
-                    # Implements: REQ-p00014-O
-                    # Record the repository owning this clone's ORIGINAL so
-                    # viewers can show "Template defined in <repo>" without
-                    # walking the cross-graph INSTANCE edge. Each clone's own
-                    # original, not the root's: a subtree spans repositories
-                    # where a template in one refines a template in another.
-                    # The repository's NAME, because this is shown to a
-                    # reader; the namespace identifies the member but is not
-                    # what it is called.
-                    owner_namespace = self._ownership.get(orig.id, target_repo_name)
-                    owner_entry = self._repos.get(owner_namespace)
-                    clone.set_field(
-                        "template_repo",
-                        owner_entry.name if owner_entry else owner_namespace,
-                    )
-                    # Source files live in foreign repo; do NOT copy parse_line.
-                    clone.set_field("parse_line", None)
-                    clone.set_field("parse_end_line", None)
-
-                    source_entry.graph._index[clone_id] = clone
-                    self._ownership[clone_id] = source_entry.namespace
-                    clone_map[orig.id] = clone
-
-                    # Cross-graph INSTANCE edge: clone -> template original.
-                    # Use .link() directly so the edge crosses repo
-                    # boundaries (TraceGraph.add_edge with target_graph
-                    # would place the edge on target.link(source), which
-                    # would invert the direction we want here).
-                    clone.link(orig, EdgeKind.INSTANCE)
-
-                # Intra-graph STRUCTURES and REFINES edges among the clones,
-                # the same way the in-repo path recreates them.
-                recreate_subtree_edges(template_nodes, clone_map)
-
-                # Intra-graph SATISFIES edge: declaring REQ -> cloned root.
-                cloned_root = clone_map.get(template_node.id)
-                if cloned_root is not None:
-                    declaring_node.link(cloned_root, EdgeKind.SATISFIES)
-
-                # Intra-graph DEFINES edges: declaring FILE -> every clone.
-                declaring_file = declaring_node.file_node()
-                if declaring_file is not None:
-                    for clone in clone_map.values():
-                        declaring_file.link(clone, EdgeKind.DEFINES)
+                clone_map = instantiate_subtree(
+                    template_node,
+                    declaring_node,
+                    lambda orig_id, source_id=br.source_id, resolver=resolver: (
+                        resolver.build_instance_id(source_id, orig_id)
+                    ),
+                    lambda orig, default=target_repo_name, here=source_entry.namespace: (
+                        self._repo_name_owning(orig, default),
+                        self._ownership.get(orig.id, default) == here,
+                    ),
+                    source_entry.graph._index,
+                )
+                for clone in clone_map.values():
+                    self._ownership[clone.id] = source_entry.namespace
 
                 resolved_indices.append(i)
 
@@ -2652,6 +2829,12 @@ class FederatedGraph:
         if entry and entry.graph:
             result = entry.graph.undo_last()
             if result:
+                if result.operation in (
+                    "delete_assertion",
+                    "update_assertion",
+                    "delete_requirement",
+                ):
+                    self._undo_followed_retirement(entry.graph, result)
                 # Reverse any ownership changes
                 self._rebuild_ownership()
             return result

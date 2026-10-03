@@ -8,6 +8,7 @@ import pytest
 from elspais.graph.builder import GraphBuilder, TraceGraph
 from elspais.graph.GraphNode import NodeKind
 from elspais.graph.parsers import ParsedContent
+from elspais.graph.reference_faults import FaultClass
 from tests.core.graph_test_helpers import grammar_for
 
 
@@ -643,15 +644,22 @@ class TestDeleteRequirement:
 
         assert not graph.has_root("REQ-p00001")
 
-    # Verifies: REQ-o00062-A
-    def test_delete_requirement_orphans_children(self):
-        """Deleting a parent orphans its non-assertion children."""
+    # Verifies: REQ-o00062-A, REQ-p00017-H
+    def test_delete_requirement_leaves_children_as_a_build_does(self):
+        """A child left with no parent is a root whose citation is unresolved."""
         graph = build_hierarchy_graph(status=DRAFT)
+        assert not graph.has_root("REQ-p00002")
 
         graph.delete_requirement("REQ-p00001")
 
-        # Child should now be an orphan
-        assert "REQ-p00002" in graph._orphaned_ids
+        assert graph.has_root("REQ-p00002")
+        assert "REQ-p00002" not in graph._orphaned_ids
+        faults = [
+            (f.edge_kind, f.fault_class)
+            for f in graph.unresolved_references()
+            if f.source_id == "REQ-p00002" and f.target_id == "REQ-p00001"
+        ]
+        assert faults == [("implements", FaultClass.UNKNOWN_REQUIREMENT)]
 
     # Verifies: REQ-o00062-A
     def test_delete_requirement_deletes_assertions(self):
