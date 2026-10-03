@@ -1,4 +1,4 @@
-# Implements: REQ-o00066-A+B+C+D+E
+# Implements: REQ-o00066-B+C+D+E+I+J+K
 name: CI
 
 on:
@@ -97,6 +97,9 @@ jobs:
     # CLI, MCP and viewer path. It covers the CLI broadly, so it runs on every
     # change rather than behind a path filter. Browser tests carrying the e2e
     # marker run here too, so the browser extra and chromium are installed.
+    # A pull request runs it on the newest supported Python only; the unit
+    # tier already runs on every supported version. A push to main runs it
+    # on every supported version.
     name: E2E (Python ${{ matrix.python-version }})
     needs: [compute-hash, prepare-image]
     runs-on: ubuntu-latest
@@ -104,7 +107,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.13"]' || '["3.10", "3.11", "3.12", "3.13"]') }}
 
     steps:
       - uses: actions/checkout@v4

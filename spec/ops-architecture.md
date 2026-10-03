@@ -111,11 +111,13 @@ The pipeline validates at three levels:
 
 These checks are required status checks on the main branch, preventing merges that do not meet the standards.
 
+I, J and K divide the test suite by trigger. The end-to-end tier is the slowest part of the suite, and a difference between Python versions shows first in the unit tier. Consequently, a pull request runs the end-to-end tier on one supported version, and every push to main runs the whole suite on every supported version.
+
 H is stated apart from B because formatting and linting are enforced by the same tool and were not enforced in the same places. A local hook cannot be the only gate for a standard: it is absent from a fresh clone until configured, a contributor may bypass it, and it never runs at all for a commit created on the forge -- an automated version bump, or an edit accepted through the web. A standard enforced only there reaches main unenforced, and is then inherited by whoever next touches the tree.
 
 ## Assertions
 
-A. The CI pipeline SHALL run the full test suite across supported Python versions on every push to main and every pull request targeting main.
+A. <RETIRED> The CI pipeline SHALL run the full test suite across supported Python versions on every push to main and every pull request targeting main.
 
 B. The CI pipeline SHALL run static analysis (linting) to enforce code quality standards.
 
@@ -131,15 +133,23 @@ G. The PR validation pipeline SHALL require both a ticket reference (uppercase t
 
 H. The CI pipeline SHALL enforce the project's code formatting.
 
+I. For every pull request targeting main, the CI pipeline SHALL run the unit tier on every supported Python version.
+
+J. For every pull request targeting main, the CI pipeline SHALL run the end-to-end tier on at least one supported Python version.
+
+K. For every push to main, the CI pipeline SHALL run the full test suite on every supported Python version.
+
 ## Changelog
 
+- 2026-10-03 | 3f2127be | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-03 | - | - | Michael Lewis (<michael@anspar.org>) | A retired: a pull request runs the unit tier on every supported version and the end-to-end tier on one (I, J); a push to main runs the full suite on every supported version (K)
 - 2026-09-10 | 133e2f0d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 67d7ec07 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | 84723bf6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: F/G accept any Linear team prefix, not only CUR — the repo's team moved to TOOL; matches the commit-msg hook's existing pattern
 - 2026-03-30 | 315accce | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *CI/CD Pipeline Enforcement* | **Hash**: 133e2f0d
+*End* *CI/CD Pipeline Enforcement* | **Hash**: 3f2127be
 ---
 
 # REQ-o00078: Release Completeness Across Distribution Channels

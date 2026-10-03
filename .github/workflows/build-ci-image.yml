@@ -1,4 +1,4 @@
-# Implements: REQ-o00066-A
+# Implements: REQ-o00066-I+K
 name: Build CI Image (Manual)
 
 on:
