@@ -397,6 +397,18 @@ _REPLACED_SETTINGS: dict[tuple[str, ...], str] = {
 }
 
 
+# A boolean that once both chose a check's severity and decided whether its
+# condition counted against the run. The check takes its severity from
+# [rules.severity] now, like every check with no setting of its own; the value
+# the boolean held decides which severity reproduces what it did.
+_SEVERITY_FLAGS: dict[tuple[str, ...], tuple[str, dict[bool, str]]] = {
+    ("validation", "strict_hierarchy"): (
+        "spec.hierarchy_levels",
+        {True: "warning", False: "info"},
+    ),
+}
+
+
 def _container_at(config: dict[str, Any], path: tuple[str, ...]) -> dict | None:
     """The table a setting lives in, or None where the file has no such table."""
     container: Any = config
@@ -459,6 +471,27 @@ def _setting_repairs(config: dict[str, Any]) -> list[tuple[str, str]]:
         if container is not None and path[-1] in container:
             section = ".".join(path[:-1])
             repairs.append((f"[{section}] {path[-1]}", replacement))
+
+    for path, (check, severity_of) in _SEVERITY_FLAGS.items():
+        container = _container_at(config, path)
+        if container is not None and path[-1] in container:
+            section = ".".join(path[:-1])
+            value = container[path[-1]]
+            severity = severity_of.get(value) if isinstance(value, bool) else None
+            written = str(value).lower() if isinstance(value, bool) else repr(value)
+            instead = (
+                f'[rules.severity] "{check}" = "{severity}"'
+                if severity is not None
+                else f'[rules.severity] "{check}" = "<off | info | warning | error>"'
+            )
+            repairs.append(
+                (
+                    f"[{section}] {path[-1]} = {written}",
+                    f"{instead}   (the check takes its severity like every other "
+                    f"check -- off, info, warning, error -- and reports at info "
+                    f"where nothing is written)",
+                )
+            )
 
     return repairs
 

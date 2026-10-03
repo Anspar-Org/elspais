@@ -1394,11 +1394,6 @@
           "default": 8,
           "title": "Hash Length",
           "type": "integer"
-        },
-        "strict_hierarchy": {
-          "default": false,
-          "title": "Strict Hierarchy",
-          "type": "boolean"
         }
       },
       "title": "ValidationConfig",

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from elspais.commands.health import (
     HealthFinding,
     check_reference_class,
@@ -184,8 +186,8 @@ namespace = "REQ"
 [scanning.spec]
 directories = ["spec"]
 
-[validation]
-strict_hierarchy = true
+[rules.severity]
+"spec.hierarchy_levels" = "warning"
 
 [levels.prd]
 rank = 1
@@ -241,6 +243,146 @@ A. The system SHALL also exist.
         finding = check.findings[0]
         assert isinstance(finding, HealthFinding)
         assert finding.node_id is not None, "Finding should have node_id"
+
+
+_HIERARCHY_PROJECT = """version = 5
+
+[project]
+name = "test"
+namespace = "REQ"
+
+[scanning.spec]
+directories = ["spec"]
+
+[levels.prd]
+rank = 1
+letter = "p"
+implements = []
+
+[levels.ops]
+rank = 2
+letter = "o"
+implements = ["prd"]
+
+[levels.dev]
+rank = 3
+letter = "d"
+implements = ["ops", "prd"]
+"""
+
+_PRD_IMPLEMENTS_PRD = """# REQ-p00001: Parent PRD
+
+**Level**: PRD | **Status**: Active
+
+## Assertions
+
+A. The system SHALL exist.
+
+*End* *Parent PRD* | **Hash**: eeee5555
+
+# REQ-p00002: Child PRD
+
+**Level**: PRD | **Status**: Active
+**Implements**: REQ-p00001
+
+## Assertions
+
+A. The system SHALL also exist.
+
+*End* *Child PRD* | **Hash**: ffff6666
+"""
+
+
+def _hierarchy_project(tmp_path: Path, spec: str, severity: str | None) -> tuple:
+    """A project holding `spec`, with the hierarchy check's severity set to
+    `severity` under [rules.severity], or left unwritten where it is None."""
+    text = _HIERARCHY_PROJECT
+    if severity is not None:
+        text += f'\n[rules.severity]\n"spec.hierarchy_levels" = "{severity}"\n'
+    config_path = tmp_path / ".elspais.toml"
+    config_path.write_text(text)
+    spec_dir = tmp_path / "spec"
+    spec_dir.mkdir()
+    (spec_dir / "reqs.md").write_text(spec)
+    return _build(tmp_path, config_path), _load_config(config_path)
+
+
+class TestCheckSpecHierarchyLevelsSeverity:
+    """The hierarchy check takes its severity from [rules.severity] alone."""
+
+    # Verifies: REQ-d00285-E
+    @pytest.mark.parametrize("severity", ["info", "warning", "error"])
+    def test_REQ_d00285_E_configured_severity_reaches_the_check(
+        self, tmp_path: Path, severity: str
+    ) -> None:
+        graph, config = _hierarchy_project(tmp_path, _PRD_IMPLEMENTS_PRD, severity)
+
+        check = check_spec_hierarchy_levels(graph, config)
+
+        assert check.severity == severity
+        assert not check.passed
+        assert [f.node_id for f in check.findings] == ["REQ-p00002"]
+
+    # Verifies: REQ-d00285-E
+    def test_REQ_d00285_E_off_withholds_the_violation(self, tmp_path: Path) -> None:
+        graph, config = _hierarchy_project(tmp_path, _PRD_IMPLEMENTS_PRD, "off")
+
+        check = check_spec_hierarchy_levels(graph, config)
+
+        assert check.passed
+        assert check.severity == "info"
+        assert check.findings == []
+        assert "not reported (severity=off)" in check.message
+
+    # Verifies: REQ-d00285-E
+    def test_REQ_d00285_E_unconfigured_severity_is_info(self, tmp_path: Path) -> None:
+        graph, config = _hierarchy_project(tmp_path, _PRD_IMPLEMENTS_PRD, None)
+
+        check = check_spec_hierarchy_levels(graph, config)
+
+        assert check.severity == "info"
+        assert not check.passed
+        assert [f.node_id for f in check.findings] == ["REQ-p00002"]
+
+
+class TestCheckSpecHierarchyLevelsSatisfies:
+    """A requirement's parents are the ones it declares with Implements: or
+    Refines:, so a Satisfies: instance is judged by neither."""
+
+    # Verifies: REQ-p00061-A
+    def test_REQ_p00061_A_satisfies_instance_is_not_a_hierarchy_deviation(
+        self, tmp_path: Path
+    ) -> None:
+        spec = """# REQ-p00001: Cross-Cutting Template
+
+**Level**: PRD | **Status**: Active | **Template**
+
+## Assertions
+
+A. The system SHALL log every change.
+
+*End* *Cross-Cutting Template* | **Hash**: eeee5555
+
+# REQ-d00001: Dev Module
+
+**Level**: DEV | **Status**: Active
+**Satisfies**: REQ-p00001
+
+## Assertions
+
+A. The module SHALL write a log record.
+
+*End* *Dev Module* | **Hash**: ffff6666
+"""
+        graph, config = _hierarchy_project(tmp_path, spec, "error")
+        assert graph.find_by_id("REQ-d00001::REQ-p00001") is not None, (
+            "the Satisfies: instance this test judges was not cloned"
+        )
+
+        check = check_spec_hierarchy_levels(graph, config)
+
+        assert [f.node_id for f in check.findings if "::" in (f.node_id or "")] == []
+        assert check.passed
 
 
 class TestCheckSpecUndefinedLevelsFindings:

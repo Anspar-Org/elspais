@@ -514,7 +514,7 @@ def _registry() -> dict[str, CheckRule]:
         _general("spec.needs_rewrite", "spec", Severity.WARNING),
         _general("spec.unfixable_issues", "spec", Severity.ERROR),
         _general("spec.undefined_levels", "spec", Severity.INFO),
-        _general("spec.hierarchy_levels", "spec", Severity.WARNING),
+        _general("spec.hierarchy_levels", "spec", Severity.INFO),
         _general("spec.structural_orphans", "spec", Severity.ERROR),
         _general("spec.format_rules", "spec", Severity.ERROR),
         _general("spec.hash_integrity", "spec", Severity.WARNING),

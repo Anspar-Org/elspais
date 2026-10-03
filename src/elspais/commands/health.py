@@ -710,11 +710,18 @@ def check_spec_undefined_levels(
     )
 
 
-# Implements: REQ-p00002-B
+# Implements: REQ-p00002-B, REQ-p00061-A
 def check_spec_hierarchy_levels(
     graph: FederatedGraph, config: dict[str, Any], namespace: str | None = None
 ) -> HealthCheck:
-    """Check that hierarchy levels follow configured rules."""
+    """Report each requirement declaring a parent at a level its own level may not implement.
+
+    A parent is declared with `Implements:` or `Refines:` (REQ-p00061-A), so
+    only those edges are read. A `Satisfies:` instance and an `Integrates:`
+    target sit in another requirement's hierarchy, at whatever level that
+    hierarchy gave them, and a level comparison across them reports nothing
+    the author chose.
+    """
     severity = severity_for("spec.hierarchy_levels", config)
     if severity == Severity.OFF:
         return skipped_check(
@@ -725,13 +732,11 @@ def check_spec_hierarchy_levels(
     from elspais.graph.relations import EdgeKind
 
     typed_config = _validate_config(config)
-    levels = typed_config.levels
-    strict_hierarchy = typed_config.validation.strict_hierarchy
-
-    # Parse hierarchy rules from levels config
     allowed_parents_map = {
-        name.lower(): [p.lower() for p in level.implements] for name, level in levels.items()
+        name.lower(): [p.lower() for p in level.implements]
+        for name, level in typed_config.levels.items()
     }
+    parent_edges = {EdgeKind.IMPLEMENTS, EdgeKind.REFINES}
 
     violations = []
 
@@ -743,16 +748,7 @@ def check_spec_hierarchy_levels(
         allowed_parents = allowed_parents_map.get(node_level, [])
 
         seen_parents: set[str] = set()
-        for edge in node.iter_incoming_edges():
-            # INTEGRATES is a cross-repo integration edge (consumer -> library),
-            # not a level-hierarchy relationship: the library requirement lives
-            # in a separate repo's hierarchy and may sit at any level, so a
-            # low-level consumer integrating a higher-level library requirement
-            # is legitimate, not a deviation. Excluding it keeps the level check
-            # from flagging a spurious deviation on the library node. (REQ-d00252-D)
-            if edge.kind == EdgeKind.INTEGRATES:
-                continue
-            parent = edge.source
+        for parent in node.iter_parents(edge_kinds=parent_edges):
             if parent.id in seen_parents:
                 continue
             seen_parents.add(parent.id)
@@ -780,30 +776,15 @@ def check_spec_hierarchy_levels(
             )
             for v in violations
         ]
-        # Severity controlled by validation.strict_hierarchy config
-        if strict_hierarchy:
-            return HealthCheck(
-                name="spec.hierarchy_levels",
-                passed=False,
-                message=f"{len(violations)} hierarchy level violations",
-                category="spec",
-                severity=severity,
-                details={"violations": violations[:10]},
-                findings=findings,
-            )
-        else:
-            return HealthCheck(
-                name="spec.hierarchy_levels",
-                passed=True,  # Informational when not strict
-                message=f"{len(violations)} hierarchy level deviations (strict_hierarchy=false)",
-                category="spec",
-                severity="info",
-                details={
-                    "violations": violations[:10],
-                    "hint": "Set validation.strict_hierarchy=true to enforce",
-                },
-                findings=findings,
-            )
+        return HealthCheck(
+            name="spec.hierarchy_levels",
+            passed=False,
+            message=f"{len(violations)} hierarchy level violations",
+            category="spec",
+            severity=severity,
+            details={"violations": violations[:10]},
+            findings=findings,
+        )
 
     return HealthCheck(
         name="spec.hierarchy_levels",

@@ -37,6 +37,15 @@ Lower levels **implement** higher levels:
 
 **Never** the reverse: PRD cannot implement DEV.
 
+A requirement naming a parent at a level its own level's `implements`
+list does not include is reported by the `spec.hierarchy_levels` check. It
+reports at `info` unless `[rules.severity]` says otherwise:
+
+```toml
+[rules.severity]
+"spec.hierarchy_levels" = "error"   # off | info | warning | error
+```
+
 Example chain:
 
   `REQ-p00001`: Users can reset passwords (PRD)

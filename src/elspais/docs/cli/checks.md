@@ -158,7 +158,7 @@ documentation says about it.
 | `spec.needs_rewrite` | Flags requirements, journeys and file-level prose that will be rewritten on next save (duplicate refs, stale hash, spacing, term forms) | warning | `[rules.severity]` | `elspais fix` |
 | `spec.unfixable_issues` | Issues `elspais fix` cannot repair, so a person has to | error | `[rules.severity]` | `elspais errors` |
 | `spec.undefined_levels` | No requirement carries a level the configuration does not define (such a requirement is still counted and grouped, so this discloses it rather than dropping it) | info | `[rules.severity]` | no command resolves this; resolve it by hand |
-| `spec.hierarchy_levels` | Requirements follow hierarchy rules | warning | `[rules.severity]` | `elspais -v checks --spec` |
+| `spec.hierarchy_levels` | Requirements follow hierarchy rules | info | `[rules.severity]` | `elspais -v checks --spec` |
 | `spec.structural_orphans` | No nodes without a FILE ancestor (build bugs) | error | `[rules.severity]` | `elspais -v checks --spec` |
 | `spec.format_rules` | Requirements satisfy the enabled `[rules.format]` rules | error | `[rules.severity]` | `elspais errors` |
 | `spec.hash_integrity` | Flags Satisfies-linked requirements for review when their template hash is stale | warning | `[rules.severity]` | `elspais fix` |

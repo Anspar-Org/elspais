@@ -66,8 +66,10 @@ require_rationale = false
 require_assertions = true
 require_status = true
 
+[rules.severity]
+"spec.hierarchy_levels" = "warning"
+
 [validation]
-strict_hierarchy = true
 hash_algorithm = "sha256"
 hash_length = 8
 

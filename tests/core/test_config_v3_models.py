@@ -490,16 +490,69 @@ class TestValidationConfigRetiredKeys:
 
         path = tmp_path / ".elspais.toml"
         path.write_text(
-            'version = 5\n[project]\nname = "t"\nnamespace = "REQ"\n'
-            "[validation]\nstrict_hierarchy = true\n"
+            'version = 5\n[project]\nname = "t"\nnamespace = "REQ"\n[validation]\nhash_length = 8\n'
         )
-        assert load_config(path)["validation"]["strict_hierarchy"] is True
+        assert load_config(path)["validation"]["hash_length"] == 8
 
     # Verifies: REQ-d00269-F
     def test_REQ_d00269_F_validation_config_still_accepts_its_real_fields(self):
-        vc = ValidationConfig(hash_mode="normalized-text", strict_hierarchy=True)
+        vc = ValidationConfig(hash_mode="normalized-text", hash_length=12)
         assert vc.hash_mode == "normalized-text"
-        assert vc.strict_hierarchy is True
+        assert vc.hash_length == 12
+
+    # Verifies: REQ-d00212-X
+    @pytest.mark.parametrize(
+        ("written", "severity"),
+        [("true", "warning"), ("false", "info")],
+    )
+    def test_REQ_d00212_X_strict_hierarchy_in_a_file_is_refused(self, tmp_path, written, severity):
+        """The withdrawn switch is refused when read, and the message names
+        the severity setting that reproduces what the value it held did."""
+        from elspais.config import load_config
+
+        path = tmp_path / ".elspais.toml"
+        path.write_text(
+            'version = 5\n[project]\nname = "t"\nnamespace = "REQ"\n'
+            f"[validation]\nstrict_hierarchy = {written}\n"
+        )
+        with pytest.raises(ValueError) as excinfo:
+            load_config(path)
+        message = str(excinfo.value)
+        assert f"[validation] strict_hierarchy = {written}" in message
+        assert f'[rules.severity] "spec.hierarchy_levels" = "{severity}"' in message
+
+    # Verifies: REQ-d00212-X
+    def test_REQ_d00212_X_strict_hierarchy_of_another_type_names_the_values(self, tmp_path):
+        """A value that is not a boolean reproduces no severity, so the message
+        offers the vocabulary rather than guessing one."""
+        from elspais.config import load_config
+
+        path = tmp_path / ".elspais.toml"
+        path.write_text(
+            'version = 5\n[project]\nname = "t"\nnamespace = "REQ"\n'
+            '[validation]\nstrict_hierarchy = "yes"\n'
+        )
+        with pytest.raises(ValueError) as excinfo:
+            load_config(path)
+        assert '[rules.severity] "spec.hierarchy_levels" = "<off | info | warning | error>"' in str(
+            excinfo.value
+        )
+
+    # Verifies: REQ-d00212-Y
+    def test_REQ_d00212_Y_strict_hierarchy_is_not_a_schema_field(self):
+        """The schema defines no strict_hierarchy, so the model refuses it and
+        neither the generated nor the committed JSON schema offers it."""
+        import json
+        from pathlib import Path
+
+        import elspais.config as config_pkg
+
+        with pytest.raises(ValidationError, match="extra"):
+            ValidationConfig(strict_hierarchy=True)
+        generated = json.dumps(_schema.ElspaisConfig.model_json_schema())
+        committed = (Path(config_pkg.__file__).parent / "elspais-schema.json").read_text()
+        assert "strict_hierarchy" not in generated
+        assert "strict_hierarchy" not in committed
 
 
 _HASH_MODE_PROJECT = 'version = 5\n[project]\nname = "t"\nnamespace = "REQ"\n'

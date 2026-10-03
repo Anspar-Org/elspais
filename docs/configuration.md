@@ -96,6 +96,10 @@ name = "my-project"
 # Defines requirement levels with rank, letter, display name, and implements rules.
 # Lower rank = higher in hierarchy (PRD=1 is parent of DEV=3).
 # The `implements` list declares which levels this level may implement.
+# A requirement that names a parent through `Implements:` or `Refines:` at a
+# level its own level may not implement is reported by `spec.hierarchy_levels`,
+# at the severity `[rules.severity]` gives that check (info where nothing is
+# written).
 #
 # A requirement may carry a level this configuration does not define -- an
 # associate declaring its own levels, a misspelling, or a level removed while
@@ -659,7 +663,6 @@ hash_mode = "normalized-text"
 
 # hash_algorithm = "sha256"         # Hash algorithm
 # hash_length = 8                   # Hash truncation length (characters)
-# strict_hierarchy = false          # Strict hierarchy validation
 
 #──────────────────────────────────────────────────────────────────────────────
 # HIERARCHY RULES
