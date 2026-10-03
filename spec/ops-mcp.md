@@ -614,6 +614,10 @@ L. An address the tool records in a client's configuration SHALL resolve to the 
 
 M. Where a client's registration names a fixed address, the tool SHALL report it.
 
+N. An operator SHALL be able to start the process serving a working tree on a port the operator does not name, taken from the ports available when it starts.
+
+O. When a process takes a port the operator did not name, the tool SHALL report the port that process took.
+
 ### Rationale
 
 A client and the process serving it meet at one point — the client asks which process serves its working tree, and acts on the answer. Everything here is a property of that meeting: that it can happen at all, that the answer is true, and that what answers is what the client would have run. That a process exists and that exactly one of them serves a tree is REQ-o00075's subject and is not restated.
@@ -644,8 +648,12 @@ M is about a registration, not about which repositories a tree federates. A tree
 
 M does not cover a shell holding another tree's address. That ends when the address is re-derived, and by the time it could be reported the client has already connected, so nothing useful follows from saying it.
 
+N and O exist for whoever starts a process beside others that are already running -- several servers on one machine, or a test suite starting many at once. Naming a port then means guessing one that is free, and two starters can guess the same port; the second process then fails to start, or a client reaches the first one. Letting the process take any available port removes the guess. O is what makes such a process reachable: an address nobody named is useless until the tool says what it is. The report is the record a client locates the process through (C, E), so the port it names is the port the process took, never the one it was asked for. On the command line the request is a port of 0, and the report is the port in the working tree's state record.
+
 ### Changelog
 
+- 2026-10-02 | 85f1f1a5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | Add N and O: an operator can start the serving process on any available port, and the tool reports the port it took
 - 2026-08-25 | 7505310d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-25 | 0bdae779 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | 32c4639b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -654,7 +662,7 @@ M does not cover a shell holding another tree's address. That ends when the addr
 - 2026-08-18 | cd6333aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | d2a0addf | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
 
-*End* *Reaching the Serving Process* | **Hash**: 7505310d
+*End* *Reaching the Serving Process* | **Hash**: 85f1f1a5
 
 ## REQ-o00077: Serving From the Installed Program
 

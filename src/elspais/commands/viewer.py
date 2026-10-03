@@ -165,7 +165,7 @@ def _run_server(args: argparse.Namespace, open_browser: bool = False) -> int:
     port = 5001 if requested_port is None else requested_port
     quiet = getattr(args, "quiet", False)
 
-    # Implements: REQ-o00076-E
+    # Implements: REQ-o00076-E, REQ-o00076-N, REQ-o00076-O
     # Port 0 asks for any free port. The socket is bound here, before the
     # record below is written, so the record names the port this server
     # answers on and nothing can take it in between.

@@ -1677,10 +1677,11 @@ class TestViewerSessionBoundLifetime:
 
 
 class TestViewerBindsAnyFreePort:
-    """Validates REQ-o00076-E: a viewer asked for port 0 serves on a free
-    port, and its record names the port it answers on."""
+    """Validates REQ-o00076-N, REQ-o00076-O and REQ-o00076-E: a viewer asked
+    for port 0 serves on a free port, and its record names the port it
+    answers on."""
 
-    # Verifies: REQ-o00076-E
+    # Verifies: REQ-o00076-E, REQ-o00076-N, REQ-o00076-O
     def test_REQ_o00076_E_port_zero_is_recorded_as_the_bound_port(self, tmp_path):
         import os
         import urllib.request
