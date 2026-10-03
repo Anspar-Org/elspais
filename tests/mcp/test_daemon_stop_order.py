@@ -22,7 +22,17 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 from elspais.mcp.daemon import StopOutcome, _daemon_json_path, stop_daemon, wait_for_daemon_exit
+
+
+def _proc_state(pid: int) -> str | None:
+    """The state letter ``/proc/<pid>/stat`` reports, or None once it is gone."""
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+    except (OSError, IndexError):
+        return None
 
 
 def _write_record(repo_root: Path, pid: int, port: int = 65000) -> Path:
@@ -136,22 +146,35 @@ class TestStopWaitsForTheProcess:
         )
 
     # Verifies: REQ-o00075-B
-    def test_REQ_o00075_B_unreaped_child_counts_as_stopped(self, tmp_path, monkeypatch):
+    def test_REQ_o00075_B_unreaped_child_counts_as_not_running(self, tmp_path, monkeypatch):
         """Validates REQ-o00075-B: stop_daemon must not mistake a zombie
         for a still-serving process -- that would refuse a restart, or a
-        viewer takeover, over a daemon that has actually already gone."""
+        viewer takeover, over a daemon that has actually already gone. A
+        zombie was not running when the stop was asked, so nothing is
+        stopped and the record naming it is removed."""
+        if sys.platform != "linux":
+            pytest.skip("a zombie is observed through /proc, which only Linux provides")
         proc = subprocess.Popen([sys.executable, "-c", "pass"])
-        time.sleep(0.3)  # let it exit and sit unreaped
-        # A zombie has no argv left to spoof -- the kernel frees the cmdline
-        # at exit, so /proc/<pid>/cmdline reads empty for any process, daemon
-        # or not. Identity is not this test's question; whether the wait sees
-        # an unreaped exit as gone is. Answering the identity question for it
-        # is what lets the wait be reached at all.
-        monkeypatch.setattr("elspais.mcp.daemon.process_is_daemon", lambda pid: True)
-        record = _write_record(tmp_path, proc.pid)
+        try:
+            # Left unreaped: no proc.wait()/poll() until the finally.
+            deadline = time.monotonic() + 30.0
+            while _proc_state(proc.pid) != "Z":
+                assert time.monotonic() < deadline, f"child {proc.pid} never became a zombie"
+                time.sleep(0.01)
+            # A zombie has no argv left -- the kernel frees the cmdline at
+            # exit -- so the identity check would also decline it. Answering
+            # the identity question for it leaves liveness as the only thing
+            # that can keep the stop from reaching the process.
+            monkeypatch.setattr("elspais.mcp.daemon.process_is_daemon", lambda pid: True)
+            record = _write_record(tmp_path, proc.pid)
 
-        assert stop_daemon(tmp_path) is StopOutcome.STOPPED
-        assert not record.exists()
+            outcome = stop_daemon(tmp_path)
+
+            assert outcome is StopOutcome.NOT_RUNNING
+            assert outcome.is_gone
+            assert not record.exists(), "the record naming a zombie was kept"
+        finally:
+            proc.wait()
 
 
 class TestTheStopperOwnsTheDeadline:

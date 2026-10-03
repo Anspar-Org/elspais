@@ -10,6 +10,7 @@ import subprocess
 
 import pytest
 
+from .conftest import private_tree
 from .helpers import resolve_elspais
 
 pytest.importorskip("mcp")
@@ -28,10 +29,11 @@ pytestmark = [
 # Helpers
 # ---------------------------------------------------------------------------
 
-# Allowance for the server's first response: startup includes a full graph
-# build (~10s on this repo), so the handshake needs far more headroom than
-# per-request calls against an already-running server.
-STARTUP_TIMEOUT = 30.0
+# Allowance for the server's first response, which follows a cold full graph
+# build of this repository's estate. It covers that build on the slowest
+# machine that runs this tier, beside another worker building its own copy.
+# The tests ask whether the server answers; this is not a performance budget.
+STARTUP_TIMEOUT = 120.0
 
 
 def _send(proc, obj: dict) -> None:
@@ -126,14 +128,20 @@ def _call_tool_all(proc, name: str, arguments: dict, msg_id: int = 2) -> list:
 
 
 @pytest.fixture(scope="module")
-def mcp(repo_tree):
+def mcp_tree(tmp_path_factory):
+    """A private copy of this repository for the module's server to serve."""
+    return private_tree(tmp_path_factory.mktemp("repo-tree"))
+
+
+@pytest.fixture(scope="module")
+def mcp(mcp_tree):
     """Start a single MCP server for the entire module, shared across all test classes.
 
     It serves a private copy of this repository, never the checkout itself.
     """
     proc = subprocess.Popen(
         [_ELSPAIS, "mcp", "serve"],
-        cwd=repo_tree,
+        cwd=mcp_tree,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

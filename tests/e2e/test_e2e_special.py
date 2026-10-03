@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from elspais.mcp.daemon import pid_alive, wait_for_daemon_exit
 from tests.e2e.conftest import run_elspais
 
 from .helpers import resolve_elspais, trace_rows
@@ -676,7 +677,6 @@ class TestDaemonClientLiveness:
     def test_REQ_o00074_A_daemon_exits_after_client_dies(self, tmp_path):
         import os
         import sys
-        import time
 
         from tests.e2e.helpers import Requirement, base_config, build_project
 
@@ -719,21 +719,14 @@ class TestDaemonClientLiveness:
             # is what an operator reads to ask why the daemon is still up.
             assert _recorded_pids(info) == [client.pid]
             daemon_pid = info["pid"]
-            os.kill(daemon_pid, 0)  # daemon alive while client alive
+            assert pid_alive(daemon_pid), "the daemon stopped while its client was alive"
 
             # Kill the session; the daemon must notice and exit cleanly
             # (no unsaved mutations -> no grace period).
             client.kill()
             client.wait()
 
-            deadline = time.time() + 20
-            while time.time() < deadline:
-                try:
-                    os.kill(daemon_pid, 0)
-                except ProcessLookupError:
-                    break  # daemon exited
-                time.sleep(0.3)
-            else:
+            if not wait_for_daemon_exit({"pid": daemon_pid}, timeout=20):
                 raise AssertionError(
                     "daemon survived its client's death: "
                     + (tmp_path / ".elspais" / "daemon.log").read_text()[-1000:]
@@ -789,7 +782,7 @@ class TestDaemonClientLiveness:
             )
             # And it stays up: no watchdog is running.
             time.sleep(1.5)
-            os.kill(info["pid"], 0)
+            assert pid_alive(info["pid"]), "the explicitly started daemon stopped"
         finally:
             if daemon_json.exists():
                 try:
@@ -855,9 +848,7 @@ class TestDaemonClientLiveness:
 
             deadline = time.time() + 20
             while time.time() < deadline:
-                try:
-                    os.kill(daemon_pid, 0)
-                except ProcessLookupError:
+                if not pid_alive(daemon_pid):
                     break  # daemon exited
                 # A client that keeps talking to the daemon must not keep it
                 # alive: read traffic is not evidence a writer is present.
@@ -955,19 +946,12 @@ class TestDaemonClientLiveness:
             starter.kill()
             starter.wait()
             time.sleep(3)
-            os.kill(daemon_pid, 0)  # raises ProcessLookupError if it stopped
+            assert pid_alive(daemon_pid), "the daemon stopped under its adopted client"
 
             # Now the adopter goes. Nobody is left.
             adopter.kill()
             adopter.wait()
-            deadline = time.time() + 20
-            while time.time() < deadline:
-                try:
-                    os.kill(daemon_pid, 0)
-                except ProcessLookupError:
-                    break
-                time.sleep(0.3)
-            else:
+            if not wait_for_daemon_exit({"pid": daemon_pid}, timeout=20):
                 raise AssertionError(
                     "daemon kept serving with every recorded client gone: "
                     + (tmp_path / ".elspais" / "daemon.log").read_text()[-1500:]
@@ -991,7 +975,6 @@ class TestDaemonClientLiveness:
         """
         import os
         import sys
-        import time
         import urllib.request
 
         from tests.e2e.helpers import Requirement, base_config, build_project
@@ -1057,14 +1040,7 @@ class TestDaemonClientLiveness:
             client.kill()
             client.wait()
 
-            deadline = time.time() + 30
-            while time.time() < deadline:
-                try:
-                    os.kill(daemon_pid, 0)
-                except ProcessLookupError:
-                    break
-                time.sleep(0.3)
-            else:
+            if not wait_for_daemon_exit({"pid": daemon_pid}, timeout=30):
                 raise AssertionError(
                     "daemon holding unsaved work never terminated: "
                     + (tmp_path / ".elspais" / "daemon.log").read_text()[-1500:]
@@ -1216,20 +1192,6 @@ def _apply_pending_title(info: dict, title: str) -> None:
         assert json.loads(resp.read().decode())["success"] is True
 
 
-def _await_exit(pid: int, seconds: float = 30.0) -> bool:
-    import os
-    import time
-
-    deadline = time.time() + seconds
-    while time.time() < deadline:
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            return True
-        time.sleep(0.2)
-    return False
-
-
 class TestStoppingALiveDaemonAccountsForItsWork:
     """Validates REQ-p00083-A and REQ-p00083-B: a live daemon told to discard the
     work it holds drops it, and one stopped by any other route writes it. Only a
@@ -1264,7 +1226,9 @@ class TestStoppingALiveDaemonAccountsForItsWork:
             result = run_elspais("daemon", "--discard-changes", cwd=tmp_path)
 
             assert result.returncode == 0, result.stderr + result.stdout
-            assert _await_exit(daemon_pid), "the daemon told to discard never stopped"
+            assert wait_for_daemon_exit({"pid": daemon_pid}, timeout=30.0), (
+                "the daemon told to discard never stopped"
+            )
             assert title not in spec.read_text(), (
                 "the work the operator said to throw away was written anyway"
             )
@@ -1311,7 +1275,9 @@ class TestStoppingALiveDaemonAccountsForItsWork:
             assert payload["saved"] is True, payload
             assert payload["discarded"] is False
 
-            assert _await_exit(daemon_pid), "the daemon asked to stop never stopped"
+            assert wait_for_daemon_exit({"pid": daemon_pid}, timeout=30.0), (
+                "the daemon asked to stop never stopped"
+            )
             assert title in spec.read_text(), (
                 "a stop nobody qualified destroyed the work the daemon held"
             )
@@ -1348,7 +1314,9 @@ class TestStoppingALiveDaemonAccountsForItsWork:
 
             os.kill(daemon_pid, signal.SIGTERM)
 
-            assert _await_exit(daemon_pid), "the signalled daemon never stopped"
+            assert wait_for_daemon_exit({"pid": daemon_pid}, timeout=30.0), (
+                "the signalled daemon never stopped"
+            )
             log_tail = (tmp_path / ".elspais" / "daemon.log").read_text()[-1500:]
             assert title in spec.read_text(), (
                 "a signalled daemon destroyed the work it was holding: " + log_tail
@@ -1400,7 +1368,7 @@ class TestStoppingALiveDaemonAccountsForItsWork:
             )
 
             os.kill(daemon_pid, signal.SIGKILL)
-            assert _await_exit(daemon_pid)
+            assert wait_for_daemon_exit({"pid": daemon_pid}, timeout=30.0)
             assert sentinel.exists(), "the only surviving account of the loss went with the process"
             assert title not in spec.read_text(), "the work reached disk, so nothing was lost"
 
