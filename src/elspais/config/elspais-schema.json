@@ -1272,6 +1272,11 @@
           "default": ".results",
           "title": "Output Root",
           "type": "string"
+        },
+        "evidence": {
+          "default": "",
+          "title": "Evidence",
+          "type": "string"
         }
       },
       "title": "TestScanningConfig",

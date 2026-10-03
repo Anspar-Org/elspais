@@ -318,6 +318,13 @@ output_root = ".results"
 # and on the command line.
 concurrency = 1
 
+# evidence names the directory of the project's Evidence Snapshot, from the
+# repository root. A target that has not run in this tree, and that the run
+# does not execute, reads its results from that snapshot, tagged carried. A
+# target that ran and left no results is missing them. Empty (the default)
+# names no snapshot.
+# evidence = "test-evidence"
+
 # Configured test targets - result ingestion and coverage attribution.
 # See `elspais docs test-targets` for full documentation.
 #
@@ -1084,7 +1091,8 @@ the file at `coverage`, so a coverage-only target need not name one.
 | --- | --- | --- | --- |
 | `coverage-json` | file | coverage | Parses the JSON report `coverage json` (coverage.py) writes, in either its aggregate or its per-context form, into per-file line coverage. |
 | `coverage-sqlite` | file | coverage | Reads coverage.py's own `.coverage` SQLite data file through coverage.py's public API, so per-test contexts are read compactly rather than through a JSON expansion of them. Needs the `coverage` package (`elspais[coverage]`) importable, and degrades to unattributed coverage where it is not. |
-| `flutter-machine` | stdout | results | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the file and line where each test is declared, and the file that executed it, so `match = "source"` binds each result to its test, including a test declared in a shared file that a runner file executes. |
+| `evidence-snapshot` | file | results | Reads the `results.jsonl` of an Evidence Snapshot. A build reads it for each target that has not run in the tree and that the run does not execute, from the directory `[scanning.test] evidence` names, tagging those results carried. |
+| `flutter-machine` | stdout | results | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the file and line where each test is declared, and the file that executed it, so `match = "source"` binds each result to its test, including a test declared in a shared file that a runner file executes. Each result also carries its duration and the output its test printed. |
 | `junit` | file | results | Parses JUnit XML result files matched by the `results` glob. Honours an optional per-`<testcase>` `file` attribute (a real source path) and `line` attribute, so `match = "source"` can bind to a scanned test node. |
 | `lcov` | file | coverage | Parses an LCOV report -- the `lcov.info` that `flutter test --coverage` and most language toolchains write -- into per-file line coverage. |
 | `pytest-json` | file | results | Parses the report pytest's `--json-report` writes, matched by the `results` glob. |

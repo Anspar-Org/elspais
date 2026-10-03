@@ -110,7 +110,11 @@ not evidence of where results came from.
 
 Copy results from elsewhere with their folder, fingerprint included. An
 example is a baseline that another job produced. Such results read as fresh
-exactly while the inputs here match the inputs they ran against.
+exactly while the inputs here match the inputs they ran against. The
+fingerprint records the root of the tree the run executed in, and elspais
+reads an absolute path a reporter wrote under that root relative to it.
+Consequently, results keep matching their tests after the tree moves or is
+copied to another directory.
 
 `elspais fingerprint` writes no [record of the last run](#the-record-of-the-last-run).
 That record lists only the targets elspais itself executed, so a report after
@@ -119,8 +123,9 @@ a bracketed run names the target with `--targets` rather than `last-run`.
 ### The fingerprint file
 
 The fingerprint is the JSON file `.elspais-run.json` in the target's folder.
-Its `version` field states the format. Its `inputs` field lists one object for
-each input file, with a `path` field and a `digest` field. The digest is the
+Its `version` field states the format. Its `root` field names the directory
+the run executed in. Its `inputs` field lists one object for each input file,
+with a `path` field and a `digest` field. The digest is the
 SHA-256 of the file's content. No path is ever a JSON key. Consequently, a
 secret scanner that looks for a secret-like key beside a long hex value finds
 nothing in the file. The file is safe to include in build output that a
@@ -134,8 +139,9 @@ A run is in progress from the time its fingerprint is written by `start` until
 `finish` records its end. While it is, its folder holds results and coverage
 that are partial or not yet written, so elspais reads nothing from that folder.
 `elspais checks` reports the target under `tests.run_in_progress` (info),
-stating when the run started, and judges neither its freshness nor whether its
-results are missing. A run that stopped without `finish` reads the same way:
+stating when the run started, and does not judge its freshness. A target the
+run expects (`--expect`) needs its results, so a run of it in progress also
+fails `tests.ingestion_fault`: its results are missing. A run that stopped without `finish` reads the same way:
 the fingerprint cannot tell a run that is still going from one that died, so the
 report states the start time and leaves that judgement to the reader.
 
@@ -238,7 +244,8 @@ under that base credits nothing.
 | --- | --- | --- | --- |
 | `coverage-json` | file | coverage | Parses the JSON report `coverage json` (coverage.py) writes, in either its aggregate or its per-context form, into per-file line coverage. |
 | `coverage-sqlite` | file | coverage | Reads coverage.py's own `.coverage` SQLite data file through coverage.py's public API, so per-test contexts are read compactly rather than through a JSON expansion of them. Needs the `coverage` package (`elspais[coverage]`) importable, and degrades to unattributed coverage where it is not. |
-| `flutter-machine` | stdout | results | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the file and line where each test is declared, and the file that executed it, so `match = "source"` binds each result to its test, including a test declared in a shared file that a runner file executes. |
+| `evidence-snapshot` | file | results | Reads the `results.jsonl` of an Evidence Snapshot. A build reads it for each target that has not run in the tree and that the run does not execute, from the directory `[scanning.test] evidence` names, tagging those results carried. |
+| `flutter-machine` | stdout | results | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the file and line where each test is declared, and the file that executed it, so `match = "source"` binds each result to its test, including a test declared in a shared file that a runner file executes. Each result also carries its duration and the output its test printed. |
 | `junit` | file | results | Parses JUnit XML result files matched by the `results` glob. Honours an optional per-`<testcase>` `file` attribute (a real source path) and `line` attribute, so `match = "source"` can bind to a scanned test node. |
 | `lcov` | file | coverage | Parses an LCOV report -- the `lcov.info` that `flutter test --coverage` and most language toolchains write -- into per-file line coverage. |
 | `pytest-json` | file | results | Parses the report pytest's `--json-report` writes, matched by the `results` glob. |

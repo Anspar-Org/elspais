@@ -5652,6 +5652,9 @@ class GraphBuilder:
             "name": test_name,
             "classname": classname,
             "message": data.get("message"),
+            # Implements: REQ-d00322-M
+            # What the test printed, where its reporter carries it.
+            "output": data.get("output"),
             "parse_line": content.start_line,
             "parse_end_line": content.end_line,
             "source_path": source_path,

@@ -633,6 +633,8 @@ L. The system SHALL run the command of a test target in the working directory of
 
 M. If the working directory of a test target resolves outside the repository root, then the system SHALL refuse to run the command of that target.
 
+N. A run that executes targets SHALL execute a federation member's target only where the selection names that member's namespace and the target, and SHALL execute it with that member's configuration, repository root and output area.
+
 ### Rationale
 
 A single command executes a project's test targets and then evaluates
@@ -661,8 +663,11 @@ before any time is spent.
 
 L and M confine a target's command to the repository it belongs to. Which targets run, in which order and at the same time as which others is REQ-d00314.
 
+N keeps a run inside the repository that asked for it unless the reader names another member. Running a member's target executes a command that the member's configuration declares, so the reader names it explicitly.
+
 ### Changelog
 
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a run executes a federation member's target only where the selection names it (N)
 - 2026-10-02 | 3a252869 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-138: the order of test target runs moves to REQ-d00314; the working directory of a target is L and M (A retired)
 - 2026-10-02 | eaae2588 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms, update hash

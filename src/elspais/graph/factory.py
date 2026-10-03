@@ -9,6 +9,7 @@ implementing their own file reading logic.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -267,6 +268,8 @@ def _ingest_target_results(
     scanned_tests: frozenset[str] = frozenset(),
     results_pattern: str = "",
     results_base: Path | None = None,
+    reporter: str | None = None,
+    recorded_root: Path | None = None,
 ) -> int:
     """Parse a target's reporter output and add RESULT ParsedContent.
 
@@ -275,24 +278,43 @@ def _ingest_target_results(
 
     Only "results"-kind reporters are handled; coverage-kind reporters are
     skipped (returns 0 immediately).
+
+    ``reporter`` names the format *results_text* is in, where it is not the
+    one the target declares: an *Evidence Snapshot*'s lines for the target.
+
+    ``recorded_root`` is the root the target's *Result Fingerprint* records.
+    An absolute path under it is read relative to it, so results keep
+    matching their tests after the tree moves.
     """
     from elspais.graph.parsers import ParsedContent
     from elspais.graph.parsers.results.registry import get_reporter
 
+    reporter_name = reporter or target.reporter
     try:
-        spec = get_reporter(target.reporter)
+        spec = get_reporter(reporter_name)
     except KeyError:
         # A misspelled reporter name produces no results anywhere, and a
         # target that ingested nothing looks exactly like a suite that
         # reported nothing. Record the name that matched no reporter.
-        _log.debug("_ingest_target_results: unknown reporter %r, skipping", target.reporter)
+        _log.debug("_ingest_target_results: unknown reporter %r, skipping", reporter_name)
         builder.record_ingestion_fault(
             path=_repo_relative(source_path, repo_root) if source_path else "",
             stage="target",
-            cause=_unknown_reporter_cause(target.reporter),
+            cause=_unknown_reporter_cause(reporter_name),
             target=target.name,
         )
         return 0
+
+    # Implements: REQ-d00322-C+J
+    # The settings a target declares describe its own reporter's output. Text
+    # in another reporter's format -- an Evidence Snapshot's lines, already in
+    # the tool's own line numbering, naming their files and carrying no
+    # environment -- is read by that reporter's declarations alone.
+    line_base = spec.line_base if reporter else target.line_base
+    if line_base is None:
+        line_base = spec.line_base
+    form = spec.classname if reporter else (target.classname or spec.classname)
+    env_source = spec.environment if reporter else (target.environment or spec.environment)
 
     if spec.kind != "results":
         # Suppressed deliberately: this is routing, not a condition. A
@@ -301,7 +323,7 @@ def _ingest_target_results(
         # here would report a target that was read as one that was not.
         _log.debug(
             "_ingest_target_results: reporter %r is kind=%r, not 'results', skipping",
-            target.reporter,
+            reporter_name,
             spec.kind,
         )
         return 0
@@ -317,7 +339,7 @@ def _ingest_target_results(
     # and pointing a reader at that line -- can then treat a line as a line.
     # `result_line` is this module's own count of lines in the results
     # artifact and is already 1-based, so it is left alone.
-    line_shift = 1 - (target.line_base if target.line_base is not None else spec.line_base)
+    line_shift = 1 - line_base
     if line_shift:
         for rec in result_records:
             for key in ("line", "root_line"):
@@ -329,7 +351,6 @@ def _ingest_target_results(
     # declares. A name read as a source file binds only where it picks out
     # exactly one test scanned for this target; otherwise it binds to nothing
     # and carries why, so the result can be reported rather than dropped.
-    form = target.classname or spec.classname
     for rec in result_records:
         if not rec.get("test_id"):
             continue  # already bound by a source file the producer named
@@ -349,7 +370,6 @@ def _ingest_target_results(
     # declared source yields nothing, the results keep no environment and
     # the build says it derived none, because a guess reads exactly like a
     # reading in every figure afterwards.
-    env_source = target.environment or spec.environment
     path_environment: str | None = None
     if env_source == "results-path":
         about_pattern = False
@@ -382,14 +402,22 @@ def _ingest_target_results(
 
     repo_root_resolved = Path(repo_root).resolve()
 
+    # Implements: REQ-d00311-Q
     def _repo_relative_or_kept(raw: str | None) -> str | None:
-        # An absolute path inside the repository becomes repo-relative. A
-        # relative path, or one outside the repository, is kept as it is.
-        if raw and os.path.isabs(raw):
+        # An absolute path inside the repository, or inside the root the run
+        # executed in, becomes repo-relative. A relative path, or one under
+        # neither root, is kept as it is. A path that no longer exists
+        # resolves to itself, so the recorded root still matches it.
+        if not raw or not os.path.isabs(raw):
+            return raw
+        resolved = Path(raw).resolve(strict=False)
+        for root in (repo_root_resolved, recorded_root):
+            if root is None:
+                continue
             try:
-                return str(Path(raw).resolve().relative_to(repo_root_resolved))
+                return str(resolved.relative_to(root))
             except ValueError:
-                return raw
+                continue
         return raw
 
     count = 0
@@ -426,7 +454,7 @@ def _ingest_target_results(
         ordinal = rec.get("ordinal")
         if ordinal is None:
             raise ValueError(
-                f"reporter {target.reporter!r} produced a result carrying no "
+                f"reporter {reporter_name!r} produced a result carrying no "
                 f"ordinal, so the result record cannot be told from the other "
                 f"result records of the same test. Every results reporter numbers "
                 f"its result records."
@@ -447,7 +475,7 @@ def _ingest_target_results(
                     reason = "the suite that holds this result record names no hostname"
                 else:
                     reason = (
-                        f"reporter {target.reporter!r} reads a format whose "
+                        f"reporter {reporter_name!r} reads a format whose "
                         f"result records carry no suite hostname"
                     )
                 builder.record_ingestion_fault(
@@ -466,6 +494,8 @@ def _ingest_target_results(
             "classname": rec.get("classname", ""),
             "duration": rec.get("duration", 0.0),
             "message": rec.get("message"),
+            # Implements: REQ-d00322-M
+            "output": rec.get("output"),
             "test_id": rec.get("test_id"),
             "source_path": raw_src,
             "source_file": source_file,
@@ -494,6 +524,48 @@ def _ingest_target_results(
         builder.add_parsed_content(content)
         count += 1
     return count
+
+
+# Implements: REQ-d00322-J+L
+def _evidence_lines(
+    builder, repo_root: Path, evidence: str, *, evidence_only: bool
+) -> tuple[Path, dict[str, str]]:
+    """The *Evidence Snapshot* at *evidence*, as each target's lines to ingest.
+
+    Returns the snapshot's `results.jsonl` path and, for each target the
+    snapshot holds, that target's result lines, one JSON object per line,
+    each carrying ``_line``: its 1-based line number in `results.jsonl`. A
+    target the snapshot selected and holds no result for maps to no lines,
+    because its run produced none.
+
+    A directory that does not exist holds no snapshot yet, and supplies
+    nothing. A snapshot that cannot be read is an ingestion fault naming
+    the file and line, and supplies nothing: it is never read as empty.
+    The build that renders the report reads the snapshot before the report
+    exists, so only it reads a snapshot without one.
+    """
+    from elspais.utilities.evidence import SnapshotUnreadable, load_snapshot
+
+    directory = repo_root / evidence
+    results_path = directory / "results.jsonl"
+    if not evidence_only and not directory.is_dir():
+        return results_path, {}
+    try:
+        snapshot = load_snapshot(directory, require_report=not evidence_only)
+    except SnapshotUnreadable as exc:
+        builder.record_ingestion_fault(
+            path=_repo_relative(exc.path, repo_root),
+            stage="results",
+            cause=f"the Evidence Snapshot was not read: {exc.reason}",
+            line=exc.line,
+        )
+        return results_path, {}
+    lines: dict[str, list[str]] = {name: [] for name, _digest in snapshot.targets}
+    for number, result in enumerate(snapshot.results, start=1):
+        lines.setdefault(result.target, []).append(
+            json.dumps({**result.to_json(), "_line": number}, sort_keys=True)
+        )
+    return results_path, {name: "\n".join(rows) for name, rows in lines.items()}
 
 
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
@@ -1052,6 +1124,7 @@ def build_graph(
     scan_tests: bool = True,
     captured_results: dict[str, str] | None = None,
     fresh_targets: set[str] | None = None,
+    evidence_only: bool = False,
 ) -> FederatedGraph:
     """Build a FederatedGraph from spec directories.
 
@@ -1081,6 +1154,9 @@ def build_graph(
             ingested for a target NOT in this set is tagged ``carried=True``.
             When None (the default), no target is considered carried. Stashed
             on the returned FederatedGraph as ``render_fresh_targets``.
+        evidence_only: Read every target's results from the *Evidence
+            Snapshot* its repository names, and none from the target's own
+            output area or coverage file.
 
     Returns:
         FederatedGraph wrapping one or more TraceGraph instances.
@@ -1128,6 +1204,7 @@ def build_graph(
         captured_results=captured_results,
         fresh_targets=fresh_targets,
         federation_resolvers=federation_resolvers,
+        evidence_only=evidence_only,
     )
 
     # Implements: REQ-d00203-A+B+E
@@ -1162,6 +1239,7 @@ def build_graph(
                 scan_code=scan_code,
                 scan_tests=scan_tests,
                 federation_resolvers=federation_resolvers,
+                evidence_only=evidence_only,
             )
             entries.append(
                 RepoEntry(
@@ -1198,6 +1276,7 @@ def _build_repository(
     captured_results: dict[str, str] | None = None,
     fresh_targets: set[str] | None = None,
     federation_resolvers: list[IdResolver] | None = None,
+    evidence_only: bool = False,
 ) -> tuple[TraceGraph, Callable[[], None]]:
     """Build one repository's graph, held by no federation.
 
@@ -1456,10 +1535,61 @@ def _build_repository(
             # RemainderParser is NOT registered for RESULT file types.
             # When targets is empty (the default) this loop is a no-op.
             from elspais.graph.builder import UnreadArtifact
-            from elspais.utilities.fingerprint import run_in_progress, target_folder
+            from elspais.utilities.fingerprint import (
+                FINGERPRINT_NAME,
+                read_fingerprint,
+                run_in_progress,
+                target_folder,
+            )
 
             _captured = captured_results or {}
             from elspais.graph.parsers.results.registry import get_reporter as _get_reporter
+
+            # Implements: REQ-d00322-J+L
+            # The Evidence Snapshot this repository names, read once. Each
+            # federation member reads its own, against its own root.
+            evidence_path: Path | None = None
+            evidence_lines: dict[str, str] = {}
+            if typed_config.scanning.test.evidence and typed_config.scanning.test.targets:
+                evidence_path, evidence_lines = _evidence_lines(
+                    builder,
+                    repo_root,
+                    typed_config.scanning.test.evidence,
+                    evidence_only=evidence_only,
+                )
+
+            def _read_evidence(target, scanned: frozenset[str]) -> bool:
+                """Ingest *target*'s results from the Evidence Snapshot, tagged carried.
+
+                Returns whether the snapshot holds the target and was read.
+                """
+                if evidence_path is None or target.name not in evidence_lines:
+                    return False
+                # Implements: REQ-d00322-J, REQ-d00254-I, REQ-d00283-R
+                # A target this run executed, or one whose output area holds
+                # a Result Fingerprint, ran here: its results are its own even
+                # where it left none, so the snapshot never stands in for
+                # them. A build reading only the snapshot asks nothing of the
+                # output area.
+                if not evidence_only:
+                    if fresh_targets is not None and target.name in fresh_targets:
+                        return False
+                    area = target_folder(repo_root, typed_config, target.name)
+                    if (area / FINGERPRINT_NAME).is_file():
+                        return False
+                _get_or_create_file_node(evidence_path, FileType.RESULT)
+                _ingest_target_results(
+                    builder,
+                    target,
+                    evidence_lines[target.name],
+                    repo_root,
+                    str(evidence_path),
+                    namespace=typed_config.project.namespace,
+                    carried=True,
+                    scanned_tests=scanned,
+                    reporter="evidence-snapshot",
+                )
+                return True
 
             for target in typed_config.scanning.test.targets:
                 if not target.reporter:
@@ -1514,6 +1644,24 @@ def _build_repository(
                 target_tests = frozenset(
                     f for f in scanned_test_files if not prefix or f.startswith(prefix)
                 )
+                # Implements: REQ-d00322-J
+                # A build reading only the snapshot reads nothing from the
+                # target's output area, whatever is there or running.
+                if evidence_only:
+                    if not _read_evidence(target, target_tests) and target_spec.kind == "results":
+                        builder.record_unread_artifact(
+                            UnreadArtifact(
+                                target=target.name,
+                                artifact="results",
+                                path=(
+                                    _repo_relative(evidence_path, repo_root)
+                                    if evidence_path is not None
+                                    else ""
+                                ),
+                                reason="absent",
+                            )
+                        )
+                    continue
                 # Implements: REQ-d00311-N
                 # A run in progress has emptied the area and writes into it
                 # while it runs, so nothing there is read until it ends.
@@ -1539,6 +1687,15 @@ def _build_repository(
                         )
                     )
                     continue
+                # Implements: REQ-d00311-Q
+                # The root the run executed in, read once for the target, so
+                # a path its reporter recorded under that root still names
+                # the same file after the tree moves.
+                _fingerprint = read_fingerprint(target_folder(repo_root, typed_config, target.name))
+                _recorded = (_fingerprint or {}).get("root")
+                recorded_root = (
+                    Path(_recorded) if isinstance(_recorded, str) and _recorded else None
+                )
                 if target.name in _captured:
                     _ingest_target_results(
                         builder,
@@ -1549,6 +1706,7 @@ def _build_repository(
                         namespace=typed_config.project.namespace,
                         carried=carried,
                         scanned_tests=target_tests,
+                        recorded_root=recorded_root,
                     )
                 elif target.results:
                     # Implements: REQ-d00312-A+C
@@ -1578,8 +1736,14 @@ def _build_repository(
                                     # of the path its wildcard stood for.
                                     results_pattern=target.results,
                                     results_base=area,
+                                    recorded_root=recorded_root,
                                 )
                     elif target_spec.kind == "results":
+                        # Implements: REQ-d00322-J
+                        # A target with no results of its own reads the
+                        # project's Evidence Snapshot, tagged carried.
+                        if _read_evidence(target, target_tests):
+                            continue
                         # Implements: REQ-d00283-R+S+T
                         # The build records that no results are there. Whether
                         # that is a fault depends on what the run executed and
@@ -1594,6 +1758,9 @@ def _build_repository(
                             )
                         )
                 elif target_spec.kind == "results":
+                    # Implements: REQ-d00322-J
+                    if _read_evidence(target, target_tests):
+                        continue
                     # Implements: REQ-d00283-R+S+T
                     # The same fact as a results pattern that matched nothing,
                     # for a target whose reporter reads its runner's output.
@@ -1611,7 +1778,11 @@ def _build_repository(
 
     # 6c-target. Per-target coverage ingestion: scan coverage files and annotate FILE nodes.
     # When targets is empty (the default), this loop is a no-op.
-    if typed_config.scanning.test.targets:
+    # Implements: REQ-d00322-F
+    # A build reading only the Evidence Snapshot reads no coverage file: the
+    # snapshot holds none, and the report rendered from it depends on the
+    # snapshot and the specification alone.
+    if typed_config.scanning.test.targets and not evidence_only:
         from elspais.graph.builder import UnreadArtifact
         from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
         from elspais.graph.parsers.results.coverage_sqlite import CoverageSqliteParser

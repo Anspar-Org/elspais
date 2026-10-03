@@ -218,3 +218,82 @@ def test_a_url_that_is_not_a_file_url_names_no_path(url):
     from elspais.graph.parsers.results.flutter_machine import _file_url_path
 
     assert _file_url_path(url) is None
+
+
+# ---------------------------------------------------------------------------
+# Durations and printed output
+# ---------------------------------------------------------------------------
+
+
+def _timed_stream(*prints: dict, start: object = 100, done: object = 1600) -> str:
+    """One suite running test 1 from ``start`` to ``done``, with ``prints`` between."""
+    events = [
+        {"type": "suite", "suite": {"id": 0, "platform": "vm", "path": _SUITE_PATH}},
+        {
+            "type": "testStart",
+            "test": {"id": 1, "name": "throughput", "suiteID": 0, "line": 12},
+            "time": start,
+        },
+        *prints,
+        {"type": "testDone", "testID": 1, "result": "success", "hidden": False, "time": done},
+    ]
+    return "\n".join(json.dumps(e) for e in events)
+
+
+def _print(message: str, test_id: int = 1) -> dict:
+    return {"type": "print", "testID": test_id, "message": message, "messageType": "print"}
+
+
+# Verifies: REQ-d00322-M
+def test_a_record_carries_the_seconds_between_its_start_and_done_events():
+    (record,) = FlutterMachineParser().parse(_timed_stream())
+
+    assert record["duration"] == 1.5
+
+
+# Verifies: REQ-d00322-M
+@pytest.mark.parametrize(
+    "start,done",
+    [(None, 1600), (100, None), ("100", 1600)],
+    ids=["no-start", "no-done", "not-an-integer"],
+)
+def test_a_record_without_two_event_times_carries_no_duration(start, done):
+    (record,) = FlutterMachineParser().parse(_timed_stream(start=start, done=done))
+
+    assert record["duration"] == 0.0
+
+
+# Verifies: REQ-d00322-M
+@pytest.mark.parametrize(
+    "prints,output",
+    [
+        ([_print("ratio 0.9x")], "ratio 0.9x"),
+        ([_print("ratio 0.9x"), _print("pause 12ms")], "ratio 0.9x\npause 12ms"),
+        ([], None),
+        ([_print("from nowhere", test_id=99)], None),
+    ],
+    ids=["one-print", "two-prints-joined", "no-print", "print-for-an-unknown-test"],
+)
+def test_a_record_carries_what_its_test_printed(prints, output):
+    (record,) = FlutterMachineParser().parse(_timed_stream(*prints))
+
+    assert record["output"] == output
+
+
+# Verifies: REQ-d00322-M
+def test_a_result_node_carries_its_duration_and_printed_output(tmp_path):
+    from elspais.config.schema import TestTargetConfig
+    from elspais.graph.builder import GraphBuilder
+    from elspais.graph.factory import _ingest_target_results
+    from elspais.graph.GraphNode import NodeKind
+    from tests.core.graph_test_helpers import grammar_for
+
+    builder = GraphBuilder(repo_root=tmp_path, namespace="REQ", resolver=grammar_for("REQ"))
+    target = TestTargetConfig(name="flutter", reporter="flutter-machine", match="source")
+    stream = _timed_stream(_print("ratio 0.9x"), _print("pause 12ms"))
+    assert _ingest_target_results(builder, target, stream, tmp_path, namespace="REQ") == 1
+
+    (node,) = list(builder.build().iter_by_kind(NodeKind.RESULT))
+
+    assert node.get_field("duration") == 1.5
+    assert node.get_field("output") == "ratio 0.9x\npause 12ms"

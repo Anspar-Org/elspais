@@ -4775,7 +4775,7 @@ def check_unbound_citations(
     )
 
 
-# Implements: REQ-d00283-Q+R+S+T+U+V, REQ-d00311-N
+# Implements: REQ-d00283-Q+R+S+T+U+V+Z, REQ-d00311-N
 @dataclass(frozen=True)
 class _TargetOutcomes:
     """The artifacts a build did not read, divided by what the run asked for.
@@ -4786,8 +4786,9 @@ class _TargetOutcomes:
 
     Attributes:
         missing: ``(repo, artifact, cause)`` for each artifact a target the run
-            executed or expected did not leave, and for coverage a target with
-            results did not leave.
+            executed or expected did not leave, for coverage a target with
+            results did not leave, and once for each expected target whose
+            run is in progress.
         not_run: ``(repo, target, path)`` for each target with no results that
             the run neither executed nor expected.
         running: ``(repo, target, started_at)`` for each target whose run had
@@ -4816,9 +4817,27 @@ def _target_outcomes(graph: FederatedGraph, expected_targets: tuple[str, ...]) -
     running: dict[tuple[str, str], str] = {}
     for entry in graph.iter_repos():
         unread = graph.unread_artifacts(namespace=entry.namespace)
+        # The run of a target in progress, once per target: its results
+        # artifact where one was recorded, else its coverage.
+        in_progress: dict[str, Any] = {}
         for item in unread:
             if item.reason == "running":
                 running.setdefault((entry.name, item.target), item.started_at)
+                if item.target not in in_progress or item.artifact == "results":
+                    in_progress[item.target] = item
+        # Implements: REQ-d00283-Z
+        # A run that has not ended left no results this run can read, so a
+        # target the run expects is missing its results.
+        for target_name, item in sorted(in_progress.items()):
+            if qualified_target(entry.namespace, target_name) in expected:
+                missing.append(
+                    (
+                        entry.name,
+                        item,
+                        "results unread because its run is in progress "
+                        f"(started {item.started_at or 'at an unrecorded time'})",
+                    )
+                )
         absent = [item for item in unread if item.reason == "absent"]
         results_absent = {item.target for item in absent if item.artifact == "results"}
         # A target whose reporter reads results, and whose results were not

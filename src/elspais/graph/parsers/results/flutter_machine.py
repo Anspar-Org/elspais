@@ -5,7 +5,10 @@ file that executed it, and its name.
 
 Result record shape mirrors sibling parsers (junit_xml, pytest_json):
 ``{"ordinal", "name", "classname", "status", "duration", "message",
-"source_path", "line", "root_path", "root_line", "runner_path", "test_id"}``.
+"source_path", "line", "root_path", "root_line", "runner_path", "test_id"}``,
+plus ``output``: what the test printed, one ``print`` event per line, or
+``None`` where it printed nothing. ``duration`` is the seconds between the
+test's ``testStart`` and ``testDone`` events.
 
 ``test.url`` and ``test.line`` name the frame that called ``test()``, and
 ``suite.path`` names the file the runner executed. The two differ for a
@@ -51,6 +54,18 @@ def _file_url_path(url: Any) -> str | None:
     return None
 
 
+# Implements: REQ-d00322-M
+def _seconds(start: Any, end: Any) -> float:
+    """The seconds between two event times, which the stream gives in milliseconds.
+
+    A missing or non-integer time gives 0.0, as for a reporter that records no
+    duration.
+    """
+    if isinstance(start, int) and isinstance(end, int):
+        return round((end - start) / 1000, 3)
+    return 0.0
+
+
 # Implements: REQ-d00254-E
 class FlutterMachineParser(DiagnosticRecorder):
     def parse(self, content: str, source_path: str = "") -> list[dict[str, Any]]:
@@ -92,7 +107,15 @@ class FlutterMachineParser(DiagnosticRecorder):
                     "declared_path": declared_path,
                     "root_line": None if declared_path else t.get("root_line"),
                     "root_path": None if declared_path else _file_url_path(t.get("root_url")),
+                    "started": ev.get("time"),
                 }
+            # Implements: REQ-d00322-M
+            # What a test printed is kept with its result. A print that names
+            # no started test belongs to no result and is passed over.
+            elif etype == "print":
+                meta = tests.get(ev.get("testID"))
+                if meta is not None:
+                    meta.setdefault("output", []).append(str(ev.get("message", "")))
             elif etype == "testDone":
                 if ev.get("hidden"):
                     continue
@@ -117,7 +140,9 @@ class FlutterMachineParser(DiagnosticRecorder):
                         "name": meta["name"],
                         "classname": "",
                         "status": status,
-                        "duration": 0.0,
+                        # Implements: REQ-d00322-M
+                        "duration": _seconds(meta.get("started"), ev.get("time")),
+                        "output": "\n".join(meta["output"]) if meta.get("output") else None,
                         "message": None,
                         "source_path": meta["declared_path"] or runner,
                         "line": meta["line"],

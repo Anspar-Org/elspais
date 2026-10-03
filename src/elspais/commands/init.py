@@ -261,6 +261,10 @@ _FIELD_COMMENTS: dict[str, str] = {
         "Directory holding one folder per test target; a target writes its results"
         " and coverage into its own folder (default .results)"
     ),
+    "scanning.test.evidence": (
+        "Directory of the Evidence Snapshot that evidence write fills and builds read"
+        " when a target has no results"
+    ),
     "scanning.test.targets": ("Per-package/suite test-ingestion targets (array of tables)"),
     "scanning.test.targets.name": "Unique label for this target (required)",
     "scanning.test.targets.cwd": (

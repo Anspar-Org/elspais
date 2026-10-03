@@ -1060,6 +1060,25 @@ class TestServedGraphCurrency:
 
         assert [p.name for p in state.changed_files()] == [FINGERPRINT_NAME]
 
+    # Verifies: REQ-d00313-A
+    def test_writing_the_evidence_snapshot_makes_the_graph_stale(self, tmp_path):
+        """A member naming an Evidence Snapshot reads its results from it, so
+        a snapshot arriving after the build is a file the graph predates."""
+        config = _TARGET_CONFIG.replace(
+            "[scanning.test]\nenabled = true\n",
+            '[scanning.test]\nenabled = true\nevidence = "test-evidence"\n',
+        )
+        assert config != _TARGET_CONFIG
+        root = self._repo(tmp_path, config)
+        state = self._state(root)
+        assert not state.is_stale()
+
+        evidence = root / "test-evidence"
+        evidence.mkdir()
+        (evidence / "results.jsonl").write_text("")
+
+        assert [p.name for p in state.changed_files()] == ["results.jsonl"]
+
     # Verifies: REQ-d00313-A, REQ-p00004-J
     def test_creating_the_configuration_overlay_makes_the_graph_stale(self, tmp_path):
         root = self._repo(tmp_path)

@@ -6,12 +6,13 @@ current against the files here and nowhere else, so the rebuild decision and
 the staleness it reports cannot disagree about what was watched.
 
 The set covers every member of the federation. For each member it holds the
-configuration documents, the files the spec, code and test kinds select, and
-the output area of each test target: the result fingerprint of its run, its
-results and its coverage. The selection is the build's own (``scan_plan`` and
-``select_files``), asked again at each snapshot, so a new file the selection
-admits counts, a scanned directory created after the build included, and a
-file it skips or declines never does.
+configuration documents, the files the spec, code and test kinds select, the
+files of the Evidence Snapshot it names, and the output area of each test
+target: the result fingerprint of its run, its results and its coverage. The
+selection is the build's own (``scan_plan`` and ``select_files``), asked again
+at each snapshot, so a new file the selection admits counts, a scanned
+directory created after the build included, and a file it skips or declines
+never does.
 """
 
 from __future__ import annotations
@@ -57,6 +58,7 @@ class WatchSet:
 def watch_set(members: Iterable[tuple[Path, dict[str, Any]]]) -> WatchSet:
     """Return the files a graph was built from, given the root and configuration of each member."""
     from elspais.config import config_document_candidates, validate_config
+    from elspais.utilities.evidence import SNAPSHOT_FILES, TIMINGS_FILE
     from elspais.utilities.fingerprint import target_folder
 
     planned: list[tuple[Path, dict[str, Any]]] = []
@@ -67,6 +69,13 @@ def watch_set(members: Iterable[tuple[Path, dict[str, Any]]]) -> WatchSet:
         planned.append((root, config or {}))
         files.extend(config_document_candidates(root / ".elspais.toml"))
         typed = validate_config(config or {})
+        # Implements: REQ-d00313-A, REQ-d00322-J
+        # A member naming an Evidence Snapshot reads its results from the
+        # snapshot's files wherever a target has none of its own, so those
+        # files are build inputs, counted whether or not they exist yet.
+        if typed.scanning.test.evidence and typed.scanning.test.targets:
+            directory = root / typed.scanning.test.evidence
+            files.extend(directory / name for name in (*SNAPSHOT_FILES, TIMINGS_FILE))
         for target in typed.scanning.test.targets:
             folder = target_folder(root, typed, target.name)
             patterns = tuple(str(folder / p) for p in (target.results, target.coverage) if p)

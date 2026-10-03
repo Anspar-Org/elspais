@@ -1,4 +1,4 @@
-# Implements: REQ-d00311-A+B+C+D+I+J+K+L+M+N, REQ-d00312-A+B+D
+# Implements: REQ-d00311-A+B+C+D+I+J+K+L+M+N+P, REQ-d00312-A+B+D
 """Record the fingerprint of a test target's run, and judge the freshness of its results.
 
 Terms:
@@ -8,7 +8,7 @@ Terms:
   The command of the target writes its results and coverage there.
 - A result fingerprint is a statement of one run of a target. It holds a
   manifest: the path and the content digest of each input, and the times the
-  run started and finished.
+  run started and finished, and the root of the tree it executed in.
 
 A run writes its fingerprint into the output area when the run starts. The
 results are fresh while the manifest matches the inputs on disk. The manifest
@@ -285,6 +285,10 @@ def start_run(repo_root: Path, config: Any, target_name: str) -> Path:
         {
             "version": _FINGERPRINT_VERSION,
             "target": target_name,
+            # Implements: REQ-d00311-P
+            # Where the run executed, so a recorded absolute path is read
+            # relative to it after the tree moves.
+            "root": str(root),
             "started_at": _now(),
             "finished_at": "",
             "commit": commit,

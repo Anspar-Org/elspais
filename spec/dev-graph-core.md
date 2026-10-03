@@ -1228,6 +1228,8 @@ X. The system SHALL reject at configuration-validation time a test target name o
 
 Y. If a run that does not execute test targets is given a selection of targets to execute or a request to stop at the first failing target, then the system SHALL refuse the run.
 
+Z. The system SHALL report a target that the run expects, and whose run is in progress, as a target with missing results.
+
 ### Rationale
 
 The cost of a target is not something the tool can read off its configuration, and it is not the tool's judgement to make. What the tool can do is let the project say it once, in a place a reader of the configuration will find, and then honour it. A description is required with each declaration for that reason: a group called `slow` tells a newcomer nothing about whether their change should have run it, and the declaration is the only place that explanation has to live.
@@ -1250,7 +1252,13 @@ Y is H's discipline applied to a run that executes nothing. A selection of targe
 
 G carries the cost of that aliasing, and it is the whole cost. One namespace means a name cannot be a target's and a group's at once, so a configuration holding both is refused when it is read rather than resolved by a precedence rule — a precedence rule being a thing every reader of that configuration would afterwards have to know. What makes the aliasing safe beyond that is that a run says which targets it executed, so what an invocation resolved to is answerable by looking at the run rather than by knowing any of this.
 
-*End* *Test Target Groups* | **Hash**: 2e819a81
+Z applies R to a run that never ended. A job that died leaves a *Result Fingerprint* with no end, and its results are unread, so a gate that expects the target fails rather than passing over it.
+
+### Changelog
+
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: an expected target whose run is in progress reports its results as missing (Z)
+
+*End* *Test Target Groups* | **Hash**: a4217e49
 
 ## REQ-d00284: How a Result Names Its Test
 
@@ -1363,6 +1371,60 @@ G applies the same principle to one scenario that several runner files execute. 
 
 *End* *Each Result Record Is a Result of Its Own* | **Hash**: cd9ff4c9
 
+## REQ-d00322: Evidence Snapshot
+
+**Level**: dev | **Status**: Draft | **Implements**: REQ-o00051
+
+A project stores the results of its test suites with each change, and a reader verifies that those results describe that change.
+
+### Assertions
+
+A. The system SHALL write an *Evidence Snapshot* from the results of a selection of test targets.
+
+B. The system SHALL refuse to write an *Evidence Snapshot* while a selected target's results are absent, stale or in progress, and SHALL name each such target.
+
+C. An *Evidence Snapshot* SHALL hold, for each result, the target, the file and line that declare the test, the test name, the file that executed it where that file differs, the outcome, and the skip reason where one is given.
+
+D. An *Evidence Snapshot* SHALL hold the digest of the tree its results describe, each selected target with the digest of its inputs, and the facts the project declared about the run.
+
+E. Two *Evidence Snapshots* written from runs of the same tree with the same outcomes and the same declared facts SHALL be identical, byte for byte, apart from the file that holds durations and printed output.
+
+F. An *Evidence Snapshot* SHALL hold the *Traceability* report, rendered from the *Evidence Snapshot* and the *Specification* alone.
+
+G. For each assertion, the *Traceability* report SHALL name the code that implements it, the tests that verify it, and each test's outcome, by repository-relative file and line.
+
+H. The system SHALL compare an *Evidence Snapshot* with one derived from the current results and SHALL report each test whose outcome differs, each result present on one side only, a tree digest that differs, a declared fact that differs, and a *Traceability* report that differs.
+
+I. The comparison SHALL return a non-zero exit code when any difference exists, and 0 when none exists.
+
+J. Where a target has no results of its own, the system SHALL read that target's results from the *Evidence Snapshot* the project names, and SHALL tag them carried.
+
+K. Where an *Evidence Snapshot*'s tree digest differs from the digest of the current tree, the system SHALL report the *Evidence Snapshot* as stale.
+
+L. Where a federation member names an *Evidence Snapshot* and holds no results of its own, the system SHALL read that member's results from that member's *Evidence Snapshot*, judged against that member's tree.
+
+M. The system SHALL keep each result's duration and printed output beside the *Evidence Snapshot*, and SHALL exclude them from the comparison.
+
+N. No name SHALL appear as a JSON key beside a digest in an *Evidence Snapshot*.
+
+### Rationale
+
+An *Evidence Snapshot* lets a reader cite a commit's test results without running the suites, and lets CI confirm that the results committed with a change describe that change. H is the primary use: a new run is compared with the committed snapshot, test by test.
+
+C excludes durations, timestamps, absolute paths, invocation identifiers and failure messages because each varies between runs of an unchanged tree. E depends on that exclusion. M keeps the measurements a timing guard prints, so they are not lost, and keeps them out of the comparison, so a measurement never fails a verification.
+
+D binds the results to a tree. The digest covers every file git tracks or has staged, apart from the snapshot itself, so a snapshot written over uncommitted work does not match the commit CI checks out.
+
+J and L make the snapshot the source of a member's results in a federation, where a member checkout has run nothing. A target that ran in the tree, or that the current run executes, has results of its own even where it left none, so the snapshot never stands in for a run that produced nothing. K stops a snapshot of another tree from reading as current.
+
+N follows the rule the *Result Fingerprint* follows: a secret scanner reads a secret-like key beside a long hexadecimal value as a leaked credential.
+
+### Changelog
+
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: an Evidence Snapshot records a tree's test results and is verified against a new run
+
+*End* *Evidence Snapshot* | **Hash**: 5885653b
+
 ## REQ-d00281: Level Vocabulary of a Reported Graph
 
 **Level**: dev | **Status**: Draft | **Implements**: REQ-p00015
@@ -1429,21 +1491,29 @@ L. Where a test target declares an exclude set, the system SHALL exclude from it
 
 M. The system SHALL exclude from the inputs of every test target the test output location and every path that the global skip list of the project names.
 
-N. While a run of a test target has started and has not recorded its end, the system SHALL report the run of that target as in progress in place of any judgement of its results or its coverage.
+N. While a run of a test target has started and has not recorded its end, the system SHALL report the run of that target as in progress in place of any judgement of the freshness of its results or its coverage.
 
 O. When the system reports a run of a test target as in progress, the system SHALL state when the run started.
+
+P. The *Result Fingerprint* SHALL record the root of the tree that its run executed in.
+
+Q. Where a results artifact records an absolute path under the root that the target's *Result Fingerprint* records, the system SHALL read that path relative to that root.
 
 ### Rationale
 
 The inputs of a test target are the files whose content can change what its run reports, so results stay current exactly as long as those files are unchanged, and reuse of results from an earlier run is legitimate. The default takes every file because a missed dependency makes old results look current, which is worse than a needless run. What a run writes, and what tools keep for themselves while it runs, changes during every run, so the project names those paths in its global skip list.
 
-A run empties its output area when it starts and writes its results while it runs, so an area whose run has not finished holds results that are partial or not yet written. Judging them would report a run that is still going as one that produced nothing, or as one that is complete. N reports the fact instead, and O gives the time it started so a reader can decide for themselves whether the run is still going.
+A run empties its output area when it starts and writes its results while it runs, so an area whose run has not finished holds results that are partial or not yet written. Judging their freshness would report a run that is still going as one that produced nothing, or as one that is complete. N reports the fact instead, and O gives the time it started so a reader can decide for themselves whether the run is still going. Whether a run that expects the target is owed those results is a separate question, which REQ-d00283-Z answers.
+
+A tree that moves after its tests ran keeps its results. A reporter often records absolute paths, and reading such a path against the new root alone matches no test, so the results read as fresh while crediting nothing. P records where the run executed, and Q reads each recorded path against that root.
 
 ### Changelog
 
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a run in progress replaces the freshness judgement of its results, and leaves to REQ-d00283-Z whether an expected target is missing them (N)
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: the Result Fingerprint records the root its run executed in, and a recorded absolute path is read relative to that root (P, Q)
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the run fingerprint with the Defined Term Result Fingerprint (D)
 
-*End* *Test Result Freshness* | **Hash**: 0ff34a2f
+*End* *Test Result Freshness* | **Hash**: c116fe70
 
 ## REQ-d00312: Test Target Output Areas
 

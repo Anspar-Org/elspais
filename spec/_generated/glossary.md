@@ -26,6 +26,12 @@
 : A domain-specific word or phrase whose meaning is formally declared in a definition block and tracked across the specification corpus.
 *Defined in: file:REQ:spec/glossary.md (REQ)*
 
+## E
+
+**Evidence Snapshot**
+: The normalized results of one test run of one tree, bound to that tree by its digest and stored in the repository with the traceability report derived from them.
+*Defined in: file:REQ:spec/glossary.md (REQ)*
+
 ## P
 
 **Project State**
@@ -43,7 +49,7 @@
 *Defined in: REQ-p00017 (REQ)*
 
 **Result Fingerprint**
-: A statement of one run of a test target that gives the inputs the run read, the content digest of each input, and the times the run started and finished.
+: A statement of one run of a test target that gives the inputs the run read, the content digest of each input, the root of the tree the run executed in, and the times the run started and finished.
 *Defined in: file:REQ:spec/glossary.md (REQ)*
 
 **Result Record**

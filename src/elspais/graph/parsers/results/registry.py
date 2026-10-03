@@ -75,7 +75,24 @@ def get_reporter(name: str) -> ReporterSpec:
 
 
 def _register_builtins() -> None:
+    from elspais.graph.parsers.results.evidence_snapshot import EvidenceSnapshotParser
     from elspais.graph.parsers.results.flutter_machine import FlutterMachineParser
+
+    # Implements: REQ-d00322-J
+    register_reporter(
+        ReporterSpec(
+            "evidence-snapshot",
+            "file",
+            "results",
+            EvidenceSnapshotParser,
+            description=(
+                "Reads the `results.jsonl` of an Evidence Snapshot. A build reads it for "
+                "each target that has not run in the tree and that the run does not "
+                "execute, from the directory `[scanning.test] evidence` names, tagging "
+                "those results carried."
+            ),
+        )
+    )
 
     register_reporter(
         ReporterSpec(
@@ -87,7 +104,8 @@ def _register_builtins() -> None:
                 "Parses the `flutter test --machine` JSON-line protocol from the command's "
                 "stdout. Carries the file and line where each test is declared, and the file "
                 'that executed it, so `match = "source"` binds each result to its test, '
-                "including a test declared in a shared file that a runner file executes."
+                "including a test declared in a shared file that a runner file executes. "
+                "Each result also carries its duration and the output its test printed."
             ),
         )
     )

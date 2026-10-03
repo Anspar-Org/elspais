@@ -23,7 +23,7 @@ Reader Preference
 : Viewer state that the viewer remembers for a reader and that is not project state, such as the theme, the font size or the width of a panel.
 
 Result Fingerprint
-: A statement of one run of a test target that gives the inputs the run read, the content digest of each input, and the times the run started and finished.
+: A statement of one run of a test target that gives the inputs the run read, the content digest of each input, the root of the tree the run executed in, and the times the run started and finished.
 
 Result Record
 : One outcome of one test that a results producer wrote, such as one test case in a JUnit XML file or one test entry in a pytest JSON report.
@@ -36,3 +36,6 @@ Daemon Record
 
 Automatic Save Record
 : A statement that the tool persisted held changes on its own initiative, which gives who persisted them, when, how many changes it persisted, and the condition that caused it.
+
+Evidence Snapshot
+: The normalized results of one test run of one tree, bound to that tree by its digest and stored in the repository with the traceability report derived from them.
