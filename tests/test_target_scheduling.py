@@ -10,9 +10,12 @@ assertion reads that evidence; no assertion reads a wall clock.
 from __future__ import annotations
 
 import argparse
+import os
 import re
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -29,9 +32,11 @@ from elspais.config.schema import (
 from elspais.utilities.fingerprint import judge, read_record, start_run, target_folder
 
 # Modes (argv[1]):
-#   hold SECONDS [LOCK]  stay running for SECONDS; with LOCK, hold an exclusive
+#   hold SECONDS [LOCK [PARTNER]]
+#                        stay running for SECONDS; with LOCK, hold an exclusive
 #                        lock file for that time and record a violation if it
-#                        is already held
+#                        is already held; with PARTNER, record arrival after
+#                        trying the lock and stop early once PARTNER arrives
 #   meet PARTNER         record arrival, then wait (bounded) for PARTNER's
 #                        arrival; exit 0 only if PARTNER arrived
 #   say TOKEN N CODE [PARTNER]
@@ -77,7 +82,14 @@ if mode == "hold":
             held = True
         except FileExistsError:
             (out / "violation").write_text("lock already held")
-    time.sleep(float(rest[0]))
+    if len(rest) > 2:
+        (out / "here").write_text("1")
+        theirs = out.parent / rest[2] / "here"
+        deadline = time.monotonic() + float(rest[0])
+        while not theirs.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+    else:
+        time.sleep(float(rest[0]))
     if held:
         os.unlink(lock)
 elif mode == "meet":
@@ -214,14 +226,20 @@ def test_targets_naming_a_common_resource_never_overlap(
     repo, stub, tmp_path, monkeypatch, resources_honoured
 ):
     """The `ignored` case removes the resource rule from the scheduler and shows
-    the same evidence then records an overlap, so the evidence can see one."""
+    the same evidence then records an overlap, so the evidence can see one.
+
+    Each stub holds the lock until its partner arrives, bounded by the hold
+    time. Under the scheduler the partner cannot arrive, so a short bound
+    keeps the run quick; with the rule removed the two always meet, however
+    slowly the second one starts, so a long bound costs nothing."""
     if not resources_honoured:
         monkeypatch.setattr(test_runner, "_resource_keys", lambda target: frozenset())
     lock = tmp_path / "db.lock"
+    hold = "0.4" if resources_honoured else "10"
     cfg = _cfg(
         [
-            _target("a", stub("hold", "0.4", str(lock)), resources=["db"]),
-            _target("b", stub("hold", "0.4", str(lock)), resources=["DB"]),
+            _target("a", stub("hold", hold, str(lock), "b"), resources=["db"]),
+            _target("b", stub("hold", hold, str(lock), "a"), resources=["DB"]),
         ],
         concurrency=2,
         resources={"db": "the local postgres"},
@@ -339,6 +357,44 @@ def test_a_concurrent_run_attributes_every_line_and_keeps_captures_apart(repo, s
     assert re.search(rf"^<<< alpha: passed {_TALLY}$", err, re.M)
     assert re.search(rf"^<<< beta: FAILED \(exit 3\) {_TALLY}$", err, re.M)
     assert re.search(rf"^<<< gamma: passed {_TALLY}$", err, re.M)
+
+
+# Verifies: REQ-d00314-K
+def test_a_target_ends_when_its_command_exits_though_a_background_process_holds_its_output(
+    repo, tmp_path, monkeypatch, capfd
+):
+    """The command leaves a sleeper in the background holding its stdout and
+    stderr. The run reports the target when the command exits, not when the
+    sleeper does; the sleeper is killed afterwards so it does not linger."""
+    monkeypatch.setattr(test_runner, "_DRAIN_SECONDS", 0.2)
+    pid_file = tmp_path / "sleeper.pid"
+    sleeper = f"import os, time; open(r'{pid_file}', 'w').write(str(os.getpid())); time.sleep(20)"
+    cfg = _cfg(
+        [_target("bg", f'"{sys.executable}" -c "{sleeper}" & echo started')],
+        concurrency=2,
+    )
+
+    try:
+        began = time.monotonic()
+        results, _ = run_configured_targets(cfg, repo)
+        elapsed = time.monotonic() - began
+    finally:
+        deadline = time.monotonic() + 5
+        while not pid_file.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        if pid_file.exists() and pid_file.read_text():
+            try:
+                os.kill(int(pid_file.read_text()), signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+    out, err = capfd.readouterr()
+
+    assert elapsed < 15, f"the run waited {elapsed:.1f}s for the background process"
+    assert [(r.name, r.returncode) for r in results] == [("bg", 0)]
+    assert "[bg] started" in out.splitlines()
+    assert re.search(rf"^<<< bg: passed {_TALLY}$", err, re.M)
+    record = read_record(target_folder(repo, cfg, "bg"))
+    assert record is not None and record.get("finished_at")
 
 
 # Verifies: REQ-d00314-B+C+D

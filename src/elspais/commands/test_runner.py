@@ -321,6 +321,9 @@ def run_configured_targets(
     return results, captured
 
 
+# How long the pumps may drain a target's pipes after its command exits.
+_DRAIN_SECONDS = 2.0
+
 # One lock serialises every line this process writes while targets run
 # together, so a line is never split by another target's line.
 _OUTPUT_LOCK = threading.Lock()
@@ -378,7 +381,7 @@ def _run_one_attributed(
     env = {**os.environ, OUTPUT_ENV: str(folder)}
     kept: list[str] | None = [] if is_stdout_channel else None
     try:
-        with subprocess.Popen(
+        proc = subprocess.Popen(
             target.command,
             shell=True,
             cwd=cwd,
@@ -389,29 +392,32 @@ def _run_one_attributed(
             text=True,
             errors="replace",
             bufsize=1,
-        ) as proc:
-            # A stdout-channel target's stdout is its results, so it is echoed
-            # to stderr, as a run of one target at a time echoes it.
-            pumps = [
-                threading.Thread(
-                    target=_pump,
-                    args=(
-                        proc.stdout,
-                        prefix,
-                        sys.stderr if is_stdout_channel else sys.stdout,
-                        kept,
-                    ),
-                    daemon=True,
+        )
+        # A stdout-channel target's stdout is its results, so it is echoed
+        # to stderr, as a run of one target at a time echoes it.
+        pumps = [
+            threading.Thread(
+                target=_pump,
+                args=(
+                    proc.stdout,
+                    prefix,
+                    sys.stderr if is_stdout_channel else sys.stdout,
+                    kept,
                 ),
-                threading.Thread(
-                    target=_pump, args=(proc.stderr, prefix, sys.stderr, None), daemon=True
-                ),
-            ]
-            for pump in pumps:
-                pump.start()
-            for pump in pumps:
-                pump.join()
-            returncode = proc.wait()
+                daemon=True,
+            ),
+            threading.Thread(
+                target=_pump, args=(proc.stderr, prefix, sys.stderr, None), daemon=True
+            ),
+        ]
+        for pump in pumps:
+            pump.start()
+        # The target ends when its command exits. A process the command left
+        # in the background can hold the pipes open for as long as it lives,
+        # so the pumps get a bounded time to drain what is already written.
+        returncode = proc.wait()
+        for pump in pumps:
+            pump.join(_DRAIN_SECONDS)
         elapsed = time.monotonic() - start
         result = RunnerResult(target.name, target.command, cwd, returncode, elapsed)
         tag = "passed" if returncode == 0 else f"FAILED (exit {returncode})"
@@ -424,7 +430,7 @@ def _run_one_attributed(
             f"<<< {target.name}: FAILED (spawn error: {exc}) ({elapsed:.1f}s)\n",
         )
     finish_run(repo_root, config, target.name)
-    return result, ("".join(kept) if kept is not None else None)
+    return result, ("".join(list(kept)) if kept is not None else None)
 
 
 def _resource_keys(target: Any) -> frozenset[str]:
