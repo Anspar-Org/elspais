@@ -60,6 +60,7 @@ def _make_edit_args(project: Path, req_id: str, status: str) -> argparse.Namespa
         dry_run=False,
         validate_refs=False,
         from_json=None,
+        message="approved by the test",
     )
 
 
@@ -128,3 +129,4 @@ class TestDraftActiveTransitionRequiresAuthor:
             f"File content was:\n{content}"
         )
         assert "Tester" in content
+        assert "approved by the test" in content

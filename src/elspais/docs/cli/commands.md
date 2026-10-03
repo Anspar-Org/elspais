@@ -846,8 +846,8 @@ Analyze foundational requirement importance using graph metrics.
 
 Edit requirements in-place.
 
-  $ elspais edit REQ-d00001 --status Draft
-  $ elspais edit REQ-d00001 --implements REQ-p00001,REQ-p00002
+  $ elspais edit REQ-d00001 --status Draft -m "Reopened for review"
+  $ elspais edit REQ-d00001 --implements REQ-p00001,REQ-p00002 -m "Trace to privacy"
   $ elspais edit REQ-d00001 --move-to roadmap/future.md
   $ elspais edit --from-json edits.json
 
@@ -860,13 +860,25 @@ Edit requirements in-place.
   `--from-json FILE`    Batch edit from JSON (- for stdin)
   `--dry-run`           Show changes without applying
   `--validate-refs`     Validate implements references exist
+  `-m, --message TEXT`  Changelog reason for an edit to an Active requirement
+
+Where `[changelog] hash_current` is on, an edit that changes a requirement
+whose status is Active before or after the edit needs a reason. The edit adds
+one changelog entry to that requirement carrying the reason and its hash.
+Without a reason, or with a blank one, nothing is edited and the command
+names the requirement. Setting the status a requirement already has changes
+nothing and needs no reason.
 
 **Batch JSON Format:**
 
     [
-      {"req_id": "REQ-d00001", "status": "Draft"},
+      {"req_id": "REQ-d00001", "status": "Draft", "message": "Reopened for review"},
       {"req_id": "REQ-d00002", "implements": ["REQ-p00001"]}
     ]
+
+A change's `message` is its reason; a change without one takes `--message`.
+A batch in which any change of an Active requirement has no reason is refused
+before any change is applied.
 
 ## config
 

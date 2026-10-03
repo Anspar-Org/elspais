@@ -550,24 +550,9 @@ class TestBrowserSaveReportsRefusal:
                 {{node_id: '{_EDIT_CONTROLS_CITING}', new_title: 'Citing Renamed'}})"""
         )
         assert edited and edited.get("success"), edited
-        # The save the reader answers with a reason is refused by the write
-        # itself: the reason prompt is something the viewer can answer, a
-        # write that failed is not. The first, reasonless save reaches the
-        # server, which asks for the reason.
-        cause = "save failed: PermissionError(13, 'Permission denied')"
-
-        def _refuse_the_write(route):
-            body = route.request.post_data_json or {}
-            if body.get("message"):
-                route.fulfill(
-                    status=500,
-                    content_type="application/json",
-                    body=json.dumps({"success": False, "code": "save_failed", "error": cause}),
-                )
-            else:
-                route.continue_()
-
-        page.route("**/api/save", _refuse_the_write)
+        # The reason prompt is something the viewer can answer; the server
+        # then refuses the save because no changelog author can be resolved
+        # (see the refused_save_viewer fixture), which the viewer cannot.
         page.wait_for_selector("#btn-save:not([disabled])", timeout=10_000)
         saves: list = []
         page.on("response", lambda r: saves.append(r) if r.url.endswith("/api/save") else None)
@@ -585,7 +570,10 @@ class TestBrowserSaveReportsRefusal:
         assert [r.status for r in saves] == [400, 500]
         shown = page.locator("#error-modal-overlay").inner_text()
         assert "Save failed" in shown, shown
-        assert cause in shown, shown
+        assert "Cannot determine changelog author" in shown, shown
+        refusal = saves[-1].json()
+        assert refusal.get("code") == "save_failed", refusal
+        assert refusal["error"] in shown, (refusal, shown)
 
         dirty = page.request.get(f"{base_url}/api/dirty").json()
         assert dirty.get("mutation_count", 0) > 0, dirty

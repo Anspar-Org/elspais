@@ -83,12 +83,21 @@ def run(args: argparse.Namespace) -> int:
             resolver,
             exclusions,
             spec_dirs,
+            config=config,
+            message=getattr(args, "message", None),
         )
 
     # Handle single edit mode
     if hasattr(args, "req_id") and args.req_id:
         return run_single_edit(
-            args, base_spec_dir, dry_run, validate_refs, resolver, exclusions, spec_dirs
+            args,
+            base_spec_dir,
+            dry_run,
+            validate_refs,
+            resolver,
+            exclusions,
+            spec_dirs,
+            config=config,
         )
 
     print("Error: Must specify REQ_ID or --from-json", file=sys.stderr)
@@ -103,8 +112,14 @@ def run_batch_edit(
     resolver: Any | None = None,
     exclusions: Any = None,
     search_dirs: Any = None,
+    config: dict[str, Any] | None = None,
+    message: str | None = None,
 ) -> int:
-    """Run batch edit from JSON file or stdin."""
+    """Run batch edit from JSON file or stdin.
+
+    A change carries its own reason as ``message``; one without falls back
+    to the command's ``--message``.
+    """
     # Load JSON
     if json_source == "-":
         changes = json.load(sys.stdin)
@@ -119,6 +134,42 @@ def run_batch_edit(
         print("Error: JSON must be a list of changes", file=sys.stderr)
         return 1
 
+    # Implements: REQ-d00325-H
+    # Judged for the whole batch before any change is applied, so a refusal
+    # leaves every file as it was.
+    owed: list[str] = []
+    for change in changes:
+        req_id = change.get("req_id") if isinstance(change, dict) else None
+        if not req_id or _reason(change.get("message"), message):
+            continue
+        location = find_requirement_in_files(search_dirs or spec_dir, req_id, exclusions)
+        if location and _reason_owed(
+            config,
+            location["file_path"],
+            req_id,
+            implements=change.get("implements"),
+            status=change.get("status"),
+            move_to=change.get("move_to"),
+        ):
+            owed.append(req_id)
+    if owed:
+        print(_reason_refusal(owed), file=sys.stderr)
+        return 1
+
+    author = None
+    if not dry_run and _tracking(config):
+        from elspais.utilities.changelog_author import (
+            AuthorResolutionError,
+            resolve_changelog_author,
+        )
+
+        if any(_reason(c.get("message"), message) for c in changes if isinstance(c, dict)):
+            try:
+                author = resolve_changelog_author((config or {}).get("changelog"))
+            except AuthorResolutionError as exc:
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+
     results = batch_edit(
         spec_dir,
         changes,
@@ -127,6 +178,9 @@ def run_batch_edit(
         resolver=resolver,
         exclusions=exclusions,
         search_dirs=search_dirs,
+        config=config,
+        message=message,
+        author=author,
     )
 
     # Report results
@@ -156,6 +210,7 @@ def run_single_edit(
     resolver: Any | None = None,
     exclusions: Any = None,
     search_dirs: Any = None,
+    config: dict[str, Any] | None = None,
 ) -> int:
     """Run single requirement edit."""
     req_id = args.req_id
@@ -168,6 +223,34 @@ def run_single_edit(
 
     file_path = location["file_path"]
     results = []
+
+    # Implements: REQ-d00325-G, REQ-d00325-H
+    # Whether this edit owes a changelog row is settled, and its author
+    # resolved, before anything is written: a refusal leaves the file as it was.
+    message = _reason(getattr(args, "message", None))
+    owes_row = _reason_owed(
+        config,
+        file_path,
+        req_id,
+        implements=getattr(args, "implements", None),
+        status=getattr(args, "status", None),
+        move_to=getattr(args, "move_to", None),
+    )
+    if owes_row and not message:
+        print(_reason_refusal([req_id]), file=sys.stderr)
+        return 1
+    reason_author = None
+    if owes_row and not dry_run:
+        from elspais.utilities.changelog_author import (
+            AuthorResolutionError,
+            resolve_changelog_author,
+        )
+
+        try:
+            reason_author = resolve_changelog_author((config or {}).get("changelog"))
+        except AuthorResolutionError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
 
     # Collect valid refs if validation is enabled
     valid_refs: set | None = None
@@ -203,7 +286,7 @@ def run_single_edit(
         # author BEFORE flipping the status so the operation is atomic:
         # either both happen (status + changelog) or neither does.
         is_draft_active = False
-        if not dry_run and args.status.lower() == "active":
+        if not dry_run and not owes_row and args.status.lower() == "active":
             current_status = _read_current_status(file_path, req_id)
             is_draft_active = current_status.lower() == "draft"
 
@@ -246,6 +329,12 @@ def run_single_edit(
         dest_path = spec_dir / args.move_to
         result = move_requirement(file_path, dest_path, req_id, dry_run=dry_run)
         results.append(("move", result))
+
+    # Implements: REQ-d00325-G
+    if owes_row and not dry_run and all(r.get("success") for _op, r in results):
+        moved = next((r for op, r in results if op == "move"), None)
+        target = Path(moved["dest_file"]) if moved and moved.get("dest_file") else file_path
+        _add_reason_changelog(target, req_id, message, reason_author)
 
     # Report
     for op_name, result in results:
@@ -384,6 +473,9 @@ def batch_edit(
     resolver: Any | None = None,
     exclusions: Any = None,
     search_dirs: Any = None,
+    config: dict[str, Any] | None = None,
+    message: str | None = None,
+    author: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Apply batch edits from a list of change specifications.
@@ -428,6 +520,19 @@ def batch_edit(
 
         file_path = location["file_path"]
         result: dict[str, Any] = {"req_id": req_id, "success": True}
+        # Implements: REQ-d00325-G
+        reason = _reason(change.get("message"), message)
+        owes_row = _reason_owed(
+            config,
+            file_path,
+            req_id,
+            implements=change.get("implements"),
+            status=change.get("status"),
+            move_to=change.get("move_to"),
+        )
+        if owes_row and not reason:
+            results.append({"req_id": req_id, "success": False, "error": _reason_refusal([req_id])})
+            continue
 
         # Validate implements references if enabled
         # `valid_refs` empty is not "nothing to check" -- it means no
@@ -482,11 +587,107 @@ def batch_edit(
                 results.append(result)
                 continue
             result["move"] = move_result
+            if move_result.get("dest_file"):
+                file_path = Path(move_result["dest_file"])
+
+        if owes_row and reason and not dry_run and author is not None:
+            _add_reason_changelog(file_path, req_id, reason, author)
 
         result["dry_run"] = dry_run
         results.append(result)
 
     return results
+
+
+def _reason(*candidates: str | None) -> str | None:
+    """The first reason given that says something; a blank one says nothing."""
+    for candidate in candidates:
+        if candidate and candidate.strip():
+            return candidate.strip()
+    return None
+
+
+def _tracking(config: dict[str, Any] | None) -> bool:
+    """Whether the project records a changelog for its Active requirements."""
+    from elspais.config.schema import ChangelogConfig
+
+    data = (config or {}).get("changelog") or {}
+    return bool(data.get("hash_current", ChangelogConfig().hash_current))
+
+
+# Implements: REQ-d00325-G, REQ-d00325-H
+def _reason_owed(
+    config: dict[str, Any] | None,
+    file_path: Path,
+    req_id: str,
+    *,
+    implements: Any = None,
+    status: str | None = None,
+    move_to: str | None = None,
+) -> bool:
+    """Whether this edit of the requirement owes a changelog row with a reason.
+
+    It does where the project tracks changelogs, the edit changes something,
+    and the requirement is Active before the edit or the edit makes it Active.
+    Setting the status a requirement already has changes nothing.
+    """
+    if not _tracking(config):
+        return False
+    current = _read_current_status(file_path, req_id)
+    status_changes = bool(status) and status != current
+    if implements is None and not status_changes and not move_to:
+        return False
+    if status_changes and status.lower() == "active":
+        return True
+    return current.lower() == "active"
+
+
+# Implements: REQ-d00325-H
+def _reason_refusal(req_ids: list[str]) -> str:
+    """The refusal for an edit of an Active requirement given no reason."""
+    ids = ", ".join(sorted(req_ids))
+    return (
+        f"Error: Active requirement(s) changed: {ids}. Each needs a changelog entry "
+        "saying why it changed, so nothing was edited. Give the reason with "
+        '-m/--message, or as a "message" field on each change in --from-json.'
+    )
+
+
+# Implements: REQ-d00325-G
+def _add_reason_changelog(
+    file_path: Path, req_id: str, reason: str | None, author: dict[str, str] | None
+) -> None:
+    """Add the changelog row an edit of an Active requirement owes.
+
+    The hash recorded is the one at the requirement's End marker: the
+    edits this command makes (references, status, location) leave the
+    hashed text as it was.
+    """
+    if not reason or author is None:
+        return
+    from datetime import date
+
+    from elspais.utilities.patterns import find_req_header as _find_req_header
+    from elspais.utilities.spec_writer import _find_end_marker_line, add_changelog_entry
+
+    content = file_path.read_text(encoding="utf-8")
+    header = _find_req_header(content, req_id)
+    if not header:
+        return
+    end = _find_end_marker_line(content, header.end())
+    current_hash = end[2].hash_value if end else "________"
+    add_changelog_entry(
+        file_path,
+        req_id,
+        {
+            "date": date.today().isoformat(),
+            "hash": current_hash,
+            "change_order": "-",
+            "author_name": author["name"],
+            "author_id": author["id"],
+            "reason": reason,
+        },
+    )
 
 
 def _read_current_status(file_path: Path, req_id: str) -> str:

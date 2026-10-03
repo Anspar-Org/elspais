@@ -10,6 +10,8 @@ All notable changes to elspais will be documented in this file.
 
 - **A changelog entry a save adds joins the requirement's changelog at any heading depth (REQ-d00325-A)** -- the entry a save adds was written under the `## Changelog` heading only; a requirement whose changelog heading sits deeper, as every rendered requirement below the top level has it, gained a second `## Changelog` section, and the earlier history dropped out of the requirement's changelog when the file was read back. The existing section is now found at whatever depth the file uses, and a new one is opened one level below the requirement's heading.
 
+- **`elspais edit` asks for a reason when it changes an Active requirement (REQ-d00325-G+H)** -- where `[changelog] hash_current` is on, an edit that changes a requirement whose status is Active before or after the edit needs `-m`/`--message`, and the edit records it as a changelog entry. A batch change carries its own reason as `message`, falling back to `--message`. Without a reason nothing is edited, and the command names each requirement and how to give one. Draft to Active records the given reason instead of a stock "First approved version" entry; setting a status the requirement already has needs no reason.
+
 - **`elspais fix -m` records its reason on a whole-repository fix (REQ-p00004-N)** -- the reason given with `-m` was used only when fixing one named requirement; a fix of every requirement ignored it and recorded `Auto-fix: ...` instead. It is now the reason on each changelog entry the fix adds, and `Auto-fix: ...` is recorded only where no reason is given.
 
 ### Added
