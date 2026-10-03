@@ -27,9 +27,18 @@ def test_real_path_from_suite():
         "line",
         "root_line",
         "root_path",
+        "runner_path",
         "result_file",
         "result_line",
     }
+
+
+# Verifies: REQ-d00254-E
+def test_a_test_naming_no_declaration_was_run_by_its_suite():
+    """The sample's events carry no ``test.url``, so the suite is both the
+    file that declares each test and the file that executed it."""
+    recs = FlutterMachineParser().parse(SAMPLE, "stdout")
+    assert all(r["runner_path"] == r["source_path"] for r in recs)
 
 
 def test_hidden_test_skipped():

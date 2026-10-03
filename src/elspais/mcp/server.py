@@ -260,6 +260,12 @@ def _serialize_result_entry(result_node: Any, graph: FederatedGraph) -> dict[str
     environment = result_node.get_field("environment")
     if environment:
         entry["environment"] = environment
+    # Implements: REQ-d00294-G
+    # The file that executed the test, where it is not the file that declares
+    # it: one shared scenario runs through several runner files.
+    runner = result_node.get_field("runner_file")
+    if runner and runner != result_node.get_field("source_file"):
+        entry["runner_file"] = runner
     return entry
 
 
@@ -607,7 +613,8 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             "message": node.get_field("message", ""),
             "classname": node.get_field("classname", ""),
         }
-        for field_name in ("result_file", "result_line", "environment"):
+        # Implements: REQ-d00294-G
+        for field_name in ("result_file", "result_line", "environment", "runner_file"):
             value = node.get_field(field_name)
             if value:
                 properties[field_name] = value

@@ -15,6 +15,7 @@ Complete reference for all elspais commands.
 | `changed` | Reports | Detect git changes to spec files |
 | `pdf` | Reports | Compile spec files into a PDF document |
 | `search` | Reports | Search requirements by keyword |
+| `test` | Reports | Execute test targets and record their results, evaluating no check |
 | `fingerprint` | Reports | Record the fingerprint of a test run elspais did not execute |
 | `gaps` | Gaps & Issues | List which requirements fall short of each coverage dimension |
 | `uncovered` | Gaps & Issues | List requirements without code coverage |
@@ -148,6 +149,28 @@ To see malformed references, use: `elspais malformed`
 above): `-v` reports each check individually rather than only the summary,
 and `-q` prints the one verdict line in text and markdown; `json`, `junit`
 and `sarif` stay whole.
+
+## test
+
+Execute test targets and record their results. Evaluate no check.
+
+  $ elspais test                       # the `default` group
+  $ elspais test --targets unit        # a target or a group
+  $ elspais checks --expect unit       # later, once: judge every result
+
+The exit code reflects only the targets: 1 if any target failed, 0 if all
+passed. Each run empties the target's folder and records a fingerprint, as
+`checks --run-tests` does.
+
+  `--targets T...` Execute only these targets or groups. The selection and its
+                   refusals are those of `checks --run-tests` (exit 2).
+  `--fail-fast`    Stop at the first target that fails.
+
+Every executed target whose reporter reads test results must declare a
+`results` pattern, because this command reads nothing while a command runs. A
+selection that holds such a target with no `results` pattern is refused before
+anything runs (exit 2). A coverage target is not affected. See
+`elspais docs test-targets`, *Parallel jobs and one gate*.
 
 ## fingerprint
 

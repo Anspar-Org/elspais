@@ -3904,6 +3904,12 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
                 continue
             environment = node.get_field("environment")
             where = f" [{environment}]" if environment else ""
+            # Implements: REQ-d00294-G
+            # One declared scenario can run through several runner files.
+            # The runner says which run failed, so it stands beside the result.
+            runner = node.get_field("runner_file")
+            if runner and runner != node.get_field("source_file"):
+                where += f" (run by {runner})"
             # The recorded line counts lines in the results artifact, so it
             # belongs to that artifact and to nothing else. Where the result
             # came from a runner's output there is no artifact, and carrying
@@ -5544,44 +5550,16 @@ def run(args: argparse.Namespace) -> int:
         from elspais.commands._scope import flag_values
 
         selected = list(flag_values(args, "targets"))
-        # Implements: REQ-d00283-H
-        # Targets and groups share one namespace. The config reader keeps
-        # their names apart (REQ-d00283-G). If a name is neither a target nor
-        # a group, then the run refuses it and does not resolve it to nothing.
-        from elspais.config import unknown_target_refusal
-
-        if refusal := unknown_target_refusal(cfg, selected):
-            print(f"error: {refusal}", file=sys.stderr)
-            return 2
-        # Implements: REQ-d00283-D+K+M+N+O
-        from elspais.config import empty_selection_refusal
-
-        if refusal := empty_selection_refusal(cfg, selected, executes=True):
-            print(f"error: {refusal}", file=sys.stderr)
-            return 2
-        # One authority resolves both selectors; None means every configured
-        # target, which is what keeps a project declaring no groups rendering
-        # exactly as it did before (REQ-d00254-J).
-        from elspais.config import selected_targets
+        from elspais.commands.test_runner import SelectionRefused, executable_selection
 
         try:
-            only = selected_targets(cfg, selected or None)
-        except ValueError as exc:
+            only = executable_selection(cfg, selected)
+        except SelectionRefused as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         commandful = [
             t for t in cfg.scanning.test.targets if t.command and (only is None or t.name in only)
         ]
-        if not commandful:
-            print(
-                "error: --run-tests requires at least one "
-                "[[scanning.test.targets]] entry with a command field "
-                "(within the selected --targets when given; a run "
-                "naming neither executes the `default` group). "
-                "See docs/cli/test-targets.md for configuration examples.",
-                file=sys.stderr,
-            )
-            return 2
         repo_root = find_git_root() or Path.cwd()
         results, captured_map = run_configured_targets(
             cfg, repo_root, fail_fast=fail_fast, only=only

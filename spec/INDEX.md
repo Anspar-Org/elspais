@@ -169,12 +169,12 @@
 | REQ-d00246 | Markdown Emphasis Normalization Utility                       | prd-core.md             | 6db4d559 |
 | REQ-d00247 | Fenced Code Block Preservation                                | prd-core.md             | 499a4ce4 |
 | REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | 99bb6d77 |
-| REQ-d00249 | Configured test runner execution                              | dev-cli.md              | fcac603a |
+| REQ-d00249 | Configured test runner execution                              | dev-cli.md              | eaae2588 |
 | REQ-d00250 | Section Header Depth Canonicalization                         | dev-graph-core.md       | 48fc2f11 |
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | b49bd5ee |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 3b102d6f |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | 8360f2f4 |
-| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 192b9bb4 |
+| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | b9bda3b5 |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 1ea68210 |
@@ -213,7 +213,7 @@
 | REQ-d00291 | Coverage Inclusion                                            | dev-graph-core.md       | 13bc6949 |
 | REQ-d00292 | Viewer Coverage Presentation                                  | dev-graph-core.md       | db9415cd |
 | REQ-d00293 | Configurable Viewer Presentation                              | dev-graph-core.md       | 31848b5c |
-| REQ-d00294 | A Result Is Its Own Record                                    | dev-graph-core.md       | 66e2737b |
+| REQ-d00294 | A Result Is Its Own Record                                    | dev-graph-core.md       | d3e70367 |
 | REQ-d00295 | Viewer Served Under a Configured Prefix                       | dev-traceview-review.md | ae94b103 |
 | REQ-d00296 | Request Identity From a Trusted Proxy                         | prd-features.md         | fe4f3620 |
 | REQ-d00297 | Opening a Pull Request From the Viewer                        | prd-core.md             | 006e3f69 |
