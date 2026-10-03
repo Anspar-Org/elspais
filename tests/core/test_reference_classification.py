@@ -387,6 +387,159 @@ def test_two_spellings_of_one_identifier_count_as_a_repeat(reader):
 
 
 # Verifies: REQ-d00272-K
+@pytest.mark.parametrize(
+    ("written", "repeated"),
+    [
+        # A multi-assertion item names each of its labels, so it repeats a
+        # later item naming one of them, in either order of the list.
+        ("REQ-d00001-A+B, REQ-d00001-B", [True, True]),
+        ("REQ-d00001-A+B, REQ-d00001-A", [True, True]),
+        ("REQ-d00001-B, REQ-d00001-A+B", [True, True]),
+        ("REQ-d00001-B+A, REQ-d00001-A+B", [True, True]),
+        # One item naming a label twice repeats itself.
+        ("REQ-d00001-A+B+A", [True]),
+        # Only the items that name a repeated target are refused.
+        ("REQ-d00001-A+B, REQ-d00002, REQ-d00001-B", [True, False, True]),
+        # A requirement and one of its assertions are two targets.
+        ("REQ-d00001, REQ-d00001-A", [False, False]),
+        ("REQ-d00001-A+B, REQ-d00002-B", [False, False]),
+        ("REQ-d00001-A, REQ-d00001-B", [False, False]),
+        ("REQ-d00001-A+B", [False]),
+    ],
+)
+def test_an_item_repeating_any_target_another_item_names_is_refused(reader, written, repeated):
+    """A repeat is judged per target named, not per item as spelled."""
+    items = reader.parse_ref_list(written)
+    assert [FaultCode.DUPLICATE_ITEM in i.codes for i in items] == repeated, items
+    for item, is_repeat in zip(items, repeated, strict=True):
+        if is_repeat:
+            assert item.resolved is None, f"a repeated item binds nothing; got {item}"
+            assert item.fault_class is FaultClass.FORBIDDEN
+        else:
+            assert item.resolved is not None, f"an item naming no repeat resolves; got {item}"
+            assert item.fault_class is None
+
+
+def _alpha_resolver():
+    """A member whose separators differ from the default: ``/`` before a
+    label and ``&`` between labels."""
+    return build_resolver(
+        {
+            "project": {"namespace": "ALP"},
+            "levels": {"prd": {"rank": 1, "letter": "p", "implements": ["prd"]}},
+            "id-patterns": {
+                "canonical": "{namespace}-{level.letter}{component}",
+                "component": {"style": "numeric", "digits": 3},
+                "assertions": {
+                    "label_style": "uppercase",
+                    "separator": "/",
+                    "multi_separator": "&",
+                },
+            },
+        }
+    )
+
+
+# Verifies: REQ-d00272-K
+@pytest.mark.parametrize(
+    ("written", "repeated"),
+    [
+        ("ALP-p001/A&B, ALP-p001/B", [True, True]),
+        ("ALP-p001/B&A, ALP-p001/A&B", [True, True]),
+        ("ALP-p001/A&B&A", [True]),
+        ("alp-p1/A&B, ALP-p001/B", [True, True]),
+        ("ALP-p001/A&B, REQ-d00001-A+B", [False, False]),
+        ("ALP-p001, ALP-p001/A", [False, False]),
+        ("ALP-p001/A, ALP-p001/B", [False, False]),
+    ],
+)
+def test_a_repeat_is_read_in_the_grammar_of_the_member_owning_it(repo_root, written, repeated):
+    """Each item's targets are read in the claiming member's grammar, so a
+    member separating labels with ``&`` repeats a target as plainly as one
+    using ``+`` -- and two members' identical labels are not one target."""
+    federated = FederatedIdReader(
+        own=build_resolver(load_config(repo_root / ".elspais.toml")),
+        others=[_alpha_resolver()],
+    )
+    items = federated.parse_ref_list(written)
+    assert [FaultCode.DUPLICATE_ITEM in i.codes for i in items] == repeated, items
+    assert [i.resolved is None for i in items] == repeated, items
+
+
+# Verifies: REQ-d00272-K
+@pytest.mark.parametrize(
+    ("implements", "faulted", "binds"),
+    [
+        ("REQ-d00001-A+B, REQ-d00001-B", ["REQ-d00001-A+B", "REQ-d00001-B"], []),
+        ("REQ-d00001-A+B+A", ["REQ-d00001-A+B+A"], []),
+        ("REQ-d00001-A, REQ-d00001-B", [], ["A", "B"]),
+    ],
+)
+def test_a_code_annotation_repeating_an_assertion_reports_every_item(
+    tmp_path, repo_root, implements, faulted, binds
+):
+    """End to end: the references.forbidden check reports each item naming
+    the repeated target, and no relationship is created from any of them."""
+    from elspais.commands.health import check_reference_class
+
+    graph = _project(tmp_path, repo_root, f"# Implements: {implements}\ndef f():\n    return 1\n")
+    node = graph.find_by_id("REQ-d00001")
+    assert node is not None
+    bound = sorted(
+        label
+        for edge in node.iter_edges_by_kind(EdgeKind.IMPLEMENTS)
+        for label in edge.assertion_targets
+    )
+    assert bound == binds
+
+    check = check_reference_class(
+        graph,
+        load_config(tmp_path / ".elspais.toml"),
+        FaultClass.FORBIDDEN,
+        "references.forbidden",
+        "resolve, but the relationship they declare is refused",
+    )
+    reported = sorted(
+        ref["target"]
+        for ref in (check.details or {}).get("references", [])
+        if FaultCode.DUPLICATE_ITEM in ref["codes"]
+    )
+    assert reported == sorted(faulted)
+    assert check.passed is (not faulted)
+
+
+# Verifies: REQ-d00272-K
+@pytest.mark.parametrize(
+    ("implements", "faulted", "binds"),
+    [
+        ("REQ-d00001-A+B, REQ-d00001-B", ["REQ-d00001-A+B", "REQ-d00001-B"], []),
+        ("REQ-d00001-A, REQ-d00001-B", [], ["A", "B"]),
+    ],
+)
+def test_a_spec_metadata_line_repeating_an_assertion_reports_every_item(
+    tmp_path, repo_root, implements, faulted, binds
+):
+    """The spec path reads its list through the same reader."""
+    graph = _spec_project(tmp_path, repo_root, implements=implements)
+    node = graph.find_by_id("REQ-d00001")
+    assert node is not None
+    bound = sorted(
+        label
+        for edge in node.iter_edges_by_kind(EdgeKind.IMPLEMENTS)
+        if edge.target.id == "REQ-d00002"
+        for label in edge.assertion_targets
+    )
+    assert bound == binds
+    faults = [
+        f
+        for f in graph.unresolved_references()
+        if f.source_id == "REQ-d00002" and FaultCode.DUPLICATE_ITEM in f.codes
+    ]
+    assert sorted(f.target_id for f in faults) == faulted
+    assert all(f.fault_class is FaultClass.FORBIDDEN for f in faults)
+
+
+# Verifies: REQ-d00272-K
 def test_a_duplicated_existing_target_binds_nothing_and_reports_twice(tmp_path, repo_root):
     """End-to-end through build_graph(): the reader's verdict is not enough
     on its own. A downstream consumer that falls back to raw text when an
@@ -516,7 +669,7 @@ def test_a_duplicated_spec_reference_binds_nothing_and_reports_twice(tmp_path, r
     graph = _spec_project(tmp_path, repo_root, implements="REQ-d00001, REQ-d00001")
     node = graph.find_by_id("REQ-d00001")
     assert node is not None
-    edges = [e for e in node.iter_edges_by_kind(EdgeKind.IMPLEMENTS) if e.source.id == "REQ-d00002"]
+    edges = [e for e in node.iter_edges_by_kind(EdgeKind.IMPLEMENTS) if e.target.id == "REQ-d00002"]
     assert edges == []
     faults = [f for f in graph.unresolved_references() if f.target_id == "REQ-d00001"]
     assert len(faults) == 2
@@ -530,7 +683,7 @@ def test_a_duplicated_refines_reference_binds_nothing_and_reports_twice(tmp_path
     graph = _spec_project(tmp_path, repo_root, refines="REQ-d00001, REQ-d00001")
     node = graph.find_by_id("REQ-d00001")
     assert node is not None
-    edges = [e for e in node.iter_edges_by_kind(EdgeKind.REFINES) if e.source.id == "REQ-d00002"]
+    edges = [e for e in node.iter_edges_by_kind(EdgeKind.REFINES) if e.target.id == "REQ-d00002"]
     assert edges == []
     faults = [f for f in graph.unresolved_references() if f.target_id == "REQ-d00001"]
     assert len(faults) == 2

@@ -18,6 +18,8 @@ All notable changes to elspais will be documented in this file.
 
 - **`elspais fix REQ-x` adds no changelog entry for a formatting-only fix** -- as the fix of every requirement already did; a fix that changes only how a requirement is written changes nothing it says.
 
+- **A reference list naming one Assertion twice reports every instance, also inside a multi-assertion item (REQ-d00272-K)** -- a repeat was detected only between items spelled alike, so `REQ-d00001-A+B, REQ-d00001-B` and `REQ-d00001-A+B+A` each created their relationships unreported. Each item is now read as the targets it names, and every item naming a repeated target is reported and binds nothing.
+
 ### TOOL-134
 
 - **A spec or journey metadata line naming one target in another repository more than once reports every instance and creates no relationship (REQ-d00272-K, REQ-d00287-F)** -- an `Implements:` list in one federation member naming a requirement another member owns twice created one relationship and reported nothing, while the same list in a code or test file, and a repeated target in the declaring repository itself, were refused and reported. A repository read its spec metadata and journey `Validates:` lists in its own identifier grammar alone, so a target another member owns did not read as an identifier there and the repetition check, which compares identifiers, never saw it. Those lists are now read in every member's grammar, as code and test annotations already were, so each instance of a repeated foreign target is reported under the same class as a repeated local one. A requirement header is still read in its own repository's grammar alone, since a repository declares only the identifiers it owns.

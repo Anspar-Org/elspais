@@ -235,6 +235,13 @@ CASES: dict[str, Expected] = {
             ("forbidden", "REQ-d00001", (_E.SYNTAX_ERROR, _E.DUPLICATE_ITEM)),
         ),
     ),
+    # "(both items: each names B)": the multi-assertion item names B too.
+    "# Implements: REQ-d00001-A+B, REQ-d00001-B": Expected(
+        faults=(
+            ("forbidden", "REQ-d00001-A+B", (_E.SYNTAX_ERROR, _E.DUPLICATE_ITEM)),
+            ("forbidden", "REQ-d00001-B", (_E.SYNTAX_ERROR, _E.DUPLICATE_ITEM)),
+        ),
+    ),
     "# Refines: REQ-d00001": Expected(
         faults=(("forbidden", "REQ-d00001", (_E.SYNTAX_ERROR,)),),
     ),
