@@ -41,14 +41,22 @@ test: ## Run unit/integration tests in parallel, with per-test coverage
 test-e2e: ## Run e2e subprocess tests (parallel pass, then serial pass)
 	$(VENV_PATH) .githooks/with-fingerprint elspais-e2e .githooks/run-e2e-tier
 
-test-browser: ## Run browser tests (~3m)
-	$(PYTEST) -m browser
+# Without coverage, as their targets in .elspais.toml run: the unit tier
+# alone measures line coverage.
+test-browser: ## Run browser tests
+	$(PYTEST) -m browser --no-cov
 
-test-stress: ## Run the concurrency stress battery (~15s)
-	$(PYTEST) -m stress
+test-stress: ## Run the concurrency stress battery
+	$(PYTEST) -m stress --no-cov
 
-test-all: ## Run all tests (unit + e2e + browser + stress; ~25m)
-	$(PYTEST) -m ""
+# Each tier the way its own target runs it, one after another: two pytest
+# sessions in one worktree collide on coverage data, so this target never
+# runs them side by side, even under `make -j`.
+test-all: ## Run all tests (unit, e2e, browser, stress), one tier at a time
+	$(MAKE) -j1 test
+	$(MAKE) -j1 test-e2e
+	$(MAKE) -j1 test-browser
+	$(MAKE) -j1 test-stress
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
