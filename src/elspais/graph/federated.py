@@ -1258,7 +1258,20 @@ class FederatedGraph:
         # Strategy: by_id
         """
         repo_name = self._ownership[assertion_id]
-        result = self._graph_for(assertion_id).delete_assertion(assertion_id)
+        # Implements: REQ-p00017-M
+        # A reference another member wrote and the federation refused to
+        # wire stays unresolved in that member's graph, where the owning
+        # graph cannot see it. It is handed over with the node holding it,
+        # so the owning graph judges it with its own before anything moves.
+        foreign = tuple(
+            (fault, graph._index.get(fault.source_id))
+            for name, graph in self._live_graphs()
+            if name != repo_name
+            for fault in graph._unresolved_references
+        )
+        result = self._graph_for(assertion_id).delete_assertion(
+            assertion_id, foreign_references=foreign
+        )
         if result.before_state.get("disposition") == "removed":
             self._ownership.pop(assertion_id, None)
             for rename in result.before_state.get("renames", []):

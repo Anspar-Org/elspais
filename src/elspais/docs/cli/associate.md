@@ -52,7 +52,11 @@ though the specification were at fault.
 
 A registration supplying the path for an expected associate records it under
 that declaration's own name, whatever the repository calls itself, and an
-associate still awaiting its path never refuses the registration of another.
+associate still awaiting its path, here or in any repository the federation
+reaches, never refuses the registration of another. Registering a repository
+a declaration already records under its namespace changes nothing and reports
+that declaration. A repository declaring a namespace other than the one an
+expected associate names is refused, and the expectation stays as committed.
 A repository that declares no associates is unaffected.
 
 ## What it does

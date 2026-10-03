@@ -803,6 +803,40 @@ class TestPathlessDeclaration:
         assert [entry.name for entry in planned] == ["solo"]
         assert planned[0].error is None
 
+    @_PATHLESS
+    # Verifies: REQ-d00289-K, REQ-d00202-R
+    def test_REQ_d00289_K_set_aside_passes_over_awaiting_associates_at_every_level(
+        self, tmp_path, path_line
+    ):
+        """Asked to set awaiting associates aside, the planner passes over a
+        declaration with no path in the invoking repository and in one it
+        reaches, and still plans every member a path names -- including one
+        declared beside the awaiting associate in the nested repository."""
+        from elspais.graph.federation_plan import UnlinkedAssociates
+
+        make_repo(tmp_path, "leaf")
+        make_repo(tmp_path, "util")
+        make_repo(tmp_path, "lib")
+        mid = make_repo(tmp_path, "mid", associates={"util": "../util"})
+        _expect(mid, "leaf", "LEAF", path_line)
+        hub = make_repo(tmp_path, "hub", associates={"mid": "../mid"})
+        _expect(hub, "lib", "LIB", path_line)
+
+        planned = _plan(hub, set_aside_unlinked=True)
+
+        assert [entry.name for entry in planned] == ["hub", "mid", "util"]
+        assert all(entry.error is None for entry in planned)
+        assert [entry.repo_root for entry in planned] == [
+            (tmp_path / name).resolve() for name in ("hub", "mid", "util")
+        ]
+
+        # Without being asked, the same configuration is refused at the
+        # invoking repository's own awaiting associate.
+        with pytest.raises(UnlinkedAssociates) as excinfo:
+            _plan(hub)
+        assert excinfo.value.unlinked == {"lib": "LIB"}
+        assert excinfo.value.declaring_root == hub.resolve()
+
 
 def _git_init_commit(repo: Path) -> None:
     import subprocess

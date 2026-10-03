@@ -2559,7 +2559,11 @@ class TraceGraph:
         return entry
 
     # Implements: REQ-o00062-B, REQ-p00017-A, REQ-p00017-E, REQ-p00017-K, REQ-p00017-L
-    def delete_assertion(self, assertion_id: str) -> MutationEntry:
+    def delete_assertion(
+        self,
+        assertion_id: str,
+        foreign_references: tuple[tuple[ReferenceFault, GraphNode | None], ...] = (),
+    ) -> MutationEntry:
         """Delete an *Assertion* in the way its requirement's status role decides.
 
         - Active role: the *Assertion* is retired in place. Its text becomes
@@ -2573,6 +2577,10 @@ class TraceGraph:
 
         Args:
             assertion_id: The assertion ID to delete.
+            foreign_references: The unresolved references other members of
+                a federation hold, each with the node that holds it. A
+                federation passes them because a reference this graph
+                refused to wire stays with the member that wrote it.
 
         Returns:
             MutationEntry recording the operation.
@@ -2600,7 +2608,7 @@ class TraceGraph:
 
         if self._status_role(parent) is StatusRole.ACTIVE:
             return self._retire_assertion(node, parent)
-        return self._remove_and_compact_assertion(node, parent)
+        return self._remove_and_compact_assertion(node, parent, foreign_references)
 
     # Implements: REQ-p00017-K
     def _retire_assertion(self, node: GraphNode, parent: GraphNode) -> MutationEntry:
@@ -2636,7 +2644,12 @@ class TraceGraph:
         return entry
 
     # Implements: REQ-p00017-L, REQ-p00017-M, REQ-p00017-B, REQ-p00017-C
-    def _remove_and_compact_assertion(self, node: GraphNode, parent: GraphNode) -> MutationEntry:
+    def _remove_and_compact_assertion(
+        self,
+        node: GraphNode,
+        parent: GraphNode,
+        foreign_references: tuple[tuple[ReferenceFault, GraphNode | None], ...] = (),
+    ) -> MutationEntry:
         """Remove *node* and move each later label down one place in the series.
 
         The relabels run in ascending order, so each one lands on the label
@@ -2661,7 +2674,9 @@ class TraceGraph:
                 moves.append((index, child))
         moves.sort(key=lambda pair: pair[0])
 
-        stranded = self._references_compaction_strands(node, parent, [n for _, n in moves])
+        stranded = self._references_compaction_strands(
+            node, parent, [n for _, n in moves], foreign_references
+        )
         if stranded:
             raise DeletionWouldRepointError(
                 f"Cannot delete {node.id}: {parent.id} is in the "
@@ -2729,7 +2744,11 @@ class TraceGraph:
 
     # Implements: REQ-p00017-M
     def _references_compaction_strands(
-        self, removed: GraphNode, parent: GraphNode, moved: list[GraphNode]
+        self,
+        removed: GraphNode,
+        parent: GraphNode,
+        moved: list[GraphNode],
+        foreign_references: tuple[tuple[ReferenceFault, GraphNode | None], ...] = (),
     ) -> list[str]:
         """The references a removal with compaction would leave designating something else.
 
@@ -2737,7 +2756,9 @@ class TraceGraph:
         a neighbour. A reference to a moved *Assertion* is one where the tool
         cannot write it under the new label -- a citation in code or a test,
         a reference that does not resolve, or a citation from a node the
-        graph renders from stored text.
+        graph renders from stored text. A reference that does not resolve
+        may be held by another member of a federation, which passes it in
+        *foreign_references* with the node holding it.
         """
         carried = (NodeKind.REQUIREMENT, NodeKind.USER_JOURNEY)
         found: list[str] = []
@@ -2780,6 +2801,9 @@ class TraceGraph:
             for fault in self._unresolved_references:
                 if fault.target_id == assertion.id:
                     _report(self._index.get(fault.source_id), fault.source_id, assertion)
+            for fault, citer in foreign_references:
+                if fault.target_id == assertion.id:
+                    _report(citer, fault.source_id, assertion)
 
         _cites(removed, any_citer=True)
         anchor = f"{parent.id}#{removed.get_field('label', '')}"

@@ -1544,3 +1544,134 @@ class TestSatisfiesTargetVerdict:
         assert node is not None
         edges = [*node.iter_incoming_edges(), *node.iter_outgoing_edges()]
         assert [e for e in edges if e.kind == EdgeKind.IMPLEMENTS] == []
+
+
+# ---------------------------------------------------------------------------
+# Compaction judges the references another member holds
+# ---------------------------------------------------------------------------
+
+
+def _draft_template_federation(tmp_path: Path, cited_label: str) -> FederatedGraph:
+    """Federate a Draft **Template** LIB-p00001 (A/B/C) with an app citing one label.
+
+    APP-p00002 is concrete, so the matrix refuses its ``Refines:`` of the
+    library's template: the reference stays unresolved in the app's graph
+    and never becomes an edge the library's graph can see.
+    """
+    library = tmp_path / "library"
+    library.mkdir()
+    _write(library, ".elspais.toml", _LIBRARY_CONFIG)
+    _write(
+        library,
+        "spec/prd-library.md",
+        """
+        # LIB-p00001: Action Dispatch
+
+        **Level**: PRD | **Status**: Draft | **Template**
+
+        ### Assertions
+
+        A. SHALL parse.
+
+        B. SHALL authorize.
+
+        C. SHALL log.
+
+        *End* *Action Dispatch*
+        """,
+    )
+    _git_init(library)
+    app = tmp_path / "app"
+    app.mkdir()
+    _write(app, ".elspais.toml", _APP_CONFIG)
+    _write(
+        app,
+        "spec/prd-app.md",
+        f"""
+        # APP-p00002: App Provision
+
+        **Level**: PRD | **Status**: Approved
+        **Refines**: LIB-p00001-{cited_label}
+
+        ### Assertions
+
+        A. SHALL provide.
+
+        *End* *App Provision*
+        """,
+    )
+    _git_init(app)
+    return build_graph(repo_root=app, scan_code=False, scan_tests=False)
+
+
+def _assertion_texts(fed: FederatedGraph) -> dict[str, str]:
+    return {
+        label: fed.find_by_id(f"LIB-p00001-{label}").get_label()
+        for label in "ABC"
+        if fed.find_by_id(f"LIB-p00001-{label}") is not None
+    }
+
+
+def _app_faults(fed: FederatedGraph) -> list[tuple[str, str, FaultClass]]:
+    return [
+        (f.source_id, f.target_id, f.fault_class)
+        for f in fed.unresolved_references()
+        if f.source_id == "APP-p00002"
+    ]
+
+
+class TestCompactionJudgesForeignReferences:
+    """Removing a provisional requirement's *Assertion* renumbers the later
+    ones, so a reference another member holds -- even one the federation
+    refused to wire -- would come to designate something else."""
+
+    # Verifies: REQ-p00017-M
+    @pytest.mark.parametrize("cited", ["A", "B"], ids=["removed", "moved"])
+    def test_foreign_unresolved_reference_refuses_compaction(
+        self, tmp_path: Path, cited: str
+    ) -> None:
+        """The refusal names the citing requirement where it is written and
+        the identifier it cites, and nothing changes."""
+        from elspais.graph.builder import DeletionWouldRepointError
+
+        fed = _draft_template_federation(tmp_path, cited)
+        texts_before = _assertion_texts(fed)
+        faults_before = _app_faults(fed)
+        assert faults_before == [("APP-p00002", f"LIB-p00001-{cited}", FaultClass.FORBIDDEN)]
+
+        with pytest.raises(DeletionWouldRepointError) as excinfo:
+            fed.delete_assertion("LIB-p00001-A")
+
+        message = str(excinfo.value)
+        assert "APP-p00002 (spec/prd-app.md:1)" in message, message
+        assert "location unknown" not in message, message
+        assert f"cites LIB-p00001-{cited}" in message, message
+
+        assert (
+            _assertion_texts(fed)
+            == texts_before
+            == {
+                "A": "SHALL parse.",
+                "B": "SHALL authorize.",
+                "C": "SHALL log.",
+            }
+        )
+        assert len(fed.mutation_log) == 0
+        assert list(fed.mutation_log.iter_entries()) == []
+        assert _app_faults(fed) == faults_before
+
+    # Verifies: REQ-p00017-L, REQ-p00017-M
+    def test_foreign_reference_to_an_unmoved_assertion_does_not_refuse(
+        self, tmp_path: Path
+    ) -> None:
+        """Removing the last *Assertion* moves nothing, so a foreign reference
+        to an earlier one still designates what it named and the removal
+        proceeds."""
+        fed = _draft_template_federation(tmp_path, "A")
+
+        entry = fed.delete_assertion("LIB-p00001-C")
+
+        assert entry.before_state.get("disposition") == "removed"
+        assert fed.find_by_id("LIB-p00001-C") is None
+        assert _assertion_texts(fed) == {"A": "SHALL parse.", "B": "SHALL authorize."}
+        assert len(fed.mutation_log) == 1

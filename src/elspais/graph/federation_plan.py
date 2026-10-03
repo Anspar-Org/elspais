@@ -301,6 +301,7 @@ def plan_federation(
     root_repo_root: Path,
     *,
     config_loader: Callable[..., dict[str, Any]] | None = None,
+    set_aside_unlinked: bool = False,
 ) -> list[PlannedRepo]:
     """Resolve every repository reachable from ``root_config``.
 
@@ -314,6 +315,11 @@ def plan_federation(
         root_config: The invoking repository's configuration.
         root_repo_root: The invoking repository's root directory.
         config_loader: Override for config loading, for tests.
+        set_aside_unlinked: Pass over a declaration that supplies no path,
+            in every repository the walk reaches, instead of refusing it.
+            A registration asks this, since an associate awaiting its path
+            is no member it could conflict with (REQ-d00289-K); a build
+            never does.
 
     Returns:
         The root repository first, then every reachable repository in
@@ -324,7 +330,7 @@ def plan_federation(
         FederationCycleError: Declarations form a directed cycle.
         NamespaceConflict: Two directories claim one namespace.
         UnlinkedAssociates: A repository declares an associate and supplies
-            no path to it.
+            no path to it, unless ``set_aside_unlinked`` is given.
         FederationError: A declaration names no namespace, or names one
             other than the repository at its path declares.
     """
@@ -397,8 +403,12 @@ def plan_federation(
         # read, so the run stops on the environment that is incomplete rather
         # than reporting every reference into the missing associate as broken.
         unlinked = {n: i["namespace"] for n, i in associates.items() if not i["path"]}
-        if unlinked:
+        if unlinked and not set_aside_unlinked:
             raise UnlinkedAssociates(parent_root, declaration_path, unlinked)
+        # Implements: REQ-d00289-K
+        # Set aside, a declaration awaiting its path names no directory, so
+        # it claims no namespace and reaches no repository.
+        associates = {n: i for n, i in associates.items() if n not in unlinked}
         for name, info in associates.items():
             # Implements: REQ-d00202-O
             # A relative path is read against the working tree of the

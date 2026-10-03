@@ -657,17 +657,27 @@ def register_associate(
         )
 
     recorded = _assembled_associates(config)
-    # Implements: REQ-d00289-J
-    # A declaration naming this namespace and no path already says which
-    # repository is meant, so the path is recorded for it under its own
-    # name. Recording it beside that declaration under the name the
-    # repository gives itself would be a second claim on one namespace.
-    awaiting = _awaiting_entry(recorded, namespace)
-    if awaiting is not None:
-        assoc_name = awaiting
+    target = Path(repo_path).resolve()
+    # Implements: REQ-d00289-J, REQ-d00289-L
+    # A declaration naming this namespace already says which repository is
+    # meant when it supplies no path or supplies this one, so the
+    # registration addresses it under its own name. Recording beside it
+    # under the name the repository gives itself would be a second claim
+    # on one namespace.
+    declared = _declaring_entry(recorded, namespace, target, repo_root)
+    if declared is not None:
+        assoc_name = declared
     existing = recorded.get(assoc_name)
     existing_path = (existing.get("path") or "") if existing else ""
-    target = Path(repo_path).resolve()
+    # Implements: REQ-d00289-M, REQ-d00202-L
+    # A declaration awaiting its path states only the namespace its author
+    # expects. The registration is judged against that expectation, so a
+    # repository declaring another namespace is the mismatch a build
+    # refuses rather than a new namespace written over the expectation.
+    # A declaration recording a path is replaced only as C and D decide.
+    expected_namespace = namespace
+    if existing and not existing_path and existing.get("namespace"):
+        expected_namespace = str(existing["namespace"])
     # A declaration with no path is recorded nowhere, so supplying one
     # replaces nothing.
     entry_moves = bool(existing_path) and _resolve_recorded(existing_path, repo_root) != target
@@ -684,7 +694,7 @@ def register_associate(
         config,
         assoc_name,
         repo_path,
-        namespace,
+        expected_namespace,
         repo_root=repo_root,
     )
     if refusal is not None:
@@ -793,15 +803,26 @@ def _assembled_associates(config: dict[str, Any]) -> dict[str, Any]:
     return {n: e for n, e in table.items() if isinstance(e, dict)}
 
 
-def _awaiting_entry(recorded: dict[str, Any], namespace: str) -> str | None:
-    """The declaration naming this namespace and no path, if there is one.
+def _declaring_entry(
+    recorded: dict[str, Any], namespace: str, target: Path, repo_root: Path
+) -> str | None:
+    """The declaration naming this namespace at this directory or at none.
 
-    Implements: REQ-d00289-J
+    Implements: REQ-d00289-J, REQ-d00289-L
+
+    A declaration already recording the target is preferred to one still
+    awaiting its path, since it is the one a repeated registration repeats.
     """
+    awaiting = None
     for key, entry in recorded.items():
-        if not entry.get("path") and entry.get("namespace") == namespace:
+        if entry.get("namespace") != namespace:
+            continue
+        path = entry.get("path")
+        if not path:
+            awaiting = awaiting or key
+        elif _resolve_recorded(str(path), repo_root) == target:
             return key
-    return None
+    return awaiting
 
 
 def _matching_entry(recorded: dict[str, Any], name: str) -> str | None:
@@ -926,22 +947,22 @@ def _federation_refusal(
 
     # Implements: REQ-d00289-K
     # A declaration still awaiting its path supplies no member to conflict
-    # with, so the registration is judged against the declarations that
-    # name a directory.
-    recorded = {
-        name: entry
-        for name, entry in (config.get("associates") or {}).items()
-        if not isinstance(entry, dict) or entry.get("path")
-    }
+    # with, in this repository or in any the federation reaches, so the
+    # planner is asked to set each one aside rather than refuse it.
+    recorded = config.get("associates") or {}
 
     try:
-        refuse_unreadable(plan_federation({**config, "associates": recorded}, repo_root))
+        refuse_unreadable(plan_federation(config, repo_root, set_aside_unlinked=True))
     except FederationError as exc:
         return str(exc), True
 
     prospective = {**recorded, assoc_name: {"path": repo_path, "namespace": namespace}}
     try:
-        refuse_unreadable(plan_federation({**config, "associates": prospective}, repo_root))
+        refuse_unreadable(
+            plan_federation(
+                {**config, "associates": prospective}, repo_root, set_aside_unlinked=True
+            )
+        )
     except FederationError as exc:
         return str(exc), False
 
