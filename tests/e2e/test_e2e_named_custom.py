@@ -334,7 +334,7 @@ class TestEmptyAssertions:
             "# REQ-pNoAssertions: No Assertions\n\n"
             "**Level**: PRD | **Status**: Active\n\n"
             "The system does something without assertions.\n\n"
-            "*End* *No Assertions* | **Hash**: e3b0c442\n"
+            "*End* *No Assertions* | **Hash**: N/A\n"
             "---\n"
         )
         write_config(tmp_path / ".elspais.toml", cfg)
