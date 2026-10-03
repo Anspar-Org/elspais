@@ -1,4 +1,3 @@
-# Verifies: REQ-d00323-D+E
 """Carried provenance across a federation.
 
 A run of the invoking repository's targets executes no target of another
