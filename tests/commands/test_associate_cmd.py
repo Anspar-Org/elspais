@@ -1803,3 +1803,143 @@ class TestAssociateUnlinkReadsTheAssembledConfiguration:
         assert "remains declared" not in out, (
             "nothing declares the entry now, so saying it stands would be false"
         )
+
+
+def _register(core: Path, target: Path, name: str, namespace: str):
+    """Register `target` against `core` the way a single-link run does."""
+    from elspais.commands.associate_cmd import register_associate
+
+    return register_associate(
+        core,
+        str(target),
+        name,
+        namespace,
+        repo_root=core,
+        config_path=core / ".elspais.toml",
+    )
+
+
+def _plan_core(core: Path):
+    from elspais.config import load_config
+    from elspais.graph.federation_plan import plan_federation
+
+    return plan_federation(load_config(core / ".elspais.toml"), core)
+
+
+class TestAssociateCompletesAnExpectedDeclaration:
+    """Validates REQ-d00289-J and REQ-d00289-K: a registration supplies the
+    path a committed declaration left to the machine-local configuration,
+    and an associate still awaiting its path refuses nothing."""
+
+    # Verifies: REQ-d00289-J, REQ-d00202-B
+    def test_REQ_d00289_J_path_is_recorded_under_the_declarations_own_name(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """The committed key differs from the name the repository gives
+        itself; the namespace says which declaration is meant, so the path
+        is recorded under that key and no second entry appears."""
+        from elspais.commands.associate_cmd import Outcome
+
+        core = _core_declaring(tmp_path, '\n[associates.betalib]\nnamespace = "BET"\n')
+        beta = _write_associate_config(tmp_path / "beta", "beta", "BET")
+
+        outcome = _register(core, beta, "beta", "BET")
+
+        assert outcome.kind is Outcome.RECORDED, outcome
+        assert outcome.name == "betalib"
+        local = tomlkit.parse((core / ".elspais.local.toml").read_text())
+        assert dict(local["associates"]) == {"betalib": {"path": str(beta), "namespace": "BET"}}
+
+        planned = _plan_core(core)
+        assert [entry.name for entry in planned] == ["core", "betalib"]
+        assert planned[1].repo_root == beta.resolve()
+
+    @pytest.mark.parametrize("path_line", ["", 'path = ""\n'], ids=["path-absent", "path-empty"])
+    # Verifies: REQ-d00289-J, REQ-d00202-B
+    def test_REQ_d00289_J_supplying_the_path_is_a_recording(
+        self, tmp_path, monkeypatch, capsys, path_line
+    ):
+        """A declaration awaiting its path records nowhere, so the run that
+        supplies one records it -- it is neither the entry-exists refusal nor
+        a run that changed nothing -- and the federation then plans."""
+        from elspais.commands.associate_cmd import Outcome, run
+
+        core = _core_declaring(tmp_path, f'\n[associates.callisto]\n{path_line}namespace = "CAL"\n')
+        callisto = _make_associate_repo(tmp_path, "callisto", "CAL")
+
+        outcome = _register(core, callisto, "callisto", "CAL")
+
+        assert outcome.kind is Outcome.RECORDED, outcome
+        assert outcome.path == str(callisto)
+        assert [entry.name for entry in _plan_core(core)] == ["core", "callisto"]
+
+        # A second run over the now-supplied path changes nothing.
+        monkeypatch.chdir(core)
+        assert run(_link_args(core, str(callisto))) == 0
+        assert _register(core, callisto, "callisto", "CAL").kind is Outcome.UNCHANGED
+
+    # Verifies: REQ-d00289-K
+    def test_REQ_d00289_K_an_associate_awaiting_its_path_refuses_no_other(self, tmp_path):
+        """Two associates await their paths; supplying one is recorded although
+        the other is still unlinked, and the refusal that remains names only
+        the one still awaiting."""
+        from elspais.commands.associate_cmd import Outcome
+        from elspais.graph.federation_plan import UnlinkedAssociates
+
+        core = _core_declaring(
+            tmp_path,
+            '\n[associates.callisto]\nnamespace = "CAL"\n'
+            '\n[associates.europa]\nnamespace = "EUR"\n',
+        )
+        callisto = _make_associate_repo(tmp_path, "callisto", "CAL")
+        _make_associate_repo(tmp_path, "europa", "EUR")
+
+        outcome = _register(core, callisto, "callisto", "CAL")
+
+        assert outcome.kind is Outcome.RECORDED, outcome
+        with pytest.raises(UnlinkedAssociates) as excinfo:
+            _plan_core(core)
+        assert excinfo.value.unlinked == {"europa": "EUR"}
+
+    # Verifies: REQ-d00289-K, REQ-d00289-I
+    def test_REQ_d00289_K_a_standing_fault_still_refuses_beside_an_awaiting_associate(
+        self, tmp_path
+    ):
+        """Setting aside the associates awaiting a path sets aside nothing
+        else: an entry pointing at a repository that declares another
+        namespace is a fault the configuration already held, and it still
+        refuses the candidate."""
+        from elspais.commands.associate_cmd import Outcome
+
+        core = _core_declaring(tmp_path, '\n[associates.europa]\nnamespace = "EUR"\n')
+        mismatched = _write_associate_config(tmp_path / "lib", "lib", "OTH")
+        local_config = core / ".elspais.local.toml"
+        local_config.write_text(f'[associates.lib]\npath = "{mismatched}"\nnamespace = "LIB"\n')
+        before = local_config.read_bytes()
+        gamma = _write_associate_config(tmp_path / "gamma", "gamma", "GAM")
+
+        outcome = _register(core, gamma, "gamma", "GAM")
+
+        assert outcome.kind is Outcome.WOULD_NOT_FEDERATE, outcome
+        assert outcome.pre_existing is True
+        assert str(mismatched) in outcome.reason
+        assert local_config.read_bytes() == before, "a refused registration must write nothing"
+
+    # Verifies: REQ-d00202-R
+    def test_REQ_d00202_R_list_shows_an_awaiting_associate_as_not_linked(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """`--list` names an associate still awaiting its path, and the file
+        that supplies it, rather than leaving it out or failing."""
+        from elspais.commands.associate_cmd import run
+
+        core = _core_declaring(tmp_path, '\n[associates.callisto]\nnamespace = "CAL"\n')
+
+        monkeypatch.chdir(core)
+        assert run(_link_args(core, None, list=True)) == 0
+
+        out = capsys.readouterr().out
+        (row,) = [line for line in out.splitlines() if line.startswith("callisto")]
+        assert "CAL" in row
+        assert "NOT LINKED" in row
+        assert ".elspais.local.toml" in row

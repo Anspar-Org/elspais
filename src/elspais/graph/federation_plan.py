@@ -40,8 +40,10 @@ from typing import Any
 from elspais.graph.federated import FederationError
 
 __all__ = [
+    "UNLINKED_EXIT_STATUS",
     "FederationCycleError",
     "NamespaceConflict",
+    "UnlinkedAssociates",
     "PlannedRepo",
     "declared_associates",
     "repository_origin",
@@ -96,6 +98,56 @@ class NamespaceConflict(FederationError):
             f"{' -> '.join(self.second_declaration)}). A namespace identifies one "
             f"member's identifiers, so give each member its own."
         )
+
+
+# Implements: REQ-d00202-S
+# The exit status of a run refused only because an expected associate has no
+# path. It lies outside the bits the report commands set, and outside the
+# status of every other refusal, so a script can tell an environment to
+# complete from a configuration to correct.
+UNLINKED_EXIT_STATUS = 69
+
+
+class UnlinkedAssociates(FederationError):
+    """Raised when a repository declares associates and supplies no path to them.
+
+    Implements: REQ-d00202-R, REQ-d00202-S
+
+    The committed configuration may name an associate by its namespace alone
+    (REQ-d00202-Q); the path then comes from the machine-local configuration
+    of the declaring repository. A checkout where that file supplies none is
+    an incomplete environment, and the refusal names the file that completes
+    it rather than the committed file, which is left without a path on
+    purpose.
+    """
+
+    exit_status = UNLINKED_EXIT_STATUS
+
+    def __init__(
+        self,
+        declaring_root: Path,
+        declaration_path: tuple[str, ...],
+        unlinked: dict[str, str],
+    ) -> None:
+        self.declaring_root = declaring_root
+        self.unlinked = dict(unlinked)
+        local = declaring_root / ".elspais.local.toml"
+        # The chain matters only for a repository reached through another:
+        # its own machine-local file is the one to open, not the root's.
+        reached = (
+            f" (reached via {' -> '.join(declaration_path)})" if len(declaration_path) > 1 else ""
+        )
+        lines = [
+            f"The repository at {declaring_root}{reached} expects "
+            f"{len(unlinked)} associate(s) with no path supplied:"
+        ]
+        lines += [f"  {name} (namespace {ns})" for name, ns in sorted(unlinked.items())]
+        lines.append(
+            f"Supply each path in {local}: run `elspais associate <path>` in "
+            f"{declaring_root} for each one, or `elspais associate --all` to link "
+            f"the ones found beside it."
+        )
+        super().__init__("\n".join(lines))
 
 
 @dataclass(frozen=True)
@@ -271,6 +323,8 @@ def plan_federation(
     Raises:
         FederationCycleError: Declarations form a directed cycle.
         NamespaceConflict: Two directories claim one namespace.
+        UnlinkedAssociates: A repository declares an associate and supplies
+            no path to it.
         FederationError: A declaration names no namespace, or names one
             other than the repository at its path declares.
     """
@@ -338,6 +392,13 @@ def plan_federation(
         on_path: dict[Path, str],
     ) -> None:
         associates = declared_associates(parent_config, parent_root)
+        # Implements: REQ-d00202-R
+        # An associate declared with no path is refused before any member is
+        # read, so the run stops on the environment that is incomplete rather
+        # than reporting every reference into the missing associate as broken.
+        unlinked = {n: i["namespace"] for n, i in associates.items() if not i["path"]}
+        if unlinked:
+            raise UnlinkedAssociates(parent_root, declaration_path, unlinked)
         for name, info in associates.items():
             # Implements: REQ-d00202-O
             # A relative path is read against the working tree of the

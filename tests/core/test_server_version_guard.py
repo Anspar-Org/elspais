@@ -31,6 +31,7 @@ from starlette.testclient import TestClient
 import elspais
 from elspais.graph import render
 from elspais.graph.GraphNode import FILE_ID_PREFIX, make_declaration_id, make_file_id
+from tests.core.graph_test_helpers import comparable_mutation_result
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 HHT_LIKE = FIXTURES_DIR / "hht-like"
@@ -64,6 +65,13 @@ TIP_CONFLICT_KEYS = {"success", "code", "provided_tip", "current_tip", "unseen",
 NAMESPACE = "REQ"
 
 REQ = "REQ-d00003"
+# Deleting a requirement in the active role retires it in place, and the
+# fixture's configuration declares several retired-role statuses, so that
+# deletion is refused (REQ-p00017-N). The deletion route is exercised on a
+# requirement the project copy holds in the provisional role instead, which
+# the deletion removes.
+DRAFT_REQ = "REQ-d00002"
+_DRAFT_REQ_METADATA = "**Level**: DEV | **Implements**: p00002, o00002 | **Status**: {status}"
 ASSERTION = "REQ-d00003-A"
 SECTION = "REQ-d00003:section:1"
 REQ_FILE = make_file_id(NAMESPACE, "spec/dev-impl.md")
@@ -150,7 +158,6 @@ ROUTE_CASES = [
         "/api/mutate/assertion/delete",
         ASSERTION,
         {"assertion_id": ASSERTION, "confirm": True},
-        returns_version=False,
     ),
     RouteCase("/api/mutate/remainder", SECTION, {"node_id": SECTION, "text": "guarded prose"}),
     RouteCase(
@@ -162,7 +169,6 @@ ROUTE_CASES = [
         "/api/mutate/remainder/delete",
         SECTION,
         {"node_id": SECTION},
-        returns_version=False,
     ),
     RouteCase(
         "/api/mutate/requirement/add",
@@ -171,9 +177,8 @@ ROUTE_CASES = [
     ),
     RouteCase(
         "/api/mutate/requirement/delete",
-        REQ,
-        {"node_id": REQ, "confirm": True},
-        returns_version=False,
+        DRAFT_REQ,
+        {"node_id": DRAFT_REQ, "confirm": True},
     ),
     RouteCase(
         "/api/mutate/edge",
@@ -277,6 +282,11 @@ def viewer_project(tmp_path: Path) -> Path:
     """
     project = tmp_path / "project"
     shutil.copytree(HHT_LIKE, project)
+    spec = project / "spec" / "dev-impl.md"
+    text = spec.read_text(encoding="utf-8")
+    active = _DRAFT_REQ_METADATA.format(status="Active")
+    assert text.count(active) == 1, f"fixture premise: {DRAFT_REQ} metadata line moved"
+    spec.write_text(text.replace(active, _DRAFT_REQ_METADATA.format(status="Draft")), "utf-8")
     return project
 
 
@@ -485,7 +495,7 @@ class TestHttpMutationRoutesReturnTheNewVersion:
     ):
         """REQ-o00062-K: The response carries the token for the next call."""
         if not case.returns_version:
-            pytest.skip("MCP counterpart attaches no version to this deletion")
+            pytest.skip("a removed declaration leaves no node to report a version for")
         supplied = version_of(case.guarded_id)
 
         payload = client.post(case.path, json=case.with_tokens(version_of)).json()
@@ -578,6 +588,69 @@ class TestHttpConflictIsTheMcpConflict:
         )
 
         assert http_body == mcp_body
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# A deletion reports one version on both surfaces
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestHttpDeletionVersionIsTheMcpVersion:
+    """Validates REQ-o00062-K, REQ-o00062-O for the sub-node deletions.
+
+    The route and the tool apply the same deletion to the same graph. Each
+    answers with the surviving parent requirement's resulting version, so a
+    caller threads the same token whichever surface it used.
+    """
+
+    # Verifies: REQ-o00062-K, REQ-o00062-O
+    def test_REQ_o00062_O_assertion_deletion_reports_the_mcp_version(
+        self, client, mcp_tools, app_state, version_of
+    ):
+        """The fixture requirement is Active, so the assertion is retired in place."""
+        supplied = version_of(ASSERTION)
+
+        response = client.post(
+            "/api/mutate/assertion/delete",
+            json={"assertion_id": ASSERTION, "confirm": True, VERSION_FIELD: supplied},
+        )
+        assert response.status_code == 200, response.text
+        http_body = response.json()
+        assert http_body["version"] == version_of(REQ)
+        assert http_body["version"] != supplied
+        app_state.graph.undo_last()
+        assert version_of(ASSERTION) == supplied
+
+        mcp_body = mcp_tools["mutate_delete_assertion"](
+            assertion_id=ASSERTION, if_version=supplied, confirm=True
+        )
+
+        assert mcp_body["success"] is True, mcp_body
+        assert comparable_mutation_result(mcp_body) == comparable_mutation_result(http_body)
+
+    # Verifies: REQ-o00062-K, REQ-o00062-O
+    def test_REQ_o00062_O_remainder_deletion_reports_the_mcp_version(
+        self, client, mcp_tools, app_state, version_of
+    ):
+        supplied = version_of(SECTION)
+
+        response = client.post(
+            "/api/mutate/remainder/delete",
+            json={"node_id": SECTION, VERSION_FIELD: supplied},
+        )
+        assert response.status_code == 200, response.text
+        http_body = response.json()
+        assert http_body["version"] == version_of(REQ)
+        assert http_body["version"] != supplied
+        app_state.graph.undo_last()
+        assert version_of(SECTION) == supplied
+
+        mcp_body = mcp_tools["mutate_delete_remainder"](
+            node_id=SECTION, if_version=supplied, confirm=True
+        )
+
+        assert mcp_body["success"] is True, mcp_body
+        assert comparable_mutation_result(mcp_body) == comparable_mutation_result(http_body)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

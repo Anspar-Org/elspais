@@ -20,11 +20,11 @@
 | REQ-p00014 | Satisfies Relationship                           | prd-features.md | ca4892c1 |
 | REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 1ad561d2 |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
-| REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | d2f70506 |
+| REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | bc9e593e |
 | REQ-p00018 | Compiled Risk Register                           | prd-core.md     | 0f0438e9 |
 | REQ-p00019 | Truthful Reporting and Error Discipline          | prd-core.md     | 946a0e4c |
 | REQ-p00050 | Unified Graph Architecture                       | prd-features.md | 3a0fb899 |
-| REQ-p00060 | MCP Server for AI-Driven Requirements Management | prd-features.md | a729a853 |
+| REQ-p00060 | MCP Server for AI-Driven Requirements Management | prd-features.md | 55090ed9 |
 | REQ-p00061 | Requirement Decomposition Rules                  | prd-core.md     | 462c146e |
 | REQ-p00080 | Spec-to-PDF Compilation                          | prd-core.md     | 3296bc86 |
 | REQ-p00081 | Org-Wide Requirement Visibility                  | prd-features.md | 17fa4417 |
@@ -122,7 +122,7 @@
 | REQ-d00134 | Mutation Round-Trip Fidelity                                  | dev-graph-file-nodes.md | 19cb065b |
 | REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | 67a9ca83 |
 | REQ-d00201 | FederatedGraph Mutation Delegation                            | dev-graph-federation.md | c51794b3 |
-| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | 46b7046a |
+| REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | 52fe05b1 |
 | REQ-d00203 | Multi-Repo Build Pipeline                                     | dev-graph-federation.md | f3cbca11 |
 | REQ-d00204 | Per-Repo Health Check Delegation                              | dev-graph-federation.md | 890fa7f1 |
 | REQ-d00205 | MCP Federation Support                                        | dev-mcp-tools.md        | 31c8b0c5 |
@@ -191,7 +191,7 @@
 | REQ-d00269 | Cross-Repository Coverage Credit                              | dev-graph-federation.md | 95db81d6 |
 | REQ-d00270 | Single-Authority Identifier Grammar Derivation                | dev-graph-config.md     | fe29efc0 |
 | REQ-d00271 | Diagnostic Code Vocabulary                                    | dev-cli.md              | 6f4019d1 |
-| REQ-d00272 | Reference Fault Diagnosis                                     | dev-graph-core.md       | 58971daa |
+| REQ-d00272 | Reference Fault Diagnosis                                     | dev-graph-core.md       | 84d91fef |
 | REQ-d00273 | Requirement Metadata Block                                    | dev-graph-file-nodes.md | 2d7e25e8 |
 | REQ-d00274 | Uncredited Coverage Evidence                                  | dev-graph-core.md       | bf276438 |
 | REQ-d00275 | Whose Configuration Governs a Federated Answer                | dev-graph-federation.md | 9ab2ef7c |
@@ -208,7 +208,7 @@
 | REQ-d00286 | Built-In User Documentation                                   | dev-cli.md              | 7cd5b049 |
 | REQ-d00287 | Reading a Reference                                           | dev-graph-core.md       | 02eb02ff |
 | REQ-d00288 | Journeys That Validate Nothing                                | dev-graph-core.md       | 184a67af |
-| REQ-d00289 | Associate Registration Outcome                                | dev-cli.md              | 008983e5 |
+| REQ-d00289 | Associate Registration Outcome                                | dev-cli.md              | 3c6593b6 |
 | REQ-d00290 | Machine-Local Configuration Overlay                           | dev-graph-config.md     | 9019f766 |
 | REQ-d00291 | Coverage Inclusion                                            | dev-graph-core.md       | 13bc6949 |
 | REQ-d00292 | Viewer Coverage Presentation                                  | dev-graph-core.md       | db9415cd |

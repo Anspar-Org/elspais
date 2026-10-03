@@ -1,7 +1,9 @@
 # Verifies: REQ-d00253-A
 """Tests for the [federation] config table."""
 
+import os
 import re
+import shutil
 import threading
 from pathlib import Path
 
@@ -524,35 +526,32 @@ class TestCrossRepoIdentifierCollision:
 
 
 class TestDeclarationRequiredFields:
-    """Validates REQ-d00202-B.
+    """Validates REQ-d00202-B and REQ-d00202-Q.
 
-    A declaration says which repository it means by stating where it is and
-    whose identifiers live there.  Missing either, it names nothing in
+    A declaration says which repository it means by stating whose
+    identifiers live there.  Missing its namespace, it names nothing in
     particular, so it is refused rather than resolved against whatever
-    happens to sit at that path.  The git remote answers a different
-    question -- how to obtain the repository -- and is therefore optional.
+    happens to sit at its path.  The path may be left to the machine-local
+    configuration, and the git remote answers a different question -- how
+    to obtain the repository -- so both are optional to the reader.
     """
 
     @pytest.mark.parametrize(
         "entry",
         [
-            {"namespace": "LIB"},
             {"path": "../lib"},
-            {"path": "", "namespace": "LIB"},
             {"path": "../lib", "namespace": ""},
             "../lib",
         ],
         ids=[
-            "no-path",
             "no-namespace",
-            "empty-path",
             "empty-namespace",
             "not-a-table",
         ],
     )
     # Verifies: REQ-d00202-B
     def test_REQ_d00202_B_incomplete_declaration_is_refused(self, entry):
-        """A declaration missing its path or its namespace is a ValueError."""
+        """A declaration missing its namespace, or not a table, is a ValueError."""
         from elspais.config import get_associates_config
 
         with pytest.raises(ValueError) as excinfo:
@@ -642,6 +641,278 @@ class TestDeclarationRequiredFields:
         message = str(excinfo.value)
         assert str(root.resolve()) in message, message
         assert "lib" in message, message
+
+
+def _expect(repo: Path, name: str, namespace: str, path_line: str = "") -> None:
+    """Append an associate declaration to `repo`'s committed config.
+
+    `path_line` is written verbatim inside the table, so a test can declare
+    the associate with no path at all, an empty one, or a real one.
+    """
+    config = repo / ".elspais.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8")
+        + f'\n[associates.{name}]\n{path_line}namespace = "{namespace}"\n',
+        encoding="utf-8",
+    )
+
+
+_PATHLESS = pytest.mark.parametrize(
+    "path_line",
+    ["", 'path = ""\n'],
+    ids=["path-absent", "path-empty"],
+)
+
+
+class TestPathlessDeclaration:
+    """Validates REQ-d00202-Q, REQ-d00202-R and REQ-d00202-B.
+
+    Which associates a repository federates against is committed; where each
+    one sits on a machine is not.  A committed declaration may therefore name
+    an associate by its namespace alone, and the machine-local configuration
+    supplies the path.  A checkout where nothing supplies it is an incomplete
+    environment, refused before any member is read, naming the file that
+    completes it.
+    """
+
+    @pytest.mark.parametrize(
+        "entry",
+        [{"namespace": "LIB"}, {"path": "", "namespace": "LIB"}],
+        ids=["path-absent", "path-empty"],
+    )
+    # Verifies: REQ-d00202-Q, REQ-d00202-B
+    def test_REQ_d00202_Q_namespace_alone_is_a_declaration(self, entry):
+        """The reader admits a declaration with no path, and an empty path
+        names no directory, so it reads the same as none."""
+        from elspais.config import get_associates_config
+
+        resolved = get_associates_config({"associates": {"lib": entry}})
+
+        assert resolved["lib"]["namespace"] == "LIB"
+        assert resolved["lib"]["path"] is None
+
+    # Verifies: REQ-d00202-Q
+    def test_REQ_d00202_Q_local_path_completes_a_committed_declaration(self, tmp_path):
+        """A namespace committed in `.elspais.toml` and a path supplied by
+        `.elspais.local.toml` plan the federation the same declaration plans
+        when written wholly in the committed file."""
+        split_base = tmp_path / "split"
+        whole_base = tmp_path / "whole"
+        split_base.mkdir()
+        whole_base.mkdir()
+
+        make_repo(split_base, "lib")
+        split = make_repo(split_base, "hub")
+        _expect(split, "lib", "LIB")
+        (split / ".elspais.local.toml").write_text(
+            '[associates.lib]\npath = "../lib"\n', encoding="utf-8"
+        )
+
+        make_repo(whole_base, "lib")
+        whole = make_repo(whole_base, "hub", associates={"lib": "../lib"})
+
+        def shape(base: Path, planned) -> list[tuple[str, Path, str]]:
+            return [
+                (
+                    entry.name,
+                    entry.repo_root.relative_to(base.resolve()),
+                    entry.config["project"]["namespace"],
+                )
+                for entry in planned
+            ]
+
+        split_plan = _plan(split)
+        whole_plan = _plan(whole)
+
+        assert all(entry.error is None for entry in split_plan)
+        assert shape(split_base, split_plan) == shape(whole_base, whole_plan)
+        assert shape(split_base, split_plan) == [
+            ("hub", Path("hub"), "HUB"),
+            ("lib", Path("lib"), "LIB"),
+        ]
+
+    @_PATHLESS
+    # Verifies: REQ-d00202-R
+    def test_REQ_d00202_R_unsupplied_path_is_refused_naming_the_local_file(
+        self, tmp_path, path_line
+    ):
+        """Every associate the repository awaits is named in one refusal,
+        with its namespace and the machine-local file that supplies the path."""
+        from elspais.graph.federation_plan import UnlinkedAssociates
+
+        make_repo(tmp_path, "lib")
+        make_repo(tmp_path, "util")
+        hub = make_repo(tmp_path, "hub")
+        _expect(hub, "lib", "LIB", path_line)
+        _expect(hub, "util", "UTIL", path_line)
+
+        with pytest.raises(UnlinkedAssociates) as excinfo:
+            _plan(hub)
+
+        refusal = excinfo.value
+        message = str(refusal)
+        assert refusal.unlinked == {"lib": "LIB", "util": "UTIL"}
+        assert refusal.declaring_root == hub.resolve()
+        assert "lib (namespace LIB)" in message, message
+        assert "util (namespace UTIL)" in message, message
+        assert str(hub.resolve() / ".elspais.local.toml") in message, message
+
+    # Verifies: REQ-d00202-R
+    def test_REQ_d00202_R_refusal_comes_before_any_member_is_read(self, tmp_path):
+        """A linked associate that cannot be read is not what the run stops
+        on: the incomplete environment is refused first."""
+        from elspais.graph.federation_plan import UnlinkedAssociates
+
+        hub = make_repo(tmp_path, "hub", associates={"ghost": "../absent"})
+        _expect(hub, "lib", "LIB")
+
+        with pytest.raises(UnlinkedAssociates) as excinfo:
+            _plan(hub)
+
+        assert excinfo.value.unlinked == {"lib": "LIB"}
+
+    # Verifies: REQ-d00202-R
+    def test_REQ_d00202_R_transitive_refusal_names_the_declaring_repository(self, tmp_path):
+        """An associate whose own committed configuration awaits a path is
+        completed in that associate's machine-local file, so that is the
+        file named -- not the invoking repository's."""
+        from elspais.graph.federation_plan import UnlinkedAssociates
+
+        make_repo(tmp_path, "leaf")
+        mid = make_repo(tmp_path, "mid")
+        _expect(mid, "leaf", "LEAF")
+        hub = make_repo(tmp_path, "hub", associates={"mid": "../mid"})
+
+        with pytest.raises(UnlinkedAssociates) as excinfo:
+            _plan(hub)
+
+        refusal = excinfo.value
+        message = str(refusal)
+        assert refusal.declaring_root == mid.resolve()
+        assert refusal.unlinked == {"leaf": "LEAF"}
+        assert str(mid.resolve() / ".elspais.local.toml") in message, message
+        assert str(hub.resolve() / ".elspais.local.toml") not in message, message
+
+    # Verifies: REQ-d00202-R
+    def test_REQ_d00202_R_repository_without_associates_is_not_refused(self, tmp_path):
+        """A repository declaring no associates awaits nothing."""
+        root = make_repo(tmp_path, "solo")
+
+        planned = _plan(root)
+
+        assert [entry.name for entry in planned] == ["solo"]
+        assert planned[0].error is None
+
+
+def _git_init_commit(repo: Path) -> None:
+    import subprocess
+
+    env = {**os.environ, "GIT_CONFIG_NOSYSTEM": "1"}
+    for args in (
+        ["init", "-q", "-b", "main"],
+        ["add", "-A"],
+        ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init"],
+    ):
+        subprocess.run(["git", *args], cwd=repo, env=env, check=True, capture_output=True)
+
+
+def _associated_federation(tmp_path: Path) -> Path:
+    """Copy the associated fixture (core over alpha and beta) into git repos."""
+    source = Path(__file__).resolve().parents[1] / "fixtures" / "e2e-associated"
+    for name in ("core", "alpha", "beta"):
+        shutil.copytree(source / name, tmp_path / name)
+        _git_init_commit(tmp_path / name)
+    return tmp_path / "core"
+
+
+def _drop_beta_path(core: Path) -> None:
+    config = core / ".elspais.toml"
+    text = config.read_text(encoding="utf-8")
+    assert 'path = "../beta"\n' in text
+    config.write_text(text.replace('path = "../beta"\n', ""), encoding="utf-8")
+
+
+@pytest.fixture
+def in_process_cli(monkeypatch):
+    """Run `elspais` in-process, building its own graph rather than a daemon's."""
+    from elspais.commands import _engine
+
+    monkeypatch.setattr(_engine, "_try_daemon", lambda endpoint, params: None)
+    monkeypatch.setattr(_engine, "_local_graph", None, raising=False)
+    from elspais.cli import main
+
+    return main
+
+
+class TestUnlinkedRefusalIsDistinguishable:
+    """Validates REQ-d00202-S: a run refused for an associate awaiting its
+    path is told apart from one refused for a configuration that will not
+    load, by its exit status and by its message."""
+
+    @pytest.mark.parametrize("verbose", [False, True], ids=["quiet", "verbose"])
+    # Verifies: REQ-d00202-S, REQ-d00202-R
+    def test_REQ_d00202_S_unlinked_associate_exits_with_its_own_status(
+        self, tmp_path, monkeypatch, capsys, in_process_cli, verbose
+    ):
+        from elspais.graph.federation_plan import UNLINKED_EXIT_STATUS
+
+        core = _associated_federation(tmp_path)
+        _drop_beta_path(core)
+        monkeypatch.chdir(core)
+
+        argv = (["-v"] if verbose else []) + ["checks"]
+        rc = in_process_cli(argv)
+
+        err = capsys.readouterr().err
+        assert rc == UNLINKED_EXIT_STATUS == 69
+        assert "beta (namespace REQ-BET)" in err, err
+        assert str(core.resolve() / ".elspais.local.toml") in err, err
+        assert "Traceback" not in err, err
+
+    # Verifies: REQ-d00202-S, REQ-d00202-Q
+    def test_REQ_d00202_S_supplied_path_runs_the_checks(
+        self, tmp_path, monkeypatch, capsys, in_process_cli
+    ):
+        """The same committed configuration, completed by the machine-local
+        file, is not refused at all."""
+        core = _associated_federation(tmp_path)
+        _drop_beta_path(core)
+        (core / ".elspais.local.toml").write_text(
+            '[associates.beta]\npath = "../beta"\n', encoding="utf-8"
+        )
+        monkeypatch.chdir(core)
+
+        rc = in_process_cli(["checks"])
+
+        captured = capsys.readouterr()
+        assert rc == 0, captured.out + captured.err
+        assert "no path supplied" not in captured.err
+
+    @pytest.mark.parametrize(
+        "fault",
+        ["unknown-key", "associate-without-namespace"],
+    )
+    # Verifies: REQ-d00202-S
+    def test_REQ_d00202_S_unloadable_configuration_keeps_status_one(
+        self, tmp_path, monkeypatch, capsys, in_process_cli, fault
+    ):
+        core = _associated_federation(tmp_path)
+        config = core / ".elspais.toml"
+        text = config.read_text(encoding="utf-8")
+        if fault == "unknown-key":
+            text = "bogus = 1\n" + text
+        else:
+            assert 'namespace = "REQ-BET"\n' in text
+            text = text.replace('namespace = "REQ-BET"\n', "")
+        config.write_text(text, encoding="utf-8")
+        monkeypatch.chdir(core)
+
+        rc = in_process_cli(["checks"])
+
+        err = capsys.readouterr().err
+        assert rc == 1, err
+        assert ".elspais.local.toml" not in err, err
+        assert "no path supplied" not in err, err
 
 
 class TestNamespaceCollision:

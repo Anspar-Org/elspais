@@ -482,6 +482,8 @@ R. <RETIRED> reported trailing content that opened neither a reference nor a com
 
 S. An item SHALL be reported under the same class whichever *Traceability* keyword introduced it.
 
+T. If an item is the identifier of a copy that a `Satisfies:` declaration made, then the report SHALL name the original that the copy was made from.
+
 ### Rationale
 
 Classes are only as useful as the rule that assigns them. Reading either reaches a stage or it does not, so a class is a fact about the item rather than a judgement of it, and the report says what was reached and stops there.
@@ -491,6 +493,8 @@ Attribution decided by a declared namespace separates three populations a projec
 Minimality bounds diagnosis without a list of defects worth naming. The smallest set of relaxations is the one the input determines; a larger set that also succeeds contains a relaxation the input never asked for, and naming it describes a defect the author does not have.
 
 Trailing content ranks beneath every named relaxation because an item opening with a valid reference can always be read as that reference plus whatever follows. Unranked, that reading accounts for every malformed item and leaves every diagnosis generic. The ranking governs what is reported and settles nothing about what binds.
+
+The identifier of a copy made by `Satisfies:` is the graph's own name for that copy, not an identifier an author writes, so a reference spelled that way reads as no identifier at all. The author who wrote one meant the original, and naming it turns the report into its remedy without naming a cause beyond the one the report already states.
 
 A non-canonical form is a fact about the file rather than a defect in the reference. One canonical spelling exists for a keyword and for an identifier alike, and admitting more than one form is not writing more than one, so the report names the form that was written.
 
@@ -504,6 +508,8 @@ This requirement concretizes the REQ-p00019 anti-pattern template for reference 
 
 ### Changelog
 
+- 2026-10-02 | 84d91fef | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | T added: a reference spelled as the identifier of a copy is reported naming the original
 - 2026-10-01 | 58971daa | - | Michael Lewis (<michael@anspar.org>) | S added: the class an item reaches does not depend on the keyword that introduced it
 - 2026-08-25 | 9f1a7a6a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-25 | e46b563e | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -519,7 +525,7 @@ This requirement concretizes the REQ-p00019 anti-pattern template for reference 
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-58: record how each REQ-p00019 class is answered for this subsystem — concretized, bound through the instance, or left visibly uncovered with its reason
 - 2026-08-15 | - | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: the rule assigning reference failure classes — the space and namespace tests, minimal relaxation, and reading within an item without binding from it
 
-*End* *Reference Fault Diagnosis* | **Hash**: 58971daa
+*End* *Reference Fault Diagnosis* | **Hash**: 84d91fef
 ---
 
 ## REQ-d00287: Reading a Reference

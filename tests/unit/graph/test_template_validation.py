@@ -35,7 +35,10 @@ from __future__ import annotations
 
 import pytest
 
+from elspais.graph.GraphNode import GraphNode, NodeKind
+from elspais.graph.reference_faults import FaultClass
 from elspais.graph.relations import EdgeKind, Stereotype
+from elspais.graph.template_subtree import copy_name_diagnostic, satisfies_target_fault
 from tests.core.graph_test_helpers import (
     build_graph,
     make_code_ref,
@@ -739,3 +742,97 @@ class TestUnusedTemplateWarns:
         warnings_iter = getattr(graph, "iter_warnings", lambda: [])
         warnings = list(warnings_iter())
         assert any("REQ-p00001" in str(w) for w in warnings)
+
+
+# ---------------------------------------------------------------------------
+# The one authority on the matrix's Satisfies rows
+# ---------------------------------------------------------------------------
+
+
+class TestSatisfiesTargetFault:
+    """``satisfies_target_fault`` judges a target by its stereotype alone."""
+
+    # Verifies: REQ-p00014-G
+    @pytest.mark.parametrize(
+        ("stereotype", "diagnostic"),
+        [
+            (Stereotype.TEMPLATE, None),
+            (
+                Stereotype.CONCRETE,
+                "REQ-p00001 is not marked **Template**; mark REQ-p00001 with "
+                "**Template** if it's intended to be satisfiable.",
+            ),
+            (
+                None,
+                "REQ-p00001 is not marked **Template**; mark REQ-p00001 with "
+                "**Template** if it's intended to be satisfiable.",
+            ),
+            (
+                Stereotype.INSTANCE,
+                "Chained instantiation is not supported. Satisfy the original template directly.",
+            ),
+        ],
+        ids=["template", "concrete", "unmarked", "instance"],
+    )
+    def test_verdict_follows_the_target_stereotype(
+        self, stereotype: Stereotype | None, diagnostic: str | None
+    ) -> None:
+        target = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT, label="Target")
+        if stereotype is not None:
+            target.set_field("stereotype", stereotype)
+
+        fault = satisfies_target_fault(target, "REQ-p00002", "REQ-p00001")
+
+        if diagnostic is None:
+            assert fault is None
+            return
+        assert fault is not None
+        assert (fault.source_id, fault.target_id, fault.edge_kind, fault.fault_class) == (
+            "REQ-p00002",
+            "REQ-p00001",
+            EdgeKind.SATISFIES.value,
+            FaultClass.FORBIDDEN,
+        )
+        assert fault.diagnostic == diagnostic
+
+
+class TestCopyNameDiagnostic:
+    """``copy_name_diagnostic`` answers only for a copy a ``Satisfies:`` made."""
+
+    # Verifies: REQ-d00272-T
+    def test_instance_with_its_original_names_the_original(self) -> None:
+        original = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT, label="Template")
+        original.set_field("stereotype", Stereotype.TEMPLATE)
+        copy = GraphNode(id="REQ-p00002::REQ-p00001", kind=NodeKind.REQUIREMENT, label="Copy")
+        copy.set_field("stereotype", Stereotype.INSTANCE)
+        copy.link(original, EdgeKind.INSTANCE)
+
+        assert copy_name_diagnostic("REQ-p00002::REQ-p00001", copy) == (
+            "REQ-p00002::REQ-p00001 is the name the tool gives a copy of REQ-p00001, "
+            "and a copy's name is not an identifier a reference can carry. "
+            "Name REQ-p00001 instead."
+        )
+
+    # Verifies: REQ-d00272-T
+    @pytest.mark.parametrize(
+        "stereotype",
+        [Stereotype.TEMPLATE, Stereotype.CONCRETE, None],
+        ids=["template", "concrete", "unmarked"],
+    )
+    def test_node_that_is_not_a_copy_gets_nothing(self, stereotype: Stereotype | None) -> None:
+        node = GraphNode(id="REQ-p00001", kind=NodeKind.REQUIREMENT, label="Not a copy")
+        if stereotype is not None:
+            node.set_field("stereotype", stereotype)
+
+        assert copy_name_diagnostic("REQ-p00001", node) == ""
+
+    # Verifies: REQ-d00272-T
+    def test_nothing_held_gets_nothing(self) -> None:
+        assert copy_name_diagnostic("REQ-p00002::REQ-p00001", None) == ""
+
+    # Verifies: REQ-d00272-T
+    def test_instance_without_an_original_gets_nothing(self) -> None:
+        copy = GraphNode(id="REQ-p00002::REQ-p00001", kind=NodeKind.REQUIREMENT, label="Copy")
+        copy.set_field("stereotype", Stereotype.INSTANCE)
+
+        assert copy_name_diagnostic("REQ-p00002::REQ-p00001", copy) == ""

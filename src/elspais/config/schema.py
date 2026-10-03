@@ -945,9 +945,11 @@ class ChangelogConfig(_StrictModel):
     require: ChangelogRequireConfig = Field(default_factory=ChangelogRequireConfig)
 
 
-# Implements: REQ-d00212-Y
+# Implements: REQ-d00212-Y, REQ-d00202-Q
 class AssociateEntryConfig(_StrictModel):
-    path: str
+    # The committed configuration may name an associate without saying where
+    # it is; the machine-local configuration then supplies the path.
+    path: str | None = None
     namespace: str
     # Where the repository can be obtained by someone who does not have it.
     # The path and the namespace identify the member; the remote never does,

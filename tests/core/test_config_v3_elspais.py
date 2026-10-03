@@ -315,13 +315,11 @@ class TestProjectConfigSimplified:
 class TestAssociateEntryConfigSimplified:
     """Validates REQ-d00212-Y: AssociateEntryConfig simplified."""
 
-    # Verifies: REQ-d00212-Y
-    def test_REQ_d00212_K_has_path_required(self):
-        """AssociateEntryConfig has 'path' field (str, required)."""
-        assert "path" in AssociateEntryConfig.model_fields
-        # path is required -- omitting it should raise
-        with pytest.raises(ValidationError):
-            AssociateEntryConfig(namespace="NS")  # type: ignore[call-arg]
+    # Verifies: REQ-d00202-Q
+    def test_REQ_d00202_Q_path_may_be_left_to_the_local_file(self):
+        """A declaration naming only its namespace validates, with no path."""
+        entry = AssociateEntryConfig(namespace="NS")
+        assert entry.path is None
 
     # Verifies: REQ-d00212-Y
     def test_REQ_d00212_K_has_namespace_required(self):

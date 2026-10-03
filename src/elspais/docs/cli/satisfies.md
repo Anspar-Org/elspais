@@ -148,8 +148,9 @@ The builder enforces this matrix at build time, raising typed
 | -------------------------- | --------- | ---------------------------------------- |
 | `Satisfies: X`             | TEMPLATE  | OK                                       |
 | `Satisfies: X`             | CONCRETE  | Error (target not marked **Template**)   |
-| `Satisfies: X`             | INSTANCE  | Error (chained instantiation)            |
+| `Satisfies: X`             | INSTANCE  | Error (chained instantiation). A copy's name, `<declaring>::<original>`, is never an identifier: written in any repository it is malformed, and the report names the original |
 | `Satisfies: X` (cross-repo)| missing   | Error -- diagnostic lists associates     |
+| `Satisfies: X`             | retired assertion | Unresolved (as a missing assertion) |
 | `Refines: X` (from a **Template** REQ) | TEMPLATE | OK -- forms the template subtree |
 | `Refines: X` (from any other REQ) | TEMPLATE | Error (a template's refiners must be templates) |
 | `Refines: X`               | INSTANCE  | Error (instance is read-only)            |

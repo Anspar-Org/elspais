@@ -328,7 +328,7 @@ class TestNormalizedTextMode:
         graph._recompute_requirement_hash(parent)
         hash_before = parent.get_field("hash")
 
-        graph.delete_assertion("REQ-p00001-A", compact=False)
+        graph.delete_assertion("REQ-p00001-A")
         hash_after = parent.get_field("hash")
 
         assert hash_before != hash_after, (

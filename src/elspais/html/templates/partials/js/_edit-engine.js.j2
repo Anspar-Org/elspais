@@ -1388,33 +1388,18 @@ function onDeleteRequirement(nodeId) {
 }
 
 function onDeleteAssertion(nodeId, assertionId) {
-    // Look up parent requirement status from open card data
-    var info = editState.openCards.get(nodeId);
-    var props = info && info.data && info.data.properties ? info.data.properties : {};
-    var status = (props.status || '').toLowerCase();
-    if (status === 'active') {
-        // Active requirements: deprecate assertion (preserve label for traceability)
-        if (!confirm('Deprecate assertion ' + assertionId + '? The label will be preserved. This can be undone with Ctrl+Z.')) return;
-        mutate('/api/mutate/assertion', {
-            assertion_id: assertionId,
-            new_text: '[DEPRECATED]'
-        }).then(async function(result) {
-            if (result && result.success) {
-                await refreshCard(nodeId);
-            }
-        });
-    } else {
-        // Draft/Deprecated/other: allow full deletion
-        if (!confirm('Delete assertion ' + assertionId + '? This can be undone with Ctrl+Z.')) return;
-        mutate('/api/mutate/assertion/delete', {
-            assertion_id: assertionId,
-            confirm: true
-        }).then(async function(result) {
-            if (result && result.success) {
-                await refreshCard(nodeId);
-            }
-        });
-    }
+    // The server decides by the requirement's status role: an active
+    // requirement keeps the label as a retired assertion, a draft one
+    // removes it and renumbers the later labels, or refuses with a reason.
+    if (!confirm('Delete assertion ' + assertionId + '? An active requirement keeps the label as a retired assertion; a draft requirement removes it and renumbers the later assertions. This can be undone with Ctrl+Z.')) return;
+    mutate('/api/mutate/assertion/delete', {
+        assertion_id: assertionId,
+        confirm: true
+    }).then(async function(result) {
+        if (result && result.success) {
+            await refreshCard(nodeId);
+        }
+    });
 }
 
 // ── REMAINDER section edit handlers ──

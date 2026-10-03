@@ -25,6 +25,7 @@ from elspais.graph.mutations import MutationEntry
 from elspais.graph.parsers.directives import assertion_is_retired
 from elspais.graph.reference_faults import (
     FaultClass,
+    FaultCode,
     IdentifierFormFinding,
     PlaceholderFinding,
     ReferenceFault,
@@ -1209,7 +1210,7 @@ class FederatedGraph:
         return result
 
     # Implements: REQ-d00201-A
-    def delete_requirement(self, node_id: str, compact_assertions: bool = True) -> MutationEntry:
+    def delete_requirement(self, node_id: str) -> MutationEntry:
         """Delete a requirement. Removes from ownership.
 
         # Strategy: by_id
@@ -1221,11 +1222,12 @@ class FederatedGraph:
         assertion_ids = []
         if node:
             assertion_ids = [c.id for c in node.iter_children() if c.kind == NodeKind.ASSERTION]
-        result = graph.delete_requirement(node_id, compact_assertions)
-        # Remove from ownership
-        self._ownership.pop(node_id, None)
-        for aid in assertion_ids:
-            self._ownership.pop(aid, None)
+        result = graph.delete_requirement(node_id)
+        # A retired requirement stays in its graph; a removed one leaves it.
+        if result.before_state.get("disposition") != "retired":
+            self._ownership.pop(node_id, None)
+            for aid in assertion_ids:
+                self._ownership.pop(aid, None)
         self._record_mutation(repo_name, result)
         return result
 
@@ -1247,19 +1249,21 @@ class FederatedGraph:
         return result
 
     # Implements: REQ-d00201-A
-    def delete_assertion(
-        self,
-        assertion_id: str,
-        compact: bool = True,
-        compact_style: str = "letter",
-    ) -> MutationEntry:
-        """Delete an assertion.
+    def delete_assertion(self, assertion_id: str) -> MutationEntry:
+        """Delete an assertion. Ownership follows what the deletion did.
+
+        A retired *Assertion* stays in its repository's graph. A removed one
+        leaves it, and each relabelled *Assertion* is owned under its new id.
 
         # Strategy: by_id
         """
         repo_name = self._ownership[assertion_id]
-        result = self._graph_for(assertion_id).delete_assertion(assertion_id, compact)
-        self._ownership.pop(assertion_id, None)
+        result = self._graph_for(assertion_id).delete_assertion(assertion_id)
+        if result.before_state.get("disposition") == "removed":
+            self._ownership.pop(assertion_id, None)
+            for rename in result.before_state.get("renames", []):
+                self._ownership.pop(rename["old_id"], None)
+                self._ownership[rename["new_id"]] = repo_name
         self._record_mutation(repo_name, result)
         return result
 
@@ -1898,6 +1902,12 @@ class FederatedGraph:
                 # Implements: REQ-d00252-C
                 if br.edge_kind == EdgeKind.INTEGRATES.value:
                     continue
+                # Implements: REQ-d00272-A+K, REQ-d00212-S
+                if self._refused_in_federation(br, source_entry.namespace):
+                    reached = self._class_reached(br, source_entry.namespace)
+                    if reached is not br:
+                        replacements[i] = [reached]
+                    continue
                 target_repo_name = self._ownership.get(br.target_id)
                 if target_repo_name is None:
                     expansion = self._expand_foreign_multi_reference(br.target_id)
@@ -2124,6 +2134,25 @@ class FederatedGraph:
                 return entry, parsed
         return None
 
+    # Implements: REQ-d00272-A+K, REQ-d00212-S
+    def _refused_in_federation(self, br: ReferenceFault, declaring: str) -> bool:
+        """Whether no member may read ``br`` as a reference it can bind.
+
+        A refused item is never looked up among the nodes members hold: the
+        graph holds copies under names no reference may spell, and a
+        repeated target names a node that exists, so finding either would
+        return the relationship the verdict withheld. A verdict the reader
+        reached past reading -- a repeated target, a keyword the file may
+        not use -- is final. A malformed verdict is the declaring member's
+        grammar alone, so it stands only where no other member's grammar
+        accepts the whole item either.
+        """
+        if not reader_refused((br.fault_class, br.codes)):
+            return False
+        if br.fault_class is not FaultClass.MALFORMED:
+            return True
+        return self._grammar_claimant(br.target_id, excluding=declaring) is None
+
     # Implements: REQ-p00014-H, REQ-p00014-N
     def _claim_for(self, target_id: str) -> tuple[str, str] | None:
         """Return ``(repo_name, canonical_id)`` for the member holding ``target_id``.
@@ -2206,7 +2235,9 @@ class FederatedGraph:
         from elspais.graph.relations import Stereotype
         from elspais.graph.template_subtree import (
             UNCLONED_FIELDS,
+            copy_name_diagnostic,
             recreate_subtree_edges,
+            satisfies_target_fault,
             subtree_nodes,
         )
 
@@ -2216,6 +2247,13 @@ class FederatedGraph:
 
             for i, br in enumerate(source_entry.graph._unresolved_references):
                 if br.edge_kind != EdgeKind.SATISFIES.value:
+                    continue
+
+                # Implements: REQ-d00272-A+K, REQ-d00212-S
+                if self._refused_in_federation(br, source_entry.namespace):
+                    reached = self._class_reached(br, source_entry.namespace)
+                    if reached is not br:
+                        source_entry.graph._unresolved_references[i] = reached
                     continue
 
                 # Resolve the target's owning repo.  Try exact-match
@@ -2228,21 +2266,12 @@ class FederatedGraph:
                     if claim is not None:
                         target_repo_name, target_id_canonical = claim
                 if target_repo_name is None:
-                    # Implements: REQ-d00272-A, REQ-d00287-A
-                    # An item the reader itself refused keeps the class it
-                    # reached. Reading is staged, and this rewrite speaks for
-                    # a later stage than an unread item got to: text that is
-                    # not an identifier cannot name a repository, declared or
-                    # otherwise, so describing it as one names a cause the
-                    # input does not determine.
                     # Implements: REQ-d00272-A+S
                     # A member's grammar claims the target, so the member is
                     # declared and present and only the identifier is absent.
                     reached = self._class_reached(br, source_entry.namespace)
                     if reached is not br:
                         source_entry.graph._unresolved_references[i] = reached
-                        continue
-                    if reader_refused((br.fault_class, br.codes)):
                         continue
                     # Missing-associate: no associated repo claims this
                     # target ID. Emit a typed diagnostic naming the
@@ -2278,13 +2307,26 @@ class FederatedGraph:
                     continue
 
                 target_entry = self._repos[target_repo_name]
-                template_node = target_entry.graph._index.get(target_id_canonical)
-                if template_node is None:
+                # Implements: REQ-p00017-H, REQ-d00272-S
+                # The owning repository holds this id, but a retired
+                # *Assertion* is not a target: the reference stays reported,
+                # as naming an *Assertion* the owner lacks, which is the class
+                # a reference by any other keyword reaches.
+                if not self._holds_live_target(target_entry.graph, target_id_canonical):
+                    source_entry.graph._unresolved_references[i] = self._class_reached(
+                        br, source_entry.namespace
+                    )
                     continue
-                if template_node.get_field("stereotype") != Stereotype.TEMPLATE:
-                    # Target exists but isn't marked **Template**.  Leave
-                    # the broken-ref in place; downstream validation will
-                    # attach a rule-1 diagnostic.
+                template_node = target_entry.graph._index[target_id_canonical]
+                # Implements: REQ-p00014-G, REQ-p00014-R
+                # The matrix judges a template owned by another repository by
+                # the rule a local one meets, and its refusal replaces the
+                # reference with the reason the target cannot be instantiated.
+                matrix_fault = satisfies_target_fault(
+                    template_node, br.source_id, target_id_canonical
+                )
+                if matrix_fault is not None:
+                    source_entry.graph._unresolved_references[i] = matrix_fault
                     continue
 
                 declaring_node = source_entry.graph._index.get(br.source_id)
@@ -2354,6 +2396,26 @@ class FederatedGraph:
 
             for idx in reversed(resolved_indices):
                 source_entry.graph._unresolved_references.pop(idx)
+
+        # Implements: REQ-d00272-T+S
+        # A member's builder answers a reference naming one of its own
+        # copies, but copies of a template another member owns are made in
+        # the pass above, after that member's build. Once every copy exists,
+        # a reference the reader refused that names one is answered the same
+        # way, whichever keyword introduced it.
+        for source_entry in self._repos.values():
+            faults = source_entry.graph._unresolved_references
+            for i, br in enumerate(faults):
+                if br.diagnostic or FaultCode.NOT_AN_IDENTIFIER not in br.codes:
+                    continue
+                owner = self._repos.get(self._ownership.get(br.target_id, ""))
+                if owner is None:
+                    continue
+                diagnostic = copy_name_diagnostic(
+                    br.target_id, owner.graph._index.get(br.target_id)
+                )
+                if diagnostic:
+                    faults[i] = dataclasses.replace(br, diagnostic=diagnostic)
 
     # Implements: REQ-d00252
     # Implements: REQ-d00252-D

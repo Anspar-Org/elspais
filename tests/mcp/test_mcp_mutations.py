@@ -458,9 +458,14 @@ class TestMutateDeleteRequirement:
         pytest.importorskip("mcp")
         from elspais.mcp.server import _mutate_delete_requirement
 
+        # A Draft requirement is removed; an active one is retired in place
+        # (REQ-p00017-D, tests/core/test_requirement_retire_on_delete.py).
+        mutation_graph.change_status("REQ-o00001", "Draft")
+
         result = _mutate_delete_requirement(mutation_graph, "REQ-o00001", confirm=True)
 
         assert result["success"] is True
+        assert result["message"] == "Deleted requirement REQ-o00001"
         assert mutation_graph.find_by_id("REQ-o00001") is None
 
     # Verifies: REQ-o00062-E
@@ -468,6 +473,8 @@ class TestMutateDeleteRequirement:
         """Returns MutationEntry for audit."""
         pytest.importorskip("mcp")
         from elspais.mcp.server import _mutate_delete_requirement
+
+        mutation_graph.change_status("REQ-o00001", "Draft")
 
         result = _mutate_delete_requirement(mutation_graph, "REQ-o00001", confirm=True)
 
@@ -557,23 +564,35 @@ class TestMutateDeleteAssertion:
         assert result["success"] is False
         assert mutation_graph.find_by_id("REQ-p00001-A") is not None
 
-    # Verifies: REQ-o00062-B
+    # Verifies: REQ-o00062-B, REQ-p00017-K
     def test_deletes_when_confirmed(self, mutation_graph):
-        """Deletes assertion when confirmed."""
+        """A confirmed delete retires the assertion under its own label and
+        leaves its sibling as it was."""
         pytest.importorskip("mcp")
+        from elspais.graph.parsers.directives import RETIRED_ASSERTION_TEXT, assertion_is_retired
         from elspais.mcp.server import _mutate_delete_assertion
 
-        # Store original assertion ID before deletion
-        original_text = mutation_graph.find_by_id("REQ-p00001-A").get_label()
+        sibling_text = mutation_graph.find_by_id("REQ-p00001-B").get_label()
 
         result = _mutate_delete_assertion(mutation_graph, "REQ-p00001-A", confirm=True)
 
-        assert result["success"] is True
-        # After deletion with compact=True, REQ-p00001-A now has what was REQ-p00001-B
-        # Check that the original assertion text is no longer at A
-        if mutation_graph.find_by_id("REQ-p00001-A"):
-            # A still exists but has different content (was B, now compacted to A)
-            assert mutation_graph.find_by_id("REQ-p00001-A").get_label() != original_text
+        assert result["success"] is True, result
+        retired = mutation_graph.find_by_id("REQ-p00001-A")
+        assert retired is not None
+        assert assertion_is_retired(retired)
+        assert retired.get_label() == RETIRED_ASSERTION_TEXT
+        assert mutation_graph.find_by_id("REQ-p00001-B").get_label() == sibling_text
+
+    # Verifies: REQ-o00062-B
+    def test_compact_is_not_accepted(self, mutation_graph):
+        """Deletion has no compaction option: the keyword is refused."""
+        pytest.importorskip("mcp")
+        from elspais.graph.parsers.directives import assertion_is_retired
+        from elspais.mcp.server import _mutate_delete_assertion
+
+        with pytest.raises(TypeError, match="compact"):
+            _mutate_delete_assertion(mutation_graph, "REQ-p00001-A", compact=True, confirm=True)
+        assert not assertion_is_retired(mutation_graph.find_by_id("REQ-p00001-A"))
 
     # Verifies: REQ-o00062-E
     def test_returns_mutation_entry(self, mutation_graph):

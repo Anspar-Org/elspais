@@ -511,8 +511,12 @@ values = ["id", "title", "status", "implemented", "tested", "verified"]
 # during federation. See `elspais docs graph-model`.
 #──────────────────────────────────────────────────────────────────────────────
 
-# A declaration states the path and the namespace it expects to find
-# there; both are required. The namespace must match the one the
+# A declaration states the namespace it expects and the path where that
+# repository sits. The namespace is required. The path may be left out of
+# this file and supplied by `.elspais.local.toml` (run `elspais associate
+# <path>`): the committed declaration then records that the repository is
+# expected, and a checkout that has not supplied the path is refused
+# naming the associate and the file to supply it in. The namespace must match the one the
 # repository at that path declares for itself, and no two repositories in
 # one federation may declare the same namespace — a namespace is what
 # says whose identifiers these are. `elspais associate` checks all three
@@ -530,6 +534,9 @@ namespace = "CAL"
 [associates.phoenix]
 path = "../phoenix"
 namespace = "PHX"
+
+# [associates.titan]                 # Expected, with the path left to each
+# namespace = "TTN"                  #   machine's .elspais.local.toml
 
 #──────────────────────────────────────────────────────────────────────────────
 # FEDERATION - Write / generation surface control
