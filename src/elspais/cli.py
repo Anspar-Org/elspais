@@ -500,6 +500,16 @@ def main(argv: list[str] | None = None) -> int:
         print("\nOperation cancelled.", file=sys.stderr)
         return 130
     except Exception as e:
+        from elspais.graph.federation_plan import UnlinkedAssociates
+
+        # Implements: REQ-d00202-S
+        # An expected associate with no path is an environment to complete,
+        # not a configuration to correct, and the status says which. It is a
+        # refusal rather than a fault in the tool, so verbose output adds no
+        # traceback to it.
+        if isinstance(e, UnlinkedAssociates):
+            print(f"Error: {e}", file=sys.stderr)
+            return e.exit_status
         if args.verbose:
             raise
         print(f"Error: {e}", file=sys.stderr)

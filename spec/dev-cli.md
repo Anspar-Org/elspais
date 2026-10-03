@@ -942,6 +942,14 @@ H. When a registration would record a namespace another entry already records at
 
 I. When the configuration a registration would be recorded into does not federate as it stands, the tool SHALL refuse the registration reporting that fault as one the configuration already held, distinguishably from a fault the registration itself would introduce.
 
+J. When a registration names a repository whose namespace is the namespace of an associate declared with no path, the tool SHALL record the path for that associate's declaration.
+
+K. A registration SHALL be judged against the associates whose paths are supplied, so that an associate still awaiting its path does not refuse the registration of another.
+
+L. When a registration names a repository that an associate's declaration already records under the same namespace, the tool SHALL leave the configuration unchanged and report that declaration.
+
+M. When a registration addresses an associate declared with no path, the tool SHALL judge the registration against the namespace that declaration names.
+
 ### Rationale
 
 A registration is the one moment at which an operator can still tell the tool what they meant. Reporting the argument rather than the recorded state (A) makes a run that changed nothing indistinguishable from one that did what was asked, and an operator who then reads the wrong repository has no signal that they are doing so — which is why B separates the two outcomes rather than leaving both to read as success.
@@ -950,11 +958,18 @@ G is the same decision one step earlier, and it is the namespace rule read at sc
 
 H and I are E read honestly. A namespace is what a reference resolves through, so it is the one thing a member cannot share: two directories claiming one namespace are two answers to a question that admits one, whatever the entries holding them are called. That is decidable from the declarations alone, which is why it is answered here rather than left to the federation — and naming both directories is what tells the operator which of the two they are about to stop reading. Two directories declaring *different* namespaces are not this rule's business, however closely related they are: their identifiers cannot be confused, so nothing is ambiguous about holding both. I is the other half: a registration planned against a configuration that already would not federate can be refused for a fault that has nothing to do with it, and an operator reading their own candidate's name beside somebody else's collision will go looking in the wrong place. The registration is still refused — a configuration that cannot federate is not a state to add to — but the report says whose fault it is.
 
+J and K make registration the repair for a declaration that names an associate and no path (REQ-d00202-Q). The declaration already says which repository is meant, so the path supplied for it is recorded against that declaration rather than beside it under another name, which would be a second claim on one namespace. A declaration still awaiting its path supplies no member to conflict with, wherever in the federation it is declared, so it is not a fault the configuration holds against an unrelated registration: refusing on it would make each unlinked associate block the linking of every other, and a configuration expecting two could never be completed one at a time.
+
+L and M keep a declaration the one record of its associate. A declaration that already records the repository is the entry a repeated registration addresses, whatever name the repository gives itself; a second entry for the same directory and namespace would report a change where nothing changed. A declaration awaiting its path states only the namespace its author expects, so a registration addressing it with a repository that declares another namespace is the mismatch a build refuses, not a new expectation written over the committed one. A declaration that records a path is a different case: replacing what it records is the decision C and D leave to the operator.
+
 ### Changelog
 
+- 2026-10-02 | 61203e49 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-02 | 982964e6 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-02 | 3c6593b6 | - | Michael Lewis (<michael@anspar.org>) | J and K added: a registration supplies the path an expected associate awaits
 - 2026-09-12 | 008983e5 | - | Michael Lewis (<michael@anspar.org>) | Active; G and H narrowed to the namespace, the one identity
 
-*End* *Associate Registration Outcome* | **Hash**: 008983e5
+*End* *Associate Registration Outcome* | **Hash**: 61203e49
 
 ---
 

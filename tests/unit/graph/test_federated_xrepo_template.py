@@ -1225,3 +1225,453 @@ class TestCrossRepoRefinesMatrix:
             "APP-p00001::APP-p00002": "app",
             "APP-p00001::APP-p00002-A": "app",
         }
+
+
+# ---------------------------------------------------------------------------
+# One verdict on a Satisfies: target, wherever the declaring requirement lives
+# ---------------------------------------------------------------------------
+
+_LIBRARY_CONFIG = """
+version = 5
+[project]
+name = "library"
+namespace = "LIB"
+[levels.prd]
+rank = 1
+letter = "p"
+implements = ["prd"]
+[scanning.spec]
+directories = ["spec"]
+[scanning.code]
+directories = []
+[scanning.test]
+enabled = false
+directories = []
+"""
+
+# The declaring requirements each repository holds, by component number,
+# with the metadata line naming their target. Both repositories carry the
+# same set, so the one-repository builder judges the library's and the
+# federation judges the app's.
+_DECLARERS = {
+    11: "**Satisfies**: LIB-p00002",
+    12: "**Satisfies**: LIB-p00001-B",
+    13: "**Implements**: LIB-p00001-B",
+    14: "**Satisfies**: LIB-p00001",
+    15: "**Satisfies**: LIB-p00001-A",
+}
+
+
+def _copy_name_declarers(namespace: str) -> dict[int, str]:
+    """Declarers whose item is spelled ``<declaring>::<original>``.
+
+    17 and 20 name the copy ``{namespace}-p00014`` made of LIB-p00001 in its
+    own repository; 18 and 19 name nothing the graph holds.
+    """
+    return {
+        17: f"**Satisfies**: {namespace}-p00014::LIB-p00001",
+        18: f"**Satisfies**: {namespace}-p00099::LIB-p00001",
+        19: "**Satisfies**: foo::bar",
+        20: f"**Implements**: {namespace}-p00014::LIB-p00001",
+    }
+
+
+def _declarers(namespace: str, declarers: dict[int, str] = _DECLARERS) -> str:
+    """Spell one requirement per ``declarers`` entry in ``namespace``."""
+    return "\n".join(
+        f"""
+        # {namespace}-p000{number}: Declarer {number}
+
+        **Level**: PRD | **Status**: Approved
+        {metadata}
+
+        ### Assertions
+
+        A. SHALL declare {number}.
+
+        *End* *Declarer {number}*
+        """
+        for number, metadata in declarers.items()
+    )
+
+
+@pytest.fixture(scope="module")
+def retired_template_federation(tmp_path_factory: pytest.TempPathFactory) -> FederatedGraph:
+    """A library holding a template with a retired *Assertion*, and an app.
+
+    LIB-p00001 is a **Template** whose *Assertion* B carries the RETIRED
+    directive; LIB-p00002 is concrete. The library and the app each hold the
+    declarers of ``_DECLARERS`` and of ``_copy_name_declarers``; the app
+    also satisfies (16) and implements (21), by its name, the copy of the
+    template LIB-p00014 makes in the library.
+    """
+    root = tmp_path_factory.mktemp("retired")
+    library = root / "library"
+    library.mkdir()
+    _write(library, ".elspais.toml", _LIBRARY_CONFIG)
+    _write(
+        library,
+        "spec/prd-library.md",
+        """
+        # LIB-p00001: Action Dispatch
+
+        **Level**: PRD | **Status**: Approved | **Template**
+
+        ### Assertions
+
+        A. SHALL parse.
+
+        B. <RETIRED> SHALL deny duplicate submissions.
+
+        *End* *Action Dispatch*
+
+        # LIB-p00002: Plain Concrete
+
+        **Level**: PRD | **Status**: Approved
+
+        ### Assertions
+
+        A. SHALL hold.
+
+        *End* *Plain Concrete*
+        """
+        + _declarers("LIB", {**_DECLARERS, **_copy_name_declarers("LIB")}),
+    )
+    _git_init(library)
+
+    app = root / "app"
+    app.mkdir()
+    _write(app, ".elspais.toml", _APP_CONFIG)
+    _write(
+        app,
+        "spec/prd-app.md",
+        _declarers(
+            "APP",
+            {
+                **_DECLARERS,
+                16: "**Satisfies**: LIB-p00014::LIB-p00001",
+                **_copy_name_declarers("APP"),
+                21: "**Implements**: LIB-p00014::LIB-p00001",
+            },
+        ),
+    )
+    _git_init(app)
+    return build_graph(repo_root=app, scan_code=False, scan_tests=False)
+
+
+def _faults_of(fed: FederatedGraph, source_id: str) -> list[tuple[str, str, FaultClass, str]]:
+    """The faults ``source_id`` declared, as comparable tuples."""
+    return [
+        (b.target_id, b.edge_kind, b.fault_class, b.diagnostic)
+        for b in fed.unresolved_references()
+        if b.source_id == source_id
+    ]
+
+
+# The library's declarers are judged by the one-repository builder, the app's
+# by the federation's cross-repository pass.
+_WHERE = pytest.mark.parametrize("namespace", ["LIB", "APP"], ids=["local", "cross-repo"])
+
+# A ``Satisfies:`` declarer and an ``Implements:`` declarer spelling the same
+# copy's name: a copy held in the declarers' own repository, or one another
+# repository holds.
+_COPY_NAMES = pytest.mark.parametrize(
+    ("satisfier", "implementer", "copy_name"),
+    [
+        ("LIB-p00017", "LIB-p00020", "LIB-p00014::LIB-p00001"),
+        ("APP-p00017", "APP-p00020", "APP-p00014::LIB-p00001"),
+        ("APP-p00016", "APP-p00021", "LIB-p00014::LIB-p00001"),
+    ],
+    ids=["local", "cross-repo", "held-by-another-repository"],
+)
+
+
+def _copy_name_diagnostic(copy_name: str) -> str:
+    """The diagnostic a reference spelling ``copy_name`` (a copy of LIB-p00001) carries."""
+    return (
+        f"{copy_name} is the name the tool gives a copy of LIB-p00001, and a "
+        "copy's name is not an identifier a reference can carry. "
+        "Name LIB-p00001 instead."
+    )
+
+
+class TestSatisfiesTargetVerdict:
+    """Both instantiation paths judge a ``Satisfies:`` target by one rule."""
+
+    # Verifies: REQ-p00014-G+R, REQ-d00272-A
+    @_WHERE
+    def test_non_template_target_is_forbidden_and_not_cloned(
+        self, retired_template_federation: FederatedGraph, namespace: str
+    ) -> None:
+        declarer = f"{namespace}-p00011"
+        assert _faults_of(retired_template_federation, declarer) == [
+            (
+                "LIB-p00002",
+                "satisfies",
+                FaultClass.FORBIDDEN,
+                "LIB-p00002 is not marked **Template**; mark LIB-p00002 with "
+                "**Template** if it's intended to be satisfiable.",
+            )
+        ]
+        assert retired_template_federation.find_by_id(f"{declarer}::LIB-p00002") is None
+
+    # Verifies: REQ-p00017-H, REQ-d00272-S
+    @_WHERE
+    def test_retired_assertion_target_is_an_unknown_assertion(
+        self, retired_template_federation: FederatedGraph, namespace: str
+    ) -> None:
+        """A retired *Assertion* is not cloned and is reported as absent.
+
+        The class and the diagnostic are those an ``Implements:`` of the same
+        *Assertion* from the same repository reaches.
+        """
+        satisfier = _faults_of(retired_template_federation, f"{namespace}-p00012")
+        implementer = _faults_of(retired_template_federation, f"{namespace}-p00013")
+
+        assert [(t, k, c) for t, k, c, _d in satisfier] == [
+            ("LIB-p00001-B", "satisfies", FaultClass.UNKNOWN_ASSERTION)
+        ]
+        assert [(t, k, c) for t, k, c, _d in implementer] == [
+            ("LIB-p00001-B", "implements", FaultClass.UNKNOWN_ASSERTION)
+        ]
+        assert satisfier[0][3] == implementer[0][3]
+        assert retired_template_federation.find_by_id(f"{namespace}-p00012::LIB-p00001-B") is None
+
+    # Verifies: REQ-p00014-B+H
+    @_WHERE
+    @pytest.mark.parametrize(
+        ("number", "clones"),
+        [
+            (14, ["LIB-p00001", "LIB-p00001-A"]),
+            (15, ["LIB-p00001-A"]),
+        ],
+        ids=["template", "live-assertion"],
+    )
+    def test_live_template_target_is_cloned_without_fault(
+        self,
+        retired_template_federation: FederatedGraph,
+        namespace: str,
+        number: int,
+        clones: list[str],
+    ) -> None:
+        declarer = f"{namespace}-p000{number}"
+        assert _faults_of(retired_template_federation, declarer) == []
+        for original in clones:
+            clone = retired_template_federation.find_by_id(f"{declarer}::{original}")
+            assert clone is not None, f"expected {declarer}::{original} to be cloned"
+            assert clone.get_field("stereotype") == Stereotype.INSTANCE
+
+    # Verifies: REQ-d00272-A+K+T, REQ-d00212-S
+    @_COPY_NAMES
+    def test_copy_name_is_malformed_and_names_the_original(
+        self,
+        retired_template_federation: FederatedGraph,
+        satisfier: str,
+        implementer: str,
+        copy_name: str,
+    ) -> None:
+        """A ``Satisfies:`` spelling a copy's name is malformed and names the original.
+
+        The answer is the same wherever the copy is held: in the declarer's own
+        repository (made by the one-repository builder for the library, by the
+        federation's cross-repository pass for the app) or in another one.
+        """
+        assert retired_template_federation.find_by_id(copy_name) is not None
+        faults = [
+            b
+            for b in retired_template_federation.unresolved_references()
+            if b.source_id == satisfier
+        ]
+        assert [(b.target_id, b.edge_kind, b.fault_class) for b in faults] == [
+            (copy_name, "satisfies", FaultClass.MALFORMED)
+        ]
+        assert "E_NOT_AN_IDENTIFIER" in faults[0].codes
+        assert faults[0].diagnostic == _copy_name_diagnostic(copy_name)
+        assert retired_template_federation.find_by_id(f"{satisfier}::{copy_name}") is None
+        assert retired_template_federation.find_by_id(f"{satisfier}::LIB-p00001") is None
+
+    # Verifies: REQ-d00272-T
+    @_WHERE
+    @pytest.mark.parametrize(
+        ("number", "target"),
+        [(18, "{namespace}-p00099::LIB-p00001"), (19, "foo::bar")],
+        ids=["absent-declarer", "not-an-identifier"],
+    )
+    def test_composite_naming_no_held_copy_has_no_diagnostic(
+        self,
+        retired_template_federation: FederatedGraph,
+        namespace: str,
+        number: int,
+        target: str,
+    ) -> None:
+        """Only a copy the graph holds under exactly that text is answered."""
+        faults = [
+            b
+            for b in retired_template_federation.unresolved_references()
+            if b.source_id == f"{namespace}-p000{number}"
+        ]
+        assert [(b.target_id, b.edge_kind, b.fault_class, b.diagnostic) for b in faults] == [
+            (target.format(namespace=namespace), "satisfies", FaultClass.MALFORMED, "")
+        ]
+        assert "E_NOT_AN_IDENTIFIER" in faults[0].codes
+
+    # Verifies: REQ-d00272-A+K+T, REQ-d00212-S
+    @_COPY_NAMES
+    def test_implements_of_a_copy_name_names_the_original(
+        self,
+        retired_template_federation: FederatedGraph,
+        satisfier: str,
+        implementer: str,
+        copy_name: str,
+    ) -> None:
+        """Every keyword's malformed item naming a held copy gets the same answer.
+
+        The app's own copy is made by the cross-repository pass, after the
+        app's own build has already reported the item; the library's copy is
+        held by another repository and wires no edge to it.
+        """
+        faults = [
+            b
+            for b in retired_template_federation.unresolved_references()
+            if b.source_id == implementer
+        ]
+        assert [(b.target_id, b.edge_kind, b.fault_class) for b in faults] == [
+            (copy_name, "implements", FaultClass.MALFORMED)
+        ]
+        assert "E_NOT_AN_IDENTIFIER" in faults[0].codes
+        assert faults[0].diagnostic == _copy_name_diagnostic(copy_name)
+        node = retired_template_federation.find_by_id(implementer)
+        assert node is not None
+        edges = [*node.iter_incoming_edges(), *node.iter_outgoing_edges()]
+        assert [e for e in edges if e.kind == EdgeKind.IMPLEMENTS] == []
+
+
+# ---------------------------------------------------------------------------
+# Compaction judges the references another member holds
+# ---------------------------------------------------------------------------
+
+
+def _draft_template_federation(tmp_path: Path, cited_label: str) -> FederatedGraph:
+    """Federate a Draft **Template** LIB-p00001 (A/B/C) with an app citing one label.
+
+    APP-p00002 is concrete, so the matrix refuses its ``Refines:`` of the
+    library's template: the reference stays unresolved in the app's graph
+    and never becomes an edge the library's graph can see.
+    """
+    library = tmp_path / "library"
+    library.mkdir()
+    _write(library, ".elspais.toml", _LIBRARY_CONFIG)
+    _write(
+        library,
+        "spec/prd-library.md",
+        """
+        # LIB-p00001: Action Dispatch
+
+        **Level**: PRD | **Status**: Draft | **Template**
+
+        ### Assertions
+
+        A. SHALL parse.
+
+        B. SHALL authorize.
+
+        C. SHALL log.
+
+        *End* *Action Dispatch*
+        """,
+    )
+    _git_init(library)
+    app = tmp_path / "app"
+    app.mkdir()
+    _write(app, ".elspais.toml", _APP_CONFIG)
+    _write(
+        app,
+        "spec/prd-app.md",
+        f"""
+        # APP-p00002: App Provision
+
+        **Level**: PRD | **Status**: Approved
+        **Refines**: LIB-p00001-{cited_label}
+
+        ### Assertions
+
+        A. SHALL provide.
+
+        *End* *App Provision*
+        """,
+    )
+    _git_init(app)
+    return build_graph(repo_root=app, scan_code=False, scan_tests=False)
+
+
+def _assertion_texts(fed: FederatedGraph) -> dict[str, str]:
+    return {
+        label: fed.find_by_id(f"LIB-p00001-{label}").get_label()
+        for label in "ABC"
+        if fed.find_by_id(f"LIB-p00001-{label}") is not None
+    }
+
+
+def _app_faults(fed: FederatedGraph) -> list[tuple[str, str, FaultClass]]:
+    return [
+        (f.source_id, f.target_id, f.fault_class)
+        for f in fed.unresolved_references()
+        if f.source_id == "APP-p00002"
+    ]
+
+
+class TestCompactionJudgesForeignReferences:
+    """Removing a provisional requirement's *Assertion* renumbers the later
+    ones, so a reference another member holds -- even one the federation
+    refused to wire -- would come to designate something else."""
+
+    # Verifies: REQ-p00017-M
+    @pytest.mark.parametrize("cited", ["A", "B"], ids=["removed", "moved"])
+    def test_foreign_unresolved_reference_refuses_compaction(
+        self, tmp_path: Path, cited: str
+    ) -> None:
+        """The refusal names the citing requirement where it is written and
+        the identifier it cites, and nothing changes."""
+        from elspais.graph.builder import DeletionWouldRepointError
+
+        fed = _draft_template_federation(tmp_path, cited)
+        texts_before = _assertion_texts(fed)
+        faults_before = _app_faults(fed)
+        assert faults_before == [("APP-p00002", f"LIB-p00001-{cited}", FaultClass.FORBIDDEN)]
+
+        with pytest.raises(DeletionWouldRepointError) as excinfo:
+            fed.delete_assertion("LIB-p00001-A")
+
+        message = str(excinfo.value)
+        assert "APP-p00002 (spec/prd-app.md:1)" in message, message
+        assert "location unknown" not in message, message
+        assert f"cites LIB-p00001-{cited}" in message, message
+
+        assert (
+            _assertion_texts(fed)
+            == texts_before
+            == {
+                "A": "SHALL parse.",
+                "B": "SHALL authorize.",
+                "C": "SHALL log.",
+            }
+        )
+        assert len(fed.mutation_log) == 0
+        assert list(fed.mutation_log.iter_entries()) == []
+        assert _app_faults(fed) == faults_before
+
+    # Verifies: REQ-p00017-L, REQ-p00017-M
+    def test_foreign_reference_to_an_unmoved_assertion_does_not_refuse(
+        self, tmp_path: Path
+    ) -> None:
+        """Removing the last *Assertion* moves nothing, so a foreign reference
+        to an earlier one still designates what it named and the removal
+        proceeds."""
+        fed = _draft_template_federation(tmp_path, "A")
+
+        entry = fed.delete_assertion("LIB-p00001-C")
+
+        assert entry.before_state.get("disposition") == "removed"
+        assert fed.find_by_id("LIB-p00001-C") is None
+        assert _assertion_texts(fed) == {"A": "SHALL parse.", "B": "SHALL authorize."}
+        assert len(fed.mutation_log) == 1

@@ -942,7 +942,7 @@ class AssociateArgs:
     """Auto-discover and link all associates in sibling directories."""
 
     list: bool = False
-    """Show current associate links and status."""
+    """Show current associate links and status, including declared associates not yet linked."""
 
     unlink: str | None = None
     """Retire an associate (matches entry key, namespace, or recorded directory)."""

@@ -430,6 +430,27 @@ Deletions return the version of the surviving container that absorbed the
 change: the parent requirement for an assertion or section
 (`mutate_delete_assertion`, `mutate_delete_remainder`), the containing
 FILE for a whole requirement (`mutate_delete_requirement`).
+What `mutate_delete_assertion` does depends on the status role of the
+requirement. For the active role it retires the assertion in place: the
+text becomes `<RETIRED>`, the label stays allocated and is never given to
+another assertion, no other label moves, and a citation of it reads as
+unresolved. For the provisional and aspirational roles it removes the
+assertion and moves each later label down one place; citations from
+requirements and journeys follow their assertion and are written on save.
+That deletion is refused, naming the references, when the deleted assertion
+is cited or a moved assertion is cited from code, a test or an unresolved
+reference; remove or retarget them first. A requirement in the retired role
+is read-only: every mutation of its content or identifier is refused until
+its status changes. `mutate_delete_requirement` on a requirement in the
+active role retires it in place: it keeps its identifier and takes the one
+status the project declares in the retired role. Where the project declares
+several retired-role statuses or none, the call is refused, listing them;
+set the status you mean with `mutate_change_status` instead. A refused
+assertion deletion locates a citing requirement at its Requirement
+Location, the line that declares its identifier.
+A tool called with an argument it does not declare does nothing and answers
+`code: "undeclared_argument"`, listing the undeclared arguments under
+`undeclared` and the ones the tool takes under `accepted`.
 `mutate_add_requirement` accepts an optional `file_id` to place the new
 requirement into a chosen file; when given, `if_version` guards that FILE.
 `mutate_move_node_to_file` creates a missing destination file itself

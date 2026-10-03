@@ -53,6 +53,7 @@ from elspais.graph.GraphNode import (
 from elspais.graph.mutations import MutationEntry, MutationLog
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.parsers.directives import (
+    RETIRED_ASSERTION_TEXT,
     apply_directive,
     assertion_is_retired,
     canonical_assertion_text,
@@ -74,7 +75,9 @@ from elspais.graph.template_subtree import (
     UNCLONED_FIELDS as _UNCLONED_FIELDS,
 )
 from elspais.graph.template_subtree import (
+    copy_name_diagnostic,
     recreate_subtree_edges,
+    satisfies_target_fault,
     stereotype_matrix_fault,
     subtree_nodes,
 )
@@ -355,6 +358,14 @@ def _keyword_as_written(raw_text: str) -> str:
 
 
 # Implements: REQ-p00017-B, REQ-p00017-J
+class RetiredRequirementError(ValueError):
+    """A mutation would change a requirement whose status is in the retired role."""
+
+
+class DeletionWouldRepointError(ValueError):
+    """Deleting an *Assertion* would leave a reference designating something else."""
+
+
 def _relabel_citations(requirement: GraphNode, old_label: str, new_label: str) -> None:
     """Respell an *Assertion* label in the citations of one requirement.
 
@@ -1098,6 +1109,12 @@ class TraceGraph:
         directions, assertion children, orphan bookkeeping, and root
         membership are restored too. Implements: REQ-o00062-P
         """
+        if entry.before_state.get("disposition") == "retired":
+            retired = self._index.get(entry.target_id)
+            if retired is not None:
+                retired.set_field("status", entry.before_state.get("status"))
+            return
+
         node_id = entry.target_id
         node = None
         for i, deleted in enumerate(self._deleted_nodes):
@@ -1374,48 +1391,38 @@ class TraceGraph:
 
     # Implements: REQ-o00062-P
     def _undo_delete_assertion(self, entry: MutationEntry) -> None:
-        """Undo a delete assertion operation."""
-        # First, undo any compaction renames in reverse order
-        renames = entry.before_state.get("renames", [])
-        for rename in reversed(renames):
-            old_id = rename.get("old_id")
-            new_id = rename.get("new_id")
-            old_label = rename.get("old_label")
-            new_label = rename.get("new_label")
+        """Undo a delete assertion operation.
 
-            if new_id and new_id in self._index:
-                node = self._index.pop(new_id)
-                node.set_id(old_id)
-                node.set_field("label", old_label)
-                self._index[old_id] = node
+        A retirement is undone by restoring the text. A removal is undone by
+        moving every relabelled *Assertion* back, in descending order, and
+        then restoring the removed one at its former position.
+        """
+        parent = self._index.get(entry.before_state.get("parent_id", ""))
+        old_text = entry.before_state.get("text")
 
-                # Update edges back
-                parent = self._index.get(entry.before_state.get("parent_id", ""))
-                if parent is not None:
-                    _relabel_citations(parent, new_label, old_label)
-
-        # Restore the deleted assertion
-        node_id = entry.target_id
-        for i, node in enumerate(self._deleted_nodes):
-            if node.id == node_id:
-                self._deleted_nodes.pop(i)
-                # Restore original ID and label
-                old_id = entry.before_state.get("id", node_id)
-                old_label = entry.before_state.get("label")
-                node.set_id(old_id)
-                if old_label:
-                    node.set_field("label", old_label)
-                self._index[old_id] = node
-                # Restore parent link
-                parent_id = entry.before_state.get("parent_id")
-                if parent_id and parent_id in self._index:
-                    parent = self._index[parent_id]
+        if entry.before_state.get("disposition") == "removed":
+            if parent is None:
+                return
+            for rename in reversed(entry.before_state.get("renames", [])):
+                moved = self._index.get(rename["new_id"])
+                if moved is not None:
+                    self._relabel_assertion(moved, parent, rename["old_label"])
+            for i, deleted in enumerate(self._deleted_nodes):
+                if deleted.id == entry.target_id:
+                    node = self._deleted_nodes.pop(i)
+                    self._index[node.id] = node
                     edge = parent.link(node, EdgeKind.STRUCTURES)
                     edge.metadata["render_order"] = entry.before_state.get("render_order", 0.0)
-                    # Restore parent hash (even if None)
-                    if "parent_hash" in entry.before_state:
-                        parent.set_field("hash", entry.before_state["parent_hash"])
-                break
+                    break
+            self._restore_journey_bodies(entry)
+        else:
+            node = self._index.get(entry.target_id)
+            if node is None or old_text is None:
+                return
+            node.set_label(apply_directive(node, old_text))
+
+        if parent is not None and "parent_hash" in entry.before_state:
+            parent.set_field("hash", entry.before_state["parent_hash"])
 
     # Implements: REQ-p00002-E
     def _undo_update_assertion(self, entry: MutationEntry) -> None:
@@ -1442,17 +1449,11 @@ class TraceGraph:
         old_label = entry.before_state.get("label")
         new_label = entry.after_state.get("label")
 
-        if old_id and new_id and new_id in self._index:
-            node = self._index.pop(new_id)
-            node.set_id(old_id)
-            if old_label:
-                node.set_field("label", old_label)
-            self._index[old_id] = node
-
-            # Update edges back
-            parent = self._index.get(entry.before_state.get("parent_id", ""))
-            if old_label and new_label and parent is not None:
-                _relabel_citations(parent, new_label, old_label)
+        parent = self._index.get(entry.before_state.get("parent_id", ""))
+        if old_id and new_id and new_label and old_label and new_id in self._index:
+            if parent is not None:
+                self._relabel_assertion(self._index[new_id], parent, old_label)
+                self._reconcile_journey_bodies(*self._journeys_validating(parent))
 
             # Restore parent hash (even if None)
             parent_id = entry.before_state.get("parent_id")
@@ -1633,6 +1634,7 @@ class TraceGraph:
             KeyError: If old_id is not found.
             ValueError: If new_id already exists.
         """
+        self._refuse_retired(old_id)
         if old_id not in self._index:
             raise KeyError(f"Node '{old_id}' not found")
         if new_id in self._index:
@@ -1769,6 +1771,7 @@ class TraceGraph:
         Raises:
             KeyError: If node_id is not found.
         """
+        self._refuse_retired(node_id)
         _refuse_title_hostile(new_title)
         if node_id not in self._index:
             raise KeyError(f"Node '{node_id}' not found")
@@ -1844,6 +1847,7 @@ class TraceGraph:
             KeyError: If node_id is not found.
             ValueError: If the node is not a requirement, or is an INSTANCE.
         """
+        self._refuse_retired(node_id)
         if node_id not in self._index:
             raise KeyError(f"Node '{node_id}' not found")
 
@@ -2016,13 +2020,57 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
-    # Implements: REQ-o00062-V
-    def delete_requirement(
-        self,
-        node_id: str,
-        compact_assertions: bool = True,
-    ) -> MutationEntry:
+    # Implements: REQ-p00017-D, REQ-p00017-N
+    def _retire_requirement(self, node: GraphNode) -> MutationEntry:
+        """Give an active requirement the retired-role status, keeping its identifier.
+
+        The status is the one the configuration declares in the retired role.
+        Where it declares several or none, the tool cannot tell which status
+        the author means, so the deletion is refused and nothing changes.
+        """
+        from elspais.config.status_roles import StatusRole
+
+        retired = self._status_roles().statuses_with_role(StatusRole.RETIRED)
+        if len(retired) != 1:
+            declared = ", ".join(retired) if retired else "none"
+            raise ValueError(
+                f"Cannot delete {node.id}: its status '{node.get_field('status')}' "
+                f"is in the active role, so deleting it retires it in place under "
+                f"its identifier, and the configuration declares "
+                f"{len(retired)} statuses in the retired role ({declared}), so the "
+                f"retired status is not known. Nothing was changed. Change its "
+                f"status to the retired status you mean"
+                + (
+                    "."
+                    if retired
+                    else ", after declaring one under [rules.format.status_roles] retired."
+                )
+            )
+
+        file_node = node.file_node()
+        old_status = node.get_field("status")
+        entry = MutationEntry(
+            operation="delete_requirement",
+            target_id=node.id,
+            before_state={
+                "id": node.id,
+                "status": old_status,
+                "disposition": "retired",
+                "source_file_id": file_node.id if file_node else None,
+            },
+            after_state={"status": retired[0]},
+        )
+        node.set_field("status", retired[0])
+        self._mutation_log.append(entry)
+        return entry
+
+    # Implements: REQ-o00062-V, REQ-p00017-D
+    def delete_requirement(self, node_id: str) -> MutationEntry:
         """Delete a requirement.
+
+        A requirement in the active role is retired in place: it keeps its
+        identifier and takes the retired-role status. A requirement in any
+        other role that is not retired is removed as follows.
 
         Removes the node from the index, moves it to _deleted_nodes for
         delta tracking, removes all edges to/from this node, and marks
@@ -2030,9 +2078,6 @@ class TraceGraph:
 
         Args:
             node_id: The requirement ID to delete.
-            compact_assertions: If True, sibling assertions are renumbered
-                after deletion. (Currently not implemented - reserved for
-                assertion deletion.)
 
         Returns:
             MutationEntry recording the operation.
@@ -2040,12 +2085,17 @@ class TraceGraph:
         Raises:
             KeyError: If node_id is not found.
         """
+        self._refuse_retired(node_id)
         if node_id not in self._index:
             raise KeyError(f"Node '{node_id}' not found")
 
         node = self._index[node_id]
         if node.kind != NodeKind.REQUIREMENT:
             raise ValueError(f"Node '{node_id}' is not a requirement")
+        from elspais.config.status_roles import StatusRole
+
+        if self._status_role(node) is StatusRole.ACTIVE:
+            return self._retire_requirement(node)
         was_root = node in self._roots
 
         # Record state before deletion. The FILE node's id is recorded
@@ -2138,6 +2188,76 @@ class TraceGraph:
     # Assertion Mutation API
     # ─────────────────────────────────────────────────────────────────────────
 
+    # Implements: REQ-p00017-B
+    def _relabel_assertion(self, node: GraphNode, parent: GraphNode, new_label: str) -> None:
+        """Move *node* to *new_label* and carry every reference the graph can write.
+
+        The index, the node's identifier and label, the citations held on
+        the owning requirement's edges, and the comment anchors all follow.
+        A journey's cached body is reconciled by the caller once the whole
+        mutation is applied.
+        """
+        old_label = node.get_field("label", "")
+        new_id = self.make_assertion_id(parent.id, new_label)
+        self._index.pop(node.id)
+        node.set_id(new_id)
+        node.set_field("label", new_label)
+        self._index[new_id] = node
+        _relabel_citations(parent, old_label, new_label)
+        update_anchors_on_rename(
+            self._comment_index,
+            f"{parent.id}#{old_label}",
+            f"{parent.id}#{new_label}",
+            self.repo_root,
+        )
+
+    def _status_roles(self) -> Any:
+        """The status roles this repository's configuration declares.
+
+        A graph holding no configuration document reads the schema's default
+        roles, which are the first layer of every configuration.
+        """
+        from elspais.config import get_status_roles
+        from elspais.graph.held_config import config_from_nodes, iter_config_nodes
+
+        documents = iter_config_nodes(self)
+        return get_status_roles(config_from_nodes(documents) if documents else {})
+
+    def _status_role(self, requirement: GraphNode) -> Any:
+        """The status role of *requirement* under this repository's configuration."""
+        return self._status_roles().role_of(requirement.get_field("status"))
+
+    # Implements: REQ-p00017-E
+    def _refuse_retired(self, node_id: str) -> None:
+        """Refuse a change to the content or identifier of a retired requirement.
+
+        *node_id* names the requirement, or a node a requirement renders: an
+        *Assertion* or a section. Any other node is not a requirement's
+        content and passes.
+        """
+        from elspais.config.status_roles import StatusRole
+
+        node = self._index.get(node_id)
+        if node is None:
+            return
+        if node.kind in (NodeKind.ASSERTION, NodeKind.REMAINDER):
+            owners = [
+                p
+                for p in node.iter_parents(edge_kinds={EdgeKind.STRUCTURES})
+                if p.kind == NodeKind.REQUIREMENT
+            ]
+            if not owners:
+                return
+            node = owners[0]
+        if node.kind != NodeKind.REQUIREMENT:
+            return
+        if self._status_role(node) is StatusRole.RETIRED:
+            raise RetiredRequirementError(
+                f"{node.id} has status '{node.get_field('status')}', which is in "
+                f"the retired role, so it is read-only. To change it, first "
+                f"change its status to one outside the retired role."
+            )
+
     def _recompute_requirement_hash(self, req_node: GraphNode) -> str:
         """Recompute and store the hash for a requirement node.
 
@@ -2172,6 +2292,7 @@ class TraceGraph:
             KeyError: If old_id is not found.
             ValueError: If the node is not an assertion or new_id exists.
         """
+        self._refuse_retired(old_id)
         if old_id not in self._index:
             raise KeyError(f"Assertion '{old_id}' not found")
 
@@ -2210,21 +2331,8 @@ class TraceGraph:
             affects_hash=True,
         )
 
-        # Update assertion node
-        self._index.pop(old_id)
-        node.set_id(new_id)
-        node.set_field("label", new_label)
-        self._index[new_id] = node
-
-        # Update edges with assertion_targets referencing old label
-        _relabel_citations(parent, old_label, new_label)
-
-        # Recompute parent hash
+        self._relabel_assertion(node, parent, new_label)
         self._recompute_requirement_hash(parent)
-
-        old_anchor = f"{parent.id}#{old_label}"
-        new_anchor = f"{parent.id}#{new_label}"
-        update_anchors_on_rename(self._comment_index, old_anchor, new_anchor, self.repo_root)
 
         # Implements: REQ-p00017-B
         # A journey naming this assertion holds the old label in its cached
@@ -2256,6 +2364,7 @@ class TraceGraph:
             KeyError: If assertion_id is not found.
             ValueError: If the node is not an assertion.
         """
+        self._refuse_retired(assertion_id)
         _refuse_render_hostile(new_text, "Assertion text")
         if assertion_id not in self._index:
             raise KeyError(f"Assertion '{assertion_id}' not found")
@@ -2390,6 +2499,7 @@ class TraceGraph:
             ValueError: If req_id is not a requirement, or the label series
                 is exhausted (REQ-o00062-S).
         """
+        self._refuse_retired(req_id)
         _refuse_render_hostile(text, "Assertion text")
         if req_id not in self._index:
             raise KeyError(f"Requirement '{req_id}' not found")
@@ -2448,30 +2558,41 @@ class TraceGraph:
         self._mutation_log.append(entry)
         return entry
 
-    # Implements: REQ-o00062-B
+    # Implements: REQ-o00062-B, REQ-p00017-A, REQ-p00017-E, REQ-p00017-K, REQ-p00017-L
     def delete_assertion(
         self,
         assertion_id: str,
-        compact: bool = True,
+        foreign_references: tuple[tuple[ReferenceFault, GraphNode | None], ...] = (),
     ) -> MutationEntry:
-        """Delete assertion with optional compaction.
+        """Delete an *Assertion* in the way its requirement's status role decides.
 
-        If compact=True and deleting B from [A, B, C, D]:
-        - C -> B, D -> C
-        - Updates all edges referencing C, D
-        - Recomputes parent hash
+        - Active role: the *Assertion* is retired in place. Its text becomes
+          the RETIRED directive and its label stays in the requirement, which
+          keeps the label allocated after a save. No citation changes.
+        - Provisional or aspirational role: the *Assertion* is removed and
+          each later *Assertion* takes the label before its own. Every
+          reference the graph carries follows its *Assertion*. The deletion
+          is refused where a reference would designate something else.
+        - Retired role: the requirement is read-only, so this is refused.
 
         Args:
             assertion_id: The assertion ID to delete.
-            compact: If True, renumber subsequent assertions.
+            foreign_references: The unresolved references other members of
+                a federation hold, each with the node that holds it. A
+                federation passes them because a reference this graph
+                refused to wire stays with the member that wrote it.
 
         Returns:
             MutationEntry recording the operation.
 
         Raises:
             KeyError: If assertion_id is not found.
-            ValueError: If the node is not an assertion.
+            ValueError: If the node is not an assertion, is already retired,
+                belongs to a retired requirement, or its removal would
+                repoint a reference.
         """
+        from elspais.config.status_roles import StatusRole
+
         if assertion_id not in self._index:
             raise KeyError(f"Assertion '{assertion_id}' not found")
 
@@ -2479,101 +2600,219 @@ class TraceGraph:
         if node.kind != NodeKind.ASSERTION:
             raise ValueError(f"Node '{assertion_id}' is not an assertion")
 
-        # Get parent requirement
         parents = [p for p in node.iter_parents() if p.kind == NodeKind.REQUIREMENT]
         if not parents:
             raise ValueError(f"Assertion '{assertion_id}' has no parent requirement")
         parent = parents[0]
+        self._refuse_retired(parent.id)
 
-        old_label = node.get_field("label", "")
+        if self._status_role(parent) is StatusRole.ACTIVE:
+            return self._retire_assertion(node, parent)
+        return self._remove_and_compact_assertion(node, parent, foreign_references)
+
+    # Implements: REQ-p00017-K
+    def _retire_assertion(self, node: GraphNode, parent: GraphNode) -> MutationEntry:
+        """Give *node* the RETIRED directive under its own label."""
+        if assertion_is_retired(node):
+            raise ValueError(f"Assertion '{node.id}' is already retired")
+
         old_text = node.get_label()
         old_hash = parent.get_field("hash")
 
-        # The edge carries the assertion's position in the rendered requirement;
-        # without it the undo re-links at the default 0.0 and the assertion
-        # reappears ahead of everything else.
-        old_render_order = 0.0
-        for edge in parent.iter_outgoing_edges():
-            if edge.kind == EdgeKind.STRUCTURES and edge.target is node:
-                old_render_order = edge.metadata.get("render_order", 0.0)
-                break
-
-        # Collect sibling assertions sorted by label
-        siblings = []
-        for child in parent.iter_children():
-            if child.kind == NodeKind.ASSERTION:
-                siblings.append((child.get_field("label", ""), child))
-        siblings.sort(key=lambda x: x[0])
-
-        # Track renames for undo (label_before -> label_after)
-        renames: list[dict[str, str]] = []
-
-        # Remove from index first
-        self._index.pop(assertion_id)
-        parent.unlink(node)
-        self._deleted_nodes.append(node)
-
-        # Remove edges referencing this assertion
-        for edge in parent.iter_outgoing_edges():
-            if old_label in edge.assertion_targets:
-                edge.assertion_targets.remove(old_label)
-
-        # Compact if requested
-        if compact:
-            # Find assertions after the deleted one
-            deleted_found = False
-            for sib_label, sib_node in siblings:
-                if sib_node is node:
-                    deleted_found = True
-                    continue
-                if deleted_found and sib_node.id in self._index:
-                    # This sibling needs to be renamed to previous letter
-                    prev_label = chr(ord(sib_label) - 1)
-                    old_sib_id = sib_node.id
-                    new_sib_id = self.make_assertion_id(parent.id, prev_label)
-
-                    renames.append(
-                        {
-                            "old_id": old_sib_id,
-                            "new_id": new_sib_id,
-                            "old_label": sib_label,
-                            "new_label": prev_label,
-                        }
-                    )
-
-                    # Update the node
-                    self._index.pop(old_sib_id)
-                    sib_node.set_id(new_sib_id)
-                    sib_node.set_field("label", prev_label)
-                    self._index[new_sib_id] = sib_node
-
-                    # Update edges referencing this assertion
-                    _relabel_citations(parent, sib_label, prev_label)
-
-        # Recompute parent hash
+        node.set_label(apply_directive(node, RETIRED_ASSERTION_TEXT))
         new_hash = self._recompute_requirement_hash(parent)
 
         entry = MutationEntry(
             operation="delete_assertion",
-            target_id=assertion_id,
+            target_id=node.id,
             before_state={
-                "id": assertion_id,
-                "label": old_label,
+                "id": node.id,
+                "label": node.get_field("label", ""),
                 "text": old_text,
                 "parent_id": parent.id,
                 "parent_hash": old_hash,
-                "compact": compact,
-                "renames": renames,
-                "render_order": old_render_order,
+                "disposition": "retired",
             },
             after_state={
+                "id": node.id,
+                "text": node.get_label(),
                 "parent_hash": new_hash,
             },
             affects_hash=True,
         )
+        self._mutation_log.append(entry)
+        return entry
+
+    # Implements: REQ-p00017-L, REQ-p00017-M, REQ-p00017-B, REQ-p00017-C
+    def _remove_and_compact_assertion(
+        self,
+        node: GraphNode,
+        parent: GraphNode,
+        foreign_references: tuple[tuple[ReferenceFault, GraphNode | None], ...] = (),
+    ) -> MutationEntry:
+        """Remove *node* and move each later label down one place in the series.
+
+        The relabels run in ascending order, so each one lands on the label
+        the previous step vacated. The entry records each former and new
+        identifier, which is the mapping a process outside the graph reads.
+        """
+        resolver = self.resolver
+        old_label = node.get_field("label", "")
+        deleted_index = resolver.parse_assertion_label_index(old_label)
+
+        moves: list[tuple[int, GraphNode]] = []
+        for child in parent.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
+            if child.kind != NodeKind.ASSERTION or child is node:
+                continue
+            try:
+                index = resolver.parse_assertion_label_index(child.get_field("label", ""))
+            except ValueError:
+                # A label outside the series is reported by the parser
+                # (REQ-d00268-A); it has no place in the series to move from.
+                continue
+            if index > deleted_index:
+                moves.append((index, child))
+        moves.sort(key=lambda pair: pair[0])
+
+        stranded = self._references_compaction_strands(
+            node, parent, [n for _, n in moves], foreign_references
+        )
+        if stranded:
+            raise DeletionWouldRepointError(
+                f"Cannot delete {node.id}: {parent.id} is in the "
+                f"{self._status_role(parent).value} role, so deleting it "
+                f"removes the assertion and renumbers the later ones, and "
+                f"these references would then designate a different assertion "
+                f"or the whole requirement: {'; '.join(stranded)}. Remove or "
+                f"retarget them first."
+            )
+
+        old_text = node.get_label()
+        old_hash = parent.get_field("hash")
+        journey_bodies = self._journey_bodies_snapshot(*self._journeys_validating(parent))
+        render_order = 0.0
+        for edge in parent.iter_outgoing_edges():
+            if edge.kind == EdgeKind.STRUCTURES and edge.target is node:
+                render_order = edge.metadata.get("render_order", 0.0)
+                break
+
+        self._index.pop(node.id)
+        parent.unlink(node)
+        self._deleted_nodes.append(node)
+
+        renames: list[dict[str, str]] = []
+        for index, sibling in moves:
+            new_label = resolver.format_assertion_label(index - 1)
+            former_id = sibling.id
+            former_label = sibling.get_field("label", "")
+            self._relabel_assertion(sibling, parent, new_label)
+            renames.append(
+                {
+                    "old_id": former_id,
+                    "new_id": sibling.id,
+                    "old_label": former_label,
+                    "new_label": new_label,
+                }
+            )
+
+        new_hash = self._recompute_requirement_hash(parent)
+
+        entry = MutationEntry(
+            operation="delete_assertion",
+            target_id=node.id,
+            before_state={
+                "id": node.id,
+                "label": old_label,
+                "text": old_text,
+                "parent_id": parent.id,
+                "parent_hash": old_hash,
+                "disposition": "removed",
+                "render_order": render_order,
+                "renames": renames,
+                "journey_bodies": journey_bodies,
+            },
+            after_state={"parent_hash": new_hash},
+            affects_hash=True,
+        )
+        cited_by = self._journeys_validating(parent)
+        if renames and cited_by:
+            self._reconcile_journey_bodies(*cited_by)
+            entry.after_state["journeys_reconciled"] = [j.id for j in cited_by]
 
         self._mutation_log.append(entry)
         return entry
+
+    # Implements: REQ-p00017-M
+    def _references_compaction_strands(
+        self,
+        removed: GraphNode,
+        parent: GraphNode,
+        moved: list[GraphNode],
+        foreign_references: tuple[tuple[ReferenceFault, GraphNode | None], ...] = (),
+    ) -> list[str]:
+        """The references a removal with compaction would leave designating something else.
+
+        Any reference to the removed *Assertion* is one: its label passes to
+        a neighbour. A reference to a moved *Assertion* is one where the tool
+        cannot write it under the new label -- a citation in code or a test,
+        a reference that does not resolve, or a citation from a node the
+        graph renders from stored text. A reference that does not resolve
+        may be held by another member of a federation, which passes it in
+        *foreign_references* with the node holding it.
+        """
+        carried = (NodeKind.REQUIREMENT, NodeKind.USER_JOURNEY)
+        found: list[str] = []
+
+        def _place(citer: GraphNode | None) -> str:
+            if citer is None:
+                return "location unknown"
+            file_node = citer.file_node()
+            path = file_node.get_field("relative_path") if file_node else None
+            # The file's CONTAINS edge records where the node's text starts,
+            # which for a test is its citation comment rather than its
+            # function definition.
+            line = None
+            for edge in citer.iter_incoming_edges():
+                if edge.kind == EdgeKind.CONTAINS:
+                    line = edge.metadata.get("start_line")
+                    break
+            if line is None:
+                line = citer.get_field("parse_line")
+            if path and line:
+                return f"{path}:{line}"
+            return path or "location unknown"
+
+        def _report(citer: GraphNode | None, citer_id: str, assertion: GraphNode) -> None:
+            found.append(f"{citer_id} ({_place(citer)}) cites {assertion.id}")
+
+        def _cites(assertion: GraphNode, *, any_citer: bool) -> None:
+            label = assertion.get_field("label", "")
+            for edge in parent.iter_outgoing_edges():
+                if edge.kind == EdgeKind.STRUCTURES or label not in edge.assertion_targets:
+                    continue
+                if any_citer or edge.target.kind not in carried:
+                    _report(edge.target, edge.target.id, assertion)
+            for edge in (*assertion.iter_outgoing_edges(), *assertion.iter_incoming_edges()):
+                if edge.kind == EdgeKind.STRUCTURES:
+                    continue
+                other = edge.target if edge.source is assertion else edge.source
+                if any_citer or other.kind not in carried:
+                    _report(other, other.id, assertion)
+            for fault in self._unresolved_references:
+                if fault.target_id == assertion.id:
+                    _report(self._index.get(fault.source_id), fault.source_id, assertion)
+            for fault, citer in foreign_references:
+                if fault.target_id == assertion.id:
+                    _report(citer, fault.source_id, assertion)
+
+        _cites(removed, any_citer=True)
+        anchor = f"{parent.id}#{removed.get_field('label', '')}"
+        if self.has_comments(anchor):
+            source = self.comment_source_file(anchor) or "location unknown"
+            found.append(f"comments ({source}) are anchored on {removed.id}")
+        for sibling in moved:
+            _cites(sibling, any_citer=False)
+        return found
 
     # ─────────────────────────────────────────────────────────────────────────
     # Edge Mutation API
@@ -2607,6 +2846,7 @@ class TraceGraph:
         Raises:
             KeyError: If source_id is not found.
         """
+        self._refuse_retired(source_id)
         if source_id not in self._index:
             raise KeyError(f"Source node '{source_id}' not found")
 
@@ -2691,6 +2931,7 @@ class TraceGraph:
             KeyError: If source_id or target_id is not found.
             ValueError: If no edge exists between source and target.
         """
+        self._refuse_retired(source_id)
         if source_id not in self._index:
             raise KeyError(f"Source node '{source_id}' not found")
         if target_id not in self._index:
@@ -2764,6 +3005,7 @@ class TraceGraph:
             KeyError: If source_id or target_id is not found.
             ValueError: If no matching edge exists between source and target.
         """
+        self._refuse_retired(source_id)
         if source_id not in self._index:
             raise KeyError(f"Source node '{source_id}' not found")
         if target_id not in self._index:
@@ -2831,6 +3073,7 @@ class TraceGraph:
             KeyError: If source_id or target_id is not found.
             ValueError: If no edge exists between source and target.
         """
+        self._refuse_retired(source_id)
         if source_id not in self._index:
             raise KeyError(f"Source node '{source_id}' not found")
         if target_id not in self._index:
@@ -3473,6 +3716,7 @@ class TraceGraph:
             KeyError: If source_id is not found.
             ValueError: If no broken reference exists from source to old_target.
         """
+        self._refuse_retired(source_id)
         if source_id not in self._index:
             raise KeyError(f"Source node '{source_id}' not found")
 
@@ -3875,6 +4119,7 @@ class TraceGraph:
             KeyError: If node_id not found.
             ValueError: If not a REMAINDER or is a definition_block.
         """
+        self._refuse_retired(node_id)
         if heading is not None:
             _refuse_heading_hostile(heading)
         if text is not None:
@@ -3948,6 +4193,7 @@ class TraceGraph:
             KeyError: If req_id not found.
             ValueError: If req_id is not a requirement.
         """
+        self._refuse_retired(req_id)
         _refuse_heading_hostile(heading)
         _refuse_render_hostile(text, "Section text", headings=False)
         if req_id not in self._index:
@@ -4041,6 +4287,7 @@ class TraceGraph:
             KeyError: If node_id not found.
             ValueError: If not a REMAINDER or is a definition_block.
         """
+        self._refuse_retired(node_id)
         if node_id not in self._index:
             raise KeyError(f"Node '{node_id}' not found")
 
@@ -5616,8 +5863,17 @@ class GraphBuilder:
         off the failing line; content the grammar could not account for is
         answered by naming both halves of the item, since the codes and the
         verbatim text never say where one ends and the other begins
-        (REQ-d00272-O). Everything else gets nothing rather than a guess.
+        (REQ-d00272-O). An item that is the identifier of a copy a
+        ``Satisfies:`` made is answered by the original the copy was made
+        from (REQ-d00272-T). Everything else gets nothing rather than a guess.
         """
+        # Implements: REQ-d00272-T
+        # The graph holds the copy under exactly this text, so the input
+        # determines the original.
+        if FaultCode.NOT_AN_IDENTIFIER in codes:
+            copy_name = copy_name_diagnostic(target_id, self._nodes.get(target_id))
+            if copy_name:
+                return copy_name
         assertions = getattr(getattr(self._resolver, "config", None), "assertions", None)
         if assertions is None:
             return ""
@@ -5726,17 +5982,6 @@ class GraphBuilder:
             # but keep the full ref for later use
             template_roots.setdefault(template_id, []).append(declaring_id)
 
-        for declaring_id, template_id, fault_class, codes in refused_items:
-            self._unresolved_references.append(
-                ReferenceFault(
-                    source_id=declaring_id,
-                    target_id=template_id,
-                    edge_kind=EdgeKind.SATISFIES.value,
-                    fault_class=fault_class,
-                    codes=codes,
-                )
-            )
-
         # Sub-pass 1: Validate template-marker on each Satisfies target.
         # Implements: REQ-p00014-F, REQ-p00014-G
         # Composite targets (containing INSTANCE_SEPARATOR) are deferred to
@@ -5744,6 +5989,12 @@ class GraphBuilder:
         # later in this same call.
         for template_id in list(template_roots.keys()):
             template_node = self._nodes.get(template_id)
+            # Implements: REQ-p00017-H
+            # A retired *Assertion* is held but is not a target: a Satisfies
+            # naming one is reported as naming an *Assertion* that does not
+            # exist, as a reference by any other keyword is.
+            if template_node is not None and assertion_is_retired(template_node):
+                template_node = None
             if not template_node:
                 if INSTANCE_SEPARATOR in template_id:
                     # Defer to sub-pass 2; the INSTANCE may yet be cloned.
@@ -5760,26 +6011,19 @@ class GraphBuilder:
                     )
                 template_roots[template_id] = []
                 continue
-            stereotype = template_node.get_field("stereotype")
-            if stereotype != Stereotype.TEMPLATE:
-                # Rule 1 (CUR-1353): Satisfies target exists but is not marked
-                # **Template**. Emit a typed diagnostic and skip cloning so
-                # we don't manufacture an INSTANCE subtree against a concrete
-                # node.
-                for declaring_id in template_roots[template_id]:
-                    self._unresolved_references.append(
-                        ReferenceFault(
-                            source_id=declaring_id,
-                            target_id=template_id,
-                            edge_kind=EdgeKind.SATISFIES.value,
-                            fault_class=FaultClass.FORBIDDEN,
-                            diagnostic=(
-                                f"{template_id} is not marked **Template**; "
-                                f"mark {template_id} with **Template** if it's "
-                                f"intended to be satisfiable."
-                            ),
-                        )
-                    )
+            # Implements: REQ-p00014-G
+            # A target the matrix refuses is reported and not cloned, so no
+            # INSTANCE subtree is made against a node that is not a template.
+            # The verdict depends on the target alone, so every declaring
+            # requirement receives the same one.
+            matrix_faults = [
+                fault
+                for declaring_id in template_roots[template_id]
+                if (fault := satisfies_target_fault(template_node, declaring_id, template_id))
+                is not None
+            ]
+            if matrix_faults:
+                self._unresolved_references.extend(matrix_faults)
                 template_roots[template_id] = []
 
         # Sub-pass 2: Clone & link. Skip any satisfies-link whose template was
@@ -5787,6 +6031,9 @@ class GraphBuilder:
         cloneable_links = [(d, t) for d, t, _v in self._satisfies_links if template_roots.get(t)]
         for declaring_id, template_id in cloneable_links:
             template_node = self._nodes.get(template_id)
+            # Implements: REQ-p00017-H
+            if template_node is not None and assertion_is_retired(template_node):
+                template_node = None
             declaring_node = self._nodes.get(declaring_id)
             if not template_node or not declaring_node:
                 # Composite that still doesn't resolve after cloning passes —
@@ -5801,41 +6048,12 @@ class GraphBuilder:
                         )
                     )
                 continue
-            # Rule 2 (CUR-1353): chained instantiation. The composite target
-            # resolved to an INSTANCE node (typically cloned earlier in this
-            # very loop by a sibling satisfier). Refuse to clone again.
-            if template_node.get_field("stereotype") == Stereotype.INSTANCE:
-                self._unresolved_references.append(
-                    ReferenceFault(
-                        source_id=declaring_id,
-                        target_id=template_id,
-                        edge_kind=EdgeKind.SATISFIES.value,
-                        fault_class=FaultClass.FORBIDDEN,
-                        diagnostic=(
-                            "Chained instantiation is not supported. "
-                            "Satisfy the original template directly."
-                        ),
-                    )
-                )
-                continue
-            # Defensive: a composite that resolves to a non-TEMPLATE non-
-            # INSTANCE node would have been blanked in sub-pass 1 for the
-            # non-composite case. For composites this is still possible —
-            # emit rule-1 diagnostic.
-            if template_node.get_field("stereotype") != Stereotype.TEMPLATE:
-                self._unresolved_references.append(
-                    ReferenceFault(
-                        source_id=declaring_id,
-                        target_id=template_id,
-                        edge_kind=EdgeKind.SATISFIES.value,
-                        fault_class=FaultClass.FORBIDDEN,
-                        diagnostic=(
-                            f"{template_id} is not marked **Template**; "
-                            f"mark {template_id} with **Template** if it's "
-                            f"intended to be satisfiable."
-                        ),
-                    )
-                )
+            # Implements: REQ-p00014-G
+            # A composite target resolves only once a sibling satisfier has
+            # cloned it, so it is judged here rather than in sub-pass 1.
+            matrix_fault = satisfies_target_fault(template_node, declaring_id, template_id)
+            if matrix_fault is not None:
+                self._unresolved_references.append(matrix_fault)
                 continue
 
             # The clone is the subtree rooted at the target: the target with
@@ -5902,6 +6120,21 @@ class GraphBuilder:
             if declaring_file:
                 for clone in clone_map.values():
                     declaring_file.link(clone, EdgeKind.DEFINES)
+
+        # Implements: REQ-d00272-K+T
+        # Reported once every copy exists, so an item naming a copy made in
+        # this same pass is answered by the original it was made from.
+        for declaring_id, template_id, fault_class, codes in refused_items:
+            self._unresolved_references.append(
+                ReferenceFault(
+                    source_id=declaring_id,
+                    target_id=template_id,
+                    edge_kind=EdgeKind.SATISFIES.value,
+                    fault_class=fault_class,
+                    codes=codes,
+                    diagnostic=self._fault_diagnostic(template_id, codes),
+                )
+            )
 
     # Implements: REQ-p00014-B, REQ-p00014-G
     def _preresolve_template_refines(self) -> set[tuple[str, str, str]]:

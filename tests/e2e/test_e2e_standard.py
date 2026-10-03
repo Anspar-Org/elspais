@@ -1475,6 +1475,11 @@ class TestStandardMCPMutations:
     def test_06_delete_assertion_and_undo(self, project, mcp_server):
         from .helpers import mcp_call
 
+        def texts_by_label():
+            req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
+            return {a.get("label", ""): a.get("text", "") for a in req.get("assertions", [])}
+
+        before = texts_by_label()
         result = mcp_call(
             mcp_server,
             "mutate_delete_assertion",
@@ -1487,14 +1492,15 @@ class TestStandardMCPMutations:
         assert isinstance(result, dict)
         assert result.get("success"), f"delete_assertion failed: {result}"
 
-        req = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
-        labels = [a.get("label", "") for a in req.get("assertions", [])]
-        assert "C" not in labels
+        # The deleted assertion is retired under its label; no label moves.
+        after = texts_by_label()
+        assert after["C"] == "<RETIRED>"
+        assert {k: v for k, v in after.items() if k != "C"} == {
+            k: v for k, v in before.items() if k != "C"
+        }
 
         _undo(mcp_server)
-        req2 = mcp_call(mcp_server, "get_requirement", {"req_id": "REQ-p00001"})
-        labels2 = [a.get("label", "") for a in req2.get("assertions", [])]
-        assert "C" in labels2
+        assert texts_by_label() == before
 
     def test_07_rename_assertion(self, project, mcp_server):
         from .helpers import mcp_call

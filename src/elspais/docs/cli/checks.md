@@ -1201,6 +1201,10 @@ Exit codes use a bitfield so composed reports indicate which sections failed:
 
 Composed reports OR the bits together. Currently only `checks` returns non-zero (when checks fail). Use `--lenient` to suppress warnings-only failures.
 
+A run refused before any check because an associate the configuration
+declares has no path supplied exits with status 69, outside the bits above.
+See `elspais docs associate`.
+
 ## Severity Levels
 
 - **off**: The condition is not reported here — the check shows as skipped and

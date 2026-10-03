@@ -2375,7 +2375,8 @@ class TestMutateSaveRoundTrip:
 
     # Verifies: REQ-d00132-A
     def test_delete_assertion_and_save(self, disk_app):
-        """POST /api/mutate/assertion/delete -> POST /api/save -> assertion removed."""
+        """POST /api/mutate/assertion/delete -> POST /api/save -> assertion retired
+        under its label."""
         app, spec_file = disk_app
         client = TestClient(app)
 
@@ -2394,6 +2395,7 @@ class TestMutateSaveRoundTrip:
 
         content = spec_file.read_text(encoding="utf-8")
         assert "A. The system SHALL do something." in content
+        assert "B. <RETIRED>" in content
         assert "do another thing" not in content
 
     # Verifies: REQ-d00132-A
@@ -2401,6 +2403,9 @@ class TestMutateSaveRoundTrip:
         """POST /api/mutate/requirement/delete -> POST /api/save -> req removed from file."""
         app, graph, spec_file = disk_app_two_reqs
         client = TestClient(app)
+        # A Draft requirement is removed; an active one would be retired in
+        # place under its identifier (REQ-p00017-D).
+        graph.change_status("REQ-t00002", "Draft")
 
         resp = client.post(
             "/api/mutate/requirement/delete",

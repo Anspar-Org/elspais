@@ -112,6 +112,18 @@ Copy results from elsewhere with their folder, fingerprint included. An
 example is a baseline that another job produced. Such results read as fresh
 exactly while the inputs here match the inputs they ran against.
 
+### The fingerprint file
+
+The fingerprint is the JSON file `.elspais-run.json` in the target's folder.
+Its `version` field states the format. Its `inputs` field lists one object for
+each input file, with a `path` field and a `digest` field. The digest is the
+SHA-256 of the file's content. No path is ever a JSON key. Consequently, a
+secret scanner that looks for a secret-like key beside a long hex value finds
+nothing in the file. The file is safe to include in build output that a
+secret scan reads. elspais reads a fingerprint of another format version as
+no fingerprint. Consequently, its results read as stale until one fresh run
+rewrites the fingerprint.
+
 ### A run in progress
 
 A run is in progress from the time its fingerprint is written by `start` until

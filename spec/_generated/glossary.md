@@ -26,6 +26,10 @@
 : Viewer state that the viewer remembers for a reader and that is not project state, such as the theme, the font size or the width of a panel.
 *Defined in: file:REQ:spec/glossary.md (REQ)*
 
+**Requirement Location**
+: The file and line that declare a requirement's identifier.
+*Defined in: REQ-p00017 (REQ)*
+
 ## S
 
 **Specification**

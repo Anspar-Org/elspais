@@ -395,13 +395,37 @@ Relative paths resolve from the root of the working tree that declares
 them (see Git Worktree Support above). Each path must contain
 a `.elspais.toml` with its own configuration.
 
-Both keys are required, and the namespace must be the one the repository
+The namespace is required, and it must be the one the repository
 at that path declares for itself — a declaration naming a different one
 points somewhere its author did not intend, and the build says so. No two
 repositories in a federation may declare the same namespace, including
 repositories reached through an associate's own declarations rather than
 named here: a namespace answers whose identifiers these are, so two
 claimants leave it unanswerable and the build fails naming both.
+
+#### Declaring an associate without its path
+
+Which associates a repository federates against belongs in the committed
+`.elspais.toml`; where each one sits on a machine does not. Declare the
+associate by its namespace alone, and let each machine supply the path in
+`.elspais.local.toml`:
+
+```toml
+# .elspais.toml (committed)
+[associates.callisto]
+namespace = "CAL"
+```
+
+```bash
+elspais associate ../callisto   # writes the path to .elspais.local.toml
+```
+
+A checkout where no path is supplied is refused before anything is
+reported, naming the associate, its namespace and the `.elspais.local.toml`
+that supplies the path, and exits with status 69. A configuration that will
+not load exits with status 1, so a script can tell the two apart. An empty
+path (`path = ""`) names no directory and reads the same as no path. See
+`elspais docs associate`.
 
 The viewer renders one toggle per namespace (local repo first, then each
 associate in declared order). Namespace badge colors are taken from
