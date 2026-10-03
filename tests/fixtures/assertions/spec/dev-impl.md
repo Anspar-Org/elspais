@@ -12,6 +12,10 @@ C. The implementation SHALL reject passwords shorter than 8 characters.
 
 bcrypt is resistant to GPU-based attacks.
 
+## Changelog
+
+- 2026-01-01 | 2f7c9b91 | - | Fixture Author (<fixture@example.com>) | Initial version
+
 *End* *Password Hashing* | **Hash**: 2f7c9b91
 ---
 
@@ -24,6 +28,10 @@ bcrypt is resistant to GPU-based attacks.
 A. Tokens SHALL be cryptographically random using secure PRNG.
 B. Tokens SHALL be at least 256 bits in length.
 C. Tokens SHALL be stored hashed in the database.
+
+## Changelog
+
+- 2026-01-01 | 3274b592 | - | Fixture Author (<fixture@example.com>) | Initial version
 
 *End* *Session Token Generation* | **Hash**: 3274b592
 ---

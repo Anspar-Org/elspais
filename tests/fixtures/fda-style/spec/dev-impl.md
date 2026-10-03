@@ -13,6 +13,10 @@ Implement electronic signature capture and verification.
 - Timestamp from trusted source
 - Signature verification API
 
+## Changelog
+
+- 2026-01-01 | 7e599e1b | - | Fixture Author (<fixture@example.com>) | Initial version
+
 *End* *Signature Implementation* | **Hash**: 7e599e1b
 ---
 
@@ -26,6 +30,10 @@ Implement comprehensive audit logging system.
 - Event sourcing pattern
 - Hash chain for tamper evidence
 - Query interface for regulators
+
+## Changelog
+
+- 2026-01-01 | 966d547b | - | Fixture Author (<fixture@example.com>) | Initial version
 
 *End* *Audit Logger* | **Hash**: 966d547b
 ---

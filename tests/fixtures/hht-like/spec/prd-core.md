@@ -21,6 +21,10 @@ D. The system SHALL timeout sessions after 30 minutes of inactivity.
 
 Security and compliance require verified user identity.
 
+## Changelog
+
+- 2026-01-01 | d18171fc | - | Fixture Author (<fixture@example.com>) | Initial version
+
 *End* *User Authentication* | **Hash**: d18171fc
 ---
 
@@ -41,6 +45,10 @@ D. The system SHALL allow users to request data deletion.
 
 Legal compliance and user trust require data protection.
 
+## Changelog
+
+- 2026-01-01 | 38a6a60a | - | Fixture Author (<fixture@example.com>) | Initial version
+
 *End* *Data Privacy* | **Hash**: 38a6a60a
 ---
 
@@ -60,6 +68,10 @@ D. The system SHALL retain logs for 7 years.
 ## Rationale
 
 Compliance requires complete audit trails for FDA 21 CFR Part 11.
+
+## Changelog
+
+- 2026-01-01 | f2c44ef9 | - | Fixture Author (<fixture@example.com>) | Initial version
 
 *End* *Audit Logging* | **Hash**: f2c44ef9
 ---

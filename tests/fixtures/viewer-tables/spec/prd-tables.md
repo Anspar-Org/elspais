@@ -21,5 +21,9 @@ The following table demonstrates the rendered output that the viewer should prod
 
 The table above should appear with thin borders on every cell.
 
+## Changelog
+
+- 2026-01-01 | - | - | Fixture Author (<fixture@example.com>) | Initial version
+
 *End* *Table Rendering Example*
 ---
