@@ -358,15 +358,15 @@ Where a project records a changelog for each Active requirement, a save that cha
 
 A. Where changelog tracking is enabled, when a save changes a requirement whose status is Active before or after the save, the save SHALL add to the changelog of that requirement one entry that carries the reason supplied with the save and the hash that the requirement has after the save.
 
-B. If a save that a client requests changes a requirement whose status is Active before or after the save, and the client supplies no reason or a blank reason, then the save SHALL write no file and SHALL keep every pending change.
+B. If a save that a client requests changes a requirement whose status is Active before or after the save, and the client supplies no reason or a blank reason, then the save SHALL leave every file unwritten and every pending change in hand.
 
-C. A save refused for want of a reason SHALL name each requirement that needs the reason and SHALL state how to supply the reason.
+C. A save refused for want of a reason SHALL name each requirement that needs the reason and the way to supply the reason.
 
 D. When a save from the viewer needs a reason, the viewer SHALL complete the save only with a reason that the reader who saves enters.
 
 E. A save that the tool performs when no client requested it SHALL record as its reason that no client requested the save, together with the condition that caused the save.
 
-F. A save requested through the viewer and a save requested through the agent interface SHALL need a reason under the same conditions and SHALL report a refusal with the same content.
+F. A save requested through the viewer and a save requested through the agent interface SHALL need a reason under the same conditions and give the same refusal where the reason is absent.
 
 ### Rationale
 
@@ -378,9 +378,10 @@ A change counts whatever part of the requirement it reaches: its title, status, 
 
 ### Changelog
 
+- 2026-10-03 | 1e1d0185 | - | Michael Lewis (<michael@anspar.org>) | State each assertion of the saved-change reason with one SHALL
 - 2026-10-03 | 1cc0ddbf | - | Michael Lewis (<michael@anspar.org>) | Require a reason for a saved change to an Active requirement
 
-*End* *Changelog Reason for a Saved Change* | **Hash**: 1cc0ddbf
+*End* *Changelog Reason for a Saved Change* | **Hash**: 1e1d0185
 
 ## REQ-d00134: Mutation Round-Trip Fidelity
 

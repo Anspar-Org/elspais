@@ -228,7 +228,7 @@
 | REQ-d00316 | Record of the Test Targets a Run Executed                     | dev-graph-core.md       | c5639977 |
 | REQ-d00320 | Viewer Edit Controls State What They Do                       | dev-traceview-review.md | e8010396 |
 | REQ-d00321 | Static View Embedded Content                                  | dev-traceview-review.md | 736babc4 |
-| REQ-d00325 | Changelog Reason for a Saved Change                           | dev-graph-file-nodes.md | 1cc0ddbf |
+| REQ-d00325 | Changelog Reason for a Saved Change                           | dev-graph-file-nodes.md | 1e1d0185 |
 
 ## User Journeys
 
