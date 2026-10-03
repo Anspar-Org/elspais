@@ -21,8 +21,6 @@ pytestmark = [
         reason="elspais CLI not found on PATH",
     ),
     pytest.mark.e2e,
-    # Reads the live worktree, its results included.
-    pytest.mark.serial,
 ]
 
 
@@ -128,10 +126,14 @@ def _call_tool_all(proc, name: str, arguments: dict, msg_id: int = 2) -> list:
 
 
 @pytest.fixture(scope="module")
-def mcp():
-    """Start a single MCP server for the entire module, shared across all test classes."""
+def mcp(repo_tree):
+    """Start a single MCP server for the entire module, shared across all test classes.
+
+    It serves a private copy of this repository, never the checkout itself.
+    """
     proc = subprocess.Popen(
         [_ELSPAIS, "mcp", "serve"],
+        cwd=repo_tree,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

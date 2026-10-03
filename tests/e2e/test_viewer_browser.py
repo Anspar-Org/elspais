@@ -39,13 +39,13 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 
 from tests.embedded_page import embedded_data  # noqa: E402
 
-from .conftest import REPO_ROOT  # noqa: E402
+from .conftest import REPO_ROOT, private_tree  # noqa: E402
 from .helpers import resolve_elspais  # noqa: E402
 
 pytestmark = [
     pytest.mark.browser,
-    # Serves the live worktree (stopping its daemon), writes daemon records
-    # into checked-in fixture directories, and probes a fixed port range.
+    # Writes daemon records into checked-in fixture directories, and probes
+    # a fixed port range.
     pytest.mark.serial,
     pytest.mark.skipif(
         resolve_elspais() is None,
@@ -190,18 +190,23 @@ def _wait_for_server(
 
 
 @pytest.fixture(scope="session")
-def viewer_url():
-    """Start elspais viewer server and yield base URL."""
+def viewer_url(tmp_path_factory):
+    """Start elspais viewer server over a private copy of this repository.
+
+    The copy is the tree under test without the checkout's daemon or
+    results, so serving it stops nothing the developer is running.
+    """
     elspais_bin = resolve_elspais()
     if elspais_bin is None:
         pytest.skip("elspais CLI not found on PATH")
 
+    tree = private_tree(tmp_path_factory.mktemp("repo-tree"))
     port = _find_free_port()
     base_url = f"http://127.0.0.1:{port}"
 
     proc, log_path = _spawn_viewer(
-        [elspais_bin, "viewer", "--server", "--port", str(port)],
-        cwd=REPO_ROOT,
+        [elspais_bin, "viewer", "--server", "--port", str(port), "--path", str(tree)],
+        cwd=tree,
     )
 
     try:

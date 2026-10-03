@@ -700,15 +700,17 @@ def trace_rows(stdout: str) -> list[dict]:
 
 def run_elspais(
     *args: str,
-    cwd: str | Path | None = None,
+    cwd: str | Path,
     timeout: int = 120,
     env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess:
-    """Run the elspais CLI as a subprocess.
+    """Run the elspais CLI as a subprocess in ``cwd``.
 
-    ``cwd`` defaults to the repo root so tests don't have to repeat that
-    boilerplate. Pass an explicit ``cwd`` (typically a tmp_path project)
-    to override.
+    ``cwd`` is required. The CLI runs from the git root of the directory it
+    starts in, so a call without one would run against this checkout, its
+    daemon and its results, which every other test process shares. Pass a
+    project under pytest's temp directory -- a fixture copy, or the
+    ``repo_tree`` copy of this checkout.
     """
     if _ELSPAIS is None:
         import pytest
@@ -723,7 +725,7 @@ def run_elspais(
         [_ELSPAIS, *args],
         capture_output=True,
         text=True,
-        cwd=cwd or REPO_ROOT,
+        cwd=cwd,
         timeout=timeout,
         env=run_env,
     )

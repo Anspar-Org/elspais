@@ -10,6 +10,7 @@ import subprocess
 
 import pytest
 
+from tests.e2e.conftest import private_tree
 from tests.e2e.helpers import resolve_elspais
 
 pytest.importorskip("mcp")
@@ -21,8 +22,6 @@ pytestmark = [
         reason="elspais CLI not found on PATH",
     ),
     pytest.mark.e2e,
-    # Serves the live worktree.
-    pytest.mark.serial,
 ]
 
 
@@ -73,11 +72,18 @@ def _initialize(proc) -> dict:
     return response
 
 
+@pytest.fixture(scope="module")
+def protocol_tree(tmp_path_factory):
+    """A private copy of this repository for the module's servers to serve."""
+    return private_tree(tmp_path_factory.mktemp("repo-tree"))
+
+
 @pytest.fixture
-def mcp_server():
-    """Start MCP server as subprocess with stdio transport."""
+def mcp_server(protocol_tree):
+    """Start MCP server as subprocess with stdio transport, over the private copy."""
     proc = subprocess.Popen(
         [_ELSPAIS, "mcp", "serve"],
+        cwd=protocol_tree,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

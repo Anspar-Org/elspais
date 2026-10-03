@@ -145,13 +145,17 @@ class TestTraceFormatConsistency:
     """Validates REQ-d00085-A: trace JSON and CSV both produce valid output."""
 
     # Verifies: REQ-d00085-A
-    def test_REQ_d00085_A_trace_json_csv_same_count(self, tmp_path):
+    def test_REQ_d00085_A_trace_json_csv_same_count(self, repo_tree, tmp_path):
         json_out = tmp_path / "trace_json"
-        result_json = run_elspais("trace", "--format", "json", "--output", str(json_out))
+        result_json = run_elspais(
+            "trace", "--format", "json", "--output", str(json_out), cwd=repo_tree
+        )
         assert result_json.returncode == 0, f"trace json failed: {result_json.stderr}"
 
         csv_out = tmp_path / "trace_csv"
-        result_csv = run_elspais("trace", "--format", "csv", "--output", str(csv_out))
+        result_csv = run_elspais(
+            "trace", "--format", "csv", "--output", str(csv_out), cwd=repo_tree
+        )
         assert result_csv.returncode == 0, f"trace csv failed: {result_csv.stderr}"
 
         # Find the JSON output file

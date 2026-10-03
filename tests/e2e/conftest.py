@@ -40,32 +40,6 @@ requires_playwright = pytest.mark.skipif(
 )
 
 
-@pytest.fixture(autouse=True, scope="session")
-def _warm_daemon():
-    """Pre-start the daemon for REPO_ROOT so global-scope tests are fast.
-
-    Without this, the first CLI invocation pays ~3s for daemon auto-start.
-    With this, the daemon starts once and all subsequent calls hit it in ~0.3s.
-
-    Inert on an xdist worker. The tests that use the REPO_ROOT daemon are
-    marked `serial` and never run on a worker, and every worker warming it at
-    once would race to start one daemon for the same tree.
-    """
-    if os.environ.get("PYTEST_XDIST_WORKER"):
-        yield
-        return
-    try:
-        from elspais.config import find_git_root
-        from elspais.mcp.daemon import ensure_daemon
-
-        repo_root = find_git_root()
-        if repo_root:
-            ensure_daemon(repo_root)
-    except Exception:
-        pass
-    yield
-
-
 def _git_init(root: Path) -> None:
     """Initialize a git repo with an initial commit."""
     env = {
@@ -93,6 +67,53 @@ def load_fixture(fixture_name: str, dest: Path) -> Path:
             shutil.copy2(item, dest / item.name)
     _git_init(dest)
     return dest
+
+
+def private_tree(dest: Path) -> Path:
+    """Copy this checkout's working tree to dest as a repository of its own.
+
+    The copy holds every file git tracks or would track -- the working copy
+    of each, uncommitted changes included -- and nothing it ignores, so it
+    carries no ``.venv``, ``.results`` or ``.elspais`` state. Tests that read
+    this repository's own estate run against it, so they never touch the
+    developer's worktree, its daemon or its results, and two test processes
+    never share one. The spawned CLI is still this checkout's build: the
+    editable install imports from the checkout's ``src``, not from the copy.
+    """
+    listed = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=True,
+    ).stdout.decode()
+    for relative in listed.split("\0"):
+        if not relative:
+            continue
+        source = REPO_ROOT / relative
+        # A tracked file deleted in the working tree is not in it.
+        if not source.is_symlink() and not source.is_file():
+            continue
+        target = dest / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target, follow_symlinks=False)
+    _git_init(dest)
+    return dest
+
+
+@pytest.fixture(scope="module")
+def repo_tree(tmp_path_factory):
+    """A private copy of this checkout, with its daemon started, for one module.
+
+    One per module rather than per session: under ``--dist loadfile`` a
+    session fixture is already one per worker, and a module's copy cannot
+    carry state a mutation in another module left behind.
+    """
+    from elspais.mcp.daemon import stop_daemon
+
+    root = private_tree(tmp_path_factory.mktemp("repo-tree"))
+    ensure_fixture_daemon(root)
+    yield root
+    stop_daemon(root)
 
 
 def load_associated_fixture(dest: Path) -> Path:
