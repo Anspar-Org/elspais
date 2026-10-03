@@ -58,7 +58,7 @@
 | REQ-o00063 | MCP File Mutation Tools                           | ops-mcp.md          | 05c1e9c4 |
 | REQ-o00064 | MCP Test Coverage Analysis Tools                  | ops-mcp.md          | a97fc5c4 |
 | REQ-o00065 | Agent-Assisted Link Suggestion                    | ops-mcp.md          | 06f8e1ac |
-| REQ-o00066 | CI/CD Pipeline Enforcement                        | ops-architecture.md | 133e2f0d |
+| REQ-o00066 | CI/CD Pipeline Enforcement                        | ops-architecture.md | 3f2127be |
 | REQ-o00067 | MCP Subtree Extraction Tool                       | ops-mcp.md          | ea2ba371 |
 | REQ-o00068 | MCP Cursor Protocol                               | ops-mcp.md          | f876db43 |
 | REQ-o00069 | MCP Minimize Requirement Set Tool                 | ops-mcp.md          | 68c20489 |
@@ -68,7 +68,7 @@
 | REQ-o00073 | MCP Org-Wide Context                              | ops-mcp.md          | 346f3031 |
 | REQ-o00074 | Background Daemon Lifetime                        | ops-mcp.md          | fe168c0e |
 | REQ-o00075 | Shared Graph Daemon                               | ops-mcp.md          | 2598192d |
-| REQ-o00076 | Reaching the Serving Process                      | ops-mcp.md          | 7505310d |
+| REQ-o00076 | Reaching the Serving Process                      | ops-mcp.md          | 85f1f1a5 |
 | REQ-o00077 | Serving From the Installed Program                | ops-mcp.md          | 3488ba9c |
 | REQ-o00078 | Release Completeness Across Distribution Channels | ops-architecture.md | 3f2d4577 |
 | REQ-o00079 | Serving a Browser Session                         | ops-mcp.md          | abe6acb7 |
@@ -169,7 +169,7 @@
 | REQ-d00246 | Markdown Emphasis Normalization Utility                       | prd-core.md             | 6db4d559 |
 | REQ-d00247 | Fenced Code Block Preservation                                | prd-core.md             | 499a4ce4 |
 | REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | 99bb6d77 |
-| REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 9e29f256 |
+| REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 9e2255c3 |
 | REQ-d00250 | Section Header Depth Canonicalization                         | dev-graph-core.md       | 48fc2f11 |
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | b49bd5ee |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 3b102d6f |
@@ -223,6 +223,9 @@
 | REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | 4a31d912 |
 | REQ-d00312 | Test Target Output Areas                                      | dev-graph-core.md       | a0788b2a |
 | REQ-d00313 | Served Graph Currency                                         | dev-traceview-review.md | 8822f2a7 |
+| REQ-d00314 | Concurrent Test Target Runs                                   | dev-graph-core.md       | 228b3b98 |
+| REQ-d00315 | Stale-Only Test Target Runs                                   | dev-graph-core.md       | 890ea4b2 |
+| REQ-d00316 | Record of the Test Targets a Run Executed                     | dev-graph-core.md       | c5639977 |
 | REQ-d00320 | Viewer Edit Controls State What They Do                       | dev-traceview-review.md | e8010396 |
 | REQ-d00321 | Static View Embedded Content                                  | dev-traceview-review.md | 736babc4 |
 | REQ-d00322 | Evidence Snapshot                                             | dev-graph-core.md       | 5885653b |

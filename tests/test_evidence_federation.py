@@ -1,4 +1,4 @@
-# Verifies: REQ-d00249-L, REQ-d00322-K+L
+# Verifies: REQ-d00249-N, REQ-d00322-K+L
 """Federation members: running their targets, and reading their snapshots.
 
 Each test builds two git repositories side by side: ``root``, which declares
@@ -94,7 +94,7 @@ def _lib_results(graph) -> list:
     return list(graph.nodes_by_kind(NodeKind.RESULT, namespace="LIB"))
 
 
-# Verifies: REQ-d00249-L
+# Verifies: REQ-d00249-N
 def test_a_member_target_named_by_namespace_runs_in_the_member(tmp_path, monkeypatch, capsys):
     root, lib = _federation(tmp_path, monkeypatch)
 
@@ -106,7 +106,7 @@ def test_a_member_target_named_by_namespace_runs_in_the_member(tmp_path, monkeyp
     assert not (root / ".results").exists()
 
 
-# Verifies: REQ-d00249-L
+# Verifies: REQ-d00249-N
 def test_a_bare_run_never_reaches_a_member(tmp_path, monkeypatch):
     root, lib = _federation(tmp_path, monkeypatch)
 
@@ -116,7 +116,7 @@ def test_a_bare_run_never_reaches_a_member(tmp_path, monkeypatch):
     assert not (lib / ".results").exists()
 
 
-# Verifies: REQ-d00249-L
+# Verifies: REQ-d00249-N
 def test_a_selection_naming_root_and_member_runs_each_in_its_own_repository(tmp_path, monkeypatch):
     root, lib = _federation(tmp_path, monkeypatch)
 
@@ -126,7 +126,7 @@ def test_a_selection_naming_root_and_member_runs_each_in_its_own_repository(tmp_
     assert str(lib) in (_area(lib) / "machine.jsonl").read_text(encoding="utf-8")
 
 
-# Verifies: REQ-d00249-L
+# Verifies: REQ-d00249-N
 def test_checks_run_tests_runs_a_named_member_target_in_the_member(tmp_path, monkeypatch, capsys):
     root, lib = _federation(tmp_path, monkeypatch)
 
@@ -143,7 +143,7 @@ def test_checks_run_tests_runs_a_named_member_target_in_the_member(tmp_path, mon
     assert {f["repo"] for f in checks["tests.not_run"]["findings"]} == {"root"}
 
 
-# Verifies: REQ-d00249-L
+# Verifies: REQ-d00249-N
 def test_an_unknown_namespace_is_refused(tmp_path, monkeypatch, capsys):
     root, lib = _federation(tmp_path, monkeypatch)
 
@@ -156,7 +156,7 @@ def test_an_unknown_namespace_is_refused(tmp_path, monkeypatch, capsys):
     assert not (root / ".results").exists()
 
 
-# Verifies: REQ-d00249-L
+# Verifies: REQ-d00249-N
 def test_a_target_the_member_does_not_declare_is_refused_naming_the_member(
     tmp_path, monkeypatch, capsys
 ):
@@ -272,7 +272,7 @@ def test_a_member_snapshot_holding_no_result_is_still_judged(tmp_path, monkeypat
     assert f"Evidence Snapshot {_EVIDENCE} describes another tree" in finding.message
 
 
-# Verifies: REQ-d00322-B, REQ-d00249-L
+# Verifies: REQ-d00322-B, REQ-d00249-N
 def test_a_member_target_is_refused_by_the_name_that_selected_it(tmp_path, monkeypatch, capsys):
     root, lib = _federation(tmp_path, monkeypatch)
 
@@ -282,7 +282,7 @@ def test_a_member_target_is_refused_by_the_name_that_selected_it(tmp_path, monke
     assert not (lib / _EVIDENCE).exists()
 
 
-# Verifies: REQ-d00322-H, REQ-d00249-L
+# Verifies: REQ-d00322-H, REQ-d00249-N
 def test_a_member_difference_names_the_target_by_namespace(tmp_path, monkeypatch, capsys):
     root, lib = _federation(tmp_path, monkeypatch)
     assert main(["test", "--targets", "LIB:flutter"]) == 0
@@ -298,7 +298,7 @@ def test_a_member_difference_names_the_target_by_namespace(tmp_path, monkeypatch
     assert "outcome: target LIB:flutter:" in out
 
 
-# Verifies: REQ-d00322-L, REQ-d00249-L
+# Verifies: REQ-d00322-L, REQ-d00249-N
 def test_a_member_snapshot_is_written_and_verified_from_the_root(tmp_path, monkeypatch, capsys):
     root, lib = _federation(tmp_path, monkeypatch)
     assert main(["test", "--targets", "LIB:flutter"]) == 0

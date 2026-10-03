@@ -123,7 +123,7 @@ class TargetRun:
         return name if self.is_root else qualified_target(self.namespace, name)
 
 
-# Implements: REQ-d00249-L, REQ-d00283-D+H+K
+# Implements: REQ-d00249-N, REQ-d00283-D+H+K
 def plan_target_runs(
     config: ElspaisConfig,
     repo_root: Path,

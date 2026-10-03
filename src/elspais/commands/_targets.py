@@ -173,7 +173,7 @@ def _member_expected(cfg: Any, names: list[str], namespace: str, root_ns: str) -
     return set(configured) if chosen is None else set(chosen) & configured
 
 
-# Implements: REQ-d00283-W, REQ-d00249-L
+# Implements: REQ-d00283-W, REQ-d00249-N
 def split_by_member(names: list[str], root_ns: str, *, flag: str) -> dict[str, list[str]]:
     """Group *names* by the member each one names, keyed by namespace.
 
@@ -218,7 +218,7 @@ class FederationMember:
     repo_root: Path
 
 
-# Implements: REQ-d00202-D, REQ-d00249-L
+# Implements: REQ-d00202-D, REQ-d00249-N
 def federation_members(
     config: Any, root_cfg: Any, repo_root: Path | None, *, flag: str
 ) -> dict[str, FederationMember]:

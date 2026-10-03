@@ -667,6 +667,7 @@ N keeps a run inside the repository that asked for it unless the reader names an
 
 ### Changelog
 
+- 2026-10-03 | 9e2255c3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a run executes a federation member's target only where the selection names it (N)
 - 2026-10-02 | 3a252869 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-138: the order of test target runs moves to REQ-d00314; the working directory of a target is L and M (A retired)
@@ -680,7 +681,7 @@ N keeps a run inside the repository that asked for it unless the reader names an
 - 2026-09-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: point the no-runners error at the document carrying target configuration examples (F)
 - 2026-09-12 | 784f8350 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Configured test runner execution* | **Hash**: 3a252869
+*End* *Configured test runner execution* | **Hash**: 9e2255c3
 
 ## REQ-d00259: Requirement Format Reference Command
 

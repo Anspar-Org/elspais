@@ -1203,6 +1203,8 @@ class TestArgs:
     while it runs.
     """
 
+    __test__ = False  # a CLI argument model, not a pytest test class
+
     targets: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
         default_factory=list
     )

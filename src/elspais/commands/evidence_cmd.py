@@ -190,7 +190,7 @@ def run(args: argparse.Namespace) -> int:
     except (SelectionRefused, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    # Implements: REQ-d00322-L, REQ-d00249-L
+    # Implements: REQ-d00322-L, REQ-d00249-N
     # A snapshot describes one repository's tree. A selection naming a
     # member's targets writes or verifies that member's snapshot, in that
     # member's repository, with its configuration.

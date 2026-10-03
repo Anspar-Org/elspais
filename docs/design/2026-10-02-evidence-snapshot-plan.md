@@ -45,7 +45,7 @@ Task order for execution: 1, 2, 3, 4, 5, 11, 12, 6, 7, 8, 9, 10. Tasks 11 and 12
 - Modify: `spec/glossary.md`
 - Generated: `spec/INDEX.md`, `spec/_generated/*` (via `elspais fix`)
 
-**Interfaces:** Produces REQ-d00322 assertion letters A-N and REQ-d00249-L, cited by every later task.
+**Interfaces:** Produces REQ-d00322 assertion letters A-N and REQ-d00249-N, cited by every later task.
 
 - [x] **Step 1: Add the Defined Term to `spec/glossary.md`** (same format as the existing entries):
 
@@ -112,7 +112,7 @@ N follows the rule the *Result Fingerprint* follows: a secret scanner reads a se
 *End* *Evidence Snapshot* | **Hash**: 00000000
 ```
 
-- [x] **Step 3: Add REQ-d00249-L to `spec/dev-cli.md`** after K, with one Rationale paragraph, and a changelog line `TOOL-123: a run executes a federation member's target only where the selection names it (L)`:
+- [x] **Step 3: Add REQ-d00249-N to `spec/dev-cli.md`** after K, with one Rationale paragraph, and a changelog line `TOOL-123: a run executes a federation member's target only where the selection names it (L)`:
 
 ```markdown
 L. A run that executes targets SHALL execute a federation member's target only where the selection names that member's namespace and the target, and SHALL execute it with that member's configuration, repository root and output area.
@@ -658,7 +658,7 @@ Wire the args/cli exactly like `FingerprintArgs` (nested `EvidenceAction = Annot
 - Produces: `@dataclass(frozen=True) class TargetRun: namespace: str; config: ElspaisConfig; repo_root: Path; only: set[str]`; `plan_target_runs(config, repo_root, selected: list[str]) -> list[TargetRun]` (in `test_runner.py`; raises `SelectionRefused`). Bare names and groups resolve in the root as today (`executable_selection`); a `NS:NAME` (target or group) resolves through `plan_federation` against that member's validated config, keeping `PlannedRepo.repo_root`; an unknown namespace or name is refused with the same wording `resolve_expected_targets` uses.
 
 - [x] **Step 1: Write failing tests** (sub-agent), with a root and one associate in `tmp_path` (`[associates.lib] path = "../lib", namespace = "LIB"` -- copy the setup in `tests/config/test_federation_config.py`):
-  - `elspais test --targets LIB:unit` runs the associate's command with `cwd` under the associate, writes `lib/.results/unit/`, and does not run any root target; `elspais test` (bare) never runs `LIB:unit` (REQ-d00249-L);
+  - `elspais test --targets LIB:unit` runs the associate's command with `cwd` under the associate, writes `lib/.results/unit/`, and does not run any root target; `elspais test` (bare) never runs `LIB:unit` (REQ-d00249-N);
   - the associate has a committed snapshot and no `.results` -> the root's federated graph reads the associate's results from it, carried (REQ-d00322-L);
   - the associate's snapshot tree digest no longer matches the associate's tree -> `tests.results_stale` has a finding naming the associate and the snapshot directory (REQ-d00322-K); matching digest -> no finding.
 
@@ -717,7 +717,7 @@ Wire the args/cli exactly like `FingerprintArgs` (nested `EvidenceAction = Annot
 **Files:**
 - Modify: `src/elspais/docs/cli/test-targets.md` (new section `## Evidence Snapshot`: what it holds, `evidence write`, `evidence verify [--run]`, reading back, staleness, federation, the CI recipe from the design's "consumer's workflow")
 - Modify: `src/elspais/docs/cli/commands.md` (already has `## evidence`; link the topic)
-- Modify: `CHANGELOG.md` (`[Unreleased]` `### Added`: one entry for the snapshot and its commands citing REQ-d00322; one for member target runs citing REQ-d00249-L; one `### Changed` for the `flutter-machine` duration/output)
+- Modify: `CHANGELOG.md` (`[Unreleased]` `### Added`: one entry for the snapshot and its commands citing REQ-d00322; one for member target runs citing REQ-d00249-N; one `### Changed` for the `flutter-machine` duration/output)
 - Modify: `pyproject.toml` (patch bump)
 - Modify: CLAUDE.md (one bullet under the "No Duplicate Library Functions" list: "Evidence Snapshot: only `utilities/evidence.py` (`tree_digest`, `derive_snapshot`, `render_files`, `load_snapshot`, `compare`) ... Do NOT read or write `test-evidence/` files anywhere else."; and note `iter_assertion_coverage` now lives in `graph/aggregation.py`)
 

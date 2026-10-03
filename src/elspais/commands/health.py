@@ -4047,7 +4047,7 @@ def _snapshot_staleness(entry: Any, evidence: str, *, root: bool) -> HealthFindi
     own tree. A tree whose digest cannot be computed is reported with the
     cause, because a snapshot that cannot be judged is not known to be fresh.
     *root* says whether the member is the invoking repository. A bare
-    command reaches only that repository (REQ-d00249-L), so a member's
+    command reaches only that repository (REQ-d00249-N), so a member's
     remedy names its targets by namespace.
     """
     import subprocess
