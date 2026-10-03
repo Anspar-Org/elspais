@@ -950,6 +950,25 @@ def preset_reference_faults(graph: FederatedGraph, preset: str) -> list[Referenc
     return [f for f in graph.unresolved_references() if f.fault_class in classes]
 
 
+# Implements: REQ-p00019-G
+def _fault_cause(graph: FederatedGraph, fault: ReferenceFault) -> str | None:
+    """The cause of *fault*, stated from what was read, where its class names one.
+
+    Every identifier opens with a namespace, so an item no member claims is
+    one whose opening is no declared namespace.  The finding quotes the item
+    and lists the namespaces declared, and says nothing about what the author
+    meant: a stray *Assertion* label and a reference into an unlinked
+    repository fail the same test.
+    """
+    if fault.fault_class is not FaultClass.UNKNOWN_NAMESPACE:
+        return None
+    declared = ", ".join(sorted(entry.namespace for entry in graph.iter_repos()))
+    return (
+        f"'{fault.target_id}' does not open with a namespace any configured "
+        f"repository declares; the declared namespaces are: {declared}"
+    )
+
+
 # Implements: REQ-d00275-A
 def check_reference_class(
     graph: FederatedGraph,
@@ -990,7 +1009,7 @@ def check_reference_class(
             HealthFinding(
                 message=(
                     f"{f.source_id} -> {f.target_id} ({f.edge_kind}) "
-                    f"-- {f.diagnostic or description}{detail}"
+                    f"-- {f.diagnostic or _fault_cause(graph, f) or description}{detail}"
                 ),
                 node_id=f.source_id,
                 repo=repo_name,
