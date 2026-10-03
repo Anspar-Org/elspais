@@ -51,6 +51,18 @@ def _step_run_containing(job: dict, needle: str) -> str:
 
 class TestCITestSuite:
     # Verifies: REQ-o00066-A
+    def test_REQ_o00066_A_e2e_tier_runs_across_the_matrix(self, ci_config):
+        """The e2e tier is part of the full suite, so CI runs it on every
+        change and every supported version, the way the pre-push hook does."""
+        job = ci_config["jobs"]["e2e-test"]
+        assert (
+            job["strategy"]["matrix"]["python-version"]
+            == (ci_config["jobs"]["test"]["strategy"]["matrix"]["python-version"])
+        )
+        assert ".githooks/run-e2e-tier" in _step_run_containing(job, "run-e2e-tier")
+        assert not any("paths-filter" in s.get("uses", "") for s in job["steps"])
+
+    # Verifies: REQ-o00066-A
     def test_REQ_o00066_A_test_job_exists(self, ci_config):
         assert "test" in ci_config["jobs"]
 
