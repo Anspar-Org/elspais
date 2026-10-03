@@ -7275,7 +7275,9 @@ def create_server(
         its identifier and takes the one status the project declares in the
         retired role. Where the project declares several or none, the call is
         refused; change the status yourself. A requirement in the retired role
-        is read-only and is refused.
+        is read-only and is refused. Any other requirement is removed with its
+        assertions and sections, and every citation of it or of one of its
+        assertions reads as unresolved.
 
         On success, returns the resulting `version` of the containing FILE —
         the surviving container that absorbed the change (REQ-o00062-K).

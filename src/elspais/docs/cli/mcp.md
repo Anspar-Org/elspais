@@ -445,7 +445,9 @@ its status changes. `mutate_delete_requirement` on a requirement in the
 active role retires it in place: it keeps its identifier and takes the one
 status the project declares in the retired role. Where the project declares
 several retired-role statuses or none, the call is refused, listing them;
-set the status you mean with `mutate_change_status` instead. A refused
+set the status you mean with `mutate_change_status` instead. Any other
+requirement is removed with its assertions and sections, and every citation
+of it or of one of its assertions reads as unresolved at once. A refused
 assertion deletion locates a citing requirement at its Requirement
 Location, the line that declares its identifier.
 A tool called with an argument it does not declare does nothing and answers
