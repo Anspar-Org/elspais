@@ -42,13 +42,24 @@ be decided from the tree alone happens here, once per commit.
 | Python quality | `ruff check` and `ruff format --check` on `src/ tests/` | `ruff` |
 | Markdown linting | markdownlint on changed `.md` files | `markdownlint` |
 | Index regeneration | `elspais fix`, staging what it regenerates | `elspais` |
-| Unit tests | `pytest` with coverage, cached by tree hash | `pytest` |
+| Unit tests | `run-unit-tier`, in parallel with per-test coverage, cached by tree hash | `pytest`, `pytest-cov`, `pytest-xdist` |
 
 The index step resolves this tree's `elspais` rather than whichever one is on
 `PATH`: a different version rewrites hashes across spec files the commit never
 touched, and reports success while doing it.
 
-The unit tier runs through `with-fingerprint`, which brackets it with
+The unit tier runs through `run-unit-tier`, which `make test`, the
+`elspais-unit` target in `.elspais.toml` and CI's unit job also call. It runs
+the tier with `pytest-xdist` and `--dist loadfile`, so each test file stays on
+one worker in order, and records which test ran each line
+(`--cov-context=test`); pytest-cov combines the workers' coverage into the
+one `.coverage` file elspais reads, beside `junit.xml` and `coverage.json`.
+Every parallel tier takes its worker count from `test-workers`: half the
+processors this process may run on, and at least one, so the unit and e2e
+tiers together never take the whole machine. `ELSPAIS_TEST_WORKERS`
+overrides it.
+
+The hook runs `run-unit-tier` through `with-fingerprint`, which brackets it with
 `elspais fingerprint start` and `finish` for the `elspais-unit` target. Its
 results and coverage land in `.results/elspais-unit/` with a fingerprint of the
 tree they ran against, so `elspais checks` reads them as fresh until an input
@@ -83,13 +94,17 @@ the tier runs it the same way:
    `pytest-xdist` and `--dist loadfile`. Each module stays on one worker, in
    order, beside the project and daemon its module fixture built.
 2. A serial pass over the tests marked `serial`, with no other test process
-   alive. These share state no worker owns: the live worktree and its daemon,
-   the user's home directory, fixed ports.
+   alive, for a test sharing state no worker owns. None is marked: each e2e
+   test works in its own copy of a fixture or of this checkout, on a port its
+   viewer bound itself, and with a private home for the claude CLI. A pass
+   that collects nothing is not a failure.
 
 Both passes always run, with coverage off, and their results are merged into
 the target's one `junit.xml`. `tests/conftest.py` fails a `serial` test that
-an xdist worker runs, so the split cannot be undone by a selection mistake.
-`ELSPAIS_E2E_WORKERS` sets the parallel pass's worker count (default `auto`).
+an xdist worker runs, so the split cannot be undone by a selection mistake,
+and fails every e2e and browser test when the `elspais` it would spawn does
+not import elspais from this checkout's `src`. The parallel pass's worker
+count comes from `test-workers`. CI's `e2e-test` job runs `run-e2e-tier` too.
 
 **Why this list is short.** Nothing that pre-commit already gates is repeated
 here. You cannot push what you have not committed, so every commit in a push

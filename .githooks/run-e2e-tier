@@ -20,10 +20,11 @@
 # collides with whatever other tier is running there.
 #
 # The output directory defaults to $ELSPAIS_TARGET_OUTPUT, which
-# with-fingerprint sets. ELSPAIS_E2E_WORKERS sets the first pass's worker
-# count (default: auto). Both passes always run, so the results describe the
-# whole tier. The exit code is the first pass's when that pass failed, and the
-# second pass's otherwise.
+# with-fingerprint sets. The first pass's worker count is the one
+# .githooks/test-workers gives every parallel tier: half the processors.
+# Both passes always run, so the results describe the whole tier. The exit
+# code is the first pass's when that pass failed, and the second pass's
+# otherwise.
 
 _out="${1:-$ELSPAIS_TARGET_OUTPUT}"
 if [ -z "$_out" ]; then
@@ -31,7 +32,10 @@ if [ -z "$_out" ]; then
     exit 2
 fi
 mkdir -p "$_out"
-_workers="${ELSPAIS_E2E_WORKERS:-auto}"
+if ! _workers=$("$(cd "$(dirname "$0")" && pwd)/test-workers"); then
+    echo "ERROR: could not compute the worker count" >&2
+    exit 2
+fi
 
 _parallel="$_out/junit-parallel.xml"
 _serial="$_out/junit-serial.xml"

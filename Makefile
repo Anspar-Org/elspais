@@ -31,8 +31,10 @@ setup: ## Set up development environment
 	@echo "  Git hooks installed from .githooks/"
 	@echo "  Run 'make test' to verify."
 
-test: ## Run unit/integration tests (~12m, coverage is on by default)
-	$(PYTEST)
+# The run the pre-commit hook makes, in parallel on half the processors and
+# fingerprinted into the `elspais-unit` target's output area.
+test: ## Run unit/integration tests in parallel, with per-test coverage
+	$(VENV_PATH) .githooks/with-fingerprint elspais-unit .githooks/run-unit-tier
 
 # The same two-pass run the pre-push hook makes, fingerprinted into the
 # `elspais-e2e` target's output area so `elspais checks` reads its results.

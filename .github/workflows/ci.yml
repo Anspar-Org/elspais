@@ -89,7 +89,7 @@ jobs:
         run: pip install -e ".[dev,all]"
 
       - name: Run tests
-        run: pytest --tb=short -q
+        run: .githooks/run-unit-tier .results/elspais-unit
 
   e2e-test:
     # The e2e tier, run the way the pre-push hook runs it: through

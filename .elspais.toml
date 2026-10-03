@@ -176,7 +176,7 @@ stress = "Concurrency battery racing live daemon surfaces. Run when mcp/, server
 
 [[scanning.test.targets]]
 name = "elspais-unit"
-command = "COVERAGE_FILE=$ELSPAIS_TARGET_OUTPUT/.coverage pytest tests/ -q --junitxml=$ELSPAIS_TARGET_OUTPUT/junit.xml -o junit_family=xunit1"
+command = ".githooks/run-unit-tier"
 reporter = "junit"
 results = "junit.xml"
 coverage = ".coverage"

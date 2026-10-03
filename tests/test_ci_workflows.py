@@ -84,8 +84,11 @@ class TestCITestSuite:
 
     # Verifies: REQ-o00066-A
     def test_REQ_o00066_A_test_job_runs_pytest(self, ci_config):
-        run_text = _step_runs(ci_config["jobs"]["test"])
-        assert "pytest" in run_text
+        """The unit job runs the tier through the runner the pre-commit hook
+        calls, so CI and the hook run the same tests the same way."""
+        assert ".githooks/run-unit-tier" in _step_run_containing(
+            ci_config["jobs"]["test"], "run-unit-tier"
+        )
 
 
 # --- Assertion B: static analysis (linting) ---
