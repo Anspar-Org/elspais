@@ -4,6 +4,14 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-140
+
+#### Fixed
+
+- **`trace --body` prints each requirement's body (REQ-d00084-C)** -- the option read a field no requirement holds, so every body came out empty in every format. The body is now the requirement's text as `get_requirement` presents it.
+
+- **The `full` trace preset states more than `standard` (REQ-d00084-E)** -- the two presets stated identical columns. `full` now adds `implements`, `hash` and `file` to the standard values; `-v` renders it with every detail flag, as before.
+
 ### TOOL-134
 
 - **A spec or journey metadata line naming one target in another repository more than once reports every instance and creates no relationship (REQ-d00272-K, REQ-d00287-F)** -- an `Implements:` list in one federation member naming a requirement another member owns twice created one relationship and reported nothing, while the same list in a code or test file, and a repeated target in the declaring repository itself, were refused and reported. A repository read its spec metadata and journey `Validates:` lists in its own identifier grammar alone, so a target another member owns did not read as an identifier there and the repetition check, which compares identifiers, never saw it. Those lists are now read in every member's grammar, as code and test annotations already were, so each instance of a repeated foreign target is reported under the same class as a repeated local one. A requirement header is still read in its own repository's grammar alone, since a repository declares only the identifiers it owns.

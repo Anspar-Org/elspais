@@ -8,6 +8,8 @@ the graph per test (~2.5s each). Tests call trace rendering functions
 directly against the pre-built graph.
 """
 
+import csv
+import io
 import json
 
 import pytest
@@ -225,7 +227,7 @@ class TestTraceReportPresets:
                     "Code Tested",
                     "LCOV Tested",
                 ],
-                [],
+                ["Implements", "Hash", "File"],
             ),
             (
                 "full",
@@ -234,6 +236,9 @@ class TestTraceReportPresets:
                     "Title",
                     "Level",
                     "Status",
+                    "Implements",
+                    "Hash",
+                    "File",
                     "Implemented",
                     "Tested",
                     "Passing",
@@ -258,7 +263,7 @@ class TestTraceReportPresets:
         """Test --preset produces expected CSV columns."""
         p = self._make_preset(preset)
         out = render_trace(canonical_federated_graph, canonical_config, TraceRequest(), "csv", p)
-        header = out.split("\n")[0]
+        header = next(csv.reader(io.StringIO(out.split("\n")[0])))
         for col in should_have:
             assert col in header, f"Missing column: {col}"
         for col in should_not_have:
@@ -337,6 +342,107 @@ class TestTraceReportPresets:
         ).split("\n")[0]
 
         assert default_header == standard_header
+
+    # Verifies: REQ-d00084-E
+    def test_every_named_default_set_differs_from_every_other(self):
+        """Two named default sets stating the same values and the same detail
+        would be two names for one report, so a reader choosing between them
+        would be choosing nothing."""
+        import itertools
+
+        def shape(preset):
+            return (
+                tuple(preset.values),
+                preset.include_body,
+                preset.include_assertions,
+                preset.include_code_refs,
+                preset.include_test_refs,
+            )
+
+        for (name_a, a), (name_b, b) in itertools.combinations(REPORT_PRESETS.items(), 2):
+            assert shape(a) != shape(b), (
+                f"presets {name_a!r} and {name_b!r} state the same values and the same detail"
+            )
+
+
+def _assertion_phrase(graph) -> tuple[str, str]:
+    """A requirement of *graph* and the text of one of its assertions.
+
+    The phrase is read off the assertion node itself, so the body a report
+    prints is checked against what the requirement holds rather than against
+    the reader that composes the body.
+    """
+    from elspais.graph.GraphNode import NodeKind
+    from elspais.graph.relations import EdgeKind
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        for child in node.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
+            if child.kind != NodeKind.ASSERTION:
+                continue
+            text = (child.get_label() or "").strip()
+            if len(text) > 20 and text not in (node.get_label() or ""):
+                return node.id, text
+    raise AssertionError("the canonical graph holds no requirement with assertion text")
+
+
+class TestTraceBody:
+    """The body flag shows each requirement's own text beneath it."""
+
+    @staticmethod
+    def _preset(include_body: bool) -> ReportPreset:
+        return ReportPreset(
+            name="standard",
+            values=list(REPORT_PRESETS["standard"].values),
+            include_body=include_body,
+        )
+
+    # Verifies: REQ-d00084-C
+    def test_markdown_body_carries_the_requirement_text(
+        self, canonical_federated_graph, canonical_config
+    ):
+        _req_id, phrase = _assertion_phrase(canonical_federated_graph)
+
+        with_body = render_trace(
+            canonical_federated_graph,
+            canonical_config,
+            TraceRequest(),
+            "markdown",
+            self._preset(True),
+        )
+        without_body = render_trace(
+            canonical_federated_graph,
+            canonical_config,
+            TraceRequest(),
+            "markdown",
+            self._preset(False),
+        )
+
+        bodies = with_body.split("<details><summary>Body</summary>")[1:]
+        assert any(phrase in body.split("</details>")[0] for body in bodies), (
+            f"no Body block carries {phrase!r}"
+        )
+        assert phrase not in without_body
+
+    # Verifies: REQ-d00084-C
+    @pytest.mark.parametrize("path", ["live-graph", "computed-data"])
+    def test_json_rows_carry_the_requirement_body(self, canonical_federated_graph, capsys, path):
+        """Both JSON paths -- the live graph and the computed payload a
+        serving process answers with -- state the body the flag asks for."""
+        from elspais.commands.trace import format_json
+
+        req_id, phrase = _assertion_phrase(canonical_federated_graph)
+        preset = self._preset(True)
+
+        if path == "live-graph":
+            rows = _trace_rows("".join(format_json(canonical_federated_graph, preset)))
+        else:
+            data = compute_trace(canonical_federated_graph, {}, TraceRequest())
+            _render_json_from_data(data, preset)
+            rows = _trace_rows(capsys.readouterr().out)
+
+        row = next(r for r in rows if r["id"] == req_id)
+        assert row["body"].strip(), f"{req_id} states an empty body"
+        assert phrase in row["body"]
 
 
 class TestLcovTestedTrace:

@@ -106,7 +106,7 @@
 | REQ-d00080 | Diagnostic Command Exit Code Contract                         | dev-cli.md              | acc2aa77 |
 | REQ-d00081 | Multi-Assertion Reference Expansion                           | dev-cli.md              | 6d66ba55 |
 | REQ-d00082 | Unified Reference Configuration                               | dev-cli.md              | dea1ce9b |
-| REQ-d00084 | Trace Command                                                 | dev-cli.md              | 5728e809 |
+| REQ-d00084 | Trace Command                                                 | dev-cli.md              | a164cae6 |
 | REQ-d00085 | Unified Report Composition                                    | dev-cli.md              | fa6d7cdf |
 | REQ-d00086 | Coverage Report Section                                       | dev-cli.md              | 515f0165 |
 | REQ-d00124 | Graph Analysis Engine                                         | dev-cli.md              | b153d5f6 |
