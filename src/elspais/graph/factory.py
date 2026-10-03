@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from glob import glob
 from pathlib import Path, PurePosixPath
@@ -888,15 +888,23 @@ def _find_repo_root(spec_dir: Path) -> Path | None:
     return None
 
 
-# Implements: REQ-d00128-G
+# Implements: REQ-d00128-G, REQ-d00272-K, REQ-d00287-F
 def _resolve_spec_dir_config(
     spec_dir: Path,
+    federation_resolvers: Sequence[IdResolver] = (),
 ) -> SpecDirConfig:
     """Resolve the full scan configuration for a spec directory.
 
     Loads the .elspais.toml from the repo containing spec_dir and returns
     a SpecDirConfig with the registry, file patterns, skip settings, and
     ignore config from that project's configuration.
+
+    Metadata and journey reference lists are read in every member's grammar,
+    as code and test annotations are. A list is judged for a repeated target
+    as it is read, so a target the declaring member's own grammar cannot
+    read would otherwise reach no repetition check at all. Requirement
+    headers stay in the declaring member's grammar alone: a repository
+    declares only the identifiers it owns.
 
     Args:
         spec_dir: The spec directory path
@@ -925,15 +933,17 @@ def _resolve_spec_dir_config(
         typed_repo_config = repo_config
 
     resolver = build_resolver(repo_config)
+    own_namespace = resolver.config.namespace
+    member_resolvers = [r for r in federation_resolvers if r.config.namespace != own_namespace]
 
     # Build Lark-based FileDispatcher for spec files
-    dispatcher = FileDispatcher(resolver)
+    dispatcher = FileDispatcher(resolver, member_resolvers)
 
     # Spec files reach the Lark dispatcher; the registry carries the parsers
     # that read the rest of a spec directory.
     registry = ParserRegistry()
     # RequirementParser removed — Lark dispatcher handles spec files
-    registry.register(JourneyParser(FederatedIdReader(resolver)))
+    registry.register(JourneyParser(FederatedIdReader(resolver, member_resolvers)))
     registry.register(RemainderParser())
 
     file_patterns, skip_dirs, skip_files = _spec_selection(repo_config, typed_repo_config)
@@ -1315,7 +1325,7 @@ def _build_repository(
 
     for spec_dir in spec_dirs:
         # Resolve full scan config for this spec dir from its own .elspais.toml
-        dir_config = _resolve_spec_dir_config(spec_dir)
+        dir_config = _resolve_spec_dir_config(spec_dir, federation_resolvers)
 
         # Implements: REQ-d00212-Q+W
         # One mechanism, one meaning: the ignore configuration excludes, the

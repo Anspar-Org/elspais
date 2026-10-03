@@ -4,6 +4,10 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-134
+
+- **A spec or journey metadata line naming one target in another repository more than once reports every instance and creates no relationship (REQ-d00272-K, REQ-d00287-F)** -- an `Implements:` list in one federation member naming a requirement another member owns twice created one relationship and reported nothing, while the same list in a code or test file, and a repeated target in the declaring repository itself, were refused and reported. A repository read its spec metadata and journey `Validates:` lists in its own identifier grammar alone, so a target another member owns did not read as an identifier there and the repetition check, which compares identifiers, never saw it. Those lists are now read in every member's grammar, as code and test annotations already were, so each instance of a repeated foreign target is reported under the same class as a repeated local one. A requirement header is still read in its own repository's grammar alone, since a repository declares only the identifiers it owns.
+
 ### Added
 
 - **`elspais viewer --port 0` serves on any free port, and its record names that port (REQ-o00076-E)** -- the viewer binds the port before it writes `.elspais/daemon.json`, so the record a client reads names the port the server answers on and nothing can take it in between. `--port 0` previously read as no port given and served on 5001.
