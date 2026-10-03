@@ -481,7 +481,7 @@ class ViewerArgs:
     """Embed requirement content and every traced source file, compressed, for offline viewing."""
 
     port: int | None = None
-    """Port number for the server (default: 5001)."""
+    """Port number for the server (default: 5001; 0 picks any free port)."""
 
     base_path: str = ""
     """URL prefix the server and page sit under (e.g. /w/abc); empty is the root. Server only."""

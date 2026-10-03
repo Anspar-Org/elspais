@@ -19,11 +19,9 @@ failing-step identification are visible in the viewer.
 import contextlib
 import json
 import os
-import random
 import re
 import shutil
 import signal
-import socket
 import subprocess
 import sys
 import tempfile
@@ -44,43 +42,11 @@ from .helpers import resolve_elspais  # noqa: E402
 
 pytestmark = [
     pytest.mark.browser,
-    # Writes daemon records into checked-in fixture directories, and probes
-    # a fixed port range.
-    pytest.mark.serial,
     pytest.mark.skipif(
         resolve_elspais() is None,
         reason="elspais CLI not found on PATH",
     ),
 ]
-
-
-# Ports handed out in this session. A port is free between the probe below
-# releasing it and the viewer binding it, so two fixtures probing in that
-# window are handed the same one and the second viewer never comes up.
-_CLAIMED_PORTS: set[int] = set()
-
-# The range is shared by every session on the machine, and two sessions
-# scanning it from the same end are handed the same first free port. Each
-# session scans from its own offset, so a concurrent run in another checkout
-# meets this one only by chance; ``_wait_for_server`` catches that chance.
-_PORT_RANGE = range(15000, 15051)
-_PORT_OFFSET = random.randrange(len(_PORT_RANGE))
-
-
-def _find_free_port() -> int:
-    """Find a free port in the 15000-15050 range, unclaimed by this session."""
-    for i in range(len(_PORT_RANGE)):
-        port = _PORT_RANGE[(_PORT_OFFSET + i) % len(_PORT_RANGE)]
-        if port in _CLAIMED_PORTS:
-            continue
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
-                s.bind(("127.0.0.1", port))
-            except OSError:
-                continue
-        _CLAIMED_PORTS.add(port)
-        return port
-    pytest.skip("No free port found in range 15000-15050")
 
 
 # A viewer serving this repository builds the whole elspais graph before it
@@ -134,57 +100,60 @@ def _server_output(log_path: Path | None, limit: int = 4000) -> str:
     return text[-limit:]
 
 
-# What uvicorn writes on binding the port, and on failing to.
-_BIND_ANNOUNCED = "Uvicorn running on"
-_BIND_REFUSED = "address already in use"
-
-
-def _wait_for_server(
-    base_url: str,
+def _await_viewer(
+    proc: subprocess.Popen,
+    log_path: Path,
+    root: str | Path,
     *,
-    proc: subprocess.Popen | None = None,
-    log_path: Path | None = None,
+    base_path: str = "",
     timeout: float = _STARTUP_TIMEOUT,
     poll: float = 0.5,
-) -> None:
-    """Poll /api/status until the server is ready, dies, or the deadline passes.
+) -> str:
+    """Wait for a viewer started with ``--port 0`` to serve; return its root URL.
 
-    A 200 is accepted only once the spawned server has itself announced the
-    bind in its output. The port range is shared by every session on the
-    machine, so a viewer of another session may already answer on this port
-    while the spawned one is still building its graph; taking that answer
-    would run this session's tests against a foreign estate.
+    The viewer binds a free port before it writes its record, so the port
+    the record under ``root`` names is held by that viewer and no other
+    process. The record is accepted only when it names the spawned process,
+    and the viewer is ready once ``/api/status`` answers under
+    ``base_path`` there.
     """
     import urllib.error
     import urllib.request
 
+    record = Path(root) / ".elspais" / "daemon.json"
     deadline = time.monotonic() + timeout
+    port: int | None = None
     while time.monotonic() < deadline:
-        if proc is not None and proc.poll() is not None:
+        if proc.poll() is not None:
             pytest.fail(
-                f"Server at {base_url} exited with code {proc.returncode} "
+                f"The viewer for {root} exited with code {proc.returncode} "
                 f"before becoming ready. Its output:\n{_server_output(log_path)}"
             )
-        if log_path is not None:
-            output = _server_output(log_path, limit=1 << 20)
-            if _BIND_REFUSED in output:
-                pytest.fail(
-                    f"Server at {base_url} could not bind its port (another "
-                    f"process holds it). Its output:\n{output}"
-                )
-            if _BIND_ANNOUNCED not in output:
-                time.sleep(0.5)
+        if port is None:
+            try:
+                info = json.loads(record.read_text())
+            except (OSError, ValueError):
+                info = None
+            if (
+                isinstance(info, dict)
+                and info.get("pid") == proc.pid
+                and isinstance(info.get("port"), int)
+            ):
+                port = info["port"]
+            else:
+                time.sleep(poll)
                 continue
+        root_url = f"http://127.0.0.1:{port}"
         try:
-            resp = urllib.request.urlopen(f"{base_url}/api/status", timeout=2)
+            resp = urllib.request.urlopen(f"{root_url}{base_path}/api/status", timeout=2)
             if resp.status == 200:
-                return
-        except (urllib.error.URLError, OSError, ConnectionRefusedError):
+                return root_url
+        except (urllib.error.URLError, OSError):
             pass
         time.sleep(poll)
     pytest.fail(
-        f"Server at {base_url} did not become ready within {timeout}s "
-        f"(still running: {proc is None or proc.poll() is None}). "
+        f"The viewer for {root} did not become ready within {timeout}s "
+        f"(still running: {proc.poll() is None}, recorded port: {port}). "
         f"Its output:\n{_server_output(log_path)}"
     )
 
@@ -201,16 +170,15 @@ def viewer_url(tmp_path_factory):
         pytest.skip("elspais CLI not found on PATH")
 
     tree = private_tree(tmp_path_factory.mktemp("repo-tree"))
-    port = _find_free_port()
-    base_url = f"http://127.0.0.1:{port}"
+    base_url = ""
 
     proc, log_path = _spawn_viewer(
-        [elspais_bin, "viewer", "--server", "--port", str(port), "--path", str(tree)],
+        [elspais_bin, "viewer", "--server", "--port", "0", "--path", str(tree)],
         cwd=tree,
     )
 
     try:
-        _wait_for_server(base_url, proc=proc, log_path=log_path)
+        base_url = _await_viewer(proc, log_path, tree)
         yield base_url
     finally:
         # Graceful shutdown via API
@@ -604,16 +572,15 @@ def viewer_url_tables(tmp_path_factory):
     subprocess.run(["git", "add", "."], cwd=dest, capture_output=True, env=env)
     subprocess.run(["git", "commit", "-m", "init"], cwd=dest, capture_output=True, env=env)
 
-    port = _find_free_port()
-    base_url = f"http://127.0.0.1:{port}"
+    base_url = ""
 
     proc, log_path = _spawn_viewer(
-        [elspais_bin, "viewer", "--server", "--port", str(port), "--path", str(dest)],
+        [elspais_bin, "viewer", "--server", "--port", "0", "--path", str(dest)],
         cwd=str(dest),
     )
 
     try:
-        _wait_for_server(base_url, proc=proc, log_path=log_path)
+        base_url = _await_viewer(proc, log_path, dest)
         yield base_url
     finally:
         # Graceful shutdown via API
@@ -721,7 +688,7 @@ _FAILING_JOURNEY_ID = "JNY-OQ-Login-01"
 
 
 @pytest.fixture(scope="module")
-def failing_journey_viewer_url():
+def failing_journey_viewer_url(tmp_path_factory):
     """Start an elspais viewer server against the journey-uat/one-step-fails fixture.
 
     Uses the current worktree's Python (via PYTHONPATH) so that the version
@@ -731,8 +698,12 @@ def failing_journey_viewer_url():
     if not _JOURNEY_FIXTURE.exists():
         pytest.skip(f"journey-uat fixture not present at {_JOURNEY_FIXTURE}")
 
-    port = _find_free_port()
-    base_url = f"http://127.0.0.1:{port}"
+    # A copy, because the viewer writes its record into the tree it serves.
+    dest = tmp_path_factory.mktemp("journey-one-step-fails")
+    shutil.copytree(
+        _JOURNEY_FIXTURE, dest, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".elspais")
+    )
+    base_url = ""
 
     # Inject the worktree src so we get the version that includes
     # journey verdict/failing_steps in the /api/node/ response.
@@ -749,15 +720,15 @@ def failing_journey_viewer_url():
             "viewer",
             "--server",
             "--port",
-            str(port),
+            "0",
             "--path",
-            str(_JOURNEY_FIXTURE),
+            str(dest),
         ],
         env=env,
     )
 
     try:
-        _wait_for_server(base_url, proc=proc, log_path=log_path)
+        base_url = _await_viewer(proc, log_path, dest)
         yield base_url
     finally:
         try:
@@ -1108,7 +1079,7 @@ _STEP_BINDING_JOURNEY_ID = "JNY-OQ-Login-01"
 
 
 @pytest.fixture(scope="module")
-def step_binding_viewer_url():
+def step_binding_viewer_url(tmp_path_factory):
     """Start a viewer server against the journey-uat/junit-step-binding fixture.
 
     Mirrors ``failing_journey_viewer_url`` (worktree src via PYTHONPATH) but
@@ -1119,8 +1090,12 @@ def step_binding_viewer_url():
     if not _STEP_BINDING_FIXTURE.exists():
         pytest.skip(f"junit-step-binding fixture not present at {_STEP_BINDING_FIXTURE}")
 
-    port = _find_free_port()
-    base_url = f"http://127.0.0.1:{port}"
+    # A copy, because the viewer writes its record into the tree it serves.
+    dest = tmp_path_factory.mktemp("journey-step-binding")
+    shutil.copytree(
+        _STEP_BINDING_FIXTURE, dest, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".elspais")
+    )
+    base_url = ""
 
     worktree_src = str(REPO_ROOT / "src")
     env = dict(os.environ)
@@ -1135,15 +1110,15 @@ def step_binding_viewer_url():
             "viewer",
             "--server",
             "--port",
-            str(port),
+            "0",
             "--path",
-            str(_STEP_BINDING_FIXTURE),
+            str(dest),
         ],
         env=env,
     )
 
     try:
-        _wait_for_server(base_url, proc=proc, log_path=log_path)
+        base_url = _await_viewer(proc, log_path, dest)
         yield base_url
     finally:
         try:
@@ -1305,16 +1280,15 @@ def concurrency_viewer_url(tmp_path_factory):
         ["git", "checkout", "-b", "concurrent-edit"], cwd=dest, capture_output=True, env=env
     )
 
-    port = _find_free_port()
-    base_url = f"http://127.0.0.1:{port}"
+    base_url = ""
 
     proc, log_path = _spawn_viewer(
-        [elspais_bin, "viewer", "--server", "--port", str(port), "--path", str(dest)],
+        [elspais_bin, "viewer", "--server", "--port", "0", "--path", str(dest)],
         cwd=str(dest),
     )
 
     try:
-        _wait_for_server(base_url, proc=proc, log_path=log_path)
+        base_url = _await_viewer(proc, log_path, dest)
         yield base_url
     finally:
         try:
@@ -1548,8 +1522,7 @@ def badge_viewer_url(tmp_path_factory):
     subprocess.run(["git", "commit", "-m", "init"], cwd=dest, capture_output=True, env=env)
     subprocess.run(["git", "checkout", "-b", "badge-truth"], cwd=dest, capture_output=True, env=env)
 
-    port = _find_free_port()
-    base_url = f"http://127.0.0.1:{port}"
+    base_url = ""
 
     # The server announces itself every few seconds rather than every half
     # minute, so a stream cycle -- the page's count heartbeat -- can be
@@ -1557,13 +1530,13 @@ def badge_viewer_url(tmp_path_factory):
     # probe every few hundred milliseconds would race tests that set page
     # state by hand.
     proc, log_path = _spawn_viewer(
-        [elspais_bin, "viewer", "--server", "--port", str(port), "--path", str(dest)],
+        [elspais_bin, "viewer", "--server", "--port", "0", "--path", str(dest)],
         cwd=str(dest),
         env={**os.environ, "_ELSPAIS_EVENTS_HEARTBEAT": str(_BADGE_HEARTBEAT_SECONDS)},
     )
 
     try:
-        _wait_for_server(base_url, proc=proc, log_path=log_path)
+        base_url = _await_viewer(proc, log_path, dest)
         yield base_url
     finally:
         try:
@@ -2901,8 +2874,7 @@ def file_mutation_viewer_url(tmp_path_factory):
         ["git", "checkout", "-b", "file-edits"], cwd=dest, capture_output=True, env=git_env
     )
 
-    port = _find_free_port()
-    base_url = f"http://127.0.0.1:{port}"
+    base_url = ""
 
     worktree_src = str(REPO_ROOT / "src")
     env = dict(os.environ)
@@ -2917,7 +2889,7 @@ def file_mutation_viewer_url(tmp_path_factory):
             "viewer",
             "--server",
             "--port",
-            str(port),
+            "0",
             "--path",
             str(dest),
         ],
@@ -2926,7 +2898,7 @@ def file_mutation_viewer_url(tmp_path_factory):
     )
 
     try:
-        _wait_for_server(base_url, proc=proc, log_path=log_path)
+        base_url = _await_viewer(proc, log_path, dest)
         yield base_url
     finally:
         try:
@@ -3394,16 +3366,15 @@ def viewer_url_environments(tmp_path_factory):
     subprocess.run(["git", "add", "."], cwd=dest, capture_output=True, env=env)
     subprocess.run(["git", "commit", "-m", "init"], cwd=dest, capture_output=True, env=env)
 
-    port = _find_free_port()
-    base_url = f"http://127.0.0.1:{port}"
+    base_url = ""
 
     proc, log_path = _spawn_viewer(
-        [elspais_bin, "viewer", "--server", "--port", str(port), "--path", str(dest)],
+        [elspais_bin, "viewer", "--server", "--port", "0", "--path", str(dest)],
         cwd=str(dest),
     )
 
     try:
-        _wait_for_server(base_url, proc=proc, log_path=log_path)
+        base_url = _await_viewer(proc, log_path, dest)
         yield base_url
     finally:
         try:
@@ -3537,8 +3508,6 @@ def _session_lifetime_viewer(tmp_path_factory):
         else:
             shutil.copy2(item, dest / item.name)
 
-    port = _find_free_port()
-    base_url = f"http://127.0.0.1:{port}"
     proc, log_path = _spawn_viewer(
         [
             elspais_bin,
@@ -3546,7 +3515,7 @@ def _session_lifetime_viewer(tmp_path_factory):
             "--server",
             "--session-lifetime",
             "--port",
-            str(port),
+            "0",
             "--path",
             str(dest),
         ],
@@ -3558,7 +3527,7 @@ def _session_lifetime_viewer(tmp_path_factory):
             "_ELSPAIS_EVENTS_HEARTBEAT": "2",
         },
     )
-    return proc, log_path, base_url, dest
+    return proc, log_path, dest
 
 
 def _await_process_exit(proc: subprocess.Popen, seconds: float) -> bool:
@@ -3596,10 +3565,10 @@ class TestBrowserSessionBoundLifetime:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
-            proc, log_path, base_url, dest = _session_lifetime_viewer(tmp_path_factory)
+            proc, log_path, dest = _session_lifetime_viewer(tmp_path_factory)
             daemon_json = dest / ".elspais" / "daemon.json"
             try:
-                _wait_for_server(base_url, proc=proc, log_path=log_path, poll=0.1)
+                base_url = _await_viewer(proc, log_path, dest, poll=0.1)
                 page.goto(base_url, wait_until="domcontentloaded")
                 _wait_for_js(
                     page,
@@ -3683,9 +3652,7 @@ def prefixed_viewer(tmp_path_factory):
     dest = tmp_path_factory.mktemp("viewer-prefixed-run")
     _copy_project(src, dest)
 
-    port = _find_free_port()
-    root_url = f"http://127.0.0.1:{port}"
-    base_url = root_url + _BASE_PATH
+    base_url = ""
 
     proc, log_path = _spawn_viewer(
         [
@@ -3693,7 +3660,7 @@ def prefixed_viewer(tmp_path_factory):
             "viewer",
             "--server",
             "--port",
-            str(port),
+            "0",
             "--base-path",
             _BASE_PATH,
             "--path",
@@ -3703,7 +3670,8 @@ def prefixed_viewer(tmp_path_factory):
     )
 
     try:
-        _wait_for_server(base_url, proc=proc, log_path=log_path)
+        root_url = _await_viewer(proc, log_path, dest, base_path=_BASE_PATH)
+        base_url = root_url + _BASE_PATH
         yield root_url, base_url, log_path, dest
     finally:
         try:
@@ -3914,7 +3882,7 @@ def static_viewer_site(tmp_path_factory):
     servers = []
     try:
         for _ in range(2):
-            server = http.server.ThreadingHTTPServer(("127.0.0.1", _find_free_port()), handler)
+            server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
             threading.Thread(target=server.serve_forever, daemon=True).start()
             servers.append(server)
         yield tuple(f"http://127.0.0.1:{s.server_address[1]}" for s in servers)
@@ -3944,9 +3912,7 @@ def second_prefixed_viewer(tmp_path_factory):
     dest = tmp_path_factory.mktemp("viewer-second-prefixed-run")
     _copy_project(src, dest)
 
-    port = _find_free_port()
-    root_url = f"http://127.0.0.1:{port}"
-    base_url = root_url + _SECOND_BASE_PATH
+    base_url = ""
 
     proc, log_path = _spawn_viewer(
         [
@@ -3954,7 +3920,7 @@ def second_prefixed_viewer(tmp_path_factory):
             "viewer",
             "--server",
             "--port",
-            str(port),
+            "0",
             "--base-path",
             _SECOND_BASE_PATH,
             "--path",
@@ -3964,7 +3930,8 @@ def second_prefixed_viewer(tmp_path_factory):
     )
 
     try:
-        _wait_for_server(base_url, proc=proc, log_path=log_path)
+        root_url = _await_viewer(proc, log_path, dest, base_path=_SECOND_BASE_PATH)
+        base_url = root_url + _SECOND_BASE_PATH
         yield root_url, base_url
     finally:
         try:
@@ -4564,8 +4531,7 @@ def _commit_on_working_branch(dest: Path, branch: str) -> None:
 @contextlib.contextmanager
 def _served_viewer(dest: Path):
     """Serve ``dest`` with a viewer run from this worktree's source; yield its URL."""
-    port = _find_free_port()
-    base_url = f"http://127.0.0.1:{port}"
+    base_url = ""
     proc, log_path = _spawn_viewer(
         [
             sys.executable,
@@ -4574,7 +4540,7 @@ def _served_viewer(dest: Path):
             "viewer",
             "--server",
             "--port",
-            str(port),
+            "0",
             "--path",
             str(dest),
         ],
@@ -4582,7 +4548,7 @@ def _served_viewer(dest: Path):
         env=_worktree_env(),
     )
     try:
-        _wait_for_server(base_url, proc=proc, log_path=log_path)
+        base_url = _await_viewer(proc, log_path, dest)
         yield base_url
     finally:
         try:

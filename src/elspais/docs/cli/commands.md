@@ -556,7 +556,8 @@ also serves MCP tools at `/mcp` for AI agent integration.
 
   `--static`             Generate static HTML file instead of live server
   `--server`             Start server without opening browser
-  `--port PORT`          Server port (default: 5001)
+  `--port PORT`          Server port (default: 5001; 0 picks any free
+                         port, which `.elspais/daemon.json` records)
   `--base-path PATH`     URL prefix the server sits under (default: none)
   `--embed-content`      Embed requirement content and every traced source
                          file, highlighted and compressed, for offline

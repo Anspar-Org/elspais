@@ -1484,14 +1484,6 @@ class TestTheRestartSurfaceOffersTheTwoAnswers:
 # ---------------------------------------------------------------------------
 
 
-def _free_port() -> int:
-    import socket
-
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return int(s.getsockname()[1])
-
-
 # The session-lifetime viewer's grace and check interval. The grace is the
 # window a client has to connect after the viewer starts, and the window a
 # lost stream has to come back: it is counted from the viewer's start, so it
@@ -1502,7 +1494,7 @@ _SESSION_GRACE_SECONDS = 8.0
 _SESSION_CHECK_SECONDS = 0.5
 
 
-def _spawn_session_viewer(tmp_path: Path) -> tuple[subprocess.Popen, Path, str]:
+def _spawn_session_viewer(tmp_path: Path) -> tuple[subprocess.Popen, Path]:
     """Start `elspais viewer --server --session-lifetime` on a fresh project.
 
     Checked twice a second with a grace of a few seconds, so the test
@@ -1515,7 +1507,6 @@ def _spawn_session_viewer(tmp_path: Path) -> tuple[subprocess.Popen, Path, str]:
     if elspais_bin is None:
         pytest.skip("elspais CLI not found on PATH")
     _daemon_project(tmp_path, "session-lifetime-project")
-    port = _free_port()
     log_path = tmp_path / "viewer.log"
     with open(log_path, "wb") as sink:
         proc = subprocess.Popen(
@@ -1525,7 +1516,7 @@ def _spawn_session_viewer(tmp_path: Path) -> tuple[subprocess.Popen, Path, str]:
                 "--server",
                 "--session-lifetime",
                 "--port",
-                str(port),
+                "0",
                 "--path",
                 str(tmp_path),
             ],
@@ -1539,23 +1530,35 @@ def _spawn_session_viewer(tmp_path: Path) -> tuple[subprocess.Popen, Path, str]:
                 "_ELSPAIS_CLIENT_GRACE": str(_SESSION_GRACE_SECONDS),
             },
         )
-    return proc, log_path, f"http://127.0.0.1:{port}"
+    return proc, log_path
 
 
-def _wait_for_viewer(proc: subprocess.Popen, base_url: str, log_path: Path) -> None:
+def _wait_for_viewer(proc: subprocess.Popen, root: Path, log_path: Path) -> str:
+    """Wait for a viewer started with ``--port 0`` to serve; return its URL.
+
+    The port is the one the viewer's record under ``root`` names, accepted
+    only when the record names the spawned process.
+    """
     import time
     import urllib.request
 
+    record = root / ".elspais" / "daemon.json"
     deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
         if proc.poll() is not None:
             pytest.fail(f"viewer exited before serving:\n{log_path.read_text(errors='replace')}")
         try:
-            with urllib.request.urlopen(f"{base_url}/api/status", timeout=2) as resp:
-                if resp.status == 200:
-                    return
-        except OSError:
-            pass
+            info = json.loads(record.read_text())
+        except (OSError, ValueError):
+            info = None
+        if isinstance(info, dict) and info.get("pid") == proc.pid:
+            base_url = f"http://127.0.0.1:{info['port']}"
+            try:
+                with urllib.request.urlopen(f"{base_url}/api/status", timeout=2) as resp:
+                    if resp.status == 200:
+                        return base_url
+            except OSError:
+                pass
         time.sleep(0.2)
     pytest.fail(f"viewer never became ready:\n{log_path.read_text(errors='replace')}")
 
@@ -1598,9 +1601,9 @@ class TestViewerSessionBoundLifetime:
         grace has passed, rather than serving nobody until something else
         stops it. While it waits it discloses that nothing is pending and
         when it will stop (REQ-o00074-M)."""
-        proc, log_path, base_url = _spawn_session_viewer(tmp_path)
+        proc, log_path = _spawn_session_viewer(tmp_path)
         try:
-            _wait_for_viewer(proc, base_url, log_path)
+            _wait_for_viewer(proc, tmp_path, log_path)
             # Several checks find nothing held, and none of them is the
             # cause of an ending: the grace has not passed.
             assert not _exited(proc, _SESSION_CHECK_SECONDS * 3), (
@@ -1632,9 +1635,9 @@ class TestViewerSessionBoundLifetime:
         import http.client
         import time
 
-        proc, log_path, base_url = _spawn_session_viewer(tmp_path)
+        proc, log_path = _spawn_session_viewer(tmp_path)
         try:
-            _wait_for_viewer(proc, base_url, log_path)
+            base_url = _wait_for_viewer(proc, tmp_path, log_path)
             host, port = base_url[len("http://") :].split(":")
             conn = http.client.HTTPConnection(host, int(port), timeout=10)
             conn.request("GET", "/api/events")
@@ -1669,5 +1672,41 @@ class TestViewerSessionBoundLifetime:
                 f"{log_path.read_text(errors='replace')}"
             )
             assert proc.returncode == 0
+        finally:
+            _end(proc)
+
+
+class TestViewerBindsAnyFreePort:
+    """Validates REQ-o00076-E: a viewer asked for port 0 serves on a free
+    port, and its record names the port it answers on."""
+
+    # Verifies: REQ-o00076-E
+    def test_REQ_o00076_E_port_zero_is_recorded_as_the_bound_port(self, tmp_path):
+        import os
+        import urllib.request
+
+        elspais_bin = resolve_elspais()
+        _daemon_project(tmp_path, "any-free-port-project")
+        log_path = tmp_path / "viewer.log"
+        with open(log_path, "wb") as sink:
+            proc = subprocess.Popen(
+                [elspais_bin, "viewer", "--server", "--port", "0", "--path", str(tmp_path)],
+                cwd=tmp_path,
+                stdout=sink,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+                env=dict(os.environ),
+            )
+        try:
+            base_url = _wait_for_viewer(proc, tmp_path, log_path)
+            port = int(base_url.rsplit(":", 1)[1])
+            assert port != 0
+            assert f"Starting trace-edit server at {base_url}" in log_path.read_text(
+                errors="replace"
+            )
+            info = json.loads((tmp_path / ".elspais" / "daemon.json").read_text())
+            assert info["port"] == port, info
+            with urllib.request.urlopen(f"{base_url}/api/status", timeout=5) as resp:
+                assert resp.status == 200
         finally:
             _end(proc)
