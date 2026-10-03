@@ -1842,6 +1842,42 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
         return value[0], value[1], truncated
 
     eps = 1e-9
+
+    # Implements: REQ-d00325-A+B+C
+    # Whether a requirement's verified figure is made only of carried results.
+    # The annotator judged the results attached to the requirement; credit
+    # conducted from a refining requirement brings that requirement's results
+    # with it, so they vote too. ``None`` means no result contributes at all,
+    # which is neither carried nor fresh.
+    own_carried: dict[str, bool | None] = {}
+    for req in reqs:
+        metrics = req.get_metric("rollup_metrics")
+        if metrics is None:
+            continue
+        vd = metrics.verified
+        has_own = bool(vd.immediate_direct_by_label or vd.immediate_indirect_by_label)
+        own_carried[req.id] = bool(vd.carried) if (has_own or vd.has_failures) else None
+    carried_memo: dict[str, bool | None] = {}
+
+    def figure_carried(req: GraphNode, visiting: frozenset[str]) -> bool | None:
+        if req.id in carried_memo:
+            return carried_memo[req.id]
+        if req.id in visiting:
+            return None
+        votes = [own_carried.get(req.id)]
+        inner = visiting | {req.id}
+        for edge in req.iter_outgoing_edges():
+            if not edge.kind.conducts_coverage():
+                continue
+            direct, indirect, _ = req_measures(edge.target, "verified", inner)
+            if direct > eps or indirect > eps:
+                votes.append(figure_carried(edge.target, inner))
+        cast = [v for v in votes if v is not None]
+        answer = all(cast) if cast else None
+        if not visiting:
+            carried_memo[req.id] = answer
+        return answer
+
     for req in reqs:
         metrics = req.get_metric("rollup_metrics")
         if metrics is None:
@@ -1855,6 +1891,8 @@ def _conduct_refines_coverage(graph: FederatedGraph) -> None:
             rolled = {lbl: rolled_values(req, lbl, dim_name, frozenset()) for lbl in labels}
             dim.rolled_direct_by_label = {lbl: v[0] for lbl, v in rolled.items() if v[0] > eps}
             dim.rolled_indirect_by_label = {lbl: v[1] for lbl, v in rolled.items() if v[1] > eps}
+        # Implements: REQ-d00325-A+B+C
+        metrics.verified.carried = bool(figure_carried(req, frozenset()))
 
 
 # =============================================================================

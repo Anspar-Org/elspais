@@ -223,7 +223,10 @@ visible and editable rather than implied.
 
 ```toml
 [scanning]
-skip = ["node_modules", ".git", "__pycache__", "*.pyc", ".venv", ".env"]
+# A pattern holding a `/` is a path from the repository root, for a file and a
+# directory alike. A single name matches a file at any depth and a directory
+# only at the root, so `**/` says "at any depth". See `elspais docs ignore`.
+skip = ["**/node_modules", "**/.git", "**/__pycache__", "*.pyc", "**/.venv", ".env"]
 
 [scanning.spec]
 directories = ["spec"]

@@ -4,6 +4,16 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-127
+
+#### Fixed
+
+- **A verified figure built only from carried results is marked as carried, wherever the results are counted (REQ-d00325-A+B+C)** -- a requirement credited only through the requirements that refine it has no results of its own, so the carried mark was never set on it: under `--targets none`, `--targets last-run` or any selection, it rendered without `(baseline)` beside requirements that carried the mark, and a reader could not tell it from a fresh measurement. The mark now follows the results a `Refines:` relationship conducts, so a figure is marked when every result behind it, attached or conducted, was carried, and is shown without the mark as soon as one fresh result contributes. `verified.carried` states the same in every format.
+
+- **A selection of fresh targets marks every associate's results as carried (REQ-d00325-D+E)** -- `--targets` on `summary` and `trace` names the invoking repository's targets, and a run of those executes no target of another member, yet an associate's results on disk were counted as fresh: they rendered without `(baseline)`, and the summary footnote reported fewer carried targets than there are result targets. Wherever a run names what ran fresh, an associate's results are now carried; a run naming nothing still marks nothing. The footnote and the `carried_result_targets`/`total_result_targets` fields count a target of each member separately, so two members declaring a target of one name are two targets.
+
+- **A skip pattern that spells a path means that path for a file as for a directory (REQ-d00212-Z)** -- a pattern holding a `/` is a path from the repository root whether it reaches a directory or a file, so `**/.coverage` now skips a `.coverage` file at any depth, as `**/.pytest_cache` skips that directory, and `gen/out.json` skips that one file. Before, a file pattern was matched against the file's name alone, so any pattern holding a `/` matched no file, silently: a generated file stayed among a test target's inputs and every run read as stale. A pattern of a single name keeps its two readings, a file of that name at any depth and a directory at the repository root. `elspais docs ignore`, `elspais docs test-targets` and `elspais docs config` state the rule, and the examples that wrote a bare directory name meaning "at any depth" now write `**/`.
+
 ### Added
 
 - **`elspais viewer --port 0` serves on any free port, and its record names that port (REQ-o00076-E)** -- the viewer binds the port before it writes `.elspais/daemon.json`, so the record a client reads names the port the server answers on and nothing can take it in between. `--port 0` previously read as no port given and served on 5001.

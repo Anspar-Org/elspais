@@ -132,7 +132,7 @@
 | REQ-d00209 | Schema-Driven Init Template Generation                        | dev-graph-config.md     | b25e4468 |
 | REQ-d00210 | Documentation Drift Detection                                 | dev-graph-config.md     | 59023724 |
 | REQ-d00211 | Config-Driven Viewer UI Values                                | dev-graph-config.md     | 6b90f87f |
-| REQ-d00212 | Configuration Schema                                          | dev-graph-config.md     | 492083b5 |
+| REQ-d00212 | Configuration Schema                                          | dev-graph-config.md     | 80edfef3 |
 | REQ-d00213 | Version Check and Update Notification                         | dev-cli.md              | cedd398b |
 | REQ-d00214 | MCP Server Install/Uninstall CLI Commands                     | dev-mcp-tools.md        | 5f372b62 |
 | REQ-d00215 | Keyword Extraction Annotator                                  | dev-graph-core.md       | db477d99 |
@@ -228,6 +228,7 @@
 | REQ-d00316 | Record of the Test Targets a Run Executed                     | dev-graph-core.md       | c5639977 |
 | REQ-d00320 | Viewer Edit Controls State What They Do                       | dev-traceview-review.md | e8010396 |
 | REQ-d00321 | Static View Embedded Content                                  | dev-traceview-review.md | 736babc4 |
+| REQ-d00325 | Carried Result Provenance                                     | dev-graph-core.md       | 67d6d8ea |
 
 ## User Journeys
 

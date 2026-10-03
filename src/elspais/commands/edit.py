@@ -292,7 +292,7 @@ def _spec_files(spec_dir: Any, exclusions: Any = None) -> list[Path]:
             except ValueError:
                 relative = md_file.name
             # Implements: REQ-p00015-H -- asked BEFORE the read.
-            if file_is_skipped(md_file.name, skip_files) or within_skipped_dir(relative, skip_dirs):
+            if file_is_skipped(relative, skip_files) or within_skipped_dir(relative, skip_dirs):
                 continue
             found.append(md_file)
     return found

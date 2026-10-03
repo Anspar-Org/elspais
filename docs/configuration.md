@@ -219,15 +219,18 @@ malformed reference is reported, not just this one.
 #──────────────────────────────────────────────────────────────────────────────
 
 [scanning]
-# Global skip patterns (applied to all scanning kinds)
+# Global skip patterns (applied to all scanning kinds). A pattern holding a
+# `/` is a path from the repository root, for a file and a directory alike,
+# so `**/` means "at any depth". A single name matches a file at any depth
+# but a directory only at the root. See `elspais docs ignore`.
 skip = [
-    "node_modules",
-    ".git",
-    "build",
-    "dist",
-    "__pycache__",
-    ".venv",
-    "venv",
+    "**/node_modules",
+    "**/.git",
+    "**/build",
+    "**/dist",
+    "**/__pycache__",
+    "**/.venv",
+    "**/venv",
     # Test tools write these caches during a test run. The inputs of a test
     # target are every file that this list does not skip. If a file changes
     # during every run, then no run produces fresh results.

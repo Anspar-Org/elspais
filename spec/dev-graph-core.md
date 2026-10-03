@@ -1592,3 +1592,30 @@ E puts the record's name in the vocabulary that already names targets and groups
 I keeps the name to the one question it answers. A run that executes targets, and a run that states which results it expects, each ask about the run in progress, and a name standing for what an earlier run did would answer a different question.
 
 *End* *Record of the Test Targets a Run Executed* | **Hash**: c5639977
+
+## REQ-d00325: Carried Result Provenance
+
+**Level**: dev | **Status**: Draft | **Implements**: -
+**Refines**: REQ-d00254-I
+
+A report that reads results from disk marks each verified figure that comes only from results of an earlier run, so a reader can tell fresh evidence from old evidence.
+
+### Assertions
+
+A. When every result that contributes to the verified figure of a requirement is carried from an earlier run, the system SHALL mark that figure as carried.
+
+B. When a fresh result contributes to the verified figure of a requirement, the system SHALL show that figure without the carried mark.
+
+C. A result whose credit a `Refines:` relationship conducts to a requirement SHALL count as a contribution to the verified figure of that requirement.
+
+D. Where a run names the test targets that ran fresh, the system SHALL treat as carried every result of a test target of another federation member that the run does not name.
+
+E. When the system states how many test targets with results were carried, the system SHALL count each test target of each federation member separately.
+
+### Rationale
+
+The carried mark exists for the reader who must not mistake old evidence for new. A figure built from carried results and shown without the mark makes that mistake for them, so the mark follows the evidence wherever the evidence is counted. C names the conducted case because a requirement credited only through the requirements that refine it has no results of its own, and the mark must not depend on where the results are attached.
+
+A run of the invoking repository's test targets executes no target of another member, so a selection of fresh targets cannot have made another member's results fresh. Two members can each declare a target with the same name, so E keeps two targets from being counted as one.
+
+*End* *Carried Result Provenance* | **Hash**: 67d6d8ea

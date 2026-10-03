@@ -213,7 +213,11 @@ _FIELD_COMMENTS: dict[str, str] = {
     ),
     # --- [scanning] ---
     "scanning": "File scanning configuration",
-    "scanning.skip": "Global skip patterns (applied to all scan kinds)",
+    "scanning.skip": (
+        "Global skip patterns (applied to all scan kinds). A pattern holding a /"
+        " is a path from the repository root for a file and a directory alike;"
+        " **/ means at any depth"
+    ),
     "scanning.spec": "Spec file scanning",
     "scanning.spec.directories": "Directories to scan for spec files",
     "scanning.spec.file_patterns": (
@@ -548,9 +552,10 @@ _CORE_OVERRIDES: dict[str, Any] = {
         },
     },
     "scanning": {
-        # A directory pattern is a path from the repository root, so "**/" is
-        # what says "at any depth". A file pattern is a glob over a name and
-        # needs none. See `elspais docs ignore`.
+        # A pattern holding a "/" is a path from the repository root, for a
+        # file and a directory alike, so "**/" is what says "at any depth". A
+        # single name matches a file at any depth and a directory only at the
+        # root. See `elspais docs ignore`.
         #
         # The entries after ".env" name caches. Test and build tools write these
         # caches during a test run. By default, every file in the repository is
