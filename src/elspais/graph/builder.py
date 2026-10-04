@@ -59,6 +59,7 @@ from elspais.graph.parsers.directives import (
     canonical_assertion_text,
     directive_fields,
 )
+from elspais.graph.parsers.prescan import reads_test_names
 from elspais.graph.reference_faults import (
     FaultClass,
     FaultCode,
@@ -4705,7 +4706,9 @@ class GraphBuilder:
         # root_line); resolved at build() time once every TEST node and its FILE
         # parent exist -- trying (source_file, line) first, then falling back to
         # (root_file or source_file, root_line) for testWidgets() results whose
-        # test.line is a framework wrapper, then to every TEST in the file.
+        # test.line is a framework wrapper. A result recording neither line
+        # binds by its recorded name where exactly one TEST carries it
+        # (REQ-d00284-E). Any other result binds to every TEST in the file.
         self._pending_source_result_links: list[
             tuple[str, str, int | None, str | None, int | None]
         ] = []
@@ -5554,6 +5557,11 @@ class GraphBuilder:
             extent_end = data.get("function_end_line") or 0
             if extent_end > source_line:
                 node.set_field("function_end_line", extent_end)
+            # Implements: REQ-d00284-E
+            # The name the test's runner records for it, where the scan could
+            # read one. A result recording no source line binds by it.
+            if data.get("test_name"):
+                node.set_field("test_name", data["test_name"])
             # Implements: REQ-d00274-G
             # The node is still built, because the comment is still a line of
             # the file and has to render back out where it was written. What
@@ -6367,6 +6375,9 @@ class GraphBuilder:
         #   test-scope: the single TEST at (source_file, line), with
         #     match_scope="test". Each test gets its own credit. Every TEST
         #     whose declaration holds that test also links (a group of tests).
+        #     A result recording no line names its test by its full name
+        #     instead, and binds only where exactly one TEST in the file has
+        #     that name (REQ-d00284-B+E+F).
         #   file-scope: every TEST in the same file, with match_scope="file".
         #     This result names no test. Consequently, it credits nothing.
         # An unmatched file links nothing (no broken reference, unlike test_id
@@ -6375,6 +6386,7 @@ class GraphBuilder:
         if self._pending_source_result_links:
             tests_by_file: dict[str, list[GraphNode]] = {}
             tests_by_file_line: dict[tuple[str, int], GraphNode] = {}
+            tests_by_file_name: dict[tuple[str, str], list[GraphNode]] = {}
             extents_by_file: dict[str, list[GraphNode]] = {}
             for candidate in self._nodes.values():
                 if candidate.kind is not NodeKind.TEST:
@@ -6387,6 +6399,9 @@ class GraphBuilder:
                 pl = candidate.get_field("parse_line")
                 if pl:
                     tests_by_file_line[(rel, pl)] = candidate
+                full_name = candidate.get_field("test_name")
+                if full_name:
+                    tests_by_file_name.setdefault((rel, full_name), []).append(candidate)
                 if candidate.get_field("function_end_line"):
                     extents_by_file.setdefault(rel, []).append(candidate)
             for (
@@ -6413,6 +6428,24 @@ class GraphBuilder:
                     # Attempt 2: root fallback for testWidgets() whose test.line
                     # is a framework wrapper line (REQ-d00254-G).
                     target = tests_by_file_line.get((root_file or source_file, root_line))
+                if line is None and root_line is None:
+                    # Implements: REQ-d00284-B+C+E+F
+                    # Attempt 3: a result that records no line names its test
+                    # by its full name. It binds at test scope only where
+                    # exactly one TEST in its file carries that name.
+                    # Otherwise it binds through its file alone and credits
+                    # nothing. Where the scan reads the names of the file's
+                    # tests, the result records what its name picked out, so
+                    # the report can say whether it was no test or several,
+                    # even where no test in the file has a full name.
+                    named = tests_by_file_name.get(
+                        (source_file, result_node.get_field("name") or ""), []
+                    )
+                    if len(named) == 1:
+                        target = named[0]
+                    elif tests_by_file.get(source_file) and reads_test_names(source_file):
+                        result_node.set_field("name_match", "ambiguous" if named else "unmatched")
+                        result_node.set_field("name_candidates", sorted(t.id for t in named))
                 if target is not None:
                     target.link(result_node, EdgeKind.YIELDS)
                     result_node.set_field("match_scope", "test")

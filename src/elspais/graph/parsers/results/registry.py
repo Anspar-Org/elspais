@@ -105,7 +105,9 @@ def _register_builtins() -> None:
                 "stdout. Carries the file and line where each test is declared, and the file "
                 'that executed it, so `match = "source"` binds each result to its test, '
                 "including a test declared in a shared file that a runner file executes. "
-                "Each result also carries its duration and the output its test printed."
+                "A test run in a browser records no Dart line, so its result binds by the "
+                "test's full name. Each result also carries its duration and the output its "
+                "test printed."
             ),
         )
     )
