@@ -4767,12 +4767,32 @@ def check_file_bound_results(
 
     bound = iter_file_bound_results(graph)
     repo_names = {entry.namespace: entry.name for entry in graph.iter_repos()}
+
+    # Implements: REQ-d00284-C
+    # A result that recorded no line was tried by its test's full name. Where
+    # that name picked out no test or several, the finding says which, because
+    # a recorded line is not something every runner can give.
+    def _by_name(result_ids: tuple[str, ...]) -> str:
+        outcomes = [
+            node.get_field("name_match")
+            for node in (graph.find_by_id(rid) for rid in result_ids)
+            if node is not None
+        ]
+        unmatched = outcomes.count("unmatched")
+        ambiguous = outcomes.count("ambiguous")
+        if not unmatched and not ambiguous:
+            return ""
+        return (
+            f"; by name, {unmatched} matched no test and {ambiguous} matched more than "
+            "one, so give each test a unique literal name"
+        )
+
     findings = [
         HealthFinding(
             message=(
                 f"{len(r.result_ids)} result(s) in {r.artifact} name only the file holding "
                 f"{len(r.tests)} test(s), not the test that produced them, so they credit no "
-                "assertion; record each test's source line in the results"
+                "assertion; record each test's source line in the results" + _by_name(r.result_ids)
             ),
             node_id=r.result_ids[0],
             file_path=r.result_file,

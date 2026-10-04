@@ -260,7 +260,7 @@ under that base credits nothing.
 | `coverage-json` | file | coverage | Parses the JSON report `coverage json` (coverage.py) writes, in either its aggregate or its per-context form, into per-file line coverage. |
 | `coverage-sqlite` | file | coverage | Reads coverage.py's own `.coverage` SQLite data file through coverage.py's public API, so per-test contexts are read compactly rather than through a JSON expansion of them. Needs the `coverage` package (`elspais[coverage]`) importable, and degrades to unattributed coverage where it is not. |
 | `evidence-snapshot` | file | results | Reads the `results.jsonl` of an Evidence Snapshot. A build reads it for each target that has not run in the tree and that the run does not execute, from the directory `[scanning.test] evidence` names, tagging those results carried. |
-| `flutter-machine` | stdout | results | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the file and line where each test is declared, and the file that executed it, so `match = "source"` binds each result to its test, including a test declared in a shared file that a runner file executes. Each result also carries its duration and the output its test printed. |
+| `flutter-machine` | stdout | results | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the file and line where each test is declared, and the file that executed it, so `match = "source"` binds each result to its test, including a test declared in a shared file that a runner file executes. A test run in a browser records no Dart line, so its result binds by the test's full name. Each result also carries its duration and the output its test printed. |
 | `junit` | file | results | Parses JUnit XML result files matched by the `results` glob. Honours an optional per-`<testcase>` `file` attribute (a real source path) and `line` attribute, so `match = "source"` can bind to a scanned test node. |
 | `lcov` | file | coverage | Parses an LCOV report -- the `lcov.info` that `flutter test --coverage` and most language toolchains write -- into per-file line coverage. |
 | `pytest-json` | file | results | Parses the report pytest's `--json-report` writes, matched by the `results` glob. |
@@ -305,6 +305,20 @@ file and line of the declaration (`test.url`, `test.line`) and the runner
 where its `Verifies:` citations are. Each runner's run is a result of that one
 test. The test passes only if every run passed. A failure names the runner
 that produced it, as `(run by <runner file>)`.
+
+A result that records no source line binds by its test's full name instead.
+The full name is the descriptions of the `group()` calls that enclose the test
+and the test's own description, in order, joined by single spaces -- the name
+the Dart runner records. A test run in a browser (`flutter test --platform
+chrome`) needs this: its runner reports a line of the compiled JavaScript,
+which is no line of the Dart file, so elspais keeps only the suite file and
+the name. elspais knows a description only where the source writes it as
+string literals (adjacent literals join, as in Dart). A description that
+interpolates a value (`'adds $count items'`), or that is not a literal at all,
+leaves the test with no full name. A result whose name matches no test, or
+matches more than one test in its file, is linked to its file only and credits
+nothing; `tests.file_bound_results` reports it, saying whether its name matched
+no test or several. A recorded line is never overridden by a name.
 
 The `junit` reporter also supports `match = "source"` when the JUnit XML
 carries a per-`<testcase>` `file` attribute naming the test's real source path
@@ -590,7 +604,8 @@ crediting it would credit the assertions of tests that possibly did not run.
 finding per artifact holding them, naming the tests they could have bound to,
 and `elspais summary` states their number beside its coverage figures. A
 producer that records each test's source line removes the condition; for
-Playwright, use the reporter below.
+Playwright, use the reporter below. For a Dart test run in a browser, which
+records no source line, give each test a unique literal name.
 
 ### A reporter that names each test's source
 

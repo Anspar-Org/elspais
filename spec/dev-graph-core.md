@@ -593,7 +593,7 @@ E. A reporter registry SHALL map each `reporter` format name to a parser and an 
 
 F. For each configured target, the system SHALL obtain the reporter's output (captured from the command's stdout for stdout-channel reporters, or read from the `results` glob for file-channel reporters), build RESULT nodes carrying the real test-file path (`source_file`, repo-relative) and the target's `match` mode, and ingest the target's `coverage` file. Coverage crediting SHALL be derived from the targets' `credit_coverage`/`min_coverage_fraction`. File-channel results SHALL additionally record where each result was recorded — the results artifact's repo-relative path and, when derivable from the artifact (e.g. one JUnit `<testcase>` per line), the per-result line — as provenance distinct from the test's source path, and result links in reporting surfaces SHALL point at that artifact location.
 
-G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step reference (in the configured reference form) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the file and line at which the result's test is declared to the specific test node at that `(path, line)`. A result that binds at neither scope SHALL credit nothing. `aggregate` SHALL derive the per-app green/red signal, which informs the line-coverage dimension only.
+G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step reference (in the configured reference form) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the file and line at which the result's test is declared to the specific test node at that `(path, line)`, or, where the result records no usable line, resolving its recorded name as REQ-d00284 states. A result that binds at neither scope SHALL credit nothing. `aggregate` SHALL derive the per-app green/red signal, which informs the line-coverage dimension only.
 
 H. `elspais checks --run-tests` SHALL accept a `--targets` selector naming a subset of `[[scanning.test.targets]]` to execute; an unknown target name SHALL be an error, and an absent selector SHALL execute the targets a run executes when no selection is made (REQ-d00283). The same `--targets` flag on `summary`/`trace` SHALL mark provenance without executing anything.
 
@@ -663,6 +663,8 @@ Z places a result where its citations are. A project that runs one scenario agai
 
 ### Changelog
 
+- 2026-10-03 | 6efe844f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-03 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a result that records no usable line binds at test scope by its recorded name (G)
 - 2026-10-02 | ec793007 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the result record and the attribution record with Defined Terms (A, E, J, M, N)
 - 2026-10-02 | b9bda3b5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -705,7 +707,7 @@ Z places a result where its citations are. A project that runs one scenario agai
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: ec793007
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 6efe844f
 
 ---
 
@@ -1272,6 +1274,16 @@ B. A result SHALL be matched to a test only where its name picks out exactly one
 
 C. A result matched to no test SHALL be reported, saying whether its name picked out no test or more than one.
 
+D. A location that a reporter records SHALL be read as the place where a test is declared only where that location names a source file of a kind that the tool scans for tests.
+
+E. Where a result records no usable line at which its test is declared, the system SHALL bind that result to the test in its source file whose full name is equal to the name that the result records.
+
+F. Where a result records a usable line at which its test is declared, the system SHALL resolve that result at test scope by that line alone.
+
+G. The full name of a test SHALL be the descriptions of the groups that enclose that test and the description of that test, in order, separated by single spaces.
+
+H. Where the tool cannot read as literal text the description of a test or of any group that encloses that test, or cannot tell which groups enclose that test, that test SHALL have no full name.
+
 ### Rationale
 
 When a results file names the test's source file there is nothing to work out. When it does not, all the tool has is a name -- `epistaxis-diary.spec.ts`, say, or `tests.test_login` -- and what that name refers to depends entirely on the tool that wrote it. The tool currently assumes a Python module path. That is right for one producer and wrong for every other, and it fails quietly: the name matches no test, the result is dropped, and the coverage figure that follows reads zero. Accurate about what the tool could read, and misleading about what was actually run.
@@ -1282,7 +1294,15 @@ B keeps the match strict. The tests it looks among are the ones scanned for that
 
 C makes the failure visible. A result matching nothing is not an error where it happens, so without C nothing mentions it and the only sign is a coverage figure lower than expected. Saying whether the name matched nothing or matched several tells an author which problem they have: a name pointing at a file that is not there, or two files sharing one name.
 
-*End* *How a Result Names Its Test* | **Hash**: 7baae0b0
+D, E and F cover a producer that records a location which is not a source line. A Dart test run in a browser executes a compiled script, and the runner records a line of that script, which is no line of the Dart file. Reading that line against the Dart file binds the result to whichever test happens to start there. D refuses such a location, so the result keeps only its source file and its name.
+
+G defines the full name as the Dart runner records it, so the name a result carries and the name the scan reads can be compared. H follows from where a name is decided: the tool knows a description only where the source writes it as a literal, because an interpolated description is decided when the test runs. A test whose enclosing groups cannot be told is in the same position. A test with any part of its name unknown has no full name, so no result binds to it by name. A name that picks out no test or several leaves the result bound only through its file, so it credits nothing and is reported as a result naming no test (REQ-d00274-I); C has that report say which of the two happened. F keeps a name from overriding a line at test scope, because a line is the stronger identity and two tests can share a name. It leaves step scope alone: a result naming a journey step binds to that step's tests first (REQ-d00254-G).
+
+### Changelog
+
+- 2026-10-03 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a recorded location is a declaration only where it names a scanned source file, and a result recording no usable line binds by its test's full name (D, E, F, G, H)
+
+*End* *How a Result Names Its Test* | **Hash**: f814df89
 
 ## REQ-d00294: Each Result Record Is a Result of Its Own
 
