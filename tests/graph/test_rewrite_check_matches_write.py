@@ -317,7 +317,7 @@ def _changelog_rows(text: str) -> list[str]:
     return [ln for ln in block.splitlines() if ln.startswith("- 2")]
 
 
-# Verifies: REQ-d00132-N
+# Verifies: REQ-p00004-A
 @pytest.mark.parametrize(
     ("level", "assertion", "rows_added"),
     [

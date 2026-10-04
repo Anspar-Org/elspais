@@ -44,6 +44,8 @@ All notable changes to elspais will be documented in this file.
 
 ### TOOL-140
 
+- A requirement whose `*End*` marker carries no hash is now reported by `spec.needs_rewrite`, and `elspais fix` writes the hash, also where `require_hash = false`. A project upgrading sees this once, until it runs `elspais fix`.
+
 #### Fixed
 
 - **`trace --body` prints each requirement's body (REQ-d00084-C)** -- the option read a field no requirement holds, so every body came out empty in every format. The body is now the requirement's text as `get_requirement` presents it.
