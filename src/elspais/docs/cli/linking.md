@@ -368,6 +368,7 @@ before an *Assertion* label, `+` between labels), and the repository holds
 | `# Implements: REQ-d00099` | unknown_requirement | — |
 | `# Implements: REQ-d00001-Z` | unknown_assertion | — |
 | `# Implements: REQ-d00001, REQ-d00001` | forbidden | `E_DUPLICATE_ITEM` (both instances) |
+| `# Implements: REQ-d00001-A+B, REQ-d00001-B` | forbidden | `E_DUPLICATE_ITEM` (both items: each names `B`) |
 | `# Refines: REQ-d00001` (in a code file) | forbidden | — |
 | `# Implements: req-d00001` | — | binds; `E_NON_CANONICAL_SPELLING` `E_WRONG_CASE` |
 | `# Implements: REQ-d1` | — | binds; `E_NON_CANONICAL_SPELLING` `E_WRONG_PADDING` |

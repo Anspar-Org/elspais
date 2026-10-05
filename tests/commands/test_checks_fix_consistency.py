@@ -53,7 +53,7 @@ def _write_reqs(project: Path, hashes: dict[str, str], changelogs: dict[str, str
         f"""\
 # REQ-p00001: First Requirement
 
-**Level**: PRD | **Status**: Active
+**Level**: prd | **Status**: Active | **Implements**: -
 
 ## Assertions
 
@@ -66,7 +66,7 @@ B. The system SHALL do the second thing.
 
 # REQ-p00002: Second Requirement
 
-**Level**: PRD | **Status**: Active
+**Level**: prd | **Status**: Active | **Implements**: -
 
 ## Assertions
 

@@ -268,14 +268,23 @@ _DESCRIPTIONS: dict[str, str] = {
     "spec.satisfies_resolve": "All Satisfies: references resolve",
     "spec.needs_rewrite": (
         "Flags requirements, journeys and file-level prose that will be rewritten on next save "
-        "(duplicate refs, stale hash, spacing, term forms)"
+        "(duplicate refs, stale hash, spacing, term forms, and any other text a write "
+        "puts in canonical form)"
     ),
     "spec.unfixable_issues": "Issues `elspais fix` cannot repair, so a person has to",
     "spec.undefined_levels": (
         "No requirement carries a level the configuration does not define (such a requirement is "
         "still counted and grouped, so this discloses it rather than dropping it)"
     ),
-    "spec.hierarchy_levels": "Requirements follow hierarchy rules",
+    "spec.hierarchy_levels": (
+        "A requirement's declared parent sits at a level its own level's `implements` list "
+        "includes, judged where the configuration defines both levels"
+    ),
+    "spec.hierarchy_undefined_levels": (
+        "A requirement's declared parent relationship involves a level the configuration does "
+        "not define, so no `implements` rule speaks to it; declare the level under `[levels]` or "
+        "correct the level the requirement carries"
+    ),
     "spec.structural_orphans": "No nodes without a FILE ancestor (build bugs)",
     "spec.format_rules": "Requirements satisfy the enabled `[rules.format]` rules",
     "spec.hash_integrity": (
@@ -514,7 +523,8 @@ def _registry() -> dict[str, CheckRule]:
         _general("spec.needs_rewrite", "spec", Severity.WARNING),
         _general("spec.unfixable_issues", "spec", Severity.ERROR),
         _general("spec.undefined_levels", "spec", Severity.INFO),
-        _general("spec.hierarchy_levels", "spec", Severity.WARNING),
+        _general("spec.hierarchy_levels", "spec", Severity.INFO),
+        _general("spec.hierarchy_undefined_levels", "spec", Severity.WARNING),
         _general("spec.structural_orphans", "spec", Severity.ERROR),
         _general("spec.format_rules", "spec", Severity.ERROR),
         _general("spec.hash_integrity", "spec", Severity.WARNING),

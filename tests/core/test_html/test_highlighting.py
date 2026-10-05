@@ -8,7 +8,11 @@ Validates:
 from __future__ import annotations
 
 import html as _html
+import importlib
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
+from types import ModuleType
 from unittest.mock import patch
 
 import pytest
@@ -18,6 +22,24 @@ from elspais.html.highlighting import (
     get_pygments_css,
     highlight_file_content,
 )
+
+
+@contextmanager
+def _highlighting_without(*hidden: str) -> Iterator[ModuleType]:
+    """Yield the highlighting module reloaded with the named modules unimportable.
+
+    The restoring reload runs after ``patch.dict`` has put ``sys.modules`` back,
+    and runs whether or not the body raised, so no later test sees the module
+    as it was while the named modules were hidden.
+    """
+    import elspais.html.highlighting as mod
+
+    try:
+        with patch.dict("sys.modules", dict.fromkeys(hidden)):
+            importlib.reload(mod)
+            yield mod
+    finally:
+        importlib.reload(mod)
 
 
 class TestHighlightFileContent:
@@ -106,46 +128,18 @@ class TestHighlightFileContentFallback:
     # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_fallback_without_pygments(self):
         """When Pygments is unavailable, falls back to HTML-escaped text."""
-        with patch.dict("sys.modules", {"pygments": None}):
-            # Force re-import behavior by patching the import inside the function
-            import importlib
-
-            import elspais.html.highlighting as mod
-
-            importlib.reload(mod)
-
+        with _highlighting_without("pygments") as mod:
             result = mod.highlight_file_content("test.py", "<script>alert(1)</script>\n")
             assert result["language"] == "text"
             assert "&lt;script&gt;" in result["lines"][0]
 
-            # Restore module
-            importlib.reload(mod)
-
     # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_fallback_escapes_html_entities(self):
         """Fallback properly escapes HTML special characters."""
-        with (
-            patch(
-                "elspais.html.highlighting.pygments_highlight",
-                side_effect=ImportError("mocked"),
-            )
-            if False
-            else patch.dict(
-                "sys.modules",
-                {"pygments": None, "pygments.formatters": None, "pygments.lexers": None},
-            )
-        ):
-            import importlib
-
-            import elspais.html.highlighting as mod
-
-            importlib.reload(mod)
-
+        with _highlighting_without("pygments", "pygments.formatters", "pygments.lexers") as mod:
             result = mod.highlight_file_content("test.html", "<div>&amp;</div>\n")
             assert "&lt;div&gt;" in result["lines"][0]
             assert "&amp;amp;" in result["lines"][0]
-
-            importlib.reload(mod)
 
 
 class TestGetPygmentsCss:
@@ -180,20 +174,9 @@ class TestGetPygmentsCss:
     # Verifies: REQ-p00006-A
     def test_REQ_p00006_A_returns_empty_without_pygments(self):
         """Returns empty string when Pygments is unavailable."""
-        with patch.dict(
-            "sys.modules",
-            {"pygments": None, "pygments.formatters": None},
-        ):
-            import importlib
-
-            import elspais.html.highlighting as mod
-
-            importlib.reload(mod)
-
+        with _highlighting_without("pygments", "pygments.formatters") as mod:
             css = mod.get_pygments_css()
             assert css == ""
-
-            importlib.reload(mod)
 
 
 class TestMaxFileSize:

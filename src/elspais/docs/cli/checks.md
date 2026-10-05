@@ -155,10 +155,11 @@ documentation says about it.
 | `spec.implements_resolve` | All Implements: references resolve | warning | `[rules.severity]` | `elspais unresolved` |
 | `spec.refines_resolve` | All Refines: references resolve | warning | `[rules.severity]` | `elspais unresolved` |
 | `spec.satisfies_resolve` | All Satisfies: references resolve | warning | `[rules.severity]` | `elspais unresolved` |
-| `spec.needs_rewrite` | Flags requirements, journeys and file-level prose that will be rewritten on next save (duplicate refs, stale hash, spacing, term forms) | warning | `[rules.severity]` | `elspais fix` |
+| `spec.needs_rewrite` | Flags requirements, journeys and file-level prose that will be rewritten on next save (duplicate refs, stale hash, spacing, term forms, and any other text a write puts in canonical form) | warning | `[rules.severity]` | `elspais fix` |
 | `spec.unfixable_issues` | Issues `elspais fix` cannot repair, so a person has to | error | `[rules.severity]` | `elspais errors` |
 | `spec.undefined_levels` | No requirement carries a level the configuration does not define (such a requirement is still counted and grouped, so this discloses it rather than dropping it) | info | `[rules.severity]` | no command resolves this; resolve it by hand |
-| `spec.hierarchy_levels` | Requirements follow hierarchy rules | warning | `[rules.severity]` | `elspais -v checks --spec` |
+| `spec.hierarchy_levels` | A requirement's declared parent sits at a level its own level's `implements` list includes, judged where the configuration defines both levels | info | `[rules.severity]` | `elspais -v checks --spec` |
+| `spec.hierarchy_undefined_levels` | A requirement's declared parent relationship involves a level the configuration does not define, so no `implements` rule speaks to it; declare the level under `[levels]` or correct the level the requirement carries | warning | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `spec.structural_orphans` | No nodes without a FILE ancestor (build bugs) | error | `[rules.severity]` | `elspais -v checks --spec` |
 | `spec.format_rules` | Requirements satisfy the enabled `[rules.format]` rules | error | `[rules.severity]` | `elspais errors` |
 | `spec.hash_integrity` | Flags Satisfies-linked requirements for review when their template hash is stale | warning | `[rules.severity]` | `elspais fix` |
@@ -244,7 +245,10 @@ current graph. Reports missing IDs, extra IDs, or both.
 Flags each part of a spec file that is not in canonical form on disk:
 requirements (duplicate references, stale hashes, spacing, section header
 depth, term forms), and journeys and sections of file-level prose (term
-forms). `elspais fix` writes them in canonical form. A save of pending
+forms). It also flags any part whose text on disk differs from what a write
+of its file would put there, such as a level spelled in another case, an
+empty `Implements` field left out, or the spacing between parts; these carry
+the reason `canonical_form`. `elspais fix` writes them in canonical form. A save of pending
 changes from the viewer or by an agent also writes a flagged part in
 canonical form when it writes the file holding it, and names the part in its
 `changed_beyond_edits` result. The one exception is a change that would move

@@ -4,6 +4,62 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-75
+
+- **Breaking: `[validation] strict_hierarchy` is withdrawn; `spec.hierarchy_levels` takes its severity from `[rules.severity]` (REQ-d00212-P+X, REQ-d00285-D+E)** -- the boolean decided both the severity of a hierarchy deviation and whether it counted against the run, outside the one severity setting every other check reads. A configuration that still carries it is refused when it is read, naming what to write instead: `strict_hierarchy = false` becomes `"spec.hierarchy_levels" = "info"` under `[rules.severity]`, or the line is deleted, since `info` is the default; `strict_hierarchy = true` becomes `"spec.hierarchy_levels" = "warning"`. `off` withholds the check, `warning` fails a non-lenient `checks` run (so a project moving from `true` to `"warning"` still has its gate trip), and `error` fails every run, lenient or not. A project that never wrote the setting sees no change: deviations are listed at `info`.
+
+- **A parent relationship involving a level the configuration does not define is reported by its own check, `spec.hierarchy_undefined_levels` (REQ-d00281-F+G)** -- no `implements` rule speaks to such a relationship, so it is no longer judged as a hierarchy violation. `spec.hierarchy_levels` now judges only relationships between two defined levels, and the new check reports the rest at `warning`, naming the requirement, the undefined level and the file whose `[levels]` table declares the levels; a requirement with no `Level` line is named as declaring no level. It takes its own `[rules.severity]` key, so silencing `spec.hierarchy_levels` no longer silences it. A project that wants the former quiet behaviour writes `"spec.hierarchy_undefined_levels" = "info"` (or `"off"`) under `[rules.severity]`.
+
+- **A `Satisfies:` instance is no longer reported as a hierarchy deviation (REQ-p00061-A)** -- `spec.hierarchy_levels` compared a requirement's level against every requirement it was linked from, so the copy of a template that `Satisfies:` places under a lower-level requirement was listed as a deviation of that template. A parent is declared with `Implements:` or `Refines:`, and the check now reads those relationships alone.
+
+### TOOL-139
+
+- **A citation of an Assertion is reported as unresolved as soon as the Assertion is retired (REQ-p00017-H)** -- retiring an Assertion through a mutation, by deleting it from an Active requirement or by giving it the `<RETIRED>` text, excluded it from coverage at once, but each citation of it stayed bound and was listed as unresolved only after the next rebuild. Coverage and the unresolved-reference listing disagreed in the meantime. The mutation now leaves the graph as a build of the saved text does: every citation of the Assertion, in a spec, journey, code or test file and in any member of a federation, is reported as unresolved by `unresolved`, `checks`, MCP `get_unresolved_references` and the viewer, and a citing requirement still renders it. Giving a retired Assertion its text back binds its citations again, and undo restores what each mutation changed.
+
+- **A citation the mutation could not see is reported too (REQ-p00017-H, REQ-d00274-H)** -- a test citation that binds to no test produces no relationship, so retiring the Assertion it names left it unreported until a rebuild. It is now reported at once, as a build reports it.
+
+- **Retiring a template Assertion reaches its `Satisfies:` copies (REQ-p00017-H, REQ-p00014-B)** -- a copy of the Assertion made by a `Satisfies:` kept its former text until a rebuild, so it stayed in coverage. It now takes the retired text at once. A copy that a `Satisfies:` naming the Assertion itself made is withdrawn, and that `Satisfies:` is reported as unresolved. Undo restores every copy.
+
+- **Giving a retired template Assertion its text back makes its `Satisfies:` copy again (REQ-p00017-H, REQ-p00014-B)** -- a `Satisfies:` naming the Assertion gets the copy a build gives it. Every `Satisfies:` copy, made by a build or by a mutation, is now made in one place.
+
+- **An unbound test citation of another repository's identifier credits nothing (REQ-d00274-H)** -- a test citation that binds to no test was linked as a real relationship when its target lived in another repository of a federation, so the Assertion read as Tested on evidence no test produced. It now links nothing, as in the citation's own repository; `elspais checks` still reports it as unbound, and it is reported as unresolved only where its target is missing or retired.
+
+- **A requirement satisfying a single Assertion is hashed over its own Assertions alone (REQ-d00131-S)** -- for a requirement with an Assertion-level `Satisfies:`, the hash computed outside the renderer counted the copy of the satisfied Assertion as one of its own. The hash held in memory after an edit, and the hash a save recorded in the changelog row it added, therefore differed from the hash the file's End marker carries and the next build reads. Every hash of a requirement now covers its own Assertions alone.
+
+- **Deleting a requirement that is not Active reports its citations (REQ-p00017-H, REQ-o00062-P)** -- the requirement is removed, and every citation of it or of one of its Assertions, in any member of a federation, is now reported as unresolved at once, as a build of the saved text reports it. A citing requirement left without a parent is a root, not an orphan. The requirement's sections and its `Satisfies:` copies leave with it, and so do the copies other requirements made of it. Undo restores all of it.
+
+### TOOL-133
+
+- **A rename respells the citations in code and test files that name the renamed identifier (REQ-p00017-B)** -- renaming a requirement, renaming an assertion, and the relabelling a deletion from a provisional or aspirational requirement makes now respell each `Implements:`/`Verifies:` comment that designates the renamed identifier, so it designates the same entity under its new identifier after the save. Multi-assertion items, continued lists and case or padding variants are respelled in canonical form; every other character of the comment is left as written. Citations whose keyword the file kind does not admit, and items that did not read, are left alone. Undo restores the comments.
+- **A respelled citation is read back before the mutation applies (REQ-p00017-O)** -- each respelled comment is read the way a build reads it, and unless it reads as the references it designated before under their new identifiers, the mutation is refused naming the file and line, and nothing changes.
+- **Deleting an assertion of a provisional requirement no longer refuses because a later assertion is cited from code or a test (REQ-p00017-M)** -- those citations are now carried to the new label. A citation of the deleted assertion itself, and an unresolved reference to a moving one, still refuse the deletion.
+- **A save never changes a line of a code or test file outside the citations it respelled (REQ-d00132-M)** -- a code or test file is now held line for line, empty lines included, and a test cited from more than one comment keeps each one; formerly writing such a file dropped every empty line and repeated a test's first citation over its later ones. A save that would change any other line, for instance because the file changed on disk after it was read, writes nothing and names the file and line.
+- **Deleting a Draft requirement no longer rewrites the files of the requirements it cited (REQ-d00132-I)** -- only the file that held it is written.
+- A citing file in an associate repository is part of the save like any other: with `federation.write_associates` false the save declines whole and keeps the work pending (REQ-d00253-G).
+- **Renaming a journey respells the `Verifies: JNY-...` items naming it or its steps (REQ-p00017-B)**, through the same read-back check.
+- **The list of test citations attached to no test follows a rename at once (REQ-p00017-B)** -- it names what the respelled comment reads as, the same answer a rebuild gives, and undo puts it back.
+- **A rename onto an identifier that an unresolved reference names is refused (REQ-p00017-P)** -- the refusal lists each such reference with its file and line; the rename would otherwise make it designate the renamed entity without anybody choosing that.
+- **An edge mutation whose source is a citation in a code or test file is refused (REQ-o00062-U)** -- `mutate_add_edge`, `mutate_delete_edge`, `mutate_change_edge_kind` and `mutate_change_edge_targets` changed the graph but never the file, so the next build read the old relationship back. The refusal says to edit the comment in the file instead.
+- **A code or test file with CRLF line endings, or with no final newline, saves back byte for byte (REQ-d00132-M)** -- the file's own line-ending convention and final-newline state are kept. A file mixing line endings is still refused rather than normalised.
+
+### TOOL-140
+
+- A requirement whose `*End*` marker carries no hash is now reported by `spec.needs_rewrite`, and `elspais fix` writes the hash, also where `require_hash = false`. A project upgrading sees this once, until it runs `elspais fix`.
+
+#### Fixed
+
+- **`trace --body` prints each requirement's body (REQ-d00084-C)** -- the option read a field no requirement holds, so every body came out empty in every format. The body is now the requirement's text as `get_requirement` presents it.
+
+- **The `full` trace preset states more than `standard` (REQ-d00084-E)** -- the two presets stated identical columns. `full` now adds `implements`, `hash` and `file` to the standard values; `-v` renders it with every detail flag, as before.
+
+- **`spec.needs_rewrite` reports every part a write would change (REQ-d00132-N)** -- the check reported only what the build itself had changed, so a level spelled in another case, a requirement with no `Implements` field, and the spacing before a part following a section were rewritten by the next save of their file, and named in its `changed_beyond_edits`, without the check having said so. A build now compares each part of a spec or journey file with what a write would put there and marks each difference with the reason `canonical_form`; the check reports it and `elspais fix` writes it, without a changelog entry. A project upgrading sees these parts reported once; running `elspais fix` writes them and clears the warning.
+
+- **A requirement's parts are written one blank line apart** -- the renderer wrote two blank lines before a part following a section, and none before the `*End*` marker of a requirement ending in a part with no heading, so neither could ever be in canonical form.
+
+- **`elspais fix REQ-x` adds no changelog entry for a formatting-only fix** -- as the fix of every requirement already did; a fix that changes only how a requirement is written changes nothing it says.
+
+- **A reference list naming one Assertion twice reports every instance, also inside a multi-assertion item (REQ-d00272-K)** -- a repeat was detected only between items spelled alike, so `REQ-d00001-A+B, REQ-d00001-B` and `REQ-d00001-A+B+A` each created their relationships unreported. Each item is now read as the targets it names, and every item naming a repeated target is reported and binds nothing.
+
 ### TOOL-123
 
 #### Fixed

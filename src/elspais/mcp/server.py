@@ -833,9 +833,14 @@ def _get_graph_status(
 
 def _has_dirty_terms(graph: FederatedGraph) -> bool:
     """Check if any definition_block REMAINDER nodes are dirty."""
+    from elspais.graph.render import CANONICAL_FORM_REASON
+
     for node in graph.nodes_by_kind(NodeKind.REMAINDER):
         if node.get_field("content_type") == "definition_block":
-            if node.get_field("parse_dirty"):
+            # A definition written in a form only a write would change is
+            # not a term whose form the build changed.
+            reasons = node.get_field("parse_dirty_reasons") or []
+            if node.get_field("parse_dirty") and reasons != [CANONICAL_FORM_REASON]:
                 return True
     return False
 
@@ -7275,7 +7280,9 @@ def create_server(
         its identifier and takes the one status the project declares in the
         retired role. Where the project declares several or none, the call is
         refused; change the status yourself. A requirement in the retired role
-        is read-only and is refused.
+        is read-only and is refused. Any other requirement is removed with its
+        assertions and sections, and every citation of it or of one of its
+        assertions reads as unresolved.
 
         On success, returns the resulting `version` of the containing FILE —
         the surviving container that absorbed the change (REQ-o00062-K).
@@ -7357,10 +7364,11 @@ def create_server(
           stays allocated, no other label moves, and a citation of it keeps
           its text and reads as unresolved.
         - provisional or aspirational: the assertion is removed and each
-          later label moves down one place; citations from requirements and
-          journeys follow. Refused, naming the references, where the deleted
-          assertion is cited or a moved one is cited from code, a test or an
-          unresolved reference -- remove or retarget those first.
+          later label moves down one place; citations from requirements,
+          journeys, code and tests follow. Refused, naming the references,
+          where the deleted assertion is cited or a moved one is cited from an
+          unresolved reference -- remove or retarget those first -- and where
+          a respelled code or test citation would not read back as intended.
         - retired: refused; the requirement is read-only.
         On success, returns the parent requirement's resulting `version`
         (REQ-o00062-K).
@@ -7663,6 +7671,9 @@ def create_server(
 
         source_id is the child (the requirement doing the implementing/refining).
         target_id is the parent (the requirement being implemented/refined).
+        A source that is a citation in a code or test file is refused: its
+        relationships are the comment written in that file, so edit the
+        comment instead. The same holds for every edge mutation.
 
         Args:
             edge_kind: 'IMPLEMENTS' or 'REFINES'.

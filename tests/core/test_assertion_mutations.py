@@ -17,6 +17,7 @@ from elspais.graph.factory import build_graph
 from elspais.graph.GraphNode import NodeKind
 from elspais.graph.parsers import ParsedContent
 from elspais.graph.parsers.directives import RETIRED_ASSERTION_TEXT, assertion_is_retired
+from elspais.graph.reference_faults import FaultClass
 from elspais.graph.render import render_save
 from elspais.utilities.patterns import build_resolver
 from tests.core.graph_test_helpers import grammar_for
@@ -571,14 +572,15 @@ class TestDeleteAssertion:
             graph.delete_assertion("REQ-p00001")
 
     # Verifies: REQ-p00017-H
-    def test_REQ_p00017_H_delete_keeps_the_citation_of_the_label(self):
-        """A citation of the deleted assertion keeps naming its label; it is
-        not dropped and not widened to the whole requirement."""
+    def test_REQ_p00017_H_delete_leaves_the_citation_of_the_label_unresolved(self):
+        """A citation of the deleted assertion keeps naming its label but binds
+        nothing: it is reported unresolved at once, it is not dropped from the
+        citing requirement, and it is not widened to the whole requirement."""
         graph = build_graph_with_child_implementing_assertion()
 
         graph.delete_assertion("REQ-p00001-A")
 
-        assert _cited_labels(graph, "REQ-p00002", "REQ-p00001") == ["A"]
+        _assert_citation_reported_unresolved(graph, "REQ-p00002", "REQ-p00001", "A")
 
     # Verifies: REQ-o00062-E
     def test_delete_changes_hash(self):
@@ -1046,6 +1048,24 @@ def _cited_labels(graph, citing_id: str, cited_id: str) -> list[str]:
     )
 
 
+def _assert_citation_reported_unresolved(graph, citing_id: str, cited_id: str, label: str) -> None:
+    """*citing_id*'s Implements citation of retired *label* of *cited_id* is
+    unresolved, as a build of the retired text makes it.
+
+    No edge binds it to the label or to the requirement as a whole, the
+    citing requirement still carries the reference it wrote, it stands as a
+    root again, and the fault is listed as an unknown *Assertion*.
+    """
+    assertion_id = f"{cited_id}-{label}"
+    citing = graph.find_by_id(citing_id)
+    assert _cited_labels(graph, citing_id, cited_id) == []
+    assert not any(edge.source.id == cited_id for edge in citing.iter_incoming_edges())
+    assert assertion_id in (citing.get_field("implements_refs") or [])
+    assert graph.has_root(citing_id)
+    faults = {(f.source_id, f.target_id, f.fault_class) for f in graph.unresolved_references()}
+    assert (citing_id, assertion_id, FaultClass.UNKNOWN_ASSERTION) in faults
+
+
 class TestAMutationLeavesOtherRequirementsCitationsAlone:
     """Validates REQ-p00017-J."""
 
@@ -1335,7 +1355,7 @@ class TestDeletionUnderMultiCharacterLabels:
         for label in ("11", "12"):
             assert after[f"REQ-p00001-{label}"] == (label, f"The tool SHALL do thing {label}.")
         assert after["REQ-p00001-10"] == ("10", RETIRED_ASSERTION_TEXT)
-        assert _cited_labels(graph, "REQ-d00001", "REQ-p00001") == ["10"]
+        _assert_citation_reported_unresolved(graph, "REQ-d00001", "REQ-p00001", "10")
 
     # Verifies: REQ-p00017-A
     def test_REQ_p00017_A_saved_deletion_leaves_the_citation_unresolved(self, tmp_path: Path):

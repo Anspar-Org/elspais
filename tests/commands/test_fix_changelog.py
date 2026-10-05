@@ -258,7 +258,7 @@ class TestFixChangelog:
         active_req_correct_hash = f"""\
 # REQ-d00001: Test Req
 
-**Level**: DEV | **Status**: Active | **Implements**: -
+**Level**: dev | **Status**: Active | **Implements**: -
 
 ## Assertions
 

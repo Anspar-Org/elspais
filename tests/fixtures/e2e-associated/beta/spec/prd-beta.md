@@ -1,6 +1,6 @@
 # REQ-BET-p00001: Beta Compliance
 
-**Level**: PRD | **Status**: Active
+**Level**: prd | **Status**: Active | **Implements**: -
 
 ## Assertions
 

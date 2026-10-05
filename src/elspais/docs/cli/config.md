@@ -348,7 +348,6 @@ retired = ["Deprecated", "Superseded"]  # Excluded from everything
 hash_mode = "normalized-text"       # The only value; the hash covers Assertions alone
 # hash_algorithm = "sha256"         # Hash algorithm
 # hash_length = 8                   # Hash truncation length
-# strict_hierarchy = false          # Strict hierarchy validation
 ```
 
 ### [changelog] Section

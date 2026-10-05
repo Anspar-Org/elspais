@@ -544,7 +544,6 @@ class ValidationConfig(_StrictModel):
     hash_mode: Literal["normalized-text"] = "normalized-text"
     hash_algorithm: str = "sha256"
     hash_length: int = 8
-    strict_hierarchy: bool = False
 
     @field_validator("hash_mode", mode="before")
     @classmethod

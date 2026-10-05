@@ -12,10 +12,10 @@ OUTPUT FORMATS:
 - html: Basic styled HTML table
 - json: Full requirement data including body, assertions, hash, file_path
 
-REPORT PRESETS (--report):
-- minimal: ID, Title, Status only (quick overview)
-- standard: ID, Title, Level, Status, Implements (default)
-- full: All fields including Body, Assertions, Hash, Code/Test refs
+REPORT PRESETS (--preset):
+- minimal: ID, Title, Level, Status (quick overview)
+- standard: minimal's values and every coverage value (default)
+- full: standard's values, with Implements, Hash and File
 - evidence: standard's values, with each assertion's code and tests, and
   each test's outcome
 
@@ -132,6 +132,10 @@ REPORT_PRESETS = {
             "lcov_tested",
         ],
     ),
+    # Implements: REQ-d00084-E
+    # The widest default set: the standard values, with the identity values
+    # standard leaves out -- what each requirement implements, its hash and
+    # the file that declares it.
     "full": ReportPreset(
         name="full",
         values=[
@@ -139,6 +143,9 @@ REPORT_PRESETS = {
             "title",
             "level",
             "status",
+            "implements",
+            "hash",
+            "file",
             "implemented",
             "tested",
             "verified",
@@ -427,6 +434,7 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         ("uat_verified", "uat_verified"),
     ]
 
+    from elspais.graph.render import reconstruct_body_text
     from elspais.graph.serialize import serialize_requirement_summary
 
     data: dict = serialize_requirement_summary(
@@ -435,7 +443,10 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
             "implements": impl_ids,
             "hash": node.hash or "",
             "file": (node.file_node().get_field("relative_path") if node.file_node() else ""),
-            "body": node.get_field("body", "") or "",
+            # Implements: REQ-d00084-C
+            # A requirement holds its text in the parts it structures, so its
+            # body is read through the one reader that presents it.
+            "body": reconstruct_body_text(node),
             "assertions": assertions,
             "code_refs": code_refs,
             "test_refs": test_refs,

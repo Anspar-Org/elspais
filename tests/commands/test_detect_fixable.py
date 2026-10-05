@@ -45,7 +45,7 @@ directories = ["spec"]
 REQ_TEMPLATE = """\
 # REQ-d00001: Active Requirement
 
-**Level**: DEV | **Status**: Active | **Implements**: -
+**Level**: dev | **Status**: Active | **Implements**: -
 
 Some body text here.
 

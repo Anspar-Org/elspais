@@ -270,11 +270,11 @@ class TestHealthIntegration:
         req_file.write_text(
             """# REQ-p00001: Test Requirement
 
-**Level**: PRD | **Status**: Active
+**Level**: prd | **Status**: Active | **Implements**: -
 
 The system SHALL do something.
 
-*End* *Test Requirement* | **Hash**: 12345678
+*End* *Test Requirement* | **Hash**: N/A
 ---
 """
         )

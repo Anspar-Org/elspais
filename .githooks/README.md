@@ -41,7 +41,7 @@ be decided from the tree alone happens here, once per commit.
 | Unstaged changes | Refuses a partial commit of `src/` or `tests/` | - |
 | Python quality | `ruff check` and `ruff format --check` on `src/ tests/` | `ruff` |
 | Markdown linting | markdownlint on changed `.md` files | `markdownlint` |
-| Index regeneration | `elspais fix`, staging what it regenerates | `elspais` |
+| Index regeneration | `elspais fix`, staging every file it wrote; a file that already held unstaged edits is named and left unstaged | `elspais` |
 | Unit tests | `unit-verdict`, running `run-unit-tier` in parallel with per-test coverage, cached by tree hash; deferred on a checkpoint commit | `pytest`, `pytest-cov`, `pytest-xdist` |
 
 The index step resolves this tree's `elspais` rather than whichever one is on

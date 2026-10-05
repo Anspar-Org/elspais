@@ -577,7 +577,7 @@ Generate traceability matrix and reports.
 **Options:**
 
   `--format {text,markdown,html,json,csv}`  Output format (default: markdown)
-  `--preset {minimal,standard,full,evidence}` Named default value set; `evidence` adds each assertion's code and tests with outcomes
+  `--preset {minimal,standard,full,evidence}` Named default value set: `minimal` identity only, `standard` (default) adds every coverage value, `full` adds `implements`, `hash` and `file` to standard, `evidence` adds each assertion's code and tests with outcomes
   `--values KEY,KEY,...` State exactly these values, in this order. A coverage figure is also selectable as the numbers behind it -- `implemented.count`, `implemented.total`, `implemented.ratio` -- and `verified.carried` states whether the Passing verdict was carried from a baseline (see `elspais docs traceability`)
   `--body`               Show requirement body text
   `--assertions`         Show individual assertions

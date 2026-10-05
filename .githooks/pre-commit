@@ -8,7 +8,7 @@
 #   - Unstaged src/tests changes (prevents partial commits)
 #   - Python code quality (ruff: lint + format)
 #   - Markdown linting (markdownlint)
-#   - elspais fix (regenerate INDEX.md, KNOWN_ISSUES.md)
+#   - elspais fix (regenerate INDEX.md, hashes, spec/_generated), staging what it wrote
 #   - Unit/integration tests with coverage (last — most expensive), through
 #     .githooks/unit-verdict. ELSPAIS_CHECKPOINT=1 defers them to pre-push.
 #
@@ -244,7 +244,7 @@ if [ -n "$MARKDOWN_FILES_CHANGED" ]; then
 fi
 
 # =====================================================
-# 5. elspais fix (regenerate INDEX.md, KNOWN_ISSUES.md)
+# 5. elspais fix, staging what it wrote
 # =====================================================
 
 if command -v elspais &> /dev/null; then
@@ -266,11 +266,47 @@ if command -v elspais &> /dev/null; then
         exit 1
     fi
 
+    # What `elspais fix` writes -- spec/INDEX.md, hash footers and changelog
+    # lines in spec files, spec/_generated/* -- belongs in this commit, so it
+    # is staged here. The paths are read off the working tree rather than
+    # listed, because fix decides which files it rewrites. A path that already
+    # held unstaged edits before fix ran is left unstaged: staging it would
+    # also commit edits the author did not stage.
+    _unstaged_paths() {
+        git diff --name-only
+        git ls-files --others --exclude-standard
+    }
+    # Each unstaged path with the digest of its working-tree content, so a
+    # path fix rewrote can be told from one it left alone.
+    _unstaged_digests() {
+        _unstaged_paths | sort -u | while IFS= read -r _path; do
+            if [ -f "$_path" ]; then
+                printf '%s %s\n' "$(git hash-object -- "$_path")" "$_path"
+            else
+                printf 'absent %s\n' "$_path"
+            fi
+        done
+    }
+    _before_fix=$(_unstaged_paths | sort -u)
+    _before_digests=$(_unstaged_digests)
+
     echo -e "${BLUE}Running elspais fix...${NC}"
     if elspais fix 2>&1; then
-        # Stage any regenerated files (tolerated failure: paths may not exist yet)
-        if ! git add -u spec/INDEX.md KNOWN_ISSUES.md 2>/dev/null; then
-            echo -e "${YELLOW}  Note: no regenerated spec/INDEX.md or KNOWN_ISSUES.md to stage${NC}"
+        _after_fix=$(_unstaged_paths | sort -u)
+        _fix_wrote=$(comm -13 <(printf '%s\n' "$_before_fix") <(printf '%s\n' "$_after_fix") | sed '/^$/d')
+        # A path unstaged both before and after whose content fix changed.
+        _held_back=$(comm -13 <(printf '%s\n' "$_before_digests" | sort) <(_unstaged_digests | sort) \
+            | cut -d' ' -f2- | sort -u \
+            | comm -12 <(printf '%s\n' "$_before_fix") - | sed '/^$/d')
+        if [ -n "$_fix_wrote" ]; then
+            printf '%s\n' "$_fix_wrote" | while IFS= read -r _path; do
+                git add -- "$_path"
+                echo -e "  staged ${_path}"
+            done
+        fi
+        if [ -n "$_held_back" ]; then
+            echo -e "${YELLOW}  Not staged (held unstaged edits before elspais fix ran):${NC}"
+            printf '%s\n' "$_held_back" | sed 's/^/    /'
         fi
         echo -e "${GREEN}elspais fix passed${NC}"
     else
