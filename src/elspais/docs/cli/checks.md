@@ -310,15 +310,20 @@ that changes to cross-cutting requirements are propagated to their consumers.
 
 #### Results That Name No Test
 
-A result binds to a test in one of three ways. A result naming a journey step
+A result binds to a test in one of four ways. A result naming a journey step
 binds to the tests verifying that step. A result naming its test's source file
-and line binds to that test. A result whose file resolves and whose line
-matches no test binds to every test in the file, and so names none of them.
+and line binds to that test. A result that records no source line binds to the
+one test in its file whose full name equals the name it records (a Dart test
+run in a browser). Any other result whose file resolves -- one whose line
+matches no test, or one recording no line whose name picks out no test or
+several -- binds to every test in the file, and so names none of them.
 
 That last kind credits no assertion, because the tool cannot say which test
 produced it. `tests.file_bound_results` reports it: one finding per artifact
-holding such results, with the tests they could have bound to. The default
-severity is `warning`, set under `[rules.severity]`.
+holding such results, with the tests they could have bound to. Where results
+recorded no line, the finding also says how many names matched no test and how
+many matched several. The default severity is `warning`, set under
+`[rules.severity]`.
 
 The severity governs the finding alone. `elspais summary`, in every format,
 and the MCP project summary state the number of these results apart from the

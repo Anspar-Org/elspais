@@ -382,7 +382,9 @@ class FileDispatcher:
         from elspais.graph.parsers.prescan import (
             ast_prescan,
             dart_prescan,
+            dart_test_names,
             external_prescan,
+            reads_test_names,
             text_prescan,
         )
 
@@ -394,6 +396,11 @@ class FileDispatcher:
         # Pre-scan for function/class context
         is_python = file_path.endswith(".py")
         is_dart = file_path.endswith(".dart")
+
+        # Implements: REQ-d00284-E+G+H
+        # The name each test is known by, where the scan can read one. Only a
+        # Dart test needs it: its result may record no source line to bind by.
+        test_names: dict[int, str] = dart_test_names(lines) if reads_test_names(file_path) else {}
 
         # Implements: REQ-d00254-N
         if prescan_data and file_path in prescan_data:
@@ -417,6 +424,7 @@ class FileDispatcher:
             "test_ref",
             line_context=line_context,
             all_test_funcs=all_test_funcs,
+            test_names=test_names,
             source_id=file_path,
             reader=self._reader,
             quoted_lines=self._quoted_line_numbers(content, file_path),

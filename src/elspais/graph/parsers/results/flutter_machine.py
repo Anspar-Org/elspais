@@ -13,17 +13,20 @@ test's ``testStart`` and ``testDone`` events.
 ``test.url`` and ``test.line`` name the frame that called ``test()``, and
 ``suite.path`` names the file the runner executed. The two differ for a
 scenario declared in a shared file and executed through a runner file. The
-test's citations sit at the declaration. Consequently, a ``file:`` URL in
-``test.url`` gives ``source_path`` and ``line``, and ``suite.path`` gives
-``runner_path`` (REQ-d00254-Z).
+test's citations sit at the declaration. Consequently, a ``file:`` URL naming
+a Dart source file in ``test.url`` gives ``source_path`` and ``line``, and
+``suite.path`` gives ``runner_path`` (REQ-d00254-Z).
 
-For ``testWidgets(...)``, ``test.url`` names a frame inside
-``package:flutter_test``, which is no file of the project. The result record then
-takes ``source_path`` from ``suite.path`` and carries ``test.root_url`` /
-``test.root_line``, which name the call site in the suite's file. The builder
-tries ``(source_path, line)`` and falls back to ``(root_path, root_line)``. A
-result record that names its declaration carries no root location. Consequently,
-it never falls back to the runner file.
+Any other URL names no Dart source line (REQ-d00284-D). For ``testWidgets(...)``,
+``test.url`` names a frame inside ``package:flutter_test``; for a test run in a
+browser, it names the compiled JavaScript file and a line of that file. The
+result record then takes ``source_path`` from ``suite.path`` and no ``line``.
+Where ``test.root_url`` names a Dart source file, the record carries it and
+``test.root_line`` as the call site in the suite's file. The builder tries
+``(source_path, line)``, then ``(root_path, root_line)``, and binds a record
+carrying neither line by its test's full name (REQ-d00284-E). A result record
+that names its declaration carries no root location. Consequently, it never
+falls back to the runner file.
 
 ``test_id`` is always ``None``: which test a result belongs to is answered at
 graph-build time from the file and line, so nothing needs to be pre-baked.
@@ -52,6 +55,17 @@ def _file_url_path(url: Any) -> str | None:
     if isinstance(url, str) and url.startswith("file://"):
         return url2pathname(urlparse(url).path)
     return None
+
+
+# Implements: REQ-d00284-D
+def _dart_source_path(url: Any) -> str | None:
+    """The path a URL names where it is a Dart source file, else ``None``.
+
+    Only such a file holds the line a test is declared on. A compiled
+    ``.dart.js`` file, which a browser run reports, holds lines of no source.
+    """
+    path = _file_url_path(url)
+    return path if path is not None and path.endswith(".dart") else None
 
 
 # Implements: REQ-d00322-M
@@ -99,15 +113,23 @@ class FlutterMachineParser(DiagnosticRecorder):
                 suites[s.get("id")] = s.get("path", "")
             elif etype == "testStart":
                 t = ev.get("test", {})
-                # Implements: REQ-d00254-Z
-                declared_path = _file_url_path(t.get("url"))
+                # Implements: REQ-d00254-Z, REQ-d00284-D
+                # A URL that names no Dart source file -- a framework frame,
+                # or the compiled script a browser ran -- has a line of no
+                # source, so the record keeps no line from it. A stream
+                # recording no URL counts its line in the suite's file.
+                declared_path = _dart_source_path(t.get("url"))
+                line_counts = declared_path is not None or t.get("url") is None
+                root_url = t.get("root_url")
+                root_path = _dart_source_path(root_url)
+                root_counts = root_path is not None or root_url is None
                 tests[t.get("id")] = {
                     "name": t.get("name", ""),
                     "suiteID": t.get("suiteID"),
-                    "line": t.get("line"),
+                    "line": t.get("line") if line_counts else None,
                     "declared_path": declared_path,
-                    "root_line": None if declared_path else t.get("root_line"),
-                    "root_path": None if declared_path else _file_url_path(t.get("root_url")),
+                    "root_line": (None if declared_path or not root_counts else t.get("root_line")),
+                    "root_path": None if declared_path else root_path,
                     "started": ev.get("time"),
                 }
             # Implements: REQ-d00322-M

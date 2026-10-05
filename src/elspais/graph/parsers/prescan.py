@@ -1103,6 +1103,159 @@ def dart_prescan(
     return line_context, all_test_funcs
 
 
+# The escapes a Dart string literal resolves to one character.  ``\x``,
+# ``\u`` and ``\u{...}`` are read separately; any other escaped character
+# stands for itself.
+_DART_SIMPLE_ESCAPES = {"n": "\n", "r": "\r", "t": "\t", "b": "\b", "f": "\f", "v": "\v"}
+_DART_HEX = re.compile(r"[0-9A-Fa-f]+")
+
+
+def _dart_escape(text: str, i: int) -> tuple[str, int] | None:
+    """The character the escape at ``text[i]`` (just past the backslash) stands
+    for, and the index after it, or ``None`` for an escape that does not read."""
+    if i >= len(text):
+        return None
+    c = text[i]
+    if c in _DART_SIMPLE_ESCAPES:
+        return _DART_SIMPLE_ESCAPES[c], i + 1
+    if c == "x":
+        digits = text[i + 1 : i + 3]
+        if len(digits) == 2 and _DART_HEX.fullmatch(digits):
+            return chr(int(digits, 16)), i + 3
+        return None
+    if c == "u":
+        if text.startswith("{", i + 1):
+            close = text.find("}", i + 2)
+            digits = text[i + 2 : close] if close > 0 else ""
+            if digits and _DART_HEX.fullmatch(digits) and len(digits) <= 6:
+                return chr(int(digits, 16)), close + 1
+            return None
+        digits = text[i + 1 : i + 5]
+        if len(digits) == 4 and _DART_HEX.fullmatch(digits):
+            return chr(int(digits, 16)), i + 5
+        return None
+    return c, i + 1
+
+
+def _dart_literal(text: str, i: int) -> tuple[str, int] | None:
+    """Read one string literal starting at ``text[i]``.
+
+    Returns its value and the index after its closing quote, or ``None`` where
+    the literal interpolates a value, does not close, or does not start here.
+    """
+    raw = text.startswith("r", i)
+    if raw:
+        i += 1
+    quote = text[i : i + 3] if text[i : i + 3] in ("'''", '"""') else text[i : i + 1]
+    if quote not in ("'", '"', "'''", '"""'):
+        return None
+    i += len(quote)
+    if len(quote) == 3:
+        # A multi-line literal drops its first line where that line holds
+        # nothing but white space.
+        line_end = text.find("\n", i)
+        if line_end >= 0 and not text[i:line_end].strip(" \t\r"):
+            i = line_end + 1
+    value: list[str] = []
+    while i < len(text):
+        if text.startswith(quote, i):
+            return "".join(value), i + len(quote)
+        c = text[i]
+        if c == "\n" and len(quote) == 1:
+            return None
+        if not raw and c == "\\":
+            escaped = _dart_escape(text, i + 1)
+            if escaped is None:
+                return None
+            value.append(escaped[0])
+            i = escaped[1]
+            continue
+        if not raw and c == "$":
+            return None  # interpolation: the name is decided when the test runs
+        value.append(c)
+        i += 1
+    return None
+
+
+# Implements: REQ-d00284-H
+def _dart_description(text: str, i: int) -> str | None:
+    """The description a ``test(`` / ``group(`` call's first argument writes.
+
+    ``text[i]`` is just past the opening parenthesis, and the argument may run
+    over many lines.  The description is known only where the argument is one
+    or more adjacent string literals, which Dart joins into one string.
+    """
+    parts: list[str] = []
+    while True:
+        while i < len(text) and text[i] in " \t\r\n":
+            i += 1
+        if i < len(text) and text[i] in ",)" and parts:
+            return "".join(parts)
+        literal = _dart_literal(text, i)
+        if literal is None:
+            return None
+        parts.append(literal[0])
+        i = literal[1]
+
+
+# Implements: REQ-d00284-E
+def reads_test_names(path: str) -> bool:
+    """Whether the scan reads the full name of each test in the file at ``path``.
+
+    Only a Dart test file's names are read, because only a Dart runner may
+    record no source line for a result, leaving the name to bind it by.
+    """
+    return path.endswith(".dart")
+
+
+# Implements: REQ-d00284-G+H
+def dart_test_names(lines: list[tuple[int, str]]) -> dict[int, str]:
+    """Each Dart test's full name, keyed by the line its ``test(`` call starts on.
+
+    The full name is the descriptions of the groups that enclose the test and
+    its own description, in order, joined by single spaces: the name the Dart
+    test runner records for it.  A test has no full name where any of those
+    descriptions is not written as literals, or where a group above it has no
+    known extent, because then which groups enclose it is unknown.
+    """
+    joined = "\n".join(text for _ln, text in lines)
+    line_offsets: list[int] = []
+    offset = 0
+    for _ln, text in lines:
+        line_offsets.append(offset)
+        offset += len(text) + 1
+
+    def description(idx: int, match: re.Match) -> str | None:
+        return _dart_description(joined, line_offsets[idx] + match.end())
+
+    groups: list[tuple[int, int | None, str | None]] = []  # (start, end, description)
+    tests: list[tuple[int, str | None]] = []
+    for i, (ln, text) in enumerate(lines):
+        test = _DART_TEST.match(text)
+        if test:
+            tests.append((ln, description(i, test)))
+            continue
+        group = _DART_GROUP.match(text)
+        if group:
+            end, accurate = _match_brace_end(lines, i)
+            groups.append((ln, end if accurate else None, description(i, group)))
+
+    names: dict[int, str] = {}
+    for ln, own in tests:
+        parts: list[str | None] = []
+        for start, end, group_name in groups:
+            if start >= ln:
+                break
+            if end is None:
+                parts.append(None)
+            elif ln <= end:
+                parts.append(group_name)
+        parts.append(own)
+        if all(part is not None for part in parts):
+            names[ln] = " ".join(parts)  # type: ignore[arg-type]
+    return names
+
+
 # Implements: REQ-d00254-K, REQ-d00254-V
 def external_prescan(
     file_entries: list[dict],

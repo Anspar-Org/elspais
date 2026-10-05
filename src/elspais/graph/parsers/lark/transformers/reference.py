@@ -141,6 +141,8 @@ class ReferenceTransformer:
         content_type: Output content type -- "code_ref" or "test_ref".
         line_context: Pre-scan data mapping line_number -> (func_name, class_name, func_line).
         all_test_funcs: All test functions from pre-scan (for emitting unlinked tests).
+        test_names: Each test's full name, keyed by the line its declaration
+            starts on, where the pre-scan could read one.
         reader: Reads the identifiers of every repository in this
             federation, normalizing each under the grammar of the member
             that claims it.  Defaults to this repository alone.
@@ -161,6 +163,7 @@ class ReferenceTransformer:
         content_type: str,
         line_context: dict[int, tuple[str | None, str | None, int, int]] | None = None,
         all_test_funcs: list[tuple[int, str, str | None]] | None = None,
+        test_names: dict[int, str] | None = None,
         source_id: str = "",
         reader: FederatedIdReader | None = None,
         quoted_lines: set[int] | None = None,
@@ -174,6 +177,7 @@ class ReferenceTransformer:
         self.content_type = content_type
         self.line_context = line_context or {}
         self.all_test_funcs = all_test_funcs or []
+        self.test_names = test_names or {}
         self.source_id = source_id
         self.quoted_lines = quoted_lines or set()
         self.comment_markers: tuple[str, ...] = tuple(comment_markers)
@@ -344,6 +348,8 @@ class ReferenceTransformer:
                                 "function_name": func_name,
                                 "class_name": class_name,
                                 "function_line": func_line,
+                                # Implements: REQ-d00284-E
+                                "test_name": self.test_names.get(func_line),
                             },
                         )
                     )
@@ -511,6 +517,7 @@ class ReferenceTransformer:
                 "class_name": class_name,
                 "function_line": func_line,
                 "function_end_line": func_end_line,
+                "test_name": self.test_names.get(func_line),
                 "forbidden_keyword": keyword,
                 "forbidden": targets,
                 "reference_verdicts": verdicts,
@@ -599,6 +606,8 @@ class ReferenceTransformer:
                 "class_name": class_name,
                 "function_line": func_line,
                 "function_end_line": func_end_line,
+                # Implements: REQ-d00284-E
+                "test_name": self.test_names.get(func_line),
                 "reference_verdicts": verdicts,
                 # Implements: REQ-d00274-G, REQ-d00254-T
                 # A citation reaches a test only if the pre-scan found a test
