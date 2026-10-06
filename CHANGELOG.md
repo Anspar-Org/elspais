@@ -4,6 +4,10 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-110
+
+- **Results the current tree did not produce are marked in every report (REQ-d00323-F+G+H)** -- a target's results whose *Result Fingerprint* judgement is stale (no fingerprint, or an input changed since or during the run) are now carried on every run, not only after a `--targets` selection. `trace` marks the figure they make `(baseline)`, `summary` adds its `*` and the carried-target footnote (and `carried_result_targets` in json and csv) on any run holding them, `tests.results` states how many results are stale and names the reason beside each stale failure, the `tests.*` coverage checks say when a failure comes from stale results, and MCP result entries and the viewer's result rows carry the reason. A stale failure still fails: it is a failure the current tree has not run again, never a pass. A run whose results are all fresh renders as before.
+
 ### TOOL-75
 
 - **Breaking: `[validation] strict_hierarchy` is withdrawn; `spec.hierarchy_levels` takes its severity from `[rules.severity]` (REQ-d00212-P+X, REQ-d00285-D+E)** -- the boolean decided both the severity of a hierarchy deviation and whether it counted against the run, outside the one severity setting every other check reads. A configuration that still carries it is refused when it is read, naming what to write instead: `strict_hierarchy = false` becomes `"spec.hierarchy_levels" = "info"` under `[rules.severity]`, or the line is deleted, since `info` is the default; `strict_hierarchy = true` becomes `"spec.hierarchy_levels" = "warning"`. `off` withholds the check, `warning` fails a non-lenient `checks` run (so a project moving from `true` to `"warning"` still has its gate trip), and `error` fails every run, lenient or not. A project that never wrote the setting sees no change: deviations are listed at `info`.

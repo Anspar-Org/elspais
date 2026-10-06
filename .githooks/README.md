@@ -132,6 +132,95 @@ Re-running the rest would cost minutes per push to re-derive answers already
 in hand. If you are tempted to add a check here, first ask whether it belongs
 in pre-commit instead.
 
+## The test runner: tiers, artifacts and state
+
+This section is the review of how the test tiers, the artifacts they write
+and the checks that read those artifacts fit together. It lives here, beside
+the scripts it describes, because the runner is this repository's own tooling
+rather than part of the product: `docs/` and `src/elspais/docs/` describe
+elspais to its users, and nothing there would be read by the developer whose
+hook just failed.
+
+A tier must report the state of the tree it was asked about, and report it
+the same way twice. So every piece of state a tier keeps outside the tree is
+listed below with what happens when it is wrong: either the dependency is
+removed, or the runner says what is wrong and how to fix it. A dependency a
+developer has to remember is a defect in this list.
+
+### How each tier runs
+
+Each tier is a `[[scanning.test.targets]]` entry in `.elspais.toml`, and every
+way of running it from a terminal or a hook brackets the run with
+`with-fingerprint`. That script asks `elspais fingerprint start` to empty the
+target's output area under `.results/<target>/` and record a *Result
+Fingerprint* of the tree, runs the tier with `ELSPAIS_TARGET_OUTPUT` naming
+the area, and asks `elspais fingerprint finish` to note any input that
+changed while it ran.
+
+| Tier | Target | Run by | Writes into its output area |
+| --- | --- | --- | --- |
+| unit | `elspais-unit` | `unit-verdict` (pre-commit, pre-push), `make test`, CI's unit job | `junit.xml`, `.coverage` (per-test contexts), `coverage.json`, `.elspais-run.json` |
+| e2e | `elspais-e2e` | `e2e-verdict` (pre-push), `make test-e2e`, CI's e2e job | `junit-parallel.xml`, `junit-serial.xml`, the merged `junit.xml`, `.elspais-run.json` |
+| browser | `elspais-browser` | `make test-browser`, CI's browser job | `junit.xml`, `.elspais-run.json` |
+| stress | `elspais-stress` | `make test-stress`, CI's stress job | `junit.xml`, `.elspais-run.json` |
+
+CI runs the tier scripts or pytest directly, in a fresh container, so it
+keeps none of the state below between runs. `elspais checks --run-tests`
+runs a target's `command` with the same fingerprint bracket, and also writes
+`.results/.elspais-last-run.json`, naming the targets it executed.
+
+The hooks and the Makefile run a tier through `lib-tier-run.sh`, which keeps
+a state directory per target: `.results/run-unit`, `.results/run-e2e`, and
+`.results/run-<target>` for the others. It holds the run's `pid`, `key`,
+`log`, `rc` and the scripts that make up the run. A hook runs the tier
+detached, so a hook killed by its caller's timeout leaves the run going, and
+the next invocation attaches to it. `run-target`, which the Makefile calls,
+runs it in the foreground under the same guards.
+
+### Which check reads which artifact
+
+Every elspais build reads each target's output area: the results pattern
+(`junit.xml`) becomes RESULT nodes, the unit target's `.coverage` becomes line
+coverage, and the fingerprint decides whether those results are fresh.
+
+- `tests.results` counts the ingested results by status, and says how many
+  come from stale results.
+- `tests.results_stale` reports each target whose fingerprint judgement is
+  stale: no fingerprint, or an input changed since or during the run.
+- `tests.run_in_progress` reports a target whose fingerprint records a start
+  and no finish.
+- `tests.not_run` and `tests.ingestion_fault` report a target with no
+  results.
+- `tests.tested`, `tests.verified` and the other coverage checks, `summary`,
+  `trace`, MCP and the viewer read the RESULT nodes. A result whose target's
+  results are stale is carried: `trace` marks its figure `(baseline)`,
+  `summary` counts its target as carried, and a failure among them still
+  fails and says why its results are stale.
+- `--targets last-run` reads `.results/.elspais-last-run.json`.
+
+Two files belong to the hooks alone. `.results/.test-cache-unit` holds the
+tree a unit run passed for, and `.results/.test-cache-e2e` holds the tree and
+interpreter an e2e run passed for. Each verdict script honours its record for
+the same key and runs the tier otherwise. Nothing in elspais reads them, and
+`coverage.json` is read by nothing in this repository either.
+
+### State outside the tree, and what happens when it is wrong
+
+| Dependency | Tiers | Kept or removed | When it bites |
+| --- | --- | --- | --- |
+| Results an earlier run left in `.results/` | all | Removed as an input to a test: e2e tests work in private copies of a fixture or of this checkout, which carry no `.results/`, and no unit test reads the live checkout's output areas. Kept as an input to a report | A report marks results the current tree did not produce as carried, and `tests.results_stale` names why |
+| A cached verdict | unit, e2e | Kept, for passes only: a failed run removes the record, so a failure never decides what the next run says | The hook prints that the tree is cached as passed; `ELSPAIS_UNIT_FORCE=1` or `ELSPAIS_E2E_FORCE=1` runs it again |
+| A run in progress in the same worktree | all | Kept: starting a second run of one target empties the first one's output area | `lib-tier-run.sh` refuses, naming the run's pid and log. A recorded pid counts only while that process is running the recorded run, so a pid reused by an unrelated process reads as a run that ended |
+| Coverage shards (`.coverage.<host>.pid<N>.*`) | unit | Kept: pytest-cov writes one per process and combines them at the end | Before a run, `lib-tier-run.sh` removes every shard whose writer is not a live Python process, so a killed run's shard cannot fail the next run's teardowns |
+| This checkout's build | e2e, browser | Kept: the tiers spawn `elspais` | `tests/conftest.py` fails each e2e and browser test when the program it would spawn does not import elspais from this checkout, and `e2e-verdict` refuses to start under such an interpreter |
+| The venv first on `PATH` | e2e | Kept: a fixture's target shells out to a bare `python` | The hooks and `run-target` put `.venv/bin` first on `PATH`; run by hand without it, the build check above refuses |
+| The `mcp` extra | all | Kept | A session without it stops with a usage error naming `make setup`, unless `ELSPAIS_TEST_WITHOUT` names `mcp` |
+| The `browser` extra and chromium | e2e, browser | Kept | A session whose marker expression selects browser tests stops with a usage error naming `make setup`, unless `ELSPAIS_TEST_WITHOUT` names `browser`; `pytest -m browser` without playwright stops whatever that variable says |
+| `ELSPAIS_TEST_WORKERS` | unit, e2e | Kept, as an override of half the available processors | A value that is not a positive whole number stops the tier with a message naming the variable |
+| Git's hook environment (`GIT_DIR` and the rest) | all | Removed: `tests/conftest.py` and `unit-verdict` clear it | Never |
+| The developer's daemon, home and Claude configuration | e2e | Removed: each e2e test works in its own copy with its own daemon, on a port its viewer bound, with a private home for the claude CLI | Never |
+| `pandoc`, `xelatex`, the `claude` CLI | e2e | Kept, as optional tools | The tests needing them skip, and the skip reason names the missing tool; the claude CLI test also skips inside a Claude Code session |
+
 ## Required Tools
 
 Install these tools for full hook functionality:
