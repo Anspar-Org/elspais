@@ -430,3 +430,71 @@ def test_a_build_reading_only_the_snapshot_reads_it_after_a_finished_empty_run(t
     # target it names as fresh is that run, not a carried baseline.
     assert result.get_field("carried") is False
     assert _unread(graph) == []
+
+
+_COVERAGE = "lcov.info"
+
+
+def _declare_coverage(root: Path) -> None:
+    """Make the target name a coverage file in its output area."""
+    config_path = root / ".elspais.toml"
+    text = config_path.read_text(encoding="utf-8")
+    patched = text.replace('match = "source"\n', f'match = "source"\ncoverage = "{_COVERAGE}"\n')
+    assert patched != text
+    config_path.write_text(patched, encoding="utf-8")
+
+
+def _coverage_unread(graph) -> list:
+    return [a for a in _unread(graph) if a.artifact == "coverage"]
+
+
+# Verifies: REQ-d00322-O
+def test_a_carried_target_owes_no_coverage_file(tmp_path):
+    from elspais.commands.health import check_ingestion_faults
+
+    root = _project(tmp_path, _snapshot(_scenario_run(_RUNNER_A)), own_results=False)
+    _declare_coverage(root)
+    graph = _build(root)
+
+    (result,) = _results(graph)
+    assert result.get_field("carried") is True
+    assert _coverage_unread(graph) == []
+    (entry,) = list(graph.iter_repos())
+    check = check_ingestion_faults(graph, entry.config)
+    assert check.passed is True, [f.message for f in check.findings]
+
+
+def _finished_run_with_results(root: Path) -> None:
+    from elspais.config import load_config
+    from elspais.utilities.fingerprint import finish_run, start_run
+
+    config = load_config(root / ".elspais.toml")
+    folder = start_run(root, config, "flutter")
+    (folder / "machine.jsonl").write_text(
+        _machine_run(root, _RUNNER_A, _SHARED_FILE, "success", 1) + "\n", encoding="utf-8"
+    )
+    finish_run(root, config, "flutter")
+
+
+# Verifies: REQ-d00283-V, REQ-d00322-O
+@pytest.mark.parametrize("fresh", [None, {"flutter"}], ids=["plain-build", "executed"])
+def test_a_target_that_ran_here_still_owes_its_coverage_file(tmp_path, fresh):
+    """Only a carried target is excused its coverage: one with results of its own is not."""
+    from elspais.commands.health import check_ingestion_faults
+
+    root = _project(tmp_path, _snapshot(_scenario_run(_RUNNER_A)), own_results=False)
+    _declare_coverage(root)
+    _finished_run_with_results(root)
+    graph = _build(root, fresh_targets=fresh)
+
+    (result,) = _results(graph)
+    assert result.get_field("carried") is False
+    (unread,) = _coverage_unread(graph)
+    assert unread.reason == "absent"
+    assert unread.path == f".results/flutter/{_COVERAGE}"
+    (entry,) = list(graph.iter_repos())
+    check = check_ingestion_faults(graph, entry.config)
+    assert check.passed is False
+    assert any(
+        "the coverage file this target names is not there" in f.message for f in check.findings
+    )

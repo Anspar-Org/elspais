@@ -89,7 +89,8 @@ def _register_builtins() -> None:
                 "Reads the `results.jsonl` of an Evidence Snapshot. A build reads it for "
                 "each target that has not run in the tree and that the run does not "
                 "execute, from the directory `[scanning.test] evidence` names, tagging "
-                "those results carried."
+                "those results carried. Such a target owes no coverage file in that "
+                "build, because the snapshot holds none."
             ),
         )
     )
