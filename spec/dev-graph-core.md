@@ -1423,6 +1423,8 @@ M. The system SHALL keep each result's duration and printed output beside the *E
 
 N. No name SHALL appear as a JSON key beside a digest in an *Evidence Snapshot*.
 
+O. A target whose results are carried SHALL owe no coverage file in the build that carries them.
+
 ### Rationale
 
 An *Evidence Snapshot* lets a reader cite a commit's test results without running the suites, and lets CI confirm that the results committed with a change describe that change. H is the primary use: a new run is compared with the committed snapshot, test by test.
@@ -1431,7 +1433,7 @@ C excludes durations, timestamps, absolute paths, invocation identifiers and fai
 
 D binds the results to a tree. The digest covers every file git tracks or has staged, apart from the snapshot itself, so a snapshot written over uncommitted work does not match the commit CI checks out. A target's digest covers the same files, because a file git ignores exists only where the run executed, and E would fail between a working tree and a clone.
 
-J and L make the snapshot the source of a member's results in a federation, where a member checkout has run nothing. A target that ran in the tree, or that the current run executes, has results of its own even where it left none, so the snapshot never stands in for a run that produced nothing. K stops a snapshot of another tree from reading as current.
+J and L make the snapshot the source of a member's results in a federation, where a member checkout has run nothing. A target that ran in the tree, or that the current run executes, has results of its own even where it left none, so the snapshot never stands in for a run that produced nothing. K stops a snapshot of another tree from reading as current. O follows from J: a target whose results are carried did not run in the tree that carries them, and the snapshot holds no coverage, so a missing coverage file is not a fault there. A consumer that federates a member with a snapshot then passes its own coverage checks.
 
 N follows the rule the *Result Fingerprint* follows: a secret scanner reads a secret-like key beside a long hexadecimal value as a leaked credential.
 
@@ -1439,7 +1441,7 @@ N follows the rule the *Result Fingerprint* follows: a secret scanner reads a se
 
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: an Evidence Snapshot records a tree's test results and is verified against a new run
 
-*End* *Evidence Snapshot* | **Hash**: 5885653b
+*End* *Evidence Snapshot* | **Hash**: 13a665c5
 
 ## REQ-d00281: Level Vocabulary of a Reported Graph
 
