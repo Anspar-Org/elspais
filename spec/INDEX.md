@@ -193,7 +193,7 @@
 | REQ-d00271 | Diagnostic Code Vocabulary                                    | dev-cli.md              | 6f4019d1 |
 | REQ-d00272 | Reference Fault Diagnosis                                     | dev-graph-core.md       | 84d91fef |
 | REQ-d00273 | Requirement Metadata Block                                    | dev-graph-file-nodes.md | 2d7e25e8 |
-| REQ-d00274 | Uncredited Coverage Evidence                                  | dev-graph-core.md       | bf276438 |
+| REQ-d00274 | Uncredited Coverage Evidence                                  | dev-graph-core.md       | 56658f72 |
 | REQ-d00275 | Whose Configuration Governs a Federated Answer                | dev-graph-federation.md | 9ab2ef7c |
 | REQ-d00276 | Tests Outside the Requirement Estate                          | dev-graph-core.md       | ca4cd1fc |
 | REQ-d00277 | Coverage Dimensions                                           | dev-graph-core.md       | b097dcd7 |
@@ -235,6 +235,7 @@
 | REQ-d00326 | Path-Shaped Skip Patterns                                     | dev-graph-config.md     | 797c3fe4 |
 | REQ-d00327 | Origin of a Recorded Source Path                              | dev-graph-core.md       | 0faeeab4 |
 | REQ-d00328 | Satisfying Named Assertions                                   | dev-graph-core.md       | 6e65b3ba |
+| REQ-d00329 | Test File Results From a Command's Exit Status                | dev-graph-core.md       | 9abdd787 |
 
 ## User Journeys
 

@@ -154,8 +154,8 @@ is prose.
 > ```
 
 A citation speaks for the declaration it is written above, and for nothing
-further down the file. There is no file-level form: a comment at the top of a
-file does not reach the declarations below it, so each test carries its own.
+further down the file. A comment at the top of a file does not reach the
+declarations below it, so each test carries its own.
 
 ```python
 # Verifies: REQ-d00001-A
@@ -172,7 +172,10 @@ stops at the next citation or the next declaration, whichever comes first.
 In a test file, such a citation binds to no test. Nothing a runner reports can
 reach it. Consequently, it credits nothing, and `tests.unbound_citation` names
 it. This rule includes a citation at the top of a test file with an import or
-any other statement between it and the first test.
+any other statement between it and the first test. The one exception is a
+test file that a target declaring `file_results` scans: there such a citation
+binds to the file, and the exit status of the target's command decides it
+(`elspais docs test-targets`, *file_results*).
 
 A citation written directly above a Dart `group(...)` that holds tests binds
 to the group. The citation takes its verdict from the results of the tests

@@ -483,6 +483,13 @@ def derive_snapshot(
         if outcome is None:
             reasons.append(f"{where}: outcome {status!r} is not passed, failed or skipped")
             continue
+        # Implements: REQ-d00329-E
+        if node.get_field("match") == "file":
+            reasons.append(
+                f"{where}: the result is the file-level result of the command's exit "
+                f"status, which an Evidence Snapshot does not hold"
+            )
+            continue
         place = _declared_at(node)
         if place is None:
             reasons.append(f"{where}: the result binds to no single test")

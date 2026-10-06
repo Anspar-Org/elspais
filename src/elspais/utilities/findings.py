@@ -414,7 +414,8 @@ _DESCRIPTIONS: dict[str, str] = {
     "tests.unbound_citation": (
         "A citation in a scanned test file that found no test to attach to -- it names assertions "
         "but sits where no test was declared, so no result can ever reach it; it contributes no "
-        "coverage and is reported here instead"
+        "coverage and is reported here instead. In a test file that a target declaring "
+        "`file_results` scans, such a citation binds to the file instead and is not reported"
     ),
     "tests.ingestion_fault": (
         "An artifact ingestion could not read at all -- a results or coverage report that would "

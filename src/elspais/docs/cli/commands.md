@@ -211,7 +211,10 @@ that run are fresh.
 
 `start TARGET` empties the target's folder (`<output_root>/<name>`). It then
 records a fingerprint of the target's inputs in the folder and prints the
-folder. `finish TARGET` notes any input that changed during the run. elspais
+folder. `finish TARGET` notes any input that changed during the run.
+`finish TARGET --exit-status N` also records the exit status of the target's
+command, which a target declaring `file_results` reads as the result of each
+test file it scans. elspais
 refuses a `finish` that no `start` began, with exit 1. The reason is that
 `start` empties the folder. Without `start`, the results that an earlier run
 left there would carry the fingerprint of this run. An unknown target name exits 2. See

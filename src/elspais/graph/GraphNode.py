@@ -146,6 +146,23 @@ def make_result_id(namespace: str, place: str, ordinal: int) -> str:
     return f"{RESULT_ID_PREFIX}{namespace}:{place}:{ordinal}"
 
 
+# Implements: REQ-d00329-E
+def make_file_result_id(namespace: str, target: str, relative_path: str) -> str:
+    """Canonical RESULT node id for the file-level result of a test file.
+
+    A target's command holds exactly one such result for each test file it
+    scans, so the target and the file identify it, and its position is
+    always the first. A target name cannot contain a colon, so the place
+    this id names cannot be any other target's.
+    """
+    if not target or not relative_path:
+        raise ValueError(
+            "Cannot make a file-level result id without both the target it was "
+            "read from and the test file it stands for."
+        )
+    return make_result_id(namespace, f"{target}:{relative_path}", 1)
+
+
 def parse_structural_id(node_id: str) -> tuple[str, str, str, int | None]:
     """Split a structural id into prefix, namespace, path and line.
 

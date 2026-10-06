@@ -449,6 +449,18 @@ coverage = "lcov.info"  # optional; relative to the target's
 #                                   # working directory for every built-in
 #                                   # coverage reporter.
 
+# A test file that reports only through its command's exit status:
+# [[scanning.test.targets]]
+# name         = "scripts"
+# cwd          = "tests/scripts"
+# command      = "python check_layout.py"
+# file_results = true   # the exit status is the result of each test file
+#                       # under cwd; a citation in such a file that binds
+#                       # to no test binds to the file. Needs no reporter.
+#                       # `elspais fingerprint finish NAME --exit-status N`
+#                       # records the status for a run elspais did not
+#                       # execute. Default: false.
+
 # User journey file scanning
 [scanning.journey]
 directories = ["spec"]
