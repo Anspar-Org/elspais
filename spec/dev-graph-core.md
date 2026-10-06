@@ -1864,6 +1864,8 @@ I. Where a test target that declares file-level results has no recorded exit sta
 
 J. A citation bound to a file SHALL be credited as a citation bound to a test whose results are the file-level *Result Records* of that file.
 
+K. When a test target that declares file-level results scans no test file, the system SHALL report that test target and its working directory.
+
 ### Rationale
 
 Some tests are module-level assertions run in a bare interpreter. The interpreter exits non-zero at the first failure and writes no per-test record, so a reporter that expects one per test never sees a verdict, and the file's citations stay awaiting a result however often it passes. The exit status is the only verdict such a file gives, and it is a true statement about the file.
@@ -1878,8 +1880,11 @@ F gives a citation in such a file a place to bind. A module-level assertion is i
 
 J makes a citation bound to a file count wherever a citation bound to a test counts: the file stands as the test REQ-d00277-C asks for, so Passing follows the file's verdict. REQ-d00274-I reports a result that should have named a test and fell back to its file; a file-level *Result Record* is the file's own declared result, so that report does not include it.
 
+K covers a declaration that can credit nothing, whether or not its command has run: with no test file there is no file for a file-level result to stand for. It is a fault of the configuration, and it is reported as one. Naming the working directory tells an author which setting to correct.
+
 ### Changelog
 
+- 2026-10-06 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-143: a test target declaring file-level results that scans no test file is reported (K)
 - 2026-10-06 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-143: a test file that reports only through its command's exit status is credited at file granularity (A-J)
 
-*End* *Test File Results From a Command's Exit Status* | **Hash**: 9abdd787
+*End* *Test File Results From a Command's Exit Status* | **Hash**: 113d1a8d

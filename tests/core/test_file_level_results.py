@@ -428,6 +428,80 @@ def test_without_a_recorded_status_each_citation_awaits_a_result(tmp_path: Path,
 
 
 # ---------------------------------------------------------------------------
+# A target scanning no test file
+# ---------------------------------------------------------------------------
+
+_EMPTY_CWD = "tests/empty"
+
+
+def _point_target_at_empty_folder(root: Path) -> None:
+    """Move the target's working directory to a folder holding no scanned test file.
+
+    The folder exists and holds a file, but not one the target scans.
+    """
+    (root / _EMPTY_CWD).mkdir(parents=True, exist_ok=True)
+    (root / _EMPTY_CWD / "notes.txt").write_text("not a test\n", encoding="utf-8")
+    config_path = root / ".elspais.toml"
+    text = config_path.read_text(encoding="utf-8")
+    assert 'cwd = "tests/scripts"' in text
+    config_path.write_text(
+        text.replace('cwd = "tests/scripts"', f'cwd = "{_EMPTY_CWD}"', 1), encoding="utf-8"
+    )
+
+
+def _target_faults(graph, target: str) -> list:
+    return [f for f in graph.ingestion_faults() if f.target == target]
+
+
+# Verifies: REQ-d00329-K
+@pytest.mark.parametrize("recorded", ["exit-status-recorded", "never-run"])
+def test_a_target_scanning_no_test_file_is_reported_with_its_working_directory(
+    tmp_path: Path, recorded: str
+):
+    from elspais.commands.health import check_ingestion_faults
+    from elspais.utilities.fingerprint import finish_run, start_run
+
+    _write_project(tmp_path, layout_ok=True)
+    _point_target_at_empty_folder(tmp_path)
+    if recorded == "exit-status-recorded":
+        config = _typed_config(tmp_path)
+        start_run(tmp_path, config, "scripts")
+        finish_run(tmp_path, config, "scripts", exit_status=0)
+
+    graph, config = _build(tmp_path)
+
+    (fault,) = _target_faults(graph, "scripts")
+    assert fault.path == _EMPTY_CWD
+    assert _EMPTY_CWD in fault.cause
+    assert _file_results(graph) == {}
+
+    check = check_ingestion_faults(graph, config)
+    assert check.passed is False
+    (finding,) = [f for f in check.findings if "target scripts" in f.message]
+    assert finding.file_path == _EMPTY_CWD
+    assert _EMPTY_CWD in finding.message
+
+
+# Verifies: REQ-d00329-K
+def test_a_target_whose_working_directory_holds_a_scanned_test_file_is_not_reported(
+    tmp_path: Path,
+):
+    from elspais.commands.health import check_ingestion_faults
+    from elspais.utilities.fingerprint import finish_run, start_run
+
+    _write_project(tmp_path, layout_ok=True)
+    config = _typed_config(tmp_path)
+    start_run(tmp_path, config, "scripts")
+    finish_run(tmp_path, config, "scripts", exit_status=0)
+
+    graph, config = _build(tmp_path)
+
+    assert _target_faults(graph, "scripts") == []
+    assert _verdicts(graph, "REQ-d00001") == {"A": "passed", "B": "passed", "C": "passed"}
+    assert check_ingestion_faults(graph, config, expected_targets=("REQ:scripts",)).passed
+
+
+# ---------------------------------------------------------------------------
 # A target mixing per-test and file-level results
 # ---------------------------------------------------------------------------
 
