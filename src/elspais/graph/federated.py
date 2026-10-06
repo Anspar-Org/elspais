@@ -1390,6 +1390,8 @@ class FederatedGraph:
             if "member_ids" in record:
                 for member_id in record["member_ids"]:
                     self._ownership.pop(member_id, None)
+                for made_id in record.get("made_ids", []):
+                    self._ownership[made_id] = repo_name
                 continue
             if "fault" in record:
                 continue
@@ -1441,61 +1443,85 @@ class FederatedGraph:
         node = owner._index.get(target_id)
         if node is None:
             return
-        for member, graph in self._live_graphs():
-            if member == repo_name:
-                continue
-            for fault in list(graph._unresolved_references):
-                citer = graph._index.get(fault.source_id)
-                if citer is None:
+        # Implements: REQ-d00328-B+H
+        # A copy another member holds is remade once that member's
+        # citations are bound and its copies made, and is undone first.
+        resolved = entry.after_state["resolved_citations"]
+        remade_elsewhere = [r for r in resolved if r.get("satisfies_copy")]
+        resolved[:] = [r for r in resolved if not r.get("satisfies_copy")]
+        # Every citation is bound before any copy is made, since a template
+        # in another member refining *node* joins what a Satisfies: copies.
+        for copying in (False, True):
+            for member, graph in self._live_graphs():
+                if member == repo_name:
                     continue
-                if owner._fault_names_assertion(fault, node):
-                    record = graph._bind_citation(citer, node, fault)
-                elif owner._fault_names_assertion(fault, node, EdgeKind.SATISFIES):
-                    record = graph._make_satisfies_copy(
-                        citer,
-                        node,
-                        fault,
-                        lambda orig, here=member: (
-                            self._repo_name_owning(orig, repo_name),
-                            self._ownership.get(orig.id, repo_name) == here,
-                        ),
-                    )
-                else:
-                    continue
-                record["member"] = member
-                entry.after_state["resolved_citations"].append(record)
+                for fault in list(graph._unresolved_references):
+                    citer = graph._index.get(fault.source_id)
+                    if citer is None:
+                        continue
+                    if not copying and owner._fault_names_assertion(fault, node):
+                        record = graph._bind_citation(citer, node, fault)
+                    elif copying and owner._fault_names_assertion(fault, node, EdgeKind.SATISFIES):
+                        record = graph._make_satisfies_copy(
+                            citer,
+                            node,
+                            fault,
+                            lambda orig, here=member: (
+                                self._repo_name_owning(orig, repo_name),
+                                self._ownership.get(orig.id, repo_name) == here,
+                            ),
+                        )
+                    else:
+                        continue
+                    record["member"] = member
+                    resolved.append(record)
         # A copy made here is owned by the member holding it.
-        for record in entry.after_state["resolved_citations"]:
+        for record in resolved:
             holder = record.get("member", repo_name)
+            if record.get("satisfies_remade"):
+                for member_id in record.get("member_ids", []):
+                    self._ownership.pop(member_id, None)
+                for made_id in record.get("made_ids", []):
+                    self._ownership[made_id] = holder
+                continue
             for member_id in record.get("member_ids", []):
                 self._ownership[member_id] = holder
+        for record in remade_elsewhere:
+            self._follow_copy(record)
+            resolved.append(record)
 
-    # Implements: REQ-p00017-H, REQ-p00014-B
+    # Implements: REQ-p00017-H, REQ-p00014-B, REQ-d00328-F+H
     def _follow_copy(self, record: dict[str, Any]) -> None:
-        """Withdraw a copy another member holds, reporting the ``Satisfies:``
-        that made it where it made it directly."""
+        """Remake the copies a declaring requirement in another member holds.
+
+        The member holding the copy remakes them as its own mutation would,
+        reporting each ``Satisfies:`` the change left naming nothing under
+        the class reading it reached across the federation.
+        """
         member = self._ownership.get(record["copy_id"])
         if member is None:
             return
         graph = self._repos[member].graph
-        copy = graph._index.get(record["copy_id"])
-        if copy is None:
+        declaring = graph._index.get(record["source_id"])
+        if declaring is None or graph._index.get(record["copy_id"]) is None:
             return
-        fault = None
-        if record.get("source_id"):
-            fault = self._class_reached(
-                ReferenceFault(
-                    source_id=record["source_id"],
-                    target_id=record["original_id"],
-                    edge_kind=EdgeKind.SATISFIES.value,
-                    fault_class=FaultClass.UNKNOWN_REQUIREMENT,
+        record.update(
+            graph._remake_copies(
+                declaring,
+                frozenset(record.get("failing", [])),
+                frozenset(record.get("excluded", [])),
+                classify=lambda fault: self._class_reached(
+                    dataclasses.replace(fault, fault_class=FaultClass.UNKNOWN_REQUIREMENT),
+                    member,
                 ),
-                member,
+                declared_ids=record.get("declared"),
             )
-        record.update(graph._withdraw_copy(copy, fault))
+        )
         record["member"] = member
         for member_id in record["member_ids"]:
             self._ownership.pop(member_id, None)
+        for made_id in record["made_ids"]:
+            self._ownership[made_id] = member
 
     @staticmethod
     def _binds_to_no_test(source_entry: RepoEntry, br: ReferenceFault) -> bool:
@@ -1527,6 +1553,36 @@ class FederatedGraph:
         """Undo what ``_follow_retirement`` changed in other members."""
         from elspais.graph.builder import TraceGraph as _TraceGraph
         from elspais.graph.builder import _reattach_citation
+
+        records = [
+            *entry.after_state.get("severed_citations", []),
+            *entry.before_state.get("withdrawn_citations", []),
+            *entry.before_state.get("withdrawn_copies", []),
+            *entry.after_state.get("resolved_citations", []),
+        ]
+        # Implements: REQ-o00062-G, REQ-d00328-F+H
+        # A copy the owner withdrew and has now restored is joined again to
+        # the originals another member holds, which the owner cannot find.
+        for record in records:
+            if "member" in record:
+                continue
+            for source_id, target_id, kind, metadata, targets in record.get("cut_edges", []):
+                if source_id in owner._index and target_id in owner._index:
+                    continue
+                source = self._find_in_members(source_id)
+                target = self._find_in_members(target_id)
+                if source is None or target is None:
+                    continue
+                if any(
+                    e.kind.value == kind
+                    and e.target is target
+                    and list(e.assertion_targets) == list(targets)
+                    for e in source.iter_outgoing_edges()
+                ):
+                    continue
+                _TraceGraph._restore_edge_attrs(
+                    source.link(target, EdgeKind(kind), list(targets)), metadata, targets
+                )
 
         node = owner._index.get(entry.target_id)
         if node is None:
@@ -1572,6 +1628,9 @@ class FederatedGraph:
             if member is None or member not in self._repos:
                 continue
             graph = self._repos[member].graph
+            if record.get("satisfies_copy"):
+                graph._restore_copy(record, self._find_in_members)
+                continue
             if record.get("satisfies_made"):
                 graph._unmake_satisfies_copy(record)
                 continue
@@ -2563,6 +2622,30 @@ class FederatedGraph:
         for source_entry in self._repos.values():
             resolver = self._resolver_for(source_entry)
             resolved_indices: list[int] = []
+            targets_of: dict[str, list[GraphNode]] = {}
+            default_owner: dict[str, str] = {}
+
+            # Implements: REQ-p00014-Q, REQ-d00328-A+F+G
+            # A multi-assertion item naming another member's *Assertions*
+            # names each of them, read under that member's grammar, as the
+            # same item does in the member that owns them -- whether or not
+            # that member holds them, so a missing template is reported per
+            # label wherever it would have been.
+            items: list[ReferenceFault] = []
+            for br in source_entry.graph._unresolved_references:
+                if br.edge_kind == EdgeKind.SATISFIES.value and not self._refused_in_federation(
+                    br, source_entry.namespace
+                ):
+                    claim = self._grammar_claimant(br.target_id, excluding=source_entry.namespace)
+                    if claim is not None and len(claim[1].assertions) > 1:
+                        owner_resolver = self._resolver_for(claim[0])
+                        items.extend(
+                            dataclasses.replace(br, target_id=owner_resolver.render_canonical(p))
+                            for p in owner_resolver.expand(claim[1])
+                        )
+                        continue
+                items.append(br)
+            source_entry.graph._unresolved_references[:] = items
 
             for i, br in enumerate(source_entry.graph._unresolved_references):
                 if br.edge_kind != EdgeKind.SATISFIES.value:
@@ -2592,11 +2675,17 @@ class FederatedGraph:
                     if reached is not br:
                         source_entry.graph._unresolved_references[i] = reached
                         continue
+                    # Implements: REQ-p00014-J
+                    # The declaring member's own grammar accepts the target,
+                    # so its builder classified it already: the target is
+                    # missing from that repository, not from the federation.
+                    if resolver.parse(br.target_id) is not None:
+                        continue
                     # Missing-associate: no associated repo claims this
                     # target ID. Emit a typed diagnostic naming the
                     # currently-available associates so the author knows
                     # what IS declared (and what's missing).
-                    # Implements: REQ-p00014-J
+                    # Implements: REQ-p00014-J, REQ-d00328-G
                     available = sorted(
                         ns for ns in self._repos.keys() if ns != source_entry.namespace
                     )
@@ -2637,7 +2726,7 @@ class FederatedGraph:
                     )
                     continue
                 template_node = target_entry.graph._index[target_id_canonical]
-                # Implements: REQ-p00014-G, REQ-p00014-R
+                # Implements: REQ-p00014-G, REQ-p00014-R, REQ-d00328-G
                 # The matrix judges a template owned by another repository by
                 # the rule a local one meets, and its refusal replaces the
                 # reference with the reason the target cannot be instantiated.
@@ -2651,23 +2740,33 @@ class FederatedGraph:
                 declaring_node = source_entry.graph._index.get(br.source_id)
                 if declaring_node is None:
                     continue
+                targets = targets_of.setdefault(br.source_id, [])
+                if template_node not in targets:
+                    targets.append(template_node)
+                default_owner[template_node.id] = target_repo_name
+                resolved_indices.append(i)
 
-                clone_map = instantiate_subtree(
-                    template_node,
-                    declaring_node,
-                    lambda orig_id, source_id=br.source_id, resolver=resolver: (
+            # Every foreign target of one declaring requirement is copied in
+            # one call, extending the copies its own repository's targets
+            # made, so each original has one copy holding what every target
+            # asks of it.
+            # Implements: REQ-d00328-A+B+C+D+F
+            for declaring_id, targets in targets_of.items():
+                default = default_owner[targets[0].id]
+                made = instantiate_subtree(
+                    targets,
+                    source_entry.graph._index[declaring_id],
+                    lambda orig_id, source_id=declaring_id, resolver=resolver: (
                         resolver.build_instance_id(source_id, orig_id)
                     ),
-                    lambda orig, default=target_repo_name, here=source_entry.namespace: (
+                    lambda orig, default=default, here=source_entry.namespace: (
                         self._repo_name_owning(orig, default),
                         self._ownership.get(orig.id, default) == here,
                     ),
                     source_entry.graph._index,
                 )
-                for clone in clone_map.values():
+                for clone in made.copies.values():
                     self._ownership[clone.id] = source_entry.namespace
-
-                resolved_indices.append(i)
 
             for idx in reversed(resolved_indices):
                 source_entry.graph._unresolved_references.pop(idx)

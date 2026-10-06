@@ -1129,11 +1129,11 @@ class TestAnUnboundCitationInAnotherMember:
 # (project, the requirement whose Satisfies: names one template Assertion,
 # the copy of that Assertion hung beneath it)
 OWN_HASH_SETUPS = {
-    "in-repo": (_in_repo_project, "REQ-p00012", "REQ-p00012::REQ-p00010-A"),
+    "in-repo": (_in_repo_project, "REQ-p00012", "REQ-p00012::REQ-p00010"),
     "xrepo-tenant-assertion": (
         _xrepo_project("tenant", assertion_satisfies=True),
         "TEN-p00001",
-        "TEN-p00001::LIB-p00001-A",
+        "TEN-p00001::LIB-p00001",
     ),
 }
 
@@ -1172,9 +1172,12 @@ def _own_hash_project(tmp_path: Path, setup: str):
     _record_own_hash(root, req_id)
     graph = _build(root)
     declaring = graph.find_by_id(req_id)
-    # Premise: the copy is among the declaring requirement's children.
+    # Premise: the copy, a requirement holding copied Assertions, is among
+    # the declaring requirement's children.
     assert copy_id in {child.id for child in declaring.iter_children()}
-    assert graph.find_by_id(copy_id).kind == NodeKind.ASSERTION
+    copy = graph.find_by_id(copy_id)
+    assert copy.kind == NodeKind.REQUIREMENT
+    assert any(c.kind == NodeKind.ASSERTION for c in copy.iter_children())
     return root, graph, declaring
 
 

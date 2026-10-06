@@ -660,12 +660,17 @@ def satisfier_rollup(node: GraphNode) -> SatisfierRollup:
     satisfied_clones = [
         e.target for e in node.iter_outgoing_edges() if e.kind == EdgeKind.SATISFIES
     ]
-    template_assertions: list[GraphNode] = []
+    # Implements: REQ-d00328-C
+    # Several declarations may reach one copy -- each Assertion they name
+    # lands on the copy of its requirement, and a copy may lie inside
+    # another declaration's copied subtree -- so each copied Assertion is
+    # counted once.
+    template_assertions: dict[str, GraphNode] = {}
     for clone in satisfied_clones:
         for member in subtree_nodes(clone):
             if member.kind == NodeKind.ASSERTION and not assertion_is_retired(member):
-                template_assertions.append(member)
-    template_covered = sum(1 for a in template_assertions if inherited_coverage_for(a) > 0)
+                template_assertions.setdefault(member.id, member)
+    template_covered = sum(1 for a in template_assertions.values() if inherited_coverage_for(a) > 0)
 
     total = len(own_assertions) + len(template_assertions)
     covered = own_covered + template_covered

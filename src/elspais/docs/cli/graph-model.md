@@ -366,6 +366,11 @@ Satisfies: REQ-p00099
 This clones the template's subtree as INSTANCE nodes under the
 declaring requirement. See INSTANCE and DEFINES below.
 
+The edge runs from the declaring requirement to the copy of the target's
+requirement. Where the declaration names an assertion, the edge carries that
+assertion's label, and the copy holds only the assertions its declarations
+name (`elspais docs satisfies`).
+
 #### INTEGRATES
 
 Declares that this requirement's implementation is provided by a

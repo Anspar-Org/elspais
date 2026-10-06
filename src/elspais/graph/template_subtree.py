@@ -11,20 +11,27 @@ reads it over the clones, whose REFINES edges mirror the originals'.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass, field
 
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.reference_faults import FaultClass, ReferenceFault
-from elspais.graph.relations import EdgeKind, Stereotype
+from elspais.graph.relations import Edge, EdgeKind, Stereotype
 
 # Fields an original holds that a clone of it does not copy. The stereotype
 # is the clone's own; the reference text is what the original declared, and
-# a clone's relationships are the edges recreated among the clones.
-UNCLONED_FIELDS: frozenset[str] = frozenset({"stereotype", "implements_refs", "refines_refs"})
+# a clone's relationships are the edges recreated among the clones. Whether
+# the original's text needs rewriting is a fact about its file, and a clone
+# has no text of its own to rewrite.
+UNCLONED_FIELDS: frozenset[str] = frozenset(
+    {"stereotype", "implements_refs", "refines_refs", "parse_dirty", "parse_dirty_reasons"}
+)
 
 
 # Implements: REQ-p00014-B
-def iter_subtree_requirements(root: GraphNode) -> Iterator[GraphNode]:
+def iter_subtree_requirements(
+    root: GraphNode, excluded: frozenset[str] = frozenset()
+) -> Iterator[GraphNode]:
     """Yield ``root`` and every requirement that refines a member, recursively.
 
     Membership follows outgoing REFINES edges (the cited requirement holds the
@@ -32,8 +39,11 @@ def iter_subtree_requirements(root: GraphNode) -> Iterator[GraphNode]:
     stereotype differs from the root's: over a template this keeps the walk to
     template-marked refiners, over an instance clone to the clones made with
     it. Each member is yielded once however many paths reach it. A root that
-    is not a requirement is yielded alone.
+    is not a requirement is yielded alone. A requirement named in
+    ``excluded`` is neither yielded nor walked through.
     """
+    if root.id in excluded:
+        return
     if root.kind != NodeKind.REQUIREMENT:
         yield root
         return
@@ -50,7 +60,7 @@ def iter_subtree_requirements(root: GraphNode) -> Iterator[GraphNode]:
             if edge.kind != EdgeKind.REFINES:
                 continue
             refiner = edge.target
-            if refiner.kind != NodeKind.REQUIREMENT:
+            if refiner.kind != NodeKind.REQUIREMENT or refiner.id in excluded:
                 continue
             if refiner.get_field("stereotype") != stereotype:
                 continue
@@ -76,35 +86,141 @@ def subtree_nodes(root: GraphNode) -> list[GraphNode]:
     return nodes
 
 
+def owning_requirement(node: GraphNode) -> GraphNode | None:
+    """The requirement holding *node*: itself, or an *Assertion*'s requirement."""
+    if node.kind == NodeKind.REQUIREMENT:
+        return node
+    if node.kind != NodeKind.ASSERTION:
+        return None
+    return next(
+        (
+            p
+            for p in node.iter_parents(edge_kinds={EdgeKind.STRUCTURES})
+            if p.kind == NodeKind.REQUIREMENT
+        ),
+        None,
+    )
+
+
+# Implements: REQ-p00014-B, REQ-d00328-A+B+C+D
+def copy_plan(
+    targets: Iterable[GraphNode], excluded: frozenset[str] = frozenset()
+) -> dict[str, tuple[GraphNode, set[str] | None]]:
+    """What one declaring requirement's ``Satisfies:`` targets copy, together.
+
+    Maps each original requirement to copy to the ids of the *Assertions*
+    its copy holds, or to None where it holds them all. A requirement
+    target contributes its whole template subtree. An *Assertion* target
+    contributes its requirement holding that *Assertion*, and the whole
+    subtree of each template requirement refining that *Assertion* or
+    refining its requirement without naming an *Assertion*. Every target is
+    planned at once, so each original appears once and holds the union of
+    what the targets ask of it, whatever order they were declared in. An
+    original named in ``excluded`` is planned for nothing.
+    """
+    plan: dict[str, tuple[GraphNode, set[str] | None]] = {}
+
+    def whole(root: GraphNode) -> None:
+        for member in iter_subtree_requirements(root, excluded):
+            plan[member.id] = (member, None)
+
+    for target in targets:
+        if target.id in excluded:
+            continue
+        if target.kind == NodeKind.REQUIREMENT:
+            whole(target)
+            continue
+        requirement = owning_requirement(target)
+        if requirement is None or requirement.id in excluded:
+            continue
+        held = plan.get(requirement.id)
+        if held is None:
+            plan[requirement.id] = (requirement, {target.id})
+        elif held[1] is not None:
+            held[1].add(target.id)
+        label = target.get_field("label", "")
+        stereotype = requirement.get_field("stereotype")
+        for edge in requirement.iter_outgoing_edges():
+            if edge.kind != EdgeKind.REFINES:
+                continue
+            refiner = edge.target
+            if refiner.kind != NodeKind.REQUIREMENT:
+                continue
+            if refiner.get_field("stereotype") != stereotype:
+                continue
+            if edge.assertion_targets and label not in edge.assertion_targets:
+                continue
+            whole(refiner)
+    return plan
+
+
+@dataclass
+class SatisfiesCopy:
+    """What one ``instantiate_subtree`` call added to a graph.
+
+    ``copies`` holds each copy it made, keyed by the identifier of its
+    original; ``edges`` each edge it linked between copies it found already
+    made, or from the declaring requirement; ``relabelled`` each such edge
+    whose *Assertion* labels it widened, with the labels it held before.
+    Undo reads all three.
+    """
+
+    copies: dict[str, GraphNode] = field(default_factory=dict)
+    edges: list[Edge] = field(default_factory=list)
+    relabelled: list[tuple[Edge, list[str]]] = field(default_factory=list)
+
+
+def _copy_of(original: GraphNode, copy_id: str, index: dict[str, GraphNode]) -> GraphNode | None:
+    """The copy of *original* that ``index`` holds under *copy_id*, if one."""
+    held = index.get(copy_id)
+    if held is None:
+        return None
+    for edge in held.iter_outgoing_edges():
+        if edge.kind == EdgeKind.INSTANCE and edge.target is original:
+            return held
+    return None
+
+
 # Implements: REQ-p00014-B, REQ-p00014-H, REQ-p00014-M, REQ-p00014-O, REQ-d00128-J
+# Implements: REQ-d00328-A+B+C+D+F
 def instantiate_subtree(
-    template_node: GraphNode,
+    targets: list[GraphNode],
     declaring_node: GraphNode,
     instance_id: Callable[[str], str],
     owning_repo: Callable[[GraphNode], tuple[str, bool]],
     index: dict[str, GraphNode],
-) -> dict[str, GraphNode]:
-    """Copy the subtree at ``template_node`` for ``declaring_node``'s ``Satisfies:``.
+    excluded: frozenset[str] = frozenset(),
+) -> SatisfiesCopy:
+    """Copy what ``declaring_node``'s ``Satisfies:`` of ``targets`` instantiates.
 
     This is the one place a ``Satisfies:`` copy is made: by the builder, by
     the federation for a template another repository owns, and by a
-    mutation that brings an *Assertion* back. Each original gets a copy
-    under the identifier ``instance_id`` composes, holding the original's
+    mutation that brings an *Assertion* back. ``copy_plan`` decides what is
+    copied. Each original gets one copy under the identifier
+    ``instance_id`` composes; a copy ``index`` already holds is extended
+    rather than made again, so declarations copied in separate passes
+    still produce one copy of each original. A copy holds the original's
     content, the INSTANCE stereotype, an INSTANCE edge back to the original
     and the name of the repository owning the original. ``owning_repo``
     answers that name, and whether the original lives in the repository
     making the copy: only then does the copy keep the original's lines,
     since a line in another repository's file locates nothing here. Each
     copy enters ``index``. The subtree's own edges are recreated among the
-    copies, the declaring requirement satisfies the copied root, and the
-    declaring requirement's file defines every copy.
-
-    Returns the copies keyed by the identifier of the original.
+    copies, the declaring requirement satisfies the copy of each target's
+    requirement -- with the target's label where the target is an
+    *Assertion* -- and the declaring requirement's file defines every copy.
     """
-    template_nodes = subtree_nodes(template_node)
-    clone_map: dict[str, GraphNode] = {}
-    for orig in template_nodes:
-        clone = GraphNode(id=instance_id(orig.id), kind=orig.kind, label=orig.get_label())
+    plan = copy_plan(targets, excluded)
+    result = SatisfiesCopy()
+    declaring_file = declaring_node.file_node()
+    copies: dict[str, GraphNode] = {}
+
+    def copy(orig: GraphNode) -> GraphNode:
+        copy_id = instance_id(orig.id)
+        held = _copy_of(orig, copy_id, index)
+        if held is not None:
+            return held
+        clone = GraphNode(id=copy_id, kind=orig.kind, label=orig.get_label())
         # A clone's relationships are the edges recreated among the clones,
         # so the reference text the original declared is not copied: left in
         # place it would read as a reference the clone declared and never
@@ -121,40 +237,118 @@ def instantiate_subtree(
             if line is not None or not local:
                 clone.set_field(line_field, line)
         index[clone.id] = clone
-        clone_map[orig.id] = clone
         clone.link(orig, EdgeKind.INSTANCE)
-    recreate_subtree_edges(template_nodes, clone_map)
-    cloned_root = clone_map.get(template_node.id)
-    if cloned_root is not None:
-        declaring_node.link(cloned_root, EdgeKind.SATISFIES)
-    declaring_file = declaring_node.file_node()
-    if declaring_file is not None:
-        for clone in clone_map.values():
+        if declaring_file is not None:
             declaring_file.link(clone, EdgeKind.DEFINES)
-    return clone_map
+        result.copies[orig.id] = clone
+        return clone
 
+    for requirement, held in plan.values():
+        copies[requirement.id] = copy(requirement)
+        for child in requirement.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
+            if child.kind != NodeKind.ASSERTION or child.id in excluded:
+                continue
+            if held is None or child.id in held:
+                copies[child.id] = copy(child)
 
-# Implements: REQ-p00014-M, REQ-p00014-H
-def recreate_subtree_edges(originals: list[GraphNode], clone_map: dict[str, GraphNode]) -> None:
-    """Recreate the subtree's own edges among the clones, each exactly once.
+    def copy_found(orig: GraphNode) -> GraphNode | None:
+        return copies.get(orig.id) or _copy_of(orig, instance_id(orig.id), index)
 
-    A clone receives the STRUCTURES edges to its cloned *Assertions* and the
-    REFINES edges to the cloned requirements refining it, carrying the
-    *Assertion* labels the refinement named. Every other edge an original
-    holds leads outside the subtree — to evidence, to a file, to an
-    instance — and is not an edge of the subtree.
-    """
-    for orig in originals:
-        clone = clone_map.get(orig.id)
-        if clone is None:
+    recreate_subtree_edges([r for r, _held in plan.values()], copy_found, result)
+
+    for target in targets:
+        requirement = owning_requirement(target)
+        root = copies.get(requirement.id) if requirement is not None else None
+        if root is None:
             continue
-        for edge in orig.iter_outgoing_edges():
+        labels = [] if target is requirement else [target.get_field("label", "")]
+        if any(
+            e.kind == EdgeKind.SATISFIES and e.target is root and e.assertion_targets == labels
+            for e in declaring_node.iter_outgoing_edges()
+        ):
+            continue
+        result.edges.append(declaring_node.link(root, EdgeKind.SATISFIES, labels or None))
+    return result
+
+
+# Implements: REQ-d00328-A
+def declared_originals(edge: Edge) -> list[GraphNode]:
+    """The originals the ``Satisfies:`` that made the SATISFIES *edge* names.
+
+    The edge lands on the copy of a requirement and carries the label of
+    each *Assertion* the declaration named; with no label it named the
+    requirement.
+    """
+    copy = edge.target
+    if not edge.assertion_targets:
+        return list(copy.iter_children(edge_kinds={EdgeKind.INSTANCE}))
+    named: list[GraphNode] = []
+    for child in copy.iter_children(edge_kinds={EdgeKind.STRUCTURES}):
+        if child.kind == NodeKind.ASSERTION and child.get_field("label") in edge.assertion_targets:
+            named.extend(child.iter_children(edge_kinds={EdgeKind.INSTANCE}))
+    return named
+
+
+def _held_labels(copy: GraphNode) -> set[str]:
+    """The labels of the *Assertions* *copy* holds."""
+    return {
+        child.get_field("label", "")
+        for child in copy.iter_children(edge_kinds={EdgeKind.STRUCTURES})
+        if child.kind == NodeKind.ASSERTION
+    }
+
+
+# Implements: REQ-p00014-M, REQ-p00014-H, REQ-d00328-B+E
+def recreate_subtree_edges(
+    requirements: list[GraphNode],
+    copy_found: Callable[[GraphNode], GraphNode | None],
+    result: SatisfiesCopy,
+) -> None:
+    """Join the copies of ``requirements`` by the edges their originals hold.
+
+    A copy receives the STRUCTURES edges to its copied *Assertions*, and the
+    REFINES edges joining it to every copy -- made now or made earlier for
+    the same declaring requirement -- whose original refines its original or
+    is refined by it. A copied refinement names only the labels the copy of
+    its target holds, and one whose labels the copy holds none of is not
+    copied. Every other edge an original holds leads outside the subtree --
+    to evidence, to a file, to an instance -- and is not copied. An edge
+    already joining two copies is not linked twice.
+    """
+
+    def join(parent: GraphNode, child: GraphNode, kind: EdgeKind, labels: list[str]) -> None:
+        if kind == EdgeKind.REFINES and labels:
+            held = _held_labels(parent)
+            labels = [label for label in labels if label in held]
+            if not labels:
+                return
+        for edge in parent.iter_outgoing_edges():
+            if edge.kind != kind or edge.target is not child:
+                continue
+            if edge.assertion_targets == labels:
+                return
+            if labels and edge.assertion_targets and set(edge.assertion_targets) < set(labels):
+                result.relabelled.append((edge, list(edge.assertion_targets)))
+                edge.assertion_targets[:] = labels
+                return
+        result.edges.append(parent.link(child, kind, list(labels) or None))
+
+    for requirement in requirements:
+        requirement_copy = copy_found(requirement)
+        if requirement_copy is None:
+            continue
+        for edge in requirement.iter_outgoing_edges():
             if edge.kind not in (EdgeKind.STRUCTURES, EdgeKind.REFINES):
                 continue
-            target_clone = clone_map.get(edge.target.id)
-            if target_clone is None:
+            target_copy = copy_found(edge.target)
+            if target_copy is not None:
+                join(requirement_copy, target_copy, edge.kind, list(edge.assertion_targets))
+        for edge in requirement.iter_incoming_edges():
+            if edge.kind != EdgeKind.REFINES:
                 continue
-            clone.link(target_clone, edge.kind, assertion_targets=list(edge.assertion_targets))
+            source_copy = copy_found(edge.source)
+            if source_copy is not None:
+                join(source_copy, requirement_copy, edge.kind, list(edge.assertion_targets))
 
 
 # Implements: REQ-p00014-G

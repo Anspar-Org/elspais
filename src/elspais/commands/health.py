@@ -1513,8 +1513,8 @@ def check_spec_unknown_directive(
 
 
 # Implements: REQ-p00004-K
-def _satisfiers_of_clone(clone):
-    """Yield ``(cloned_root, satisfier)`` for every Satisfies: that cloned ``clone``.
+def _satisfactions_of_clone(clone):
+    """Yield the SATISFIES edge of every ``Satisfies:`` that cloned ``clone``.
 
     A clone of an interior subtree member reaches its satisfier by ascending
     the cloned REFINES edges through INSTANCE-stereotyped requirements: the
@@ -1531,21 +1531,12 @@ def _satisfiers_of_clone(clone):
         if node.id in seen:
             continue
         seen.add(node.id)
-        for satisfier in node.iter_parents(edge_kinds={EdgeKind.SATISFIES}):
-            yield node, satisfier
+        for edge in node.iter_incoming_edges():
+            if edge.kind == EdgeKind.SATISFIES:
+                yield edge
         for refined in node.iter_parents(edge_kinds={EdgeKind.REFINES}):
             if refined.get_field("stereotype") == Stereotype.INSTANCE:
                 stack.append(refined)
-
-
-def _template_original_id(clone) -> str:
-    """The id of the template original a clone was made from."""
-    from elspais.graph.relations import EdgeKind
-
-    for edge in clone.iter_outgoing_edges():
-        if edge.kind == EdgeKind.INSTANCE:
-            return edge.target.id
-    return clone.id
 
 
 # Implements: REQ-p00004-K
@@ -1567,6 +1558,7 @@ def check_spec_hash_integrity(
 
     from elspais.graph import NodeKind
     from elspais.graph.relations import EdgeKind
+    from elspais.graph.template_subtree import declared_originals
 
     findings: list[HealthFinding] = []
     mismatches = []
@@ -1581,8 +1573,10 @@ def check_spec_hash_integrity(
         for edge in node.iter_incoming_edges():
             if edge.kind != EdgeKind.INSTANCE:
                 continue
-            for cloned_root, satisfier in _satisfiers_of_clone(edge.source):
-                declared = _template_original_id(cloned_root)
+            for satisfaction in _satisfactions_of_clone(edge.source):
+                satisfier = satisfaction.source
+                # Implements: REQ-d00328-A
+                declared = ", ".join(o.id for o in declared_originals(satisfaction))
                 if (satisfier.id, declared) in flagged:
                     continue
                 flagged.add((satisfier.id, declared))

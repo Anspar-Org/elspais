@@ -81,6 +81,7 @@ from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.graph.render import format_definition_block, render_end_marker
 from elspais.graph.template_subtree import (
     copy_name_diagnostic,
+    declared_originals,
     instantiate_subtree,
     satisfies_target_fault,
     stereotype_matrix_fault,
@@ -212,6 +213,20 @@ def _satisfying(copy: GraphNode) -> GraphNode | None:
         (e.source for e in copy.iter_incoming_edges() if e.kind == EdgeKind.SATISFIES),
         None,
     )
+
+
+def _find_edge(source: GraphNode | None, target_id: str, kind: str, targets: list[str]) -> Any:
+    """The edge *source* holds to *target_id* of *kind* naming *targets*, if one."""
+    if source is None:
+        return None
+    for edge in source.iter_outgoing_edges():
+        if (
+            edge.kind.value == kind
+            and edge.target.id == target_id
+            and list(edge.assertion_targets) == list(targets)
+        ):
+            return edge
+    return None
 
 
 def _edge_record(edge: Any) -> tuple[str, str, str, dict[str, Any], list[str]]:
@@ -2576,9 +2591,11 @@ class TraceGraph:
         structured = [
             c for c in node.iter_children(edge_kinds={EdgeKind.STRUCTURES}) if c.id in self._index
         ]
-        withdrawn_copies: list[dict[str, Any]] = []
-        for original in [node, *[c for c in structured if c.kind == NodeKind.ASSERTION]]:
-            withdrawn_copies.extend(self._withdraw_copies_of(original, roots_only=False))
+        removed = [node, *[c for c in structured if c.kind == NodeKind.ASSERTION]]
+        removed_ids = frozenset(r.id for r in removed)
+        withdrawn_copies = self._withdraw_copies_of(
+            removed, failing=removed_ids, excluded=removed_ids
+        )
         for edge in list(node.iter_outgoing_edges()):
             if edge.kind == EdgeKind.SATISFIES and self._index.get(edge.target.id) is edge.target:
                 withdrawn_copies.append(
@@ -3167,61 +3184,171 @@ class TraceGraph:
 
     # Implements: REQ-p00017-H, REQ-p00014-G
     def _withdraw_satisfies_copies(self, node: GraphNode) -> list[dict[str, Any]]:
-        """Withdraw each copy a ``Satisfies:`` naming the retired *node* made.
+        """Remake each copy that holds a copy of the retired *node*.
 
-        A build makes no copy of a retired *Assertion* and reports the
-        ``Satisfies:`` naming it. A copy made as part of a larger subtree is
-        not withdrawn: it stays, carrying the retired text.
+        A build makes no copy for a ``Satisfies:`` naming a retired
+        *Assertion* and reports it. A copy made as part of a larger subtree
+        keeps it, carrying the retired text.
         """
-        return self._withdraw_copies_of(node, roots_only=True)
+        return self._withdraw_copies_of([node], failing=frozenset({node.id}))
 
-    # Implements: REQ-p00017-H, REQ-p00014-B, REQ-p00014-G
-    def _withdraw_copies_of(self, original: GraphNode, roots_only: bool) -> list[dict[str, Any]]:
-        """Withdraw the copies of *original*, each with the subtree it heads.
+    # Implements: REQ-p00017-H, REQ-p00014-B, REQ-p00014-G, REQ-d00328-G+H
+    def _withdraw_copies_of(
+        self,
+        originals: list[GraphNode],
+        failing: frozenset[str],
+        excluded: frozenset[str] = frozenset(),
+    ) -> list[dict[str, Any]]:
+        """Remake the copies of each declaring requirement holding a copy of *originals*.
 
-        A copy a ``Satisfies:`` made directly is reported in its place, as a
-        build reports a ``Satisfies:`` naming nothing; a copy made inside a
-        larger subtree simply leaves it. With *roots_only*, only the first
-        kind is withdrawn. A copy another member holds is withdrawn by the
-        federation, which holds that member.
+        Each such requirement's copies are remade as a build of the changed
+        text makes them: its ``Satisfies:`` naming an id in *failing* is
+        reported, and no copy holds an original in *excluded*. A copy
+        another member holds is remade by the federation, which holds that
+        member; its record names the copy and the declaring requirement.
         """
         records: list[dict[str, Any]] = []
-        for edge in list(original.iter_incoming_edges()):
-            if edge.kind != EdgeKind.INSTANCE:
-                continue
-            copy = edge.source
-            declaring = _satisfying(copy)
-            if roots_only and declaring is None:
-                continue
-            record: dict[str, Any] = {
-                "satisfies_copy": True,
-                "copy_id": copy.id,
-                "original_id": original.id,
-                "source_id": declaring.id if declaring is not None else None,
-            }
-            if self._index.get(copy.id) is copy:
-                fault = None
-                if declaring is not None:
-                    fault = ReferenceFault(
-                        source_id=declaring.id,
-                        target_id=original.id,
-                        edge_kind=EdgeKind.SATISFIES.value,
-                        fault_class=self._resolution_class(original.id),
-                    )
-                record.update(self._withdraw_copy(copy, fault))
-            records.append(record)
+        seen: set[str] = set()
+        for original in originals:
+            for edge in list(original.iter_incoming_edges()):
+                if edge.kind != EdgeKind.INSTANCE:
+                    continue
+                copy = edge.source
+                declaring_id = self.resolver.get_instance_prefix(copy.id)
+                if declaring_id is None or declaring_id in seen:
+                    continue
+                seen.add(declaring_id)
+                if self._index.get(copy.id) is copy:
+                    # A declaring requirement being removed takes its copies
+                    # with it.
+                    declaring = self._index.get(declaring_id)
+                    if declaring is not None:
+                        records.append(self._remake_copies(declaring, failing, excluded))
+                    continue
+                # What the declarations named is read now: the owner cuts
+                # the edges to *originals* before the federation remakes.
+                declared = [
+                    target.id
+                    for e in copy.iter_incoming_edges()
+                    if e.kind == EdgeKind.SATISFIES
+                    for satisfied in e.source.iter_outgoing_edges()
+                    if satisfied.kind == EdgeKind.SATISFIES
+                    for target in declared_originals(satisfied)
+                ]
+                records.append(
+                    {
+                        "satisfies_copy": True,
+                        "copy_id": copy.id,
+                        "source_id": declaring_id,
+                        "declared": list(dict.fromkeys(declared)),
+                        "failing": sorted(failing),
+                        "excluded": sorted(excluded),
+                    }
+                )
         return records
+
+    # Implements: REQ-p00017-H, REQ-d00328-A+B+C+D+G+H
+    def _remake_copies(
+        self,
+        declaring: GraphNode,
+        failing: frozenset[str],
+        excluded: frozenset[str],
+        classify: Any = None,
+        declared_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Remake every copy *declaring*'s ``Satisfies:`` declarations made.
+
+        The copies are withdrawn and made again, through the one copy
+        builder, from the declarations that still copy something: one naming
+        an id in *failing* is reported instead, and no copy holds an original
+        in *excluded*. Making all of them again at once gives the copies a
+        build of the changed text gives them, whichever declarations shared
+        an original. *classify*, when given, returns the fault a federation
+        reports for an unresolved reference. *declared_ids*, when given,
+        names originals the declarations named that the copies can no longer
+        reach. Returns the record undo reads.
+        """
+        satisfied = [
+            e
+            for e in declaring.iter_outgoing_edges()
+            if e.kind == EdgeKind.SATISFIES and self._index.get(e.target.id) is e.target
+        ]
+        declared: list[GraphNode] = []
+        members: dict[str, GraphNode] = {}
+        for edge in satisfied:
+            for target in declared_originals(edge):
+                if target not in declared:
+                    declared.append(target)
+            for member in subtree_nodes(edge.target):
+                members.setdefault(member.id, member)
+        owners: dict[str, str] = {}
+        for member in members.values():
+            repo = member.get_field("template_repo")
+            for original in member.iter_children(edge_kinds={EdgeKind.INSTANCE}):
+                if repo:
+                    owners[original.id] = repo
+        record: dict[str, Any] = {"satisfies_remade": True, "source_id": declaring.id}
+        record.update(self._withdraw_members(list(members.values())))
+        faults: list[dict[str, Any]] = []
+        named = list(dict.fromkeys([*(t.id for t in declared), *(declared_ids or [])]))
+        for target_id in named:
+            if target_id not in failing:
+                continue
+            fault = ReferenceFault(
+                source_id=declaring.id,
+                target_id=target_id,
+                edge_kind=EdgeKind.SATISFIES.value,
+                fault_class=self._resolution_class(target_id),
+            )
+            if classify is not None:
+                fault = classify(fault)
+            faults.append(self._withdraw_citation(declaring, fault))
+        record["faults"] = faults
+        project_name = self._project_name()
+        made = instantiate_subtree(
+            [t for t in declared if t.id not in failing],
+            declaring,
+            lambda orig_id: self.resolver.build_instance_id(declaring.id, orig_id),
+            lambda orig: (owners.get(orig.id, project_name), self._index.get(orig.id) is orig),
+            self._index,
+            excluded,
+        )
+        record["made_ids"] = [copy.id for copy in made.copies.values()]
+        self._admit_copy_roots(made.copies)
+        return record
+
+    # Implements: REQ-d00128-I, REQ-d00328-H
+    def _admit_copy_roots(self, copies: dict[str, GraphNode]) -> None:
+        """Make each of *copies* a root where a build of the text makes it one.
+
+        A build judges roots before a federation copies another member's
+        template, so only a copy of an original this graph holds can be one.
+        """
+        for original_id, copy in copies.items():
+            if original_id not in self._index or copy in self._roots:
+                continue
+            if _parentless_standing(copy, self.satellite_kinds) == "root":
+                self._roots.append(copy)
 
     # Implements: REQ-p00017-H, REQ-p00014-B
     def _withdraw_copy(self, copy: GraphNode, fault: ReferenceFault | None) -> dict[str, Any]:
         """Remove *copy*, which this graph holds, with the subtree it heads.
 
-        Every edge joining the subtree to the rest of the graph is cut and
-        recorded, so undo can join it again. *fault*, when given, is
-        reported by the requirement whose ``Satisfies:`` made the copy.
+        *fault*, when given, is reported by the requirement whose
+        ``Satisfies:`` made the copy.
         """
         declaring = _satisfying(copy)
-        members = subtree_nodes(copy)
+        changed = self._withdraw_members(subtree_nodes(copy))
+        if fault is not None and declaring is not None:
+            changed.update(self._withdraw_citation(declaring, fault))
+        return changed
+
+    def _withdraw_members(self, members: list[GraphNode]) -> dict[str, Any]:
+        """Remove *members*, copies this graph holds.
+
+        Every edge joining them to the rest of the graph is cut and
+        recorded, so undo can join it again.
+        """
         ids = {m.id for m in members}
         cut: list[tuple[str, str, str, dict[str, Any], list[str]]] = []
         for member in members:
@@ -3235,19 +3362,33 @@ class TraceGraph:
                     member.remove_edge(e)
             self._index.pop(member.id, None)
             self._deleted_nodes.append(member)
-        changed: dict[str, Any] = {"member_ids": [m.id for m in members], "cut_edges": cut}
-        if fault is not None and declaring is not None:
-            changed.update(self._withdraw_citation(declaring, fault))
-        return changed
+        roots = [r.id for r in self._roots if r.id in ids]
+        self._roots = [r for r in self._roots if r.id not in ids]
+        return {"member_ids": [m.id for m in members], "cut_edges": cut, "roots": roots}
 
     # Implements: REQ-o00062-G
     def _restore_copy(self, record: dict[str, Any], find: Any) -> None:
-        """Undo ``_withdraw_copy``; *find* returns a node of the graph by id."""
+        """Undo ``_withdraw_copy`` or ``_remake_copies``.
+
+        *find* returns a node of the graph by id.
+        """
+        if record.get("satisfies_remade"):
+            self._remove_copies(record.get("made_ids", []))
+            declaring = self._index.get(record["source_id"])
+            if declaring is not None:
+                for fault in reversed(record.get("faults", [])):
+                    self._restore_citation(declaring, fault)
+        # The most recent withdrawal of an id is the one this record made:
+        # a copy remade by a later mutation was withdrawn after it.
         for member_id in record.get("member_ids", []):
-            for i, deleted in enumerate(self._deleted_nodes):
-                if deleted.id == member_id:
+            for i in range(len(self._deleted_nodes) - 1, -1, -1):
+                if self._deleted_nodes[i].id == member_id:
                     self._index[member_id] = self._deleted_nodes.pop(i)
                     break
+        for root_id in record.get("roots", []):
+            root = self._index.get(root_id)
+            if root is not None and root not in self._roots:
+                self._roots.append(root)
         for source_id, target_id, kind, metadata, targets in record.get("cut_edges", []):
             source, target = find(source_id), find(target_id)
             if source is not None and target is not None:
@@ -3258,13 +3399,31 @@ class TraceGraph:
             declaring = self._index.get(record["source_id"])
             if declaring is not None:
                 self._restore_citation(declaring, record)
+        # A restored copy says what its original says now, as a build would
+        # copy it: the original's own undo may have run before this one.
         for member_id in record.get("member_ids", []):
             member = self._index.get(member_id)
-            if member is None or member.kind != NodeKind.ASSERTION:
+            if member is None:
                 continue
             for e in member.iter_outgoing_edges():
-                if e.kind == EdgeKind.INSTANCE:
+                if e.kind != EdgeKind.INSTANCE:
+                    continue
+                if member.kind == NodeKind.ASSERTION:
                     member.set_label(apply_directive(member, e.target.get_label()))
+                elif member.kind == NodeKind.REQUIREMENT:
+                    member.set_field("hash", e.target.get_field("hash"))
+
+    def _remove_copies(self, copy_ids: list[str]) -> None:
+        """Remove the copies *copy_ids* names, with every edge they hold."""
+        for copy_id in copy_ids:
+            copy = self._index.pop(copy_id, None)
+            if copy is None:
+                continue
+            self._roots = [r for r in self._roots if r is not copy]
+            for e in list(copy.iter_incoming_edges()):
+                e.source.remove_edge(e)
+            for e in list(copy.iter_outgoing_edges()):
+                copy.remove_edge(e)
 
     # Implements: REQ-p00017-H, REQ-d00274-H
     def _withdraw_unbound_citations(
@@ -3365,10 +3524,12 @@ class TraceGraph:
     ) -> None:
         """Undo ``_sever_citations`` for the citations this graph holds."""
         for record in reversed(severed):
-            if "fault" not in record or "member" in record:
+            if "member" in record:
                 continue
-            if record.get("satisfies_copy"):
+            if record.get("satisfies_remade"):
                 self._restore_copy(record, self._index.get)
+                continue
+            if "fault" not in record:
                 continue
             citer = self._index.get(record["source_id"])
             if citer is None:
@@ -3426,14 +3587,20 @@ class TraceGraph:
         project_name = self._project_name()
         for fault in list(self._unresolved_references):
             citer = self._index.get(fault.source_id)
-            if citer is None:
-                continue
-            if self._fault_names_assertion(fault, node):
+            if citer is not None and self._fault_names_assertion(fault, node):
                 resolved.append(self._bind_citation(citer, node, fault))
-            elif self._fault_names_assertion(fault, node, EdgeKind.SATISFIES):
+        # Implements: REQ-d00328-B+H
+        # Copies are made once every refinement of *node* is an edge again,
+        # since a template refining it joins what a Satisfies: copies. Each
+        # copy already holding *node*'s requirement is remade for the same
+        # reason; one another member holds is remade by the federation.
+        for fault in list(self._unresolved_references):
+            citer = self._index.get(fault.source_id)
+            if citer is not None and self._fault_names_assertion(fault, node, EdgeKind.SATISFIES):
                 resolved.append(
                     self._make_satisfies_copy(citer, node, fault, lambda _o: (project_name, True))
                 )
+        resolved.extend(self._withdraw_copies_of([parent], failing=frozenset()))
         return resolved
 
     def _fault_names_assertion(
@@ -3485,14 +3652,20 @@ class TraceGraph:
             self._unresolved_references.append(refusal)
             record["refusal"] = _fault_record(refusal)
             return record
-        copies = instantiate_subtree(
-            original,
+        made = instantiate_subtree(
+            [original],
             declaring,
             lambda orig_id: self.resolver.build_instance_id(declaring.id, orig_id),
             owning_repo,
             self._index,
         )
-        record["member_ids"] = [copy.id for copy in copies.values()]
+        record["member_ids"] = [copy.id for copy in made.copies.values()]
+        self._admit_copy_roots(made.copies)
+        record["edges"] = [_edge_record(e) for e in made.edges]
+        record["relabelled"] = [
+            (*_edge_record(e)[:3], list(e.assertion_targets), before)
+            for e, before in made.relabelled
+        ]
         return record
 
     # Implements: REQ-o00062-G
@@ -3502,14 +3675,16 @@ class TraceGraph:
             refusal = _fault_from_record(record["refusal"])
             if refusal in self._unresolved_references:
                 self._unresolved_references.remove(refusal)
-        for member_id in record.get("member_ids", []):
-            member = self._index.pop(member_id, None)
-            if member is None:
-                continue
-            for e in list(member.iter_incoming_edges()):
-                e.source.remove_edge(e)
-            for e in list(member.iter_outgoing_edges()):
-                member.remove_edge(e)
+        self._remove_copies(record.get("member_ids", []))
+        for source_id, target_id, kind, _metadata, targets in record.get("edges", []):
+            source = self._index.get(source_id)
+            edge = _find_edge(source, target_id, kind, targets)
+            if source is not None and edge is not None:
+                source.remove_edge(edge)
+        for source_id, target_id, kind, targets, before in record.get("relabelled", []):
+            edge = _find_edge(self._index.get(source_id), target_id, kind, targets)
+            if edge is not None:
+                edge.assertion_targets[:] = before
         self._unresolved_references.append(_fault_from_record(record["fault"]))
 
     # Implements: REQ-p00017-H, REQ-p00014-G, REQ-d00274-H
@@ -3552,6 +3727,11 @@ class TraceGraph:
         """Undo ``_resolve_citations`` for the citations this graph holds."""
         for record in reversed(resolved):
             if "member" in record:
+                continue
+            if record.get("satisfies_remade"):
+                self._restore_copy(record, self._index.get)
+                continue
+            if record.get("satisfies_copy"):
                 continue
             if record.get("satisfies_made"):
                 self._unmake_satisfies_copy(record)
@@ -6937,15 +7117,19 @@ class GraphBuilder:
         # instance already produces -- the silence this assertion exists to
         # remove.
         refused_items: list[tuple[str, str, FaultClass, tuple[str, ...]]] = []
-        for declaring_id, template_id, verdicts in self._satisfies_links:
-            refused = verdicts.get((EdgeKind.SATISFIES.value, template_id))
+        # Implements: REQ-p00014-Q, REQ-d00328-A
+        # A multi-assertion item names each of its *Assertions*, as it does
+        # under every other keyword.
+        satisfies_links: list[tuple[str, str]] = []
+        for declaring_id, raw_target, verdicts in self._satisfies_links:
+            refused = verdicts.get((EdgeKind.SATISFIES.value, raw_target))
             if reader_refused(refused):
                 assert refused is not None
-                refused_items.append((declaring_id, template_id, refused[0], refused[1]))
+                refused_items.append((declaring_id, raw_target, refused[0], refused[1]))
                 continue
-            # Handle assertion-level satisfies: strip assertion suffix to find root
-            # but keep the full ref for later use
-            template_roots.setdefault(template_id, []).append(declaring_id)
+            for template_id in self._expand_multi_assertion(raw_target):
+                satisfies_links.append((declaring_id, template_id))
+                template_roots.setdefault(template_id, []).append(declaring_id)
 
         # Sub-pass 1: Validate template-marker on each Satisfies target.
         # Implements: REQ-p00014-F, REQ-p00014-G
@@ -6965,6 +7149,7 @@ class GraphBuilder:
                     # Defer to sub-pass 2; the INSTANCE may yet be cloned.
                     continue
                 # Genuinely missing — record a plain broken-ref and skip clone.
+                # Implements: REQ-d00328-G
                 for declaring_id in template_roots[template_id]:
                     self._unresolved_references.append(
                         ReferenceFault(
@@ -6976,7 +7161,7 @@ class GraphBuilder:
                     )
                 template_roots[template_id] = []
                 continue
-            # Implements: REQ-p00014-G
+            # Implements: REQ-p00014-G, REQ-d00328-G
             # A target the matrix refuses is reported and not cloned, so no
             # INSTANCE subtree is made against a node that is not a template.
             # The verdict depends on the target alone, so every declaring
@@ -6992,50 +7177,66 @@ class GraphBuilder:
                 template_roots[template_id] = []
 
         # Sub-pass 2: Clone & link. Skip any satisfies-link whose template was
-        # rejected in sub-pass 1 (template_roots[t] emptied).
-        cloneable_links = [(d, t) for d, t, _v in self._satisfies_links if template_roots.get(t)]
-        for declaring_id, template_id in cloneable_links:
-            template_node = self._nodes.get(template_id)
-            # Implements: REQ-p00017-H
-            if template_node is not None and assertion_is_retired(template_node):
-                template_node = None
-            declaring_node = self._nodes.get(declaring_id)
-            if not template_node or not declaring_node:
-                # Composite that still doesn't resolve after cloning passes —
-                # genuinely broken.
-                if not template_node and INSTANCE_SEPARATOR in template_id:
-                    self._unresolved_references.append(
-                        ReferenceFault(
-                            source_id=declaring_id,
-                            target_id=template_id,
-                            edge_kind=EdgeKind.SATISFIES.value,
-                            fault_class=self._resolution_class(template_id),
+        # rejected in sub-pass 1 (template_roots[t] emptied). A composite
+        # target names a copy, so it is judged only once the copies the other
+        # targets make exist.
+        cloneable_links = [(d, t) for d, t in satisfies_links if template_roots.get(t)]
+        for composite in (False, True):
+            # Every target of one declaring requirement is copied in one
+            # call, so the copy holds what the targets ask of it together.
+            targets_of: dict[str, list[GraphNode]] = {}
+            for declaring_id, template_id in cloneable_links:
+                if (INSTANCE_SEPARATOR in template_id) != composite:
+                    continue
+                template_node = self._nodes.get(template_id)
+                # Implements: REQ-p00017-H
+                if template_node is not None and assertion_is_retired(template_node):
+                    template_node = None
+                declaring_node = self._nodes.get(declaring_id)
+                if not template_node or not declaring_node:
+                    # Composite that still doesn't resolve after cloning
+                    # passes -- genuinely broken.
+                    # Implements: REQ-d00328-G
+                    if not template_node and composite:
+                        self._unresolved_references.append(
+                            ReferenceFault(
+                                source_id=declaring_id,
+                                target_id=template_id,
+                                edge_kind=EdgeKind.SATISFIES.value,
+                                fault_class=self._resolution_class(template_id),
+                            )
                         )
-                    )
-                continue
-            # Implements: REQ-p00014-G
-            # A composite target resolves only once a sibling satisfier has
-            # cloned it, so it is judged here rather than in sub-pass 1.
-            matrix_fault = satisfies_target_fault(template_node, declaring_id, template_id)
-            if matrix_fault is not None:
-                self._unresolved_references.append(matrix_fault)
-                continue
+                    continue
+                # Implements: REQ-p00014-G, REQ-d00328-G
+                # A composite target resolves only once a sibling satisfier
+                # has cloned it, so it is judged here rather than in
+                # sub-pass 1.
+                matrix_fault = satisfies_target_fault(template_node, declaring_id, template_id)
+                if matrix_fault is not None:
+                    self._unresolved_references.append(matrix_fault)
+                    continue
+                targets = targets_of.setdefault(declaring_id, [])
+                if template_node not in targets:
+                    targets.append(template_node)
 
-            # The clone is the subtree rooted at the target: the target with
-            # its *Assertions*, plus every template that refines a member,
-            # recursively, with theirs. Declaring against an interior member
-            # is simply a narrower declaration. Every original lives in this
+            # The copy of a requirement target is the subtree rooted at it:
+            # the target with its *Assertions*, plus every template that
+            # refines a member, recursively, with theirs. An *Assertion*
+            # target copies its requirement holding that *Assertion* and the
+            # templates refining it. Every original lives in this
             # repository, which the copies name.
             # Implements: REQ-d00129-C, REQ-d00128-J, REQ-d00128-K, REQ-p00014-M
-            instantiate_subtree(
-                template_node,
-                declaring_node,
-                lambda orig_id, declaring_id=declaring_id: self._resolver.build_instance_id(
-                    declaring_id, orig_id
-                ),
-                lambda _orig: (self._project_name, True),
-                self._nodes,
-            )
+            # Implements: REQ-d00328-A+B+C+D
+            for declaring_id, targets in targets_of.items():
+                instantiate_subtree(
+                    targets,
+                    self._nodes[declaring_id],
+                    lambda orig_id, declaring_id=declaring_id: self._resolver.build_instance_id(
+                        declaring_id, orig_id
+                    ),
+                    lambda _orig: (self._project_name, True),
+                    self._nodes,
+                )
 
         # Implements: REQ-d00272-K+T
         # Reported once every copy exists, so an item naming a copy made in
