@@ -26,8 +26,8 @@
 # and if the run finished while no hook was watching, it has already recorded
 # its own verdict, so the next invocation is a cache hit.
 #
-# Sourced by pre-commit, pre-push and e2e-verdict. Do not run a tier any other
-# way from a hook.
+# Sourced by unit-verdict, e2e-verdict and run-target (which the Makefile's
+# test targets call). Do not run a tier any other way.
 
 # Remove coverage shards abandoned by runs that are no longer alive.
 #
@@ -40,7 +40,14 @@ tier_sweep_dead_coverage_shards() {
         [ -e "$_shard" ] || continue
         _spid=$(printf '%s' "${_shard##*/}" | sed -n 's/.*\.pid\([0-9][0-9]*\)\..*/\1/p')
         [ -n "$_spid" ] || continue
-        if kill -0 "$_spid" 2>/dev/null; then continue; fi
+        # A shard is written by a Python process. A live pid running anything
+        # else is a number reused after the writer died, and its shard is
+        # abandoned like any other.
+        if kill -0 "$_spid" 2>/dev/null; then
+            case "$(ps -ww -o args= -p "$_spid" 2>/dev/null)" in
+                *python*|*pytest*) continue ;;
+            esac
+        fi
         rm -f "$_shard"
         # To stderr: callers capture this function's caller's stdout for the
         # exit code, and a stray line there becomes part of the "code".
@@ -49,12 +56,22 @@ tier_sweep_dead_coverage_shards() {
 }
 
 # Is the run recorded in this state directory still going?
+#
+# A live pid is not enough: the run that recorded it may have ended long ago
+# and the number been given to an unrelated process since. The recorded pid
+# is the shell running this directory's run.sh, so the process must still be
+# running that script. A pid that names anything else is a run that ended.
 tier_run_alive() {
     _dir="$1"
     [ -f "$_dir/pid" ] || return 1
     _rpid=$(cat "$_dir/pid" 2>/dev/null) || return 1
     [ -n "$_rpid" ] || return 1
-    kill -0 "$_rpid" 2>/dev/null
+    kill -0 "$_rpid" 2>/dev/null || return 1
+    _rargs=$(ps -ww -o args= -p "$_rpid" 2>/dev/null) || return 1
+    case "$_rargs" in
+        *"$_dir/run.sh"*) return 0 ;;
+    esac
+    return 1
 }
 
 tier_run_key() {
@@ -62,13 +79,15 @@ tier_run_key() {
     if [ -f "$_dir/key" ]; then cat "$_dir/key" 2>/dev/null; fi
 }
 
-# tier_start <state-dir> <key> <repo-root> <finisher-or-empty> <cmd> [args...]
+# tier_prepare <state-dir> <key> <repo-root> <finisher-or-empty> <cmd> [args...]
 #
-# Writes <state-dir>/{pid,key,log,rc}. The finisher, when given, is a script
-# run after the command with the command's exit code as $1; it runs inside the
-# detached session too, so whatever it records — a verdict, a cache key, a
-# formatted artifact — is recorded even when no hook is left watching.
-tier_start() {
+# Writes <state-dir>/{key,log,cmd.sh,run.sh} and clears {pid,rc}. run.sh is
+# the run: it records its own pid, runs the command into the log, runs the
+# finisher, and records the exit code. The finisher, when given, is a script
+# run after the command with the command's exit code as $1, so whatever it
+# records -- a verdict, a cache key, a formatted artifact -- is recorded by
+# the run itself.
+tier_prepare() {
     _dir="$1"; shift
     _key="$1"; shift
     _root="$1"; shift
@@ -97,6 +116,14 @@ tier_start() {
         fi
         printf 'echo "$_rc" > %q\n' "$_dir/rc"
     } > "$_dir/run.sh"
+}
+
+# tier_start <state-dir> <key> <repo-root> <finisher-or-empty> <cmd> [args...]
+#
+# Prepares the run and starts it detached, in a session of its own.
+tier_start() {
+    _dir="$1"
+    tier_prepare "$@"
 
     # setsid puts it in a session of its own: the hook's process group can be
     # signalled without reaching it. </dev/null so it never blocks on a
@@ -171,8 +198,8 @@ tier_execute() {
             return 0
         fi
         echo "ERROR: a $_label run for a different tree is in progress (pid $(cat "$_dir/pid"))." >&2
-        echo "       Two test runs in one worktree corrupt each other's coverage data." >&2
-        echo "       Wait for it, or stop it and remove $_dir/pid." >&2
+        echo "       Two runs of one tier in one worktree overwrite each other's results" >&2
+        echo "       and coverage data. Wait for it to finish; its output is in $_dir/log." >&2
         echo 1
         return 0
     fi
@@ -185,4 +212,42 @@ tier_execute() {
     fi
     tier_wait "$_dir"
     return 0
+}
+
+# tier_execute_foreground <state-dir> <repo-root> <label> <cmd> [args...]
+#
+# Runs a tier in the foreground, for a person at a terminal (`make test`),
+# under the same guards a hook's run has: it refuses while any run of this
+# tier is in progress in the worktree, sweeps abandoned coverage shards, and
+# records itself in the state directory so a hook started meanwhile refuses
+# in turn. Interrupting it stops the run. Exits with the command's code.
+tier_execute_foreground() {
+    _dir="$1"
+    _root="$2"
+    _label="$3"
+    shift 3
+
+    if tier_run_alive "$_dir"; then
+        echo "ERROR: a $_label run is already in progress in this worktree (pid $(cat "$_dir/pid"))." >&2
+        echo "       Two runs of one tier in one worktree overwrite each other's results" >&2
+        echo "       and coverage data. Wait for it to finish; its output is in $_dir/log." >&2
+        return 1
+    fi
+
+    tier_sweep_dead_coverage_shards "$_root"
+    tier_prepare "$_dir" "foreground $$" "$_root" "" "$@"
+    # The log is shown as it is written, and kept for whoever asks later.
+    # The run is the foreground job, so an interrupt reaches it; the relay
+    # ends with this shell, whichever way this shell ends.
+    tail -f -n +1 --pid="$$" "$_dir/log" 2>/dev/null &
+    _tpid=$!
+    bash "$_dir/run.sh"
+    # Let the relay print what the run wrote last before it is stopped.
+    sleep 1
+    kill "$_tpid" 2>/dev/null
+    wait "$_tpid" 2>/dev/null
+    if [ -f "$_dir/rc" ]; then
+        return "$(cat "$_dir/rc")"
+    fi
+    return 137
 }

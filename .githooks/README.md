@@ -57,7 +57,8 @@ one `.coverage` file elspais reads, beside `junit.xml` and `coverage.json`.
 Every parallel tier takes its worker count from `test-workers`: half the
 processors this process may run on, and at least one, so the unit and e2e
 tiers together never take the whole machine. `ELSPAIS_TEST_WORKERS`
-overrides it.
+overrides it; a value that is not a positive whole number stops the tier with
+a message naming the variable.
 
 The hook runs `run-unit-tier` through `with-fingerprint`, which brackets it with
 `elspais fingerprint start` and `finish` for the `elspais-unit` target. Its
@@ -89,9 +90,13 @@ Runs before pushing, with PR-aware blocking behavior:
 | Doc sync tests | `pytest tests/test_doc_sync.py` | `pytest` |
 
 The e2e stage is `e2e-verdict`, the one writer of `.results/.test-cache-e2e`.
-It records `<tree> PASS|FAIL <environment>` for the tree `git write-tree`
-names, and honours a recorded verdict for the same tree and environment.
-Running it before `git push` moves the run out of the push.
+It records `<tree> PASS <environment>` for the tree `git write-tree` names
+when the tier passes, and honours that record for the same tree and
+environment. A failed run records nothing and removes any earlier record, so
+the next invocation runs the tier again: a failure caused by the environment
+is never reported again for a run that did not happen. `unit-verdict` keeps
+its cache the same way. Running `e2e-verdict` before `git push` moves the run
+out of the push.
 
 `e2e-verdict` runs the tier through `run-e2e-tier`, which `make test-e2e` and
 the `elspais-e2e` target in `.elspais.toml` also call, so every way of running

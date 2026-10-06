@@ -10,10 +10,12 @@
 # e2e stage out of the push, where a long run otherwise overruns the
 # remote's idle timeout.
 #
-# A verdict already recorded for the same tree and environment is honored
-# without re-running: exit 0 on PASS, exit 1 on FAIL. Re-run a recorded
-# verdict with ELSPAIS_E2E_FORCE=1. The verdict is written only by a real
-# run -- never pre-write PASS.
+# A PASS already recorded for the same tree and environment is honored
+# without re-running. A failure is never recorded: the next invocation runs
+# the tier again, so a failure caused by the environment -- a port, a missing
+# binary, a flaky test -- is never reported again for a run that did not
+# happen. Re-run a recorded PASS with ELSPAIS_E2E_FORCE=1. The verdict is
+# written only by a real run -- never pre-write PASS.
 
 set -e
 set -o pipefail
@@ -96,10 +98,8 @@ if [ -d "$REPO_ROOT/.venv/bin" ]; then
 fi
 E2E_ENV_SRC=$(e2e_env_src) || E2E_ENV_SRC=""
 
-# A run under the wrong interpreter says nothing about this tree, so it must
-# not reach the cache: a recorded FAIL is keyed on the tree and blocks every
-# later push of it, which turns an environment fault into a durable verdict
-# about the code. Refuse before running instead.
+# A run under the wrong interpreter says nothing about this tree, so it is
+# refused before it runs rather than reported as a failure of the tree.
 if [ "$E2E_ENV_SRC" != "$E2E_REPO_SRC" ]; then
     echo ""
     echo -e "${RED}======================================${NC}"
@@ -118,24 +118,18 @@ if [ "$E2E_ENV_SRC" != "$E2E_REPO_SRC" ]; then
     exit 1
 fi
 
-# Honor a verdict already recorded for this tree in this environment. The
-# cache records the verdict for a tree, not just its successes: caching only
-# passes meant any failing run guaranteed every subsequent push re-ran the
-# whole suite and died the same way.
+# Honor a PASS already recorded for this tree in this environment. Only a
+# pass is recorded, as for the unit verdict: a failure says something about
+# one run, which may have failed for a reason outside the tree, and a cached
+# failure would report that reason again for every later invocation.
 if [ -z "$ELSPAIS_E2E_FORCE" ] && [ -f "$E2E_CACHE" ]; then
     CACHED_HASH=$(cut -d' ' -f1 < "$E2E_CACHE")
     CACHED_VERDICT=$(cut -d' ' -f2 < "$E2E_CACHE")
     CACHED_ENV=$(cut -d' ' -f3 < "$E2E_CACHE")
     if [ "$CACHED_HASH" = "$CONTENT_HASH" ] && [ -n "$CACHED_ENV" ] \
-       && [ "$CACHED_ENV" = "$E2E_ENV_SRC" ]; then
-        if [ "$CACHED_VERDICT" = "PASS" ]; then
-            echo -e "${GREEN}E2E tests cached — passed since last change${NC}"
-            exit 0
-        fi
-        echo -e "${RED}E2E tests failed (cached verdict for an unchanged tree)${NC}"
-        echo "Re-run them with: ELSPAIS_E2E_FORCE=1 .githooks/e2e-verdict"
-        echo "Cache: $E2E_CACHE"
-        exit 1
+       && [ "$CACHED_ENV" = "$E2E_ENV_SRC" ] && [ "$CACHED_VERDICT" = "PASS" ]; then
+        echo -e "${GREEN}E2E tests cached — passed since last change${NC}"
+        exit 0
     fi
 fi
 
@@ -164,7 +158,7 @@ mkdir -p "$E2E_RUN_DIR"
     printf 'if [ "$1" -eq 0 ]; then\n'
     printf '    printf "%%s PASS %%s\\n" %q %q > %q\n' "$CONTENT_HASH" "$E2E_ENV_SRC" "$E2E_CACHE"
     printf 'else\n'
-    printf '    printf "%%s FAIL %%s\\n" %q %q > %q\n' "$CONTENT_HASH" "$E2E_ENV_SRC" "$E2E_CACHE"
+    printf '    rm -f %q\n' "$E2E_CACHE"
     printf 'fi\n'
 } > "$E2E_RUN_DIR/finish.sh"
 

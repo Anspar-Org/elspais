@@ -5,9 +5,25 @@
 # processors this process may run on, and at least one. Every tier that runs
 # in parallel asks here, so the unit and e2e tiers together never take the
 # whole machine, and the count follows whatever machine or CI runner they are
-# on. ELSPAIS_TEST_WORKERS overrides it.
+# on. ELSPAIS_TEST_WORKERS overrides it, and must be a positive whole number.
 
+# An override that is not a positive whole number is refused: pytest-xdist
+# would otherwise read `0` as "no workers" and run the tier serially, or fail
+# with a message that does not name this variable.
 if [ -n "$ELSPAIS_TEST_WORKERS" ]; then
+    case "$ELSPAIS_TEST_WORKERS" in
+        *[!0-9]*) _bad=1 ;;
+        *[1-9]*) _bad=0 ;;
+        *) _bad=1 ;;
+    esac
+    case "$_bad" in
+        1)
+            echo "ERROR: ELSPAIS_TEST_WORKERS='$ELSPAIS_TEST_WORKERS' is not a positive whole number." >&2
+            echo "       Set it to the number of pytest-xdist workers (for example 4), or unset it" >&2
+            echo "       to use half the processors this process may run on." >&2
+            exit 2
+            ;;
+    esac
     echo "$ELSPAIS_TEST_WORKERS"
     exit 0
 fi

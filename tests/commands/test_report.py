@@ -536,9 +536,19 @@ class TestCLIDispatch:
         assert "text" in call_args[0][1]
 
     # Verifies: REQ-d00085-D
-    def test_REQ_d00085_D_cli_single_section_uses_normal_argparse(self):
-        """cli.main() with single composable name uses normal argparse dispatch."""
-        with patch("elspais.commands.report.run") as mock_report_run:
+    def test_REQ_d00085_D_cli_single_section_uses_normal_argparse(self, tmp_path, monkeypatch):
+        """cli.main() with single composable name uses normal argparse dispatch.
+
+        Run in a project of its own and with no server to ask: from the
+        checkout, the command would build this repository's graph or reach the
+        daemon serving it.
+        """
+        _make_spec_dir(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        with (
+            patch("elspais.commands.report.run") as mock_report_run,
+            patch("elspais.commands._engine._try_daemon", return_value=None),
+        ):
             from elspais.cli import main
 
             # Single section should NOT go through report.run

@@ -96,8 +96,17 @@ def _hide_playwright(monkeypatch):
     monkeypatch.setitem(sys.modules, "playwright", None)
 
 
+def _extras_present(monkeypatch):
+    # These tests read the marker expression. Whether this machine has the
+    # `mcp` package or playwright's chromium build is the extras guard's
+    # question, tested in tests/test_test_runner_guards.py.
+    monkeypatch.setattr(tests_conftest, "_importable", lambda module: True)
+    monkeypatch.setattr(tests_conftest, "_chromium_refusal", lambda: None)
+
+
 def test_default_tier_is_not_refused_without_playwright(monkeypatch):
     """The CI regression: a plain `pytest` run must configure cleanly."""
+    _extras_present(monkeypatch)
     _hide_playwright(monkeypatch)
     config = FakeConfig(_default_markexpr())
 
@@ -122,7 +131,8 @@ def test_browser_tier_is_refused_without_playwright(monkeypatch):
     assert "[browser]" in message
 
 
-def test_browser_tier_is_allowed_when_playwright_is_installed():
+def test_browser_tier_is_allowed_when_playwright_is_installed(monkeypatch):
     pytest.importorskip("playwright")
+    _extras_present(monkeypatch)
 
     tests_conftest.pytest_configure(FakeConfig("browser"))

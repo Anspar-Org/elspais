@@ -39,6 +39,115 @@ def _selects_marker(markexpr: str, name: str) -> bool:
         return False
 
 
+def _selects_marker_set(markexpr: str, names: frozenset[str]) -> bool:
+    """Whether a marker expression SELECTS a test carrying exactly *names*.
+
+    The e2e tier's expression (`e2e and not serial`) selects the browser tests
+    that also carry `e2e`, and says nothing of `browser`, so asking about each
+    marker alone cannot tell that the tier runs them.
+    """
+    if not markexpr:
+        return False
+    try:
+        from _pytest.mark.expression import Expression
+    except ImportError:  # pragma: no cover - private module, stable since 5.4
+        return False
+    try:
+        return bool(Expression.compile(markexpr).evaluate(lambda n: n in names))
+    except Exception:
+        return False
+
+
+#: The environment variable naming the extras a session deliberately runs
+#: without. Its tests that need one then skip, as they always did; without
+#: it, a missing extra stops the session.
+WITHOUT_ENV = "ELSPAIS_TEST_WITHOUT"
+
+#: What each name ELSPAIS_TEST_WITHOUT accepts stands for.
+OPTIONAL_EXTRAS = {
+    "mcp": "the `mcp` package (the `mcp` extra, also in `all`)",
+    "browser": "playwright and its chromium build (the `browser` extra)",
+}
+
+_SETUP_HINT = (
+    "Run `make setup`, which installs this checkout's venv with every extra the "
+    "suite uses and fetches chromium"
+)
+
+
+def _declared_without() -> set[str]:
+    """The extras ELSPAIS_TEST_WITHOUT names, refusing a name it cannot mean."""
+    raw = os.environ.get(WITHOUT_ENV, "")
+    names = {part.strip() for part in raw.split(",") if part.strip()}
+    unknown = sorted(names - set(OPTIONAL_EXTRAS))
+    if unknown:
+        raise pytest.UsageError(
+            f"{WITHOUT_ENV} names {', '.join(unknown)}, which is not an extra the "
+            f"suite can run without; it accepts: {', '.join(sorted(OPTIONAL_EXTRAS))}"
+        )
+    return names
+
+
+def _importable(module: str) -> bool:
+    import importlib.util
+
+    try:
+        return importlib.util.find_spec(module) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _chromium_refusal() -> str | None:
+    """Why the browser tests could not launch chromium, or None where they can."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return "playwright is not installed"
+    try:
+        with sync_playwright() as p:
+            executable = p.chromium.executable_path
+    except Exception as exc:  # the driver itself failed to start
+        return f"playwright could not start: {exc}"
+    if not executable or not Path(executable).exists():
+        return f"playwright's chromium is not installed (expected at {executable})"
+    return None
+
+
+def _missing_extras_refusal(markexpr: str) -> str | None:
+    """Why this session would quietly skip tests it was asked to run, or None.
+
+    A test needing an absent extra skips on `importorskip`, and a run that
+    skipped a tier's worth of tests reads like a run that passed. Every tier
+    holds tests importing `mcp`, so its absence stops every session. The
+    browser extra and chromium stop a session that selects browser tests --
+    the e2e tier does, since most browser tests also carry `e2e`. A session
+    that means to run without one names it in ELSPAIS_TEST_WITHOUT.
+    """
+    without = _declared_without()
+    problems: list[str] = []
+    if "mcp" not in without and not _importable("mcp"):
+        problems.append("the `mcp` package is not installed, so every test needing it would skip")
+    selects_browser = _selects_marker_set(markexpr, frozenset({"browser"})) or (
+        _selects_marker_set(markexpr, frozenset({"e2e", "browser"}))
+    )
+    if selects_browser and "browser" not in without:
+        # An xdist worker asks nothing: the controller already asked, and a
+        # worker's refusal is reported as an internal error without its text.
+        if not os.environ.get("PYTEST_XDIST_WORKER"):
+            refusal = _chromium_refusal()
+            if refusal is not None:
+                problems.append(
+                    f"this session selects browser tests and {refusal}, so they would skip or fail"
+                )
+    if not problems:
+        return None
+    return (
+        "; ".join(problems)
+        + f". {_SETUP_HINT}, or name what this session deliberately runs without in "
+        + f"{WITHOUT_ENV} (accepted: {', '.join(sorted(OPTIONAL_EXTRAS))})."
+    )
+
+
 def pytest_configure(config):
     """Strip git env vars before any test collection or coverage forking.
 
@@ -109,6 +218,13 @@ def pytest_configure(config):
                 "so the browser tier would report success having run nothing. "
                 'Install it with: pip install -e ".[browser]" && playwright install chromium'
             ) from None
+
+    # A tier must run what it selects or say why it did not. An extra the
+    # suite needs and the environment lacks turns tests into skips, and a run
+    # that skipped them is indistinguishable from one that passed them.
+    refusal = _missing_extras_refusal(config.getoption("markexpr", default="") or "")
+    if refusal is not None:
+        raise pytest.UsageError(refusal)
 
 
 # Fixtures directory
