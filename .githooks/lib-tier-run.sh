@@ -115,18 +115,48 @@ tier_run_key() {
     if [ -f "$_dir/key" ]; then cat "$_dir/key" 2>/dev/null; fi
 }
 
+# tier_proc_is_zombie <pid> -- true if the kernel is still holding this pid's exit status.
+#
+# `kill -0` reports a zombie as signallable, so it alone cannot tell a run
+# that is still going from one that exited but was never reaped -- exactly
+# the orphan a detached run becomes when its container's pid 1 does not
+# reap it (the same condition CLAUDE.md's `pid_alive()` exists to answer in
+# Python; this is its shell-side counterpart for a caller with no /proc).
+# Read from /proc's stat where there is one; otherwise `ps -o state=`, which
+# both BSD and GNU ps print `Z` from. Neither readable is answered False:
+# a pid this cannot inspect is judged on `kill -0` alone, same as elsewhere
+# in this file.
+tier_proc_is_zombie() {
+    if [ -r "/proc/$1/stat" ]; then
+        # Field 2, the comm name, is parenthesized and may itself hold a
+        # space or a paren; state is field 3, so what follows the LAST ")"
+        # is read, same as _session_leader_has_tty's Python counterpart.
+        _tpz_rest=$(sed -n 's/^[0-9]*.*) //p' "/proc/$1/stat" 2>/dev/null)
+        set -- $_tpz_rest
+        [ "$1" = "Z" ]
+        return
+    fi
+    _tpz_state=$(ps -o state= -p "$1" 2>/dev/null) || _tpz_state=""
+    case "$_tpz_state" in
+        *Z*) return 0 ;;
+    esac
+    return 1
+}
+
 # tier_tail_until <pid> <file> -- relay a growing file until <pid> exits.
 #
 # The portable replacement for GNU `tail -f --pid=`, which BSD tail (macOS)
 # does not accept at all. Follows in the background, polls the pid, then
 # stops the follower once the writer is gone -- giving it a moment first so
-# the last lines written before exit are not lost to the poll's timing.
+# the last lines written before exit are not lost to the poll's timing. A
+# pid still signallable but reaped into a zombie counts as gone, not alive,
+# or this loop never ends in a container whose pid 1 does not reap orphans.
 tier_tail_until() {
     _tu_pid="$1"
     _tu_file="$2"
     tail -f -n +1 "$_tu_file" 2>/dev/null &
     _tu_tpid=$!
-    while kill -0 "$_tu_pid" 2>/dev/null; do
+    while kill -0 "$_tu_pid" 2>/dev/null && ! tier_proc_is_zombie "$_tu_pid"; do
         sleep 0.2
     done
     sleep 0.3
