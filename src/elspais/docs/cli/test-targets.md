@@ -464,6 +464,11 @@ would decide stay awaiting a result. `elspais fingerprint finish` records no
 status unless it is given `--exit-status`. An Evidence Snapshot holds no
 file-level result, so `elspais evidence write` refuses a target that has one.
 
+A target declaring `file_results` whose `cwd` holds no test file the target
+scans can credit nothing. `elspais checks` reports it under
+`tests.ingestion_fault`, naming the target and its `cwd`, whether or not the
+command has run.
+
 ### credit_coverage
 
 Controls whether covered `// Implements:` lines feed the `lcov_tested`

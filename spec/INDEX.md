@@ -235,7 +235,7 @@
 | REQ-d00326 | Path-Shaped Skip Patterns                                     | dev-graph-config.md     | 797c3fe4 |
 | REQ-d00327 | Origin of a Recorded Source Path                              | dev-graph-core.md       | 0faeeab4 |
 | REQ-d00328 | Satisfying Named Assertions                                   | dev-graph-core.md       | 6e65b3ba |
-| REQ-d00329 | Test File Results From a Command's Exit Status                | dev-graph-core.md       | 9abdd787 |
+| REQ-d00329 | Test File Results From a Command's Exit Status                | dev-graph-core.md       | 113d1a8d |
 
 ## User Journeys
 

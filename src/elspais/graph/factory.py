@@ -737,6 +737,22 @@ def _ingest_file_results(
             )
         return 0
 
+    # Implements: REQ-d00329-K
+    # With no test file to stand for, the declaration can credit nothing,
+    # whatever the command did.
+    files = sorted(f for f in scanned_test_files if not prefix or f.startswith(prefix))
+    if not files:
+        builder.record_ingestion_fault(
+            path=str(target.cwd or "."),
+            stage="target",
+            cause=(
+                f"working directory {target.cwd or '.'!r} holds no test file this "
+                f"target scans, so its file-level results credit nothing"
+            ),
+            target=target.name,
+        )
+        return 0
+
     # Where the target also reads per-test results, the per-test pass has
     # already recorded an unread results artifact for it.
     try:
@@ -786,7 +802,7 @@ def _ingest_file_results(
     passed = status == 0
     failure = f"the command of target {target.name!r} exited with status {status}"
     count = 0
-    for rel in sorted(f for f in scanned_test_files if not prefix or f.startswith(prefix)):
+    for rel in files:
         content = ParsedContent(
             content_type="test_result",
             start_line=1,
