@@ -174,7 +174,7 @@
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | b49bd5ee |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 3b102d6f |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | 8360f2f4 |
-| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 6efe844f |
+| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 3c5b3090 |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 1ea68210 |
@@ -233,6 +233,7 @@
 | REQ-d00324 | Refusal of a Retired Configuration Value                      | dev-graph-config.md     | 530fb06a |
 | REQ-d00325 | Changelog Reason for a Saved Change                           | dev-graph-file-nodes.md | 4ebffc32 |
 | REQ-d00326 | Path-Shaped Skip Patterns                                     | dev-graph-config.md     | 797c3fe4 |
+| REQ-d00327 | Origin of a Recorded Source Path                              | dev-graph-core.md       | 0faeeab4 |
 
 ## User Journeys
 

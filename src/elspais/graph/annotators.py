@@ -33,7 +33,6 @@ from typing import TYPE_CHECKING, Any
 from elspais.config.schema import ElspaisConfig
 from elspais.graph.aggregation import FAILING_STATUSES, PASSING_STATUSES
 from elspais.graph.parsers.directives import counted_assertion_labels
-from elspais.utilities.test_identity import build_test_id_from_nodeid
 
 
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
@@ -154,7 +153,10 @@ def _compute_app_status_by_owner(graph, policy: CreditPolicy) -> dict[str | None
         app_dirs = policy.for_owner(owner).app_dirs
         if not app_dirs:
             continue
-        app = _match_app_dir(r.get_field("source_path"), app_dirs)
+        # Implements: REQ-d00327-C
+        # The path read from its origin, which carries the app's directory
+        # whichever origin the producer wrote it from.
+        app = _match_app_dir(r.get_field("source_file") or r.get_field("source_path"), app_dirs)
         if app is None:
             continue
         status = (r.get_field("status") or "").lower()
@@ -819,6 +821,11 @@ def _normalize_run_context(ctx: str) -> str | None:
     (one per test x phase) reused across many lines/requirements in a single
     annotation pass, so it is memoized with ``lru_cache`` (CUR-1568).
     """
+    # Imported here: test_identity imports from the graph package, whose
+    # __init__ imports this module, so a top-level import is circular
+    # whenever test_identity is the first of the two to be imported.
+    from elspais.utilities.test_identity import build_test_id_from_nodeid
+
     nodeid, sep, phase = ctx.rpartition("|")
     if not sep or phase != "run" or not nodeid:
         return None

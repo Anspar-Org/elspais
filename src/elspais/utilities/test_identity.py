@@ -175,3 +175,35 @@ def build_test_id_from_nodeid(nodeid: str) -> str:
         parts[-1] = strip_parametrize_suffix(parts[-1])
     cleaned = "::".join(parts)
     return f"{TEST_ID_PREFIX}{cleaned}"
+
+
+# Implements: REQ-d00327-C
+def test_id_path(test_id: str) -> str | None:
+    """The source path a canonical test ID carries, or None if it carries none.
+
+    A result whose name is a module path or a pytest nodeid binds through the
+    test ID built from it, so the path inside that ID is a path the result
+    records, and is read from an origin like any other.
+
+    Examples:
+        >>> test_id_path("test:tests/test_foo.py::TestBar::test_func")
+        'tests/test_foo.py'
+    """
+    if not test_id.startswith(TEST_ID_PREFIX):
+        return None
+    path = test_id[len(TEST_ID_PREFIX) :].split("::", 1)[0]
+    return path or None
+
+
+# Implements: REQ-d00327-C
+def with_test_id_path(test_id: str, path: str) -> str:
+    """*test_id* naming *path* in place of the source path it carries.
+
+    Examples:
+        >>> with_test_id_path("test:tests/test_foo.py::test_func", "app/tests/test_foo.py")
+        'test:app/tests/test_foo.py::test_func'
+    """
+    old = test_id_path(test_id)
+    if old is None:
+        return test_id
+    return f"{TEST_ID_PREFIX}{path}{test_id[len(TEST_ID_PREFIX) + len(old) :]}"

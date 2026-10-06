@@ -541,11 +541,12 @@ def _write_cwd_project(
     cwd: str | None,
     coverage: str = "lcov.info",
     code_dirs: list[str] | None = None,
+    extra: str = "",
 ) -> Path:
     """Write a project whose `unit` target may run in a working directory.
 
     Returns the config path. Every entry of *code_files* is a repo-relative
-    path written as a scanned code file.
+    path written as a scanned code file. *extra* is appended to the target.
     """
     import json
 
@@ -567,7 +568,7 @@ directories = {json.dumps(dirs)}
 [[scanning.test.targets]]
 name = "unit"
 coverage = "{coverage}"
-{cwd_line}""",
+{cwd_line}{extra}""",
         encoding="utf-8",
     )
     _write_spec(root / "spec")
@@ -744,3 +745,93 @@ namespace = "LIB"
         node = graph.find_by_id(make_file_id("LIB", "pkg/lib/x.py"))
         assert node is not None
         assert node.get_field("line_coverage") == {1: 1, 2: 1}
+
+
+def _write_coverage(root: Path, fmt: str, recorded: str) -> str:
+    """Write the `unit` target's coverage in *fmt*, recording *recorded*; return its name."""
+    import json
+
+    if fmt == "lcov":
+        _write_lcov(_unit_folder(root) / "lcov.info", recorded)
+        return "lcov.info"
+    cov_data = {
+        "files": {
+            recorded: {
+                "executed_lines": [1, 2],
+                "missing_lines": [],
+                "summary": {"num_statements": 2, "covered_lines": 2},
+            }
+        }
+    }
+    _unit_folder(root).joinpath("coverage.json").write_text(json.dumps(cov_data), encoding="utf-8")
+    return "coverage.json"
+
+
+class TestCoveragePathsFollowTheDeclaredOrigin:
+    """A coverage artifact's relative paths are read from the origin its
+    reporter declares, or from the one its target declares in its place."""
+
+    # Verifies: REQ-d00327-B, REQ-d00254-Y
+    @pytest.mark.parametrize("fmt", ["lcov", "coverage-json"])
+    def test_a_target_declaring_the_root_reads_repo_relative_coverage(
+        self, tmp_path: Path, fmt: str
+    ) -> None:
+        """The spelling that credits nothing under the reporter's own origin
+        credits its file once the target declares the repository root."""
+        coverage = _write_coverage(tmp_path, fmt, "app/lib/x.py")
+        config_file = _write_cwd_project(
+            tmp_path,
+            ["app/lib/x.py"],
+            cwd="app",
+            coverage=coverage,
+            extra='coverage_origin = "repository-root"\n',
+        )
+
+        graph = build_graph(config_path=config_file, repo_root=tmp_path, scan_tests=False)
+
+        assert _credited(graph) == {"app/lib/x.py": {1: 1, 2: 1}}
+
+    # Verifies: REQ-d00327-B, REQ-d00254-Y
+    @pytest.mark.parametrize(
+        "declared,credited",
+        [
+            ("", "app/lib/x.py"),
+            ("working-directory", "app/lib/x.py"),
+            ("repository-root", "lib/x.py"),
+        ],
+        ids=["reporter-default", "working-directory", "repository-root"],
+    )
+    def test_the_declared_origin_alone_decides_which_file_is_credited(
+        self, tmp_path: Path, declared: str, credited: str
+    ) -> None:
+        """With a scanned file at the recorded path from either origin, the
+        origin that applies decides, and the other is never also tried."""
+        extra = f'coverage_origin = "{declared}"\n' if declared else ""
+        config_file = _write_cwd_project(
+            tmp_path,
+            ["app/lib/x.py", "lib/x.py"],
+            cwd="app",
+            code_dirs=["app/lib", "lib"],
+            extra=extra,
+        )
+        _write_lcov(_unit_folder(tmp_path) / "lcov.info", "lib/x.py")
+
+        graph = build_graph(config_path=config_file, repo_root=tmp_path, scan_tests=False)
+
+        assert _credited(graph) == {credited: {1: 1, 2: 1}}
+
+    # Verifies: REQ-d00327-B, REQ-d00327-E
+    def test_the_targets_results_origin_does_not_move_its_coverage(self, tmp_path: Path) -> None:
+        """Coverage and results are declared apart: a results origin says
+        nothing about where the target's coverage starts."""
+        config_file = _write_cwd_project(
+            tmp_path,
+            ["app/lib/x.py"],
+            cwd="app",
+            extra='results_origin = "repository-root"\n',
+        )
+        _write_lcov(_unit_folder(tmp_path) / "lcov.info", "lib/x.py")
+
+        graph = build_graph(config_path=config_file, repo_root=tmp_path, scan_tests=False)
+
+        assert _credited(graph) == {"app/lib/x.py": {1: 1, 2: 1}}

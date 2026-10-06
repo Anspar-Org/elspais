@@ -53,8 +53,10 @@
 - REQ-d00322-M
 - REQ-d00322-N
 - REQ-d00311-M
+- REQ-d00327-F
 - REQ-d00322:section:1
 - REQ-d00311:section:1
+- REQ-d00327:section:1
 
 ## Project State
 

@@ -4,6 +4,16 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-141
+
+- **A relative source path in results and coverage is read from a declared origin (REQ-d00327-A+B+C+D+E+F)** -- each reporter declares whether the relative paths it records start at the repository root or at the test target's `cwd`, and a target replaces that with `results_origin` or `coverage_origin` under `[[scanning.test.targets]]`. A runner that records paths relative to its own working directory, such as pytest whose rootdir is the target's `cwd`, now binds its results to their tests where `results_origin = "working-directory"` is declared. The origin reaches every path a result records, including the path inside a pytest nodeid or a dotted Python module name. Every results reporter elspais provides declares `repository-root` and every coverage reporter declares `working-directory`, so a project that declares neither binds exactly as before. The reporters table in `elspais docs test-targets` gives each reporter's origin, and an unknown origin value is refused when the configuration is read.
+
+- **The test names in per-test coverage contexts follow the results origin (REQ-d00327-H)** -- coverage data names the test that executed a line as the test runner wrote it, so a target whose results are read from its `cwd` keeps the lines its coverage attributes to each test.
+
+- **A result that binds to no test names its path and origin (REQ-d00327-G)** -- the `tests.unmatched_results` finding states the path as recorded and the origin it was read from, so the declaration to change is visible.
+
+- **Coverage that attaches to no scanned file is reported (REQ-d00327-I)** -- a target's coverage read from the wrong origin was credited no lines and read as a run that exercised nothing. `tests.ingestion_fault` now reports that coverage file, naming the origin and one path as recorded. The check defaults to `error`; a target whose coverage measures only files elspais does not scan now meets it too, and `[rules.severity]` lowers it.
+
 ### TOOL-123
 
 - **A target whose results are carried from an Evidence Snapshot owes no coverage file (REQ-d00322-O)** -- a project that federates a member committing an Evidence Snapshot read that member's results from the snapshot, but the coverage pass still looked for each of the member's coverage files. The snapshot holds no coverage, so `elspais checks --tests` reported `tests.ingestion_fault` for every member target that declares `coverage`, and `--lenient` did not soften it. A target whose results are carried did not run in the tree that carries them, so the build now looks for no coverage file for it. A target that ran in the tree and left no coverage file is still reported.

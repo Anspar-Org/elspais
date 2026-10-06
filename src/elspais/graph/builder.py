@@ -6639,6 +6639,12 @@ class GraphBuilder:
             # rather than silently contributing no verdict.
             "name_match": data.get("name_match"),
             "name_candidates": data.get("name_candidates"),
+            # Implements: REQ-d00327-G
+            # The origin this result's relative paths were read from, and the
+            # path it binds through where that names no test file scanned for
+            # its target, so a result binding to nothing can say why.
+            "path_origin": data.get("path_origin"),
+            "unscanned_path": data.get("unscanned_path"),
         }
         self._nodes[result_id] = node
 

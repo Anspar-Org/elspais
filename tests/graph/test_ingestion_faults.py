@@ -72,13 +72,13 @@ def _project(tmp_path: Path, targets: str, results: dict[str, str] | None = None
     return project
 
 
-def _build(project: Path):
+def _build(project: Path, *, scan_code: bool = False):
     from elspais.graph.factory import build_graph
 
     return build_graph(
         config_path=project / ".elspais.toml",
         repo_root=project,
-        scan_code=False,
+        scan_code=scan_code,
     )
 
 
@@ -352,7 +352,11 @@ coverage = "report.txt"
 
 # Verifies: REQ-d00285-G
 def test_a_coverage_report_the_reader_declined_reaches_the_graph(tmp_path):
-    """A parser's own record of what it declined is lifted onto the graph."""
+    """A parser's own record of what it declined is lifted onto the graph.
+
+    The report measures a scanned code file, so its data attaches and the
+    parser's record is the only fault the build has to report.
+    """
     project = _project(
         tmp_path,
         """
@@ -361,10 +365,13 @@ name = "unit"
 reporter = "lcov"
 coverage = "lcov.info"
 """,
-        {".results/unit/lcov.info": "SF:lib/a.dart\nDA:two,1\nend_of_record\n"},
+        {
+            "src/a.py": "def a():\n    return 1\n",
+            ".results/unit/lcov.info": "SF:src/a.py\nDA:two,1\nend_of_record\n",
+        },
     )
 
-    (fault,) = _build(project).ingestion_faults()
+    (fault,) = _build(project, scan_code=True).ingestion_faults()
     assert fault.stage == "coverage"
     assert fault.line == 2
     assert fault.target == "unit"

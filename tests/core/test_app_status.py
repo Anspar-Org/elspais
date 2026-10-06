@@ -37,3 +37,18 @@ def test_app_status_red_on_any_failure_isolated_per_app():
     )
     status = _compute_app_status(g, APPS)
     assert status == {"provenance": "red", "reaction": "green"}
+
+
+# Verifies: REQ-d00327-C
+def test_app_status_reads_the_path_read_from_its_origin():
+    """A path recorded relative to the app's own directory lacks the app's
+    segment; the path read from its origin carries it."""
+    g = build_graph(
+        make_test_result(
+            "r1",
+            status="failed",
+            source_path="test/foo_test.dart",
+            source_file="provenance/test/foo_test.dart",
+        ),
+    )
+    assert _compute_app_status(g, APPS) == {"provenance": "red"}

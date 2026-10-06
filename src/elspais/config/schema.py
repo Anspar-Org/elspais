@@ -6,7 +6,14 @@ import posixpath
 import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 # Hex-color and namespace patterns live in the utilities lib so all consumers
 # share a single regex. See `utilities/color.py` and `utilities/patterns.py`.
@@ -688,6 +695,14 @@ CLASSNAME_FORMS = ("python-module", "source-file")
 # attribute of the `<testsuite>` that holds the result record.
 ENVIRONMENT_SOURCES = ("results-path", "suite-hostname")
 
+# Implements: REQ-d00327-A+B
+# The origins a relative source path a reporter records may be read from.
+# "repository-root" reads it from the root of the repository that owns the
+# target; "working-directory" reads it from the target's `cwd`.
+PATH_ORIGIN_ROOT = "repository-root"
+PATH_ORIGIN_CWD = "working-directory"
+PATH_ORIGINS = (PATH_ORIGIN_ROOT, PATH_ORIGIN_CWD)
+
 
 class TestTargetConfig(_StrictModel):
     """One test target: how its results + coverage are produced and ingested."""
@@ -696,7 +711,8 @@ class TestTargetConfig(_StrictModel):
 
     name: str
     # Relative to repo root; empty = repo root. The command runs here, and a
-    # relative source path in the coverage report is read from here.
+    # relative source path is read from here wherever the origin that applies
+    # is the working directory.
     cwd: str = ""
     command: str = ""  # optional; omitted in CI (tests already ran)
     reporter: str = ""  # registry format name (e.g. "flutter-machine", "junit", "pytest-json")
@@ -727,6 +743,13 @@ class TestTargetConfig(_StrictModel):
     # departs from the format's convention. Unset means the reporter's own
     # declared origin.
     line_base: int | None = None
+    # Implements: REQ-d00327-B
+    # Where a relative source path in this target's results, and in its
+    # coverage data, is read from, when the producer departs from its format's
+    # convention. They are declared apart because the two are usually written
+    # by different tools. Empty means the origin the reporter declares.
+    results_origin: str = ""
+    coverage_origin: str = ""
     # Implements: REQ-d00314-F
     # The shared resources this target uses. Two targets naming a common
     # resource never run at the same time.
@@ -775,6 +798,15 @@ class TestTargetConfig(_StrictModel):
         if v and v not in ENVIRONMENT_SOURCES:
             sources = ", ".join(f'"{s}"' for s in ENVIRONMENT_SOURCES)
             raise ValueError(f"environment must be empty or one of {sources}")
+        return v
+
+    @field_validator("results_origin", "coverage_origin")
+    @classmethod
+    # Implements: REQ-d00327-B
+    def _check_origin(cls, v: str, info: ValidationInfo) -> str:
+        if v and v not in PATH_ORIGINS:
+            origins = ", ".join(f'"{o}"' for o in PATH_ORIGINS)
+            raise ValueError(f"{info.field_name} must be empty or one of {origins}")
         return v
 
     @field_validator("credit_coverage")
