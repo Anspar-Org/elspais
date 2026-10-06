@@ -103,8 +103,11 @@ class TestSetStereotypeRoundTrip:
         assert entry.before_state["stereotype"] == Stereotype.TEMPLATE.value
         node = graph.find_by_id("REQ-p00001")
         assert node.get_field("stereotype") == Stereotype.CONCRETE
-        for child in _assertion_children(node):
-            assert child.get_field("stereotype") == Stereotype.CONCRETE
+        # The Assertions hold what a parsed concrete requirement's hold.
+        parsed = _concrete_graph().find_by_id("REQ-p00001")
+        assert [c.get_field("stereotype") for c in _assertion_children(node)] == [
+            c.get_field("stereotype") for c in _assertion_children(parsed)
+        ]
 
     # Verifies: REQ-p00014-E
     def test_before_state_records_per_assertion_stereotypes(self):
@@ -113,8 +116,12 @@ class TestSetStereotypeRoundTrip:
         entry = graph.set_stereotype("REQ-p00001", True)
 
         recorded = entry.before_state["assertion_stereotypes"]
-        assert set(recorded) == {"REQ-p00001-A", "REQ-p00001-B"}
-        assert all(v == Stereotype.CONCRETE.value for v in recorded.values())
+        # Each Assertion's own field as it was, unset where the parse set none.
+        parsed = _concrete_graph().find_by_id("REQ-p00001")
+        assert recorded == {
+            c.id: (c.get_field("stereotype") and c.get_field("stereotype").value)
+            for c in _assertion_children(parsed)
+        }
 
     # Verifies: REQ-p00014-E
     def test_undo_restores_node_and_assertion_children(self):

@@ -152,9 +152,6 @@ documentation says about it.
 | `spec.parseable` | All spec files can be parsed | warning | `[rules.severity]` | `elspais errors` |
 | `spec.unknown_directive` | Assertions opening with a parsing directive the tool does not recognize | warning | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `spec.no_duplicates` | No duplicate requirement IDs | error | `[rules.severity]` | `elspais -v checks --spec` |
-| `spec.implements_resolve` | All Implements: references resolve | warning | `[rules.severity]` | `elspais unresolved` |
-| `spec.refines_resolve` | All Refines: references resolve | warning | `[rules.severity]` | `elspais unresolved` |
-| `spec.satisfies_resolve` | All Satisfies: references resolve | warning | `[rules.severity]` | `elspais unresolved` |
 | `spec.needs_rewrite` | Flags requirements, journeys and file-level prose that will be rewritten on next save (duplicate refs, stale hash, spacing, term forms, and any other text a write puts in canonical form) | warning | `[rules.severity]` | `elspais fix` |
 | `spec.unfixable_issues` | Issues `elspais fix` cannot repair, so a person has to | error | `[rules.severity]` | `elspais errors` |
 | `spec.undefined_levels` | No requirement carries a level the configuration does not define (such a requirement is still counted and grouped, so this discloses it rather than dropping it) | info | `[rules.severity]` | no command resolves this; resolve it by hand |
@@ -804,8 +801,10 @@ Produces JUnit XML that CI systems (GitHub Actions, Jenkins, GitLab CI) can inge
   </testsuite>
   <testsuite name="spec" tests="6" failures="1" errors="1">
     <testcase classname="elspais.health.spec" name="spec.parseable"/>
-    <testcase classname="elspais.health.spec" name="spec.implements_resolve">
-      <failure message="2 unresolved Implements references">
+  </testsuite>
+  <testsuite name="references" tests="5" failures="1" errors="0">
+    <testcase classname="elspais.health.references" name="references.unknown_requirement">
+      <failure message="1 reference(s): name a requirement its repository does not hold">
         REQ-d99999 referenced by REQ-d00010
       </failure>
     </testcase>
@@ -858,9 +857,9 @@ Produces [SARIF v2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.
           "informationUri": "https://github.com/anspar-org/elspais",
           "rules": [
             {
-              "id": "spec.implements_resolve",
+              "id": "references.unknown_requirement",
               "shortDescription": {
-                "text": "All Implements references resolve"
+                "text": "No claimed reference names a requirement that repository does not hold"
               }
             }
           ]
@@ -868,7 +867,7 @@ Produces [SARIF v2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.
       },
       "results": [
         {
-          "ruleId": "spec.implements_resolve",
+          "ruleId": "references.unknown_requirement",
           "level": "error",
           "message": {
             "text": "REQ-d99999 referenced by REQ-d00010"

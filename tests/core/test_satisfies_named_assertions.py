@@ -22,7 +22,9 @@ import pytest
 from starlette.testclient import TestClient
 
 from elspais.commands._requests import TraceRequest
+from elspais.commands.health import run_spec_checks
 from elspais.commands.trace import compute_trace
+from elspais.config import get_config
 from elspais.graph.factory import build_graph
 from elspais.graph.GraphNode import NodeKind
 from elspais.graph.metrics import satisfier_rollup
@@ -35,6 +37,8 @@ from tests.core.test_mutation_faults_match_rebuild import (
     _assert_memory_equals_rebuild,
     _assert_undo_restores,
     _retitle,
+    _save,
+    _state,
 )
 
 # ---------------------------------------------------------------------------
@@ -42,9 +46,8 @@ from tests.core.test_mutation_faults_match_rebuild import (
 # ---------------------------------------------------------------------------
 
 # role -> (title, status, Refines: written in roles or None, assertion labels),
-# in the order the file holds them. The Draft refiner a mutation deletes is
-# the last template, since a requirement copied within its repository keeps
-# its original's lines.
+# in the order the file holds them. Only a requirement that is not Active is
+# deleted, so the refiner a mutation deletes is Draft.
 TEMPLATES = {
     "root": ("Audit Trail", "Active", None, ("A", "B", "C")),
     "ref_whole": ("Audit Retention", "Active", "root", ("A",)),
@@ -201,15 +204,17 @@ def _block(req_id: str, title: str, status: str, marker: str, meta: str, asserti
     )
 
 
-def _spec_text(layout: Layout, directory: str, retired_root_a: bool) -> str:
+def _spec_text(layout: Layout, directory: str, start: str) -> str:
     text = ""
     for role, (title, status, refines, labels) in TEMPLATES.items():
         if layout.owner(role) != directory:
             continue
+        if role == "root" and start == "draft-root":
+            status = "Draft"
         meta = f"**Refines**: {_ref(layout, refines)}\n" if refines else ""
         if role == "root":
             said = dict(ROOT_TEXT)
-            if retired_root_a:
+            if start == "retired-root-a":
                 said["A"] = "<RETIRED>"
             assertions = list(said.items())
         else:
@@ -219,7 +224,7 @@ def _spec_text(layout: Layout, directory: str, retired_root_a: bool) -> str:
         text += _block(
             _id(layout, "concrete"),
             "Concrete Record",
-            "Active",
+            "Draft" if start == "draft-concrete" else "Active",
             "",
             "",
             [("A", "The record SHALL exist.")],
@@ -259,7 +264,13 @@ def _record_hashes(root: Path) -> None:
             path.write_text(text.replace(old, new), encoding="utf-8")
 
 
-def _make(layout_name: str, retired_root_a: bool = False):
+# How the project starts: as written above, with root-A retired, or with the
+# root template or the concrete requirement Draft so that it can be deleted.
+STARTS = ("live", "retired-root-a", "draft-root", "draft-concrete")
+
+
+def _make(layout_name: str, start: str = "live"):
+    assert start in STARTS
     layout = LAYOUTS[layout_name]
 
     def make(tmp_path: Path) -> tuple[Path, Path]:
@@ -270,7 +281,7 @@ def _make(layout_name: str, retired_root_a: bool = False):
             associates = {"library": "LIB"} if directory == "app" else {}
             (repo / ".elspais.toml").write_text(_config(namespace, associates), encoding="utf-8")
             (repo / "spec" / "prd-spec.md").write_text(
-                _spec_text(layout, directory, retired_root_a), encoding="utf-8"
+                _spec_text(layout, directory, start), encoding="utf-8"
             )
             subprocess.run(["git", "init", "-q", str(repo)], check=True)
         _record_hashes(base / layout.root)
@@ -279,8 +290,8 @@ def _make(layout_name: str, retired_root_a: bool = False):
     return make
 
 
-def _build(layout_name: str, tmp_path: Path, retired_root_a: bool = False):
-    _base, root = _make(layout_name, retired_root_a)(tmp_path)
+def _build(layout_name: str, tmp_path: Path, start: str = "live"):
+    _base, root = _make(layout_name, start)(tmp_path)
     return build_graph(repo_root=root, config_path=root / ".elspais.toml"), root
 
 
@@ -555,22 +566,46 @@ def _root_assertion(layout: str, label: str) -> str:
     return f"{_id(LAYOUTS[layout], 'root')}-{label}"
 
 
-# name -> (starts with root-A retired, mutation over (layout) -> graph -> entry)
+def _renumbered(layout: str, role: str, number: int) -> str:
+    """The identifier *role* takes when renamed to *number* in its repository."""
+    ids = LAYOUTS[layout]
+    return f"{ids.repos[ids.owner(role)]}-p{number:05d}"
+
+
+def _rename(role: str, number: int):
+    return lambda layout: (
+        lambda g: g.rename_node(_id(LAYOUTS[layout], role), _renumbered(layout, role, number))
+    )
+
+
+def _status(role: str, status: str):
+    return lambda layout: lambda g: g.change_status(_id(LAYOUTS[layout], role), status)
+
+
+def _stereotype(role: str, template: bool):
+    return lambda layout: lambda g: g.set_stereotype(_id(LAYOUTS[layout], role), template)
+
+
+def _add_assertion(role: str, text: str):
+    return lambda layout: lambda g: g.add_assertion(_id(LAYOUTS[layout], role), text)
+
+
+# name -> (how the project starts, mutation over (layout) -> graph -> entry)
 MUTATIONS = {
     "retire-root-a-by-edit": (
-        False,
+        "live",
         lambda layout: lambda g: g.update_assertion(_root_assertion(layout, "A"), "<RETIRED>"),
     ),
     "retire-root-a-by-delete": (
-        False,
+        "live",
         lambda layout: lambda g: g.delete_assertion(_root_assertion(layout, "A")),
     ),
     "bring-back-root-a": (
-        True,
+        "retired-root-a",
         lambda layout: lambda g: g.update_assertion(_root_assertion(layout, "A"), ROOT_TEXT["A"]),
     ),
     "edit-root-c": (
-        False,
+        "live",
         lambda layout: (
             lambda g: g.update_assertion(
                 _root_assertion(layout, "C"), "The system SHALL record the reason for each change."
@@ -578,8 +613,46 @@ MUTATIONS = {
         ),
     ),
     "delete-refiner": (
-        False,
+        "live",
         lambda layout: lambda g: g.delete_requirement(_id(LAYOUTS[layout], "ref_a")),
+    ),
+    # The template every declaration names, and a template refining the whole
+    # of it, each copied whole by d_whole and copied for a named Assertion by
+    # d_a.
+    "status-root": ("live", _status("root", "Draft")),
+    "retitle-root": ("live", lambda layout: _retitle(_id(LAYOUTS[layout], "root"))),
+    "retitle-ref-whole": ("live", lambda layout: _retitle(_id(LAYOUTS[layout], "ref_whole"))),
+    "status-ref-whole": ("live", _status("ref_whole", "Draft")),
+    "rename-root": ("live", _rename("root", 11)),
+    "rename-ref-whole": ("live", _rename("ref_whole", 31)),
+    "rename-declarer": ("live", _rename("d_a", 61)),
+    "rename-root-a": (
+        "live",
+        lambda layout: lambda g: g.rename_assertion(_root_assertion(layout, "A"), "D"),
+    ),
+    "rename-root-c": (
+        "live",
+        lambda layout: lambda g: g.rename_assertion(_root_assertion(layout, "C"), "D"),
+    ),
+    "untemplate-root": ("live", _stereotype("root", False)),
+    "untemplate-ref-whole": ("live", _stereotype("ref_whole", False)),
+    "template-concrete": ("live", _stereotype("concrete", True)),
+    "add-assertion-root": (
+        "live",
+        _add_assertion("root", "The system SHALL record where each change was made."),
+    ),
+    "add-assertion-ref-whole": (
+        "live",
+        _add_assertion("ref_whole", "The retention SHALL be bounded."),
+    ),
+    "delete-template-root": (
+        "draft-root",
+        lambda layout: lambda g: g.delete_requirement(_id(LAYOUTS[layout], "root")),
+    ),
+    # d_concrete's Satisfies: is refused, since its target is no template.
+    "delete-concrete": (
+        "draft-concrete",
+        lambda layout: lambda g: g.delete_requirement(_id(LAYOUTS[layout], "concrete")),
     ),
 }
 
@@ -591,9 +664,9 @@ MUTATION_CASES = pytest.mark.parametrize(
 
 
 def _case(layout: str, mutation: str) -> Case:
-    retired, mutate = MUTATIONS[mutation]
+    start, mutate = MUTATIONS[mutation]
     return Case(
-        _make(layout, retired_root_a=retired),
+        _make(layout, start),
         mutate(layout),
         _retitle(_id(LAYOUTS[layout], "d_whole")),
     )
@@ -650,3 +723,253 @@ class TestAMutationMakesTheCopyABuildMakes:
         for declarer in ("d_a", "d_ac", "d_plus", "d_overlap"):
             assert _shape(graph, layout, declarer) == EXPECTED[declarer]
             assert _satisfies_faults(graph, layout, declarer) == Counter()
+
+
+def _satisfies_lines(base: Path, layout: str) -> list[str]:
+    """The ``Satisfies:`` lines of every declaring requirement, as saved."""
+    ids = LAYOUTS[layout]
+    directories = sorted({ids.owner(role) for role in DECLARERS})
+    return [
+        line
+        for directory in directories
+        for line in (base / directory / "spec" / "prd-spec.md").read_text().splitlines()
+        if line.startswith("**Satisfies**:")
+    ]
+
+
+def _written(layout: str, respell: tuple[str, str] | None = None) -> list[str]:
+    """The ``Satisfies:`` lines the fixture writes, with *respell* applied."""
+    ids = LAYOUTS[layout]
+    lines = []
+    for directory in sorted({ids.owner(role) for role in DECLARERS}):
+        for role, written in DECLARERS.items():
+            if ids.owner(role) != directory:
+                continue
+            text = _ref(ids, written)
+            if respell:
+                text = text.replace(*respell)
+            lines.append(f"**Satisfies**: {text}")
+    return lines
+
+
+# (mutation, declarer, the labels each copy holds, Satisfies: faults written in
+# roles) after the mutation. d_whole names the root template whole and by A;
+# d_a names A alone.
+COPY_AFTER = [
+    ("rename-root-a", "d_a", {"root": ("D",), **_UNDER_A}, []),
+    ("rename-root-c", "d_ac", {"root": ("A", "D"), **_UNDER_A}, []),
+    ("untemplate-root", "d_a", {}, [("root-A", FaultClass.FORBIDDEN)]),
+    (
+        "untemplate-root",
+        "d_whole",
+        {},
+        [("root", FaultClass.FORBIDDEN), ("root-A", FaultClass.FORBIDDEN)],
+    ),
+    (
+        "untemplate-ref-whole",
+        "d_whole",
+        # A requirement that is no template refines no template, so the
+        # copy leaves it out.
+        {k: v for k, v in EXPECTED["d_whole"].copies.items() if k != "ref_whole"},
+        [],
+    ),
+    ("template-concrete", "d_concrete", {"concrete": ("A",)}, []),
+    (
+        "add-assertion-root",
+        "d_whole",
+        {**EXPECTED["d_whole"].copies, "root": ("A", "B", "C", "D")},
+        [],
+    ),
+    ("add-assertion-root", "d_a", EXPECTED["d_a"].copies, []),
+    (
+        "add-assertion-ref-whole",
+        "d_a",
+        {**EXPECTED["d_a"].copies, "ref_whole": ("A", "B")},
+        [],
+    ),
+]
+
+
+class TestEachMutationLeavesTheCopyItDescribes:
+    """Validates REQ-d00328-B+G+H, REQ-p00014-R, REQ-p00017-B, REQ-d00272-A+S."""
+
+    @LAYOUT_CASES
+    @pytest.mark.parametrize("mutation, declarer, copies, faults", COPY_AFTER)
+    # Verifies: REQ-d00328-B+G+H
+    def test_REQ_d00328_H_the_copy_after_a_mutation_is_the_copy_it_describes(
+        self, tmp_path, layout, mutation, declarer, copies, faults
+    ):
+        graph, _base, _ = _assert_memory_equals_rebuild(tmp_path, _case(layout, mutation))
+        assert _shape(graph, layout, declarer).copies == copies
+        assert _satisfies_faults(graph, layout, declarer) == Counter(
+            (_ref(LAYOUTS[layout], written), fault_class) for written, fault_class in faults
+        )
+
+    @LAYOUT_CASES
+    @pytest.mark.parametrize("role", ["root", "ref_whole"])
+    # Verifies: REQ-d00328-H
+    def test_REQ_d00328_H_a_copy_carries_its_original_s_new_status(self, tmp_path, layout, role):
+        mutation = {"root": "status-root", "ref_whole": "status-ref-whole"}[role]
+        graph, _base, _ = _assert_memory_equals_rebuild(tmp_path, _case(layout, mutation))
+        ids = LAYOUTS[layout]
+        original = _id(ids, role)
+        # d_whole copies both whole; d_a copies root for A and ref_whole under it.
+        for declarer in ("d_whole", "d_a"):
+            copy = graph.find_by_id(f"{_id(ids, declarer)}::{original}")
+            assert copy.get_field("status") == "Draft"
+
+    @LAYOUT_CASES
+    @pytest.mark.parametrize(
+        "mutation, respelled",
+        [
+            (
+                "rename-root",
+                lambda layout: (_id(LAYOUTS[layout], "root"), _renumbered(layout, "root", 11)),
+            ),
+            (
+                "rename-root-a",
+                lambda layout: (_root_assertion(layout, "A"), _root_assertion(layout, "D")),
+            ),
+        ],
+    )
+    # Verifies: REQ-p00017-B, REQ-d00132-H, REQ-d00328-H
+    def test_REQ_p00017_B_a_rename_respells_each_satisfies_declaration(
+        self, tmp_path, layout, mutation, respelled
+    ):
+        _graph, base, _ = _assert_memory_equals_rebuild(tmp_path, _case(layout, mutation))
+        assert _satisfies_lines(base, layout) == _written(layout, respelled(layout))
+
+    @LAYOUT_CASES
+    # Verifies: REQ-p00014-R, REQ-d00272-A+S, REQ-d00328-G+H
+    def test_REQ_p00014_R_deleting_the_template_reports_each_declaration_by_the_class_it_reached(
+        self, tmp_path, layout
+    ):
+        graph, _base, _ = _assert_memory_equals_rebuild(
+            tmp_path, _case(layout, "delete-template-root")
+        )
+        root = _id(LAYOUTS[layout], "root")
+        naming_root = Counter(
+            (f.source_id, f.target_id, f.fault_class)
+            for _ns, member in graph._live_graphs()
+            for f in member.unresolved_references()
+            if f.edge_kind == EdgeKind.SATISFIES.value
+            and (f.target_id == root or f.target_id.startswith(f"{root}-"))
+        )
+        # Every item naming the root, an Assertion it never held included,
+        # reached the requirement and found none.
+        expected = Counter()
+        for declarer, written in DECLARERS.items():
+            for item in _ref(LAYOUTS[layout], written).split(", "):
+                if item == root:
+                    targets = [root]
+                elif item.startswith(f"{root}-"):
+                    targets = [f"{root}-{label}" for label in item[len(root) + 1 :].split("+")]
+                else:
+                    continue
+                for target in targets:
+                    key = (_id(LAYOUTS[layout], declarer), target, FaultClass.UNKNOWN_REQUIREMENT)
+                    expected[key] += 1
+        assert naming_root == expected
+        assert any(target.endswith("-Z") for _src, target, _cls in naming_root)
+
+    @LAYOUT_CASES
+    # Verifies: REQ-p00014-R, REQ-d00272-A+S, REQ-o00062-G
+    def test_REQ_d00272_A_adding_the_named_requirement_reaches_it(self, tmp_path, layout):
+        ids = LAYOUTS[layout]
+        gone = _id(ids, "gone")
+        base, root = _make(layout)(tmp_path)
+
+        def add(graph):
+            # Placed beneath a requirement so that the save writes it.
+            graph.add_requirement(
+                gone,
+                "Gone Record",
+                "prd",
+                "Draft",
+                parent_id=_id(ids, "concrete"),
+                target_repo=ids.repos[ids.owner("gone")],
+            )
+
+        undone = build_graph(repo_root=root, config_path=root / ".elspais.toml")
+        before = _state(undone, base)["faults"]
+        add(undone)
+        undone.undo_last()
+        assert _state(undone, base)["faults"] == before
+
+        graph = build_graph(repo_root=root, config_path=root / ".elspais.toml")
+        add(graph)
+        # d_gone names A and B of a requirement that now exists and holds
+        # neither, so reading each reaches the requirement.
+        assert _satisfies_faults(graph, layout, "d_gone") == Counter(
+            {
+                (f"{gone}-A", FaultClass.UNKNOWN_ASSERTION): 1,
+                (f"{gone}-B", FaultClass.UNKNOWN_ASSERTION): 1,
+            }
+        )
+        # The faults equal a rebuild's. The rest of the graph is not
+        # compared: memory places an added requirement in no file.
+        in_memory = _state(graph, base)["faults"]
+        _save(graph, root)
+        rebuilt = build_graph(repo_root=root, config_path=root / ".elspais.toml")
+        assert in_memory == _state(rebuilt, base)["faults"]
+
+    @LAYOUT_CASES
+    # Verifies: REQ-p00014-R, REQ-d00272-A+S
+    def test_REQ_d00272_A_a_refused_reference_to_a_deleted_requirement_reaches_no_further(
+        self, tmp_path, layout
+    ):
+        graph, _base, _ = _assert_memory_equals_rebuild(tmp_path, _case(layout, "delete-concrete"))
+        # The refusal reached the requirement; once nothing holds it, reading
+        # the reference reaches only as far as a missing requirement.
+        assert _satisfies_faults(graph, layout, "d_concrete") == Counter(
+            {(_ref(LAYOUTS[layout], "concrete-A"), FaultClass.UNKNOWN_REQUIREMENT): 1}
+        )
+
+
+@pytest.fixture(scope="module")
+def checked(tmp_path_factory) -> dict[str, list]:
+    """The spec checks over a build in each layout."""
+    out = {}
+    for name in LAYOUTS:
+        graph, root = _build(name, tmp_path_factory.mktemp(name.replace("-", "_")))
+        out[name] = run_spec_checks(graph, get_config(None, root))
+    return out
+
+
+class TestTheChecksReportAnUnresolvedSatisfies:
+    """Validates REQ-d00328-G, REQ-p00014-F, REQ-d00272-S, REQ-d00285-F."""
+
+    @LAYOUT_CASES
+    @pytest.mark.parametrize("declarer", list(DECLARERS))
+    # Verifies: REQ-d00328-G, REQ-p00014-F, REQ-d00272-S
+    def test_REQ_d00328_G_each_unresolved_declaration_is_a_finding_of_its_class(
+        self, checked, layout, declarer
+    ):
+        ids = LAYOUTS[layout]
+        declaring = _id(ids, declarer)
+        reported = Counter(
+            (check.name, finding.message.split(" -> ", 1)[1].split(" ", 1)[0])
+            for check in checked[layout]
+            for finding in check.findings
+            if finding.node_id == declaring
+            and not check.passed
+            and f"({EdgeKind.SATISFIES.value})" in finding.message
+        )
+        assert reported == Counter(
+            (f"references.{fault_class.value[0]}", _ref(ids, written))
+            for written, fault_class in EXPECTED_FAULTS.get(declarer, [])
+        )
+
+    @LAYOUT_CASES
+    # Verifies: REQ-d00285-F
+    def test_REQ_d00285_F_no_check_is_named_for_one_keyword_s_references(self, checked, layout):
+        # An unresolved reference is reported under the class reading it
+        # reached, whichever keyword introduced it, so a check for one
+        # keyword's references would report a fault a second time or pass
+        # over one the run reports.
+        names = {check.name for check in checked[layout]}
+        assert not names & {
+            "spec.implements_resolve",
+            "spec.refines_resolve",
+            "spec.satisfies_resolve",
+        }

@@ -380,6 +380,21 @@ class TestGeneralSeverityTable:
                 _write_config(tmp_path, '[rules.severity]\n"spec.invented_condition" = "off"\n')
             )
 
+    # Verifies: REQ-d00285-F
+    @pytest.mark.parametrize(
+        "check_name",
+        ["spec.implements_resolve", "spec.refines_resolve", "spec.satisfies_resolve"],
+    )
+    def test_REQ_d00285_F_a_name_for_resolving_one_keyword_is_refused(
+        self, tmp_path: Path, check_name: str
+    ) -> None:
+        """An unresolved reference is reported under the class reading it
+        reached, whichever keyword introduced it, so a name for one keyword's
+        references identifies no condition of its own. The refusal names the
+        settings that configure those classes."""
+        with pytest.raises(ValidationError, match=r"names no check.*\[rules\.references\]"):
+            load_config(_write_config(tmp_path, f'[rules.severity]\n"{check_name}" = "error"\n'))
+
     # Verifies: REQ-d00285-D
     @pytest.mark.parametrize(
         "check_name", ["terms.duplicates", "references.malformed", "spec.no_assertions"]

@@ -68,14 +68,21 @@ def _record(obj, prefix: str) -> tuple:
     )
 
 
+# Fields a copy takes from its original that are not part of what a
+# Satisfies: copy says. The keyword index is rebuilt on every mutation. A
+# line is where the saved text places a part, and a mutation held in memory
+# does not move the lines of its originals, so a copy takes the lines its
+# original holds.
+_NOT_COPY_CONTENT = frozenset({"keywords", "parse_line", "parse_end_line"})
+
+
 def _instance_content(node, prefix: str) -> tuple:
-    # The keyword index is rebuilt on every mutation and is not what a
-    # Satisfies: copy says; a field holding None is a field not set.
+    # A field holding None is a field not set.
     return tuple(
         sorted(
             (key, repr(_rel(value, prefix)))
             for key, value in node.get_all_content().items()
-            if key != "keywords" and value is not None
+            if key not in _NOT_COPY_CONTENT and value is not None
         )
     )
 
@@ -117,6 +124,7 @@ def _state(graph, base: Path) -> dict:
                         node_id,
                         tuple(node.get_field("implements_refs") or ()),
                         tuple(node.get_field("refines_refs") or ()),
+                        tuple(node.get_field("satisfies_refs") or ()),
                     )
                 )
             if node.get_field("stereotype") == Stereotype.INSTANCE:

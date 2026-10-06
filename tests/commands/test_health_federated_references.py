@@ -164,8 +164,6 @@ class TestPerMemberChecksResolveAcrossTheFederation:
             if "LIB-d00007" in f.message or "LIB-d00007" in " ".join(f.related or [])
         ]
         assert naming == []
-        for name in ("spec.refines_resolve", "spec.implements_resolve"):
-            assert all(c.passed for c in checks if c.name == name), name
 
 
 # ---------------------------------------------------------------------------

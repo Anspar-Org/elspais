@@ -145,9 +145,6 @@ _REMEDIES: dict[str, str] = {
     "spec.index_current": "elspais fix",
     "spec.no_duplicates": "elspais -v checks --spec",
     "spec.no_cycles": "elspais -v checks --spec",
-    "spec.implements_resolve": "elspais unresolved",
-    "spec.refines_resolve": "elspais unresolved",
-    "spec.satisfies_resolve": "elspais unresolved",
     "spec.structural_orphans": "elspais -v checks --spec",
     "spec.hierarchy_levels": "elspais -v checks --spec",
     "spec.changelog_present": "elspais fix",
@@ -263,9 +260,6 @@ _DESCRIPTIONS: dict[str, str] = {
         "Assertions opening with a parsing directive the tool does not recognize"
     ),
     "spec.no_duplicates": "No duplicate requirement IDs",
-    "spec.implements_resolve": "All Implements: references resolve",
-    "spec.refines_resolve": "All Refines: references resolve",
-    "spec.satisfies_resolve": "All Satisfies: references resolve",
     "spec.needs_rewrite": (
         "Flags requirements, journeys and file-level prose that will be rewritten on next save "
         "(duplicate refs, stale hash, spacing, term forms, and any other text a write "
@@ -519,9 +513,6 @@ def _registry() -> dict[str, CheckRule]:
         _general("spec.parseable", "spec", Severity.WARNING),
         _general("spec.unknown_directive", "spec", Severity.WARNING),
         _general("spec.no_duplicates", "spec", Severity.ERROR),
-        _general("spec.implements_resolve", "spec", Severity.WARNING),
-        _general("spec.refines_resolve", "spec", Severity.WARNING),
-        _general("spec.satisfies_resolve", "spec", Severity.WARNING),
         _general("spec.needs_rewrite", "spec", Severity.WARNING),
         _general("spec.unfixable_issues", "spec", Severity.ERROR),
         _general("spec.undefined_levels", "spec", Severity.INFO),
@@ -751,6 +742,18 @@ def _registry() -> dict[str, CheckRule]:
 
 REGISTRY: dict[str, CheckRule] = _registry()
 
+# Implements: REQ-d00285-F
+# A name that once reported a condition another check now reports, with the
+# checks a configuration names instead. A name identifies one condition, and
+# an unresolved reference is reported under the class of how far reading it
+# reached, whichever keyword introduced it.
+WITHDRAWN_CHECKS: dict[str, str] = dict.fromkeys(
+    ("spec.implements_resolve", "spec.refines_resolve", "spec.satisfies_resolve"),
+    "references.unknown_namespace, references.unknown_requirement, "
+    "references.unknown_assertion and references.forbidden, configured under "
+    "[rules.references]",
+)
+
 
 def is_registered(check_name: str) -> bool:
     """Whether a check name has a registered category and severity."""
@@ -781,10 +784,7 @@ PRESETS: dict[str, tuple[str, ...]] = {
     # (REQ-d00272-P): a reference that read as an identifier and named nothing
     # the federation holds is unresolved, and one that did not read as an
     # identifier is malformed. A forbidden reference resolved, so it is
-    # neither, and no shortcut lists it. `spec.implements_resolve` and its two
-    # siblings answer over the unresolved population by another route and are
-    # deliberately NOT here: under both, one unresolved target would be listed
-    # twice.
+    # neither, and no shortcut lists it.
     "unresolved": (
         "references.unknown_namespace",
         "references.unknown_requirement",
