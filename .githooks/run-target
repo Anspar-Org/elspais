@@ -1,0 +1,47 @@
+#!/bin/bash
+# run-target <target> <cmd> [args...]
+#
+# Runs one [[scanning.test.targets]] entry from a terminal, the way the hooks
+# run it: fingerprinted into the target's output area by with-fingerprint, and
+# under the guards of lib-tier-run.sh. The Makefile's test targets call it.
+#
+# The guards are the reason it exists. `elspais fingerprint start` empties the
+# target's output area, so a second run of one target started while the first
+# is going deletes the first run's results and coverage as they are written.
+# This script shares the state directory the hooks use for the target, so a
+# run here refuses while a hook's run of the same target is in progress, and
+# a hook refuses while this one is.
+#
+# The run is in the foreground: interrupting it stops it. Exits with the
+# command's exit code.
+
+set -u
+
+if [ "$#" -lt 2 ]; then
+    echo "usage: run-target <target> <cmd> [args...]" >&2
+    exit 2
+fi
+_target="$1"; shift
+
+_root=$(git rev-parse --show-toplevel) || exit 2
+cd "$_root" || exit 2
+
+# The tier means this tree's pytest and this tree's elspais.
+if [ -d "$_root/.venv/bin" ]; then
+    PATH="$_root/.venv/bin:$PATH"
+    export PATH
+fi
+
+. "$_root/.githooks/lib-tier-run.sh"
+
+# The state directory a hook uses for the same target: run-unit and run-e2e
+# for the two targets the hooks run, run-<name> for any other.
+case "$_target" in
+    elspais-unit) _state="$_root/.results/run-unit" ;;
+    elspais-e2e) _state="$_root/.results/run-e2e" ;;
+    *) _state="$_root/.results/run-$_target" ;;
+esac
+
+tier_execute_foreground "$_state" "$_root" "$_target" \
+    "$_root/.githooks/with-fingerprint" "$_target" "$@"
+exit "$?"

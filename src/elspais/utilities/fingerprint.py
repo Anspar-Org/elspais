@@ -349,13 +349,18 @@ def run_in_progress(folder: Path) -> dict[str, Any] | None:
 
 
 def results_present(repo_root: Path, config: Any, target: Any) -> bool:
-    """Return whether the results pattern of a file-channel target matches a file.
+    """Return whether the output area of a target holds anything a run wrote.
 
-    The pattern names files inside the output area of the target.
+    That is a file its results pattern matches, or its coverage file: a
+    target that declares only coverage still leaves results of its run to
+    judge. Both name files inside the output area of the target.
     """
+    folder = target_folder(repo_root, config, target.name)
+    # Implements: REQ-d00323-I
+    if target.coverage and (folder / target.coverage).is_file():
+        return True
     if not target.results:
         return False
-    folder = target_folder(repo_root, config, target.name)
     return any(Path(f).is_file() for f in glob(str(folder / target.results), recursive=True))
 
 
@@ -405,6 +410,21 @@ def judge(
             fingerprint=fingerprint,
         )
     return Freshness(target=target_name, state="fresh", fingerprint=fingerprint)
+
+
+# Implements: REQ-d00311-E+F, REQ-d00323-G
+def stale_reason(verdict: Freshness) -> str:
+    """Return why a stale verdict is stale, in words a finding can quote.
+
+    The one wording of the reason, so the freshness finding and a failure
+    read from stale results say the same thing.
+    """
+    if verdict.reason == "no-fingerprint":
+        return "no fingerprint was recorded for its results"
+    shown = ", ".join(verdict.changed[:5])
+    more = f" and {len(verdict.changed) - 5} more" if len(verdict.changed) > 5 else ""
+    when = "while it ran" if verdict.reason == "changed-during-run" else "since it ran"
+    return f"inputs changed {when}: {shown}{more}"
 
 
 def last_run_path(repo_root: Path, config: Any) -> Path:

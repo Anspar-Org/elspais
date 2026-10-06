@@ -288,7 +288,7 @@ that changes to cross-cutting requirements are propagated to their consumers.
 | Check | Description | Default severity | Configured by | Remedy |
 | --- | --- | --- | --- | --- |
 | `tests.uncited_file` | A scanned test file in which no test cites anything -- either no test functions found, or no test in the file links to any requirement (a file with at least one linked test is not flagged). Not the same population as the unlinked NODES the graph API and the MCP `get_unlinked_nodes` tool answer about | info | `[rules.severity]` | `elspais uncited` |
-| `tests.results` | The pass/fail status of every ingested result. One test that runs in several environments writes one result in each of them, so the count is a count of results, not of tests | warning | `[rules.severity]` | `elspais failing` |
+| `tests.results` | The pass/fail status of every ingested result. One test that runs in several environments writes one result in each of them, so the count is a count of results, not of tests. A result whose target's results are stale counts by its status, and a failure among them states why they are stale | warning | `[rules.severity]` | `elspais failing` |
 | `tests.results_stale` | Test results whose inputs changed since they ran, that carry no fingerprint, or that an Evidence Snapshot of another tree holds | warning | `[rules.severity]` | `elspais checks --run-tests` |
 | `tests.unmatched_results` | Results matching no known test | warning | `[rules.severity]` | `elspais -v checks --tests` |
 | `tests.tested` | The `tested` coverage dimension (TEST nodes linked to assertions) | error | `[rules.severity]` | `elspais untested` |
@@ -1039,7 +1039,9 @@ it too (exit 2). A bare `--run-tests` selects the
 `default` group. If that group holds no target, then the command refuses the
 run (exit 2). Name targets or groups instead. Per-PR selectivity rendering
 (`(baseline)` for carried results, `—` for no baseline) is produced by
-`summary --targets` / `trace --targets`, not by `checks`. Every run of
+`summary --targets` / `trace --targets`, not by `checks`. Stale results are
+carried without any selection, so `summary` and `trace` mark them on every
+run, and `tests.results` states how many of its results are stale. Every run of
 `--run-tests` records the targets it executed in
 `<output_root>/.elspais-last-run.json`, and `summary --targets last-run` /
 `trace --targets last-run` read that record to mark those results fresh. See

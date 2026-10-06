@@ -231,3 +231,33 @@ def test_a_result_its_declaring_file_ran_names_no_runner(runner_file):
     entry = _serialize_result_entry(node, graph)
 
     assert "runner_file" not in entry
+
+
+# Verifies: REQ-d00323-G
+@pytest.mark.parametrize(
+    ("carried", "stale_reason"),
+    [
+        (True, "no fingerprint was recorded for its results"),
+        (False, ""),
+        (False, None),
+        (True, ""),
+    ],
+    ids=["stale", "fresh", "unset", "carried-by-selection"],
+)
+def test_a_result_states_why_it_is_stale_only_when_it_is(carried, stale_reason):
+    """The reason is a key of its own on a stale result and absent otherwise."""
+    node = _result("result:REQ:reports/junit.xml:1", status="failed")
+    node.set_field("carried", carried)
+    node.set_field("stale_reason", stale_reason)
+    graph = _graph(node)
+
+    entry = _serialize_result_entry(node, graph)
+    properties = _serialize_node_generic(node, graph)["properties"]
+
+    if stale_reason:
+        assert entry["stale_reason"] == stale_reason
+        assert properties["stale_reason"] == stale_reason
+    else:
+        assert "stale_reason" not in entry
+        assert "stale_reason" not in properties
+    assert properties.get("carried", False) is carried

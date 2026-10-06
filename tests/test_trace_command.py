@@ -26,6 +26,7 @@ from elspais.commands.trace import (
 )
 from elspais.graph.aggregation import MEASURES
 from elspais.graph.values import figure_cell
+from tests.core.graph_test_helpers import record_run
 
 
 def _trace_rows(content: str) -> list[dict]:
@@ -939,16 +940,14 @@ def two_target_project(tmp_path):
         "# Verifies: REQ-d00002-A\ndef test_b():\n    pass\n", encoding="utf-8"
     )
 
-    (project / ".results" / "a").mkdir(parents=True)
-    (project / ".results" / "a" / "results.xml").write_text(
-        _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a"), encoding="utf-8"
-    )
-    (project / ".results" / "b").mkdir(parents=True)
-    (project / ".results" / "b" / "results.xml").write_text(
-        _JUNIT_ONE_PASSING.format(suite="suite-b", name="test_b"), encoding="utf-8"
-    )
-
     (project / ".elspais.toml").write_text(_TWO_TARGET_CONFIG, encoding="utf-8")
+    # The results come from a run of this tree, so they are fresh.
+    record_run(
+        project, "a", {"results.xml": _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a")}
+    )
+    record_run(
+        project, "b", {"results.xml": _JUNIT_ONE_PASSING.format(suite="suite-b", name="test_b")}
+    )
     return project
 
 
@@ -971,14 +970,14 @@ def no_result_target_project(tmp_path):
         "# Verifies: REQ-d00002-A\ndef test_b():\n    pass\n", encoding="utf-8"
     )
 
-    (project / ".results" / "a").mkdir(parents=True)
-    (project / ".results" / "a" / "results.xml").write_text(
-        _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a"), encoding="utf-8"
-    )
     # The fixture creates no .results/b folder.
     # Consequently, the results glob of target 'b' matches nothing.
 
     (project / ".elspais.toml").write_text(_TWO_TARGET_CONFIG, encoding="utf-8")
+    # The results come from a run of this tree, so they are fresh.
+    record_run(
+        project, "a", {"results.xml": _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a")}
+    )
     return project
 
 
@@ -1000,16 +999,14 @@ def skipped_result_target_project(tmp_path):
         "# Verifies: REQ-d00002-A\ndef test_b():\n    pass\n", encoding="utf-8"
     )
 
-    (project / ".results" / "a").mkdir(parents=True)
-    (project / ".results" / "a" / "results.xml").write_text(
-        _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a"), encoding="utf-8"
-    )
-    (project / ".results" / "b").mkdir(parents=True)
-    (project / ".results" / "b" / "results.xml").write_text(
-        _JUNIT_ONE_SKIPPED.format(suite="suite-b", name="test_b"), encoding="utf-8"
-    )
-
     (project / ".elspais.toml").write_text(_TWO_TARGET_CONFIG, encoding="utf-8")
+    # The results come from a run of this tree, so they are fresh.
+    record_run(
+        project, "a", {"results.xml": _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a")}
+    )
+    record_run(
+        project, "b", {"results.xml": _JUNIT_ONE_SKIPPED.format(suite="suite-b", name="test_b")}
+    )
     return project
 
 
@@ -1178,12 +1175,11 @@ def marker_verified_project(tmp_path):
         "# Verifies: REQ-d00001\ndef test_a():\n    pass\n", encoding="utf-8"
     )
 
-    (project / ".results" / "a").mkdir(parents=True)
-    (project / ".results" / "a" / "results.xml").write_text(
-        _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a"), encoding="utf-8"
-    )
-
     (project / ".elspais.toml").write_text(_MARKER_VERIFIED_CONFIG, encoding="utf-8")
+    # The results come from a run of this tree, so they are fresh.
+    record_run(
+        project, "a", {"results.xml": _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a")}
+    )
     return project
 
 
@@ -1268,13 +1264,10 @@ def code_tested_no_attribution_project(tmp_path):
         "# Implements: REQ-d00001\nx = 1\ny = 2\nz = 3\n", encoding="utf-8"
     )
 
-    (project / ".results" / "a").mkdir(parents=True)
-    (project / ".results" / "a" / "lcov.info").write_text(
-        "SF:src/main.py\nDA:1,1\nDA:2,1\nDA:3,1\nDA:4,1\nLF:4\nLH:4\nend_of_record\n",
-        encoding="utf-8",
-    )
-
     (project / ".elspais.toml").write_text(_CODE_TESTED_CONFIG, encoding="utf-8")
+    # The coverage comes from a run of this tree, so it is fresh.
+    lcov = "SF:src/main.py\nDA:1,1\nDA:2,1\nDA:3,1\nDA:4,1\nLF:4\nLH:4\nend_of_record\n"
+    record_run(project, "a", {"lcov.info": lcov})
     return project
 
 
@@ -1298,32 +1291,29 @@ def code_tested_context_carrying_project(tmp_path):
         "# Implements: REQ-d00001\nx = 1\ny = 2\nz = 3\n", encoding="utf-8"
     )
 
-    (project / ".results" / "a").mkdir(parents=True)
-    (project / ".results" / "a" / "coverage.json").write_text(
-        json.dumps(
-            {
-                "files": {
-                    "src/main.py": {
-                        "executed_lines": [1, 2, 3, 4],
-                        "missing_lines": [],
-                        "summary": {"num_statements": 4, "covered_lines": 4},
-                        # Contexts recorded, but the test they name verifies
-                        # nothing in this project.
-                        "contexts": {
-                            "2": ["tests/test_unrelated.py::test_other|run"],
-                            "3": ["tests/test_unrelated.py::test_other|run"],
-                        },
-                    }
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-
     (project / ".elspais.toml").write_text(
         _CODE_TESTED_CONFIG.replace('"lcov.info"', '"coverage.json"'),
         encoding="utf-8",
     )
+    # The coverage comes from a run of this tree, so it is fresh.
+    coverage = json.dumps(
+        {
+            "files": {
+                "src/main.py": {
+                    "executed_lines": [1, 2, 3, 4],
+                    "missing_lines": [],
+                    "summary": {"num_statements": 4, "covered_lines": 4},
+                    # Contexts recorded, but the test they name verifies
+                    # nothing in this project.
+                    "contexts": {
+                        "2": ["tests/test_unrelated.py::test_other|run"],
+                        "3": ["tests/test_unrelated.py::test_other|run"],
+                    },
+                }
+            }
+        }
+    )
+    record_run(project, "a", {"coverage.json": coverage})
     return project
 
 
@@ -1351,16 +1341,14 @@ def marker_carried_project(tmp_path):
         "# Verifies: REQ-d00002\ndef test_b():\n    pass\n", encoding="utf-8"
     )
 
-    (project / ".results" / "a").mkdir(parents=True)
-    (project / ".results" / "a" / "results.xml").write_text(
-        _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a"), encoding="utf-8"
-    )
-    (project / ".results" / "b").mkdir(parents=True)
-    (project / ".results" / "b" / "results.xml").write_text(
-        _JUNIT_ONE_PASSING.format(suite="suite-b", name="test_b"), encoding="utf-8"
-    )
-
     (project / ".elspais.toml").write_text(_TWO_TARGET_CONFIG, encoding="utf-8")
+    # The results come from a run of this tree, so they are fresh.
+    record_run(
+        project, "a", {"results.xml": _JUNIT_ONE_PASSING.format(suite="suite-a", name="test_a")}
+    )
+    record_run(
+        project, "b", {"results.xml": _JUNIT_ONE_PASSING.format(suite="suite-b", name="test_b")}
+    )
     return project
 
 
@@ -1641,10 +1629,9 @@ def tested_breakdown_project(tmp_path):
             encoding="utf-8",
         )
 
-    (project / ".results" / "a").mkdir(parents=True)
-    (project / ".results" / "a" / "results.xml").write_text(_BREAKDOWN_JUNIT, encoding="utf-8")
-
     (project / ".elspais.toml").write_text(_BREAKDOWN_CONFIG, encoding="utf-8")
+    # The results come from a run of this tree, so they are fresh.
+    record_run(project, "a", {"results.xml": _BREAKDOWN_JUNIT})
     return project
 
 

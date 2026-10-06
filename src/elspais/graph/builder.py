@@ -6621,6 +6621,10 @@ class GraphBuilder:
             # Implements: REQ-d00294-G
             "runner_file": data.get("runner_file"),
             "carried": data.get("carried", False),
+            # Implements: REQ-d00323-G
+            # Why the results of this result's target are stale, where they
+            # are. Empty for results the current tree produced.
+            "stale_reason": data.get("stale_reason", ""),
             "target": data.get("target"),
             # Results-file provenance: where this result was RECORDED
             # (e.g. junit.xml path + <testcase> line), distinct from

@@ -346,6 +346,7 @@ def _ingest_target_results(
     *,
     namespace: str,
     carried: bool = False,
+    stale_reason: str = "",
     scanned_tests: frozenset[str] = frozenset(),
     results_pattern: str = "",
     results_base: Path | None = None,
@@ -362,6 +363,9 @@ def _ingest_target_results(
 
     ``reporter`` names the format *results_text* is in, where it is not the
     one the target declares: an *Evidence Snapshot*'s lines for the target.
+
+    ``stale_reason`` says why the target's results are stale, where the
+    judgement of their *Result Fingerprint* finds them so.
 
     ``recorded_root`` is the root the target's *Result Fingerprint* records.
     An absolute path under it is read relative to it, so results keep
@@ -639,6 +643,7 @@ def _ingest_target_results(
             "source_file": source_file,
             "match": target.match,
             "carried": carried,
+            "stale_reason": stale_reason,
             "target": target.name,
             "line": rec.get("line"),
             "root_line": rec.get("root_line"),
@@ -1487,6 +1492,11 @@ def _build_repository(
     """
     typed_config = _validate_config(config)
 
+    # Implements: REQ-d00323-F+I
+    # Why each target's artifacts on disk are stale, "" where they are fresh,
+    # judged once per target and read by the results and the coverage alike.
+    stale_by_target: dict[str, str] = {}
+
     # 2. Resolve spec directories
     if spec_dirs is None:
         spec_dirs = get_spec_directories(None, config, repo_root)
@@ -1733,10 +1743,16 @@ def _build_repository(
             from elspais.graph.builder import UnreadArtifact
             from elspais.utilities.fingerprint import (
                 FINGERPRINT_NAME,
+                judge,
                 read_fingerprint,
                 run_in_progress,
+                stale_reason,
                 target_folder,
             )
+
+            # Targets share their inputs, so every judgement of this build
+            # reads each input once.
+            _digest_cache: dict[Path, str] = {}
 
             _captured = captured_results or {}
             from elspais.graph.parsers.results.registry import get_reporter as _get_reporter
@@ -1903,6 +1919,21 @@ def _build_repository(
                 recorded_root = (
                     Path(_recorded) if isinstance(_recorded, str) and _recorded else None
                 )
+                # Implements: REQ-d00323-F+G
+                # Results on disk that the current tree did not produce are
+                # carried, whatever this invocation selected. The judgement is
+                # the one `tests.results_stale` reports, and its reason rides
+                # on each result so a failure can say why it may be out of
+                # date. Output this invocation captured is its own run.
+                stale_reason_here = ""
+                if target.name not in _captured:
+                    _verdict = judge(
+                        repo_root, typed_config, target.name, digest_cache=_digest_cache
+                    )
+                    if _verdict.state == "stale":
+                        carried = True
+                        stale_reason_here = stale_reason(_verdict)
+                    stale_by_target[target.name] = stale_reason_here
                 if target.name in _captured:
                     _ingest_target_results(
                         builder,
@@ -1935,6 +1966,7 @@ def _build_repository(
                                     str(Path(f)),
                                     namespace=typed_config.project.namespace,
                                     carried=carried,
+                                    stale_reason=stale_reason_here,
                                     scanned_tests=target_tests,
                                     # Implements: REQ-d00294-C
                                     # The pattern and the directory it was
@@ -1995,7 +2027,12 @@ def _build_repository(
         from elspais.graph.parsers.results.coverage_sqlite import CoverageSqliteParser
         from elspais.graph.parsers.results.lcov import LcovParser
         from elspais.graph.parsers.results.registry import get_reporter as _cov_spec
-        from elspais.utilities.fingerprint import run_in_progress, target_folder
+        from elspais.utilities.fingerprint import (
+            judge,
+            run_in_progress,
+            stale_reason,
+            target_folder,
+        )
 
         lcov_parser = LcovParser()
         cov_json_parser = CoverageJsonParser()
@@ -2127,6 +2164,17 @@ def _build_repository(
             _record_parser_diagnostics(
                 graph, cov_parser, "coverage", target.name, str(cov_path), repo_root
             )
+            # Implements: REQ-d00323-I
+            # Coverage the current tree did not produce is carried, by the
+            # judgement its target's results get. Output this invocation
+            # captured is its own run.
+            if target.name in (captured_results or {}):
+                cov_stale = ""
+            elif target.name in stale_by_target:
+                cov_stale = stale_by_target[target.name]
+            else:
+                _cov_verdict = judge(repo_root, typed_config, target.name)
+                cov_stale = stale_reason(_cov_verdict) if _cov_verdict.state == "stale" else ""
             attached = 0
             for source_file, data in parsed_cov.items():
                 cov_node = _resolve_coverage_file_node(
@@ -2136,6 +2184,7 @@ def _build_repository(
                     continue
                 attached += 1
                 cov_node.set_field("line_coverage", data["line_coverage"])
+                cov_node.set_field("line_coverage_stale_reason", cov_stale)
                 cov_node.set_field("executable_lines", data["executable_lines"])
                 # Implements: REQ-d00254-Q
                 # A file whose source could not be re-analysed has executed

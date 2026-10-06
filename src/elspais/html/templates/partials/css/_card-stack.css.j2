@@ -1072,7 +1072,11 @@ body.edit-mode .view-only {
 /* The environment a result was recorded in, drawn beside that result.
    It is a small tag rather than part of the test name, because the test
    is one test wherever it ran. */
-.result-environment {
+{# Implements: REQ-d00323-F+G #}
+/* A result whose target's results are stale is tagged as such, apart from
+   the environment tag, with the reason in its title. */
+.result-environment,
+.result-stale {
     flex-shrink: 0;
     margin-left: 6px;
     padding: 0 5px;

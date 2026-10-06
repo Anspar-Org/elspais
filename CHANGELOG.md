@@ -4,6 +4,12 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-110
+
+- **Results the current tree did not produce are marked in every report (REQ-d00323-F+G+H)** -- a target's results whose *Result Fingerprint* judgement is stale (no fingerprint, or an input changed since or during the run) are now carried on every run, not only after a `--targets` selection. `trace` marks the figure they make `(baseline)`, `summary` adds its `*` and the carried-target footnote (and `carried_result_targets` in json and csv) on any run holding them, `tests.results` states how many results are stale and names the reason beside each stale failure, the `tests.*` coverage checks say when a failure comes from stale results, and MCP result entries and the viewer's result rows carry the reason. A stale failure still fails: it is a failure the current tree has not run again, never a pass. A run whose results are all fresh renders as before.
+
+- **Line coverage the current tree did not produce is marked the same way (REQ-d00323-I+J+K)** -- a target's coverage is measured by the run that produced its results, so it is carried by the same judgement. A line figure (`code_tested`) or line-coverage credit (`lcov_tested`) made only of carried coverage is marked `(baseline)` in `trace` and `*` (with a footnote) in `summary`, `code.code_tested` states why the coverage is stale, and the summary payload carries `code_tested_carried`.
+
 ### TOOL-141
 
 - **The aggregate signal is named per target `cwd` (REQ-d00254-G)** -- the green/red signal that `match = "aggregate"` derives is keyed by each target's working directory, and the code, the requirement and the docs now call it that instead of an "app". The `init` template's hint for `match` now names `"source"` as the default, which it is.

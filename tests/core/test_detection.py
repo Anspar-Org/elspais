@@ -264,11 +264,18 @@ class TestIntegration:
         assert broken_node.parent_count() == 0
 
     # Verifies: REQ-p00002-B
-    def test_real_graph_detection(self):
-        """Test detection with a realistic graph structure."""
-        from elspais.graph.factory import build_graph
+    def test_real_graph_detection(self, tmp_path):
+        """Test detection with a realistic graph structure.
 
-        graph = build_graph()
+        The graph is this repository's own estate, built from a private copy
+        of the working tree: the checkout itself holds whatever results an
+        earlier run left in its output areas, and a build there would read them.
+        """
+        from elspais.graph.factory import build_graph
+        from tests.e2e.conftest import private_tree
+
+        copy = private_tree(tmp_path)
+        graph = build_graph(repo_root=copy)
 
         # These methods should work on a real graph
         orphan_count = graph.orphan_count()

@@ -11,6 +11,7 @@ binds; a spelling read from the wrong origin binds to nothing and is reported.
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,7 @@ from elspais.config.schema import PATH_ORIGIN_CWD, PATH_ORIGIN_ROOT, TestTargetC
 from elspais.graph.GraphNode import NodeKind
 from elspais.graph.parsers.results.registry import REPORTER_REGISTRY, ReporterSpec
 from elspais.graph.relations import EdgeKind
+from tests.core.graph_test_helpers import record_run
 
 _SPEC = """\
 ### REQ-p00001: Login
@@ -556,3 +558,155 @@ def test_coverage_of_which_a_measured_file_is_scanned_is_not_reported(
     assert _covered_lines(graph) > 0, "the scanned file's lines attached"
 
     assert _coverage_faults(graph) == []
+
+
+# ---------------------------------------------------------------------------
+# The declared origin and the fingerprint judgement compose: results read from
+# the target's working directory still bind once their run is judged stale,
+# and are carried with the reason; coverage read from its own declared origin
+# is carried by the same judgement.
+# ---------------------------------------------------------------------------
+
+_JUDGED_CONFIG = """\
+version = 5
+
+[project]
+name = "origin"
+namespace = "REQ"
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["app/src"]
+
+[scanning.test]
+enabled = true
+directories = ["app/tests"]
+file_patterns = ["test_*.py"]
+
+[[scanning.test.targets]]
+name = "unit"
+cwd = "app"
+reporter = "{reporter}"
+results = "{results}"
+coverage = "coverage.json"
+match = "source"
+results_origin = "{results_origin}"
+coverage_origin = "{coverage_origin}"
+"""
+
+# The runner, run in `app/`, names its test from there; the coverage tool
+# records the measured file from the repository root.
+_RECORDED_TEST = "tests/test_login.py"
+
+
+def _recorded_project(tmp_path: Path, reporter: str) -> Path:
+    """A target in `app/` whose results and coverage are written by one recorded run.
+
+    The results record the test relative to the working directory and declare
+    that origin; the coverage records the code file relative to the repository
+    root and declares that origin.
+    """
+    project = tmp_path / "project"
+    results_name, report = _REPORTS[reporter](_RECORDED_TEST)
+    measurement = {
+        "executed_lines": [2, 3],
+        "missing_lines": [],
+        "summary": {"num_statements": 2, "covered_lines": 2},
+        "contexts": {
+            "2": [f"{_RECORDED_TEST}::test_logs_in|run"],
+            "3": [f"{_RECORDED_TEST}::test_logs_in|run"],
+        },
+    }
+    files = {
+        "spec/reqs.md": _SPEC,
+        _TEST_FILE: _TEST_SOURCE,
+        _CODE_FILE: _CODE_SOURCE,
+        ".elspais.toml": _JUDGED_CONFIG.format(
+            reporter=reporter,
+            results=results_name,
+            results_origin=PATH_ORIGIN_CWD,
+            coverage_origin=PATH_ORIGIN_ROOT,
+        ),
+    }
+    for rel, text in files.items():
+        path = project / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    record_run(
+        project,
+        "unit",
+        {results_name: report, "coverage.json": json.dumps({"files": {_CODE_FILE: measurement}})},
+    )
+    return project
+
+
+def _change_an_input(project: Path) -> None:
+    """Edit the target's own test file after its run, as an author does."""
+    with (project / _TEST_FILE).open("a", encoding="utf-8") as fh:
+        fh.write("\n# Edited after the run.\n")
+
+
+def _assert_stale_because_the_test_changed(reason: str) -> None:
+    assert reason.startswith("inputs changed since it ran:"), reason
+    assert _TEST_FILE in reason, reason
+
+
+# Verifies: REQ-d00327-B+C, REQ-d00323-F
+@pytest.mark.parametrize("reporter", ["junit", "pytest-json"])
+def test_results_read_from_the_declared_origin_bind_fresh_and_carried_alike(tmp_path, reporter):
+    """The judgement decides whether the results are carried and the origin
+    decides which test they bind to; neither answer moves the other."""
+    project = _recorded_project(tmp_path, reporter)
+
+    fresh = _the_result(_build_with_code(project))
+    assert _bound_tests(fresh) == [_TEST_FILE]
+    assert fresh.get_field("path_origin") == PATH_ORIGIN_CWD
+    assert fresh.get_field("carried") is False
+    assert fresh.get_field("stale_reason") == ""
+
+    _change_an_input(project)
+    stale = _the_result(_build_with_code(project))
+
+    assert _bound_tests(stale) == [_TEST_FILE], "the origin still applies once stale"
+    assert stale.get_field("path_origin") == PATH_ORIGIN_CWD
+    assert stale.get_field("carried") is True
+    _assert_stale_because_the_test_changed(stale.get_field("stale_reason"))
+
+
+# Verifies: REQ-d00327-B+H, REQ-d00323-I
+def test_coverage_read_from_the_declared_origin_is_carried_when_its_run_is_stale(tmp_path):
+    """Coverage placed from the repository root, with its contexts naming the
+    test from the working directory, keeps every line and its attribution once
+    the run is stale, and records why."""
+    project = _recorded_project(tmp_path, "pytest-json")
+
+    def _code_file(graph):
+        return next(
+            f
+            for f in graph.iter_by_kind(NodeKind.FILE)
+            if f.get_field("relative_path") == _CODE_FILE
+        )
+
+    fresh = _build_with_code(project)
+    assert _code_file(fresh).get_field("line_coverage_stale_reason") == ""
+    fresh_lines = fresh.find_by_id("REQ-p00001").get_metric("rollup_metrics").code_tested
+    assert fresh_lines.attributed_lines > 0
+    assert fresh_lines.carried is False
+
+    _change_an_input(project)
+    stale = _build_with_code(project)
+
+    assert _code_file(stale).get_field("line_coverage"), "the coverage still attaches"
+    _assert_stale_because_the_test_changed(
+        _code_file(stale).get_field("line_coverage_stale_reason")
+    )
+    stale_lines = stale.find_by_id("REQ-p00001").get_metric("rollup_metrics").code_tested
+    assert (stale_lines.covered_lines, stale_lines.attributed_lines) == (
+        fresh_lines.covered_lines,
+        fresh_lines.attributed_lines,
+    )
+    assert stale_lines.carried is True
+    _assert_stale_because_the_test_changed(stale_lines.stale_reason)

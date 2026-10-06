@@ -18,12 +18,14 @@ from elspais.graph.builder import TraceGraph
 from elspais.graph.federated import FederatedGraph
 from elspais.utilities.fingerprint import (
     FINGERPRINT_NAME,
+    Freshness,
     RunNotStarted,
     finish_run,
     input_files,
     judge,
     read_fingerprint,
     run_in_progress,
+    stale_reason,
     start_run,
     target_folder,
 )
@@ -483,3 +485,52 @@ def test_the_runner_hands_the_command_its_folder_and_records_the_run(tmp_path):
     assert results[0].returncode == 0
     assert sorted(p.name for p in stale.iterdir()) == sorted([FINGERPRINT_NAME, "junit.xml"])
     assert judge(root, config, "unit").state == "fresh"
+
+
+def _stale_by(root: Path, config: dict, how: str) -> None:
+    """Leave the results of target ``unit`` stale, made stale *how*."""
+    if how == "no-fingerprint":
+        folder = root / ".results" / "unit"
+        folder.mkdir(parents=True)
+        (folder / "junit.xml").write_text(_JUNIT, encoding="utf-8")
+        return
+    folder = start_run(root, config, "unit")
+    (folder / "junit.xml").write_text(_JUNIT, encoding="utf-8")
+    if how == "changed-during-run":
+        (root / "src" / "a.py").write_text("x = 2\n", encoding="utf-8")
+    finish_run(root, config, "unit")
+    if how == "changed":
+        (root / "src" / "a.py").write_text("x = 2\n", encoding="utf-8")
+
+
+# Verifies: REQ-d00323-G
+@pytest.mark.parametrize(
+    ("how", "expected"),
+    [
+        ("no-fingerprint", "no fingerprint was recorded for its results"),
+        ("changed", "inputs changed since it ran: src/a.py"),
+        ("changed-during-run", "inputs changed while it ran: src/a.py"),
+    ],
+)
+def test_the_reason_results_are_stale_is_worded_once(tmp_path, how, expected):
+    """The reason a result carries is the reason the freshness finding gives."""
+    root = _project(tmp_path)
+    config = _config([_target()])
+    _stale_by(root, config, how)
+
+    reason = stale_reason(judge(root, config, "unit"))
+
+    assert reason == expected
+    (finding,) = _check(root, config).findings
+    assert reason in finding.message
+
+
+# Verifies: REQ-d00323-G
+def test_a_reason_names_the_first_five_changed_inputs_and_counts_the_rest():
+    changed = tuple(f"src/m{i}.py" for i in range(7))
+    verdict = Freshness(target="unit", state="stale", reason="changed", changed=changed)
+
+    assert stale_reason(verdict) == (
+        "inputs changed since it ran: src/m0.py, src/m1.py, src/m2.py, src/m3.py, "
+        "src/m4.py and 2 more"
+    )

@@ -22,6 +22,7 @@ from elspais.graph.builder import TraceGraph
 from elspais.graph.GraphNode import GraphNode, NodeKind
 from elspais.graph.metrics import RollupMetrics
 from elspais.graph.values import header_for as _header
+from tests.core.graph_test_helpers import record_run
 
 _INTEGRATES_FIX = Path(__file__).parents[1] / "fixtures" / "e2e-integrates"
 
@@ -1388,7 +1389,12 @@ class TestSummaryCarriedFootnote:
     silent no-op on rendered output."""
 
     @staticmethod
-    def _make_two_target_project(tmp_path):
+    def _make_two_target_project(tmp_path, unrecorded=frozenset()):
+        """Two targets, each with one passing result.
+
+        A target named in *unrecorded* has its results written with no Result
+        Fingerprint, so they are stale; the others are recorded runs.
+        """
         project = tmp_path / "project"
         (project / "spec").mkdir(parents=True)
         (project / "spec" / "reqs.md").write_text(_TWO_TARGET_SPEC_SUMMARY, encoding="utf-8")
@@ -1401,16 +1407,16 @@ class TestSummaryCarriedFootnote:
             "# Verifies: REQ-d00002-A\ndef test_b():\n    pass\n", encoding="utf-8"
         )
 
-        (project / ".results" / "a").mkdir(parents=True)
-        (project / ".results" / "a" / "results.xml").write_text(
-            _JUNIT_ONE_PASSING_SUMMARY.format(suite="suite-a", name="test_a"), encoding="utf-8"
-        )
-        (project / ".results" / "b").mkdir(parents=True)
-        (project / ".results" / "b" / "results.xml").write_text(
-            _JUNIT_ONE_PASSING_SUMMARY.format(suite="suite-b", name="test_b"), encoding="utf-8"
-        )
-
         (project / ".elspais.toml").write_text(_TWO_TARGET_CONFIG_SUMMARY, encoding="utf-8")
+        # Both targets' results come from a run of this tree, so they are
+        # fresh and only the fresh-target selection carries any of them.
+        for target, name in (("a", "test_a"), ("b", "test_b")):
+            text = _JUNIT_ONE_PASSING_SUMMARY.format(suite=f"suite-{target}", name=name)
+            if target in unrecorded:
+                (project / ".results" / target).mkdir(parents=True)
+                (project / ".results" / target / "results.xml").write_text(text, encoding="utf-8")
+            else:
+                record_run(project, target, {"results.xml": text})
         return project
 
     @staticmethod
@@ -1439,8 +1445,8 @@ class TestSummaryCarriedFootnote:
 
     # Verifies: REQ-d00254-I
     def test_collect_coverage_full_run_omits_carried_counts(self, tmp_path):
-        # A full run (no --targets) must not surface carry-forward counts at all,
-        # so output stays byte-identical to the pre-selectivity behavior.
+        # A full run (no --targets) whose every result is fresh carries
+        # nothing, so it states no carry-forward counts at all.
         project = self._make_two_target_project(tmp_path)
         graph, config = self._build(project, targets=None)
 
@@ -1448,6 +1454,32 @@ class TestSummaryCarriedFootnote:
 
         assert "total_result_targets" not in data
         assert "carried_result_targets" not in data
+
+    # Verifies: REQ-d00323-H
+    def test_collect_coverage_counts_stale_targets_on_a_run_that_selected_nothing(self, tmp_path):
+        project = self._make_two_target_project(tmp_path, unrecorded={"b"})
+        graph, config = self._build(project, targets=None)
+
+        data = collect_coverage(graph, config=config)
+
+        assert data["total_result_targets"] == 2
+        assert data["carried_result_targets"] == 1
+
+    # Verifies: REQ-d00323-H
+    @pytest.mark.parametrize("fmt", ["text", "markdown"])
+    def test_render_marks_stale_results_on_a_run_that_selected_nothing(self, tmp_path, fmt):
+        project = self._make_two_target_project(tmp_path, unrecorded={"b"})
+        graph, config = self._build(project, targets=None)
+        data = collect_coverage(graph, config=config)
+
+        out = render_summary(data, fmt)
+
+        assert "* 1/2 test results from previous runs" in out
+        if fmt == "text":
+            passing_line = next(
+                line for line in out.splitlines() if line.strip().startswith("Passing:")
+            )
+            assert "*" in passing_line
 
     # Verifies: REQ-d00254-I
     def test_render_text_selective_run_has_asterisk_and_footnote(self, tmp_path):

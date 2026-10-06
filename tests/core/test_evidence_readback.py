@@ -14,6 +14,7 @@ import pytest
 
 from elspais.graph.GraphNode import NodeKind
 from elspais.utilities.evidence import ResultLine, Snapshot, render_files
+from tests.core.graph_test_helpers import record_run
 from tests.core.test_target_ingestion import (
     _RUNNER_A,
     _RUNNER_A_DART,
@@ -76,11 +77,10 @@ def _project(root: Path, snapshot: dict[str, str] | None, *, own_results: bool) 
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
     if own_results:
-        out = root / ".results" / "flutter"
-        out.mkdir(parents=True)
-        (out / "machine.jsonl").write_text(
-            _machine_run(root, _RUNNER_A, _SHARED_FILE, "success", 1) + "\n",
-            encoding="utf-8",
+        record_run(
+            root,
+            "flutter",
+            {"machine.jsonl": _machine_run(root, _RUNNER_A, _SHARED_FILE, "success", 1) + "\n"},
         )
     return root
 

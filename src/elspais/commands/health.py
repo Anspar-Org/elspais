@@ -3144,8 +3144,25 @@ def check_dimension_coverage(
             f"{fmt_assertion_count(agg.tested_failed)} failed / "
             f"{fmt_assertion_count(agg.tested_awaiting)} awaiting a result"
         )
+    # Implements: REQ-d00323-K
+    # Line-coverage credit taken from stale coverage says why it is stale.
+    if dimension == "lcov_tested" and total_covered > 1e-9:
+        from elspais.graph.aggregation import aggregate_line_coverage
+
+        lines_stale = aggregate_line_coverage(
+            graph, config=config, level_filter=level_filter
+        ).stale_reason
+        if lines_stale:
+            msg_parts.append(f"credited from stale line coverage ({lines_stale})")
     if has_any_failures:
         msg_parts.append("FAILURES DETECTED")
+        # Implements: REQ-d00323-G
+        # A failure read from stale results still fails here. The message
+        # says so, because rerunning the stale target may clear it.
+        if category == "tests" and _stale_failures(graph):
+            msg_parts.append(
+                "some from stale results the current tree did not produce (see tests.results_stale)"
+            )
     message = ", ".join(msg_parts) + note + message_suffix
 
     return HealthCheck(
@@ -3248,6 +3265,17 @@ def check_line_coverage(graph, config=None, level_filter=None) -> HealthCheck:
         details["attributed_pct"] = round(attributed_pct, 1)
     else:
         msg_parts.append("per-test attribution not available from this coverage data")
+    # Implements: REQ-d00323-J+K
+    # Lines measured by a run the current tree did not produce are stated as
+    # such, with the reason the coverage is stale.
+    details["carried"] = agg.carried
+    if agg.stale_reason:
+        whole = "all" if agg.carried else "some"
+        msg_parts.append(
+            f"{whole} from stale line coverage the current tree did not produce "
+            f"({agg.stale_reason})"
+        )
+        details["stale_reason"] = agg.stale_reason
 
     return HealthCheck(
         name="code.code_tested",
@@ -3492,10 +3520,25 @@ def check_external_tests(
     ):
         for test in nodes:
             file_path, line = _fault_location(graph, test.id, None)
+            # Implements: REQ-d00323-G
+            # A verdict read from stale results says why it may describe
+            # another tree.
+            stale = next(
+                (
+                    r.get_field("stale_reason")
+                    for r in test.iter_children()
+                    if r.kind == NK.RESULT and r.get_field("stale_reason")
+                ),
+                "",
+            )
+            stale_note = (
+                f"; stale results: {stale}" if stale and verdict_word != "awaiting a result" else ""
+            )
             findings.append(
                 HealthFinding(
                     message=(
-                        f"{test.get_label() or test.id} ({verdict_word}) reaches no requirement"
+                        f"{test.get_label() or test.id} ({verdict_word}{stale_note}) "
+                        f"reaches no requirement"
                     ),
                     node_id=test.id,
                     file_path=file_path,
@@ -3903,6 +3946,20 @@ def _configured_test_targets(graph: FederatedGraph, config: dict | None) -> list
     return targets
 
 
+# Implements: REQ-d00323-G
+def _stale_failures(graph: FederatedGraph) -> int:
+    """Count the failed results whose target's results are stale."""
+    from elspais.graph import NodeKind
+    from elspais.graph.aggregation import FAILING_STATUSES
+
+    return sum(
+        1
+        for node in graph.nodes_by_kind(NodeKind.RESULT)
+        if node.get_field("stale_reason")
+        and (node.get_field("status", "") or "").lower() in FAILING_STATUSES
+    )
+
+
 # Implements: REQ-d00294-E+F
 def check_test_results(graph: FederatedGraph, config: dict | None = None) -> HealthCheck:
     """Check the results ingested from JUnit/pytest output.
@@ -3965,6 +4022,9 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
     def _failed(node) -> bool:
         return (node.get_field("status", "") or "").lower() in FAILING_STATUSES
 
+    def _stale(node) -> bool:
+        return bool(node.get_field("stale_reason"))
+
     passed = 0
     failed = 0
     skipped = 0
@@ -4005,6 +4065,12 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
             # the line over to the test's own source would point a reader at
             # a line that means nothing there.
             result_file = node.get_field("result_file")
+            # Implements: REQ-d00323-G
+            # A failure the current tree did not produce is still a failure,
+            # and it says why its results may describe another tree.
+            stale = node.get_field("stale_reason")
+            if stale:
+                where += f" (stale results: {stale})"
             findings.append(
                 HealthFinding(
                     message=f"Failed: {node.get_label() or node.id}{where}",
@@ -4013,13 +4079,17 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
                     line=node.get_field("result_line") if result_file else None,
                 )
             )
+        stale_failed = sum(1 for node in result_nodes if _failed(node) and _stale(node))
+        stale_note = (
+            f"; {stale_failed} of the failures are from stale results" if stale_failed else ""
+        )
         return HealthCheck(
             name="tests.results",
             passed=False,
             message=(
                 f"Result failures: {failed} of {total} results failed "
                 f"({passed} passed, {skipped} skipped, "
-                f"{pass_rate:.1f}% pass rate)"
+                f"{pass_rate:.1f}% pass rate){stale_note}"
             ),
             category="tests",
             severity=severity,
@@ -4028,14 +4098,20 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
                 "failed": failed,
                 "skipped": skipped,
                 "pass_rate": round(pass_rate, 1),
+                "stale_failed": stale_failed,
             },
             findings=findings,
         )
 
+    # Implements: REQ-d00323-F
+    # A pass the current tree did not produce is stated as such, so a reader
+    # does not take it for a pass of this tree.
+    stale_count = sum(1 for node in result_nodes if _stale(node))
+    stale_note = f"; {stale_count} of them from stale results" if stale_count else ""
     return HealthCheck(
         name="tests.results",
         passed=True,
-        message=f"All results passing: {passed} passed, {skipped} skipped",
+        message=f"All results passing: {passed} passed, {skipped} skipped{stale_note}",
         category="tests",
         severity="info",
         details={
@@ -4043,6 +4119,7 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
             "failed": failed,
             "skipped": skipped,
             "pass_rate": round(pass_rate, 1),
+            "stale": stale_count,
         },
     )
 
@@ -4073,6 +4150,8 @@ def check_test_results_stale(
 
     findings: list[HealthFinding] = []
     judged = 0
+    # Targets of one member share their inputs, so each is read once.
+    digest_cache: dict[Path, str] = {}
     for entry in graph.iter_repos():
         member = _validate_config(entry.config)
         # Implements: REQ-d00322-K+L
@@ -4087,7 +4166,7 @@ def check_test_results_stale(
             if finding is not None:
                 findings.append(finding)
         for target in member.scanning.test.targets:
-            verdict = judge(entry.repo_root, member, target.name)
+            verdict = judge(entry.repo_root, member, target.name, digest_cache=digest_cache)
             # Implements: REQ-d00311-N
             # A run in progress is reported by `tests.run_in_progress`.
             if verdict.state in ("absent", "running"):
@@ -4197,16 +4276,15 @@ def _snapshot_staleness(entry: Any, evidence: str, *, root: bool) -> HealthFindi
 # Implements: REQ-d00311-E+F
 def _stale_message(verdict: Any) -> str:
     """Return the reason that one target's results are stale, and the remedy."""
+    from elspais.utilities.fingerprint import stale_reason
+
     if verdict.reason == "no-fingerprint":
-        return (
-            f"target {verdict.target}: no fingerprint was recorded for its results; "
-            f"run it with `elspais checks --run-tests`, or record its run with "
-            f"`elspais fingerprint`"
+        remedy = (
+            "run it with `elspais checks --run-tests`, or record its run with `elspais fingerprint`"
         )
-    shown = ", ".join(verdict.changed[:5])
-    more = f" and {len(verdict.changed) - 5} more" if len(verdict.changed) > 5 else ""
-    when = "while it ran" if verdict.reason == "changed-during-run" else "since it ran"
-    return f"target {verdict.target}: inputs changed {when}: {shown}{more}; run it again"
+    else:
+        remedy = "run it again"
+    return f"target {verdict.target}: {stale_reason(verdict)}; {remedy}"
 
 
 def check_test_coverage(

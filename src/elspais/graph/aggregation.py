@@ -1040,6 +1040,17 @@ class LineAggregate:
     req_with_attribution: int = 0
     has_measurement: bool = False
     has_contexts: bool = False
+    # Implements: REQ-d00323-J+K
+    # Whether a measured requirement's lines came from fresh coverage, and
+    # from carried coverage, and why carried coverage is stale.
+    measured_fresh: bool = False
+    measured_carried: bool = False
+    stale_reason: str = ""
+
+    @property
+    def carried(self) -> bool:
+        """Whether every measurement behind the figure is carried coverage."""
+        return self.measured_carried and not self.measured_fresh
 
     @property
     def has_attribution(self) -> bool:
@@ -1077,6 +1088,13 @@ def _accumulate_lines(agg: LineAggregate, lines: LineCoverage) -> None:
         agg.req_with_attribution += 1
     agg.has_measurement = agg.has_measurement or lines.has_measurement
     agg.has_contexts = agg.has_contexts or lines.has_contexts
+    if lines.has_measurement:
+        if lines.carried:
+            agg.measured_carried = True
+        else:
+            agg.measured_fresh = True
+    if lines.stale_reason and not agg.stale_reason:
+        agg.stale_reason = lines.stale_reason
 
 
 # Implements: REQ-d00254-B
@@ -1371,6 +1389,8 @@ def collect_coverage(
                 "code_tested_attributed": agg.lines.attributed_lines,
                 "code_tested_measured": agg.lines.has_measurement,
                 "code_tested_has_contexts": agg.lines.has_contexts,
+                # Implements: REQ-d00323-J
+                "code_tested_carried": agg.lines.carried,
                 **_measure_fields("implemented", agg.implemented),
                 **_measure_fields("tested", agg.tested),
                 **_measure_fields("passing", agg.passing),
@@ -1429,28 +1449,27 @@ def collect_coverage(
             ],
         }
 
-    # Implements: REQ-d00254-I
-    # Carry-forward provenance (distinct RESULT target names + how many are
-    # carried baselines) is meaningful only for a selective run, so
-    # a selective run isn't a silent no-op on rendered output. Omit it entirely
-    # otherwise, so a full run stays byte-identical to the pre-selectivity
-    # output in every format (JSON keys and the CSV row included).
-    if getattr(graph, "render_fresh_targets", None) is not None:
-        from elspais.graph.GraphNode import parse_structural_id
+    # Implements: REQ-d00254-I, REQ-d00323-E+H
+    # Carry-forward provenance: the distinct result targets and how many of
+    # them are carried. It is stated for a selective run, and for any run
+    # holding a carried result -- results its tree did not produce are
+    # carried whatever was selected. Otherwise it is omitted, so a run whose
+    # every result is its own states nothing about carrying in any format.
+    from elspais.graph.GraphNode import parse_structural_id
 
-        # Implements: REQ-d00323-E
-        # A target is named within its member: two members may each declare
-        # a target of one name, and those are two targets.
-        all_result_targets: set[tuple[str, str]] = set()
-        carried_result_targets_set: set[tuple[str, str]] = set()
-        for result_node in graph.iter_by_kind(NodeKind.RESULT):
-            tgt = result_node.get_field("target")
-            if not tgt:
-                continue
-            member = (parse_structural_id(result_node.id)[1], tgt)
-            all_result_targets.add(member)
-            if result_node.get_field("carried"):
-                carried_result_targets_set.add(member)
+    # A target is named within its member: two members may each declare
+    # a target of one name, and those are two targets.
+    all_result_targets: set[tuple[str, str]] = set()
+    carried_result_targets_set: set[tuple[str, str]] = set()
+    for result_node in graph.iter_by_kind(NodeKind.RESULT):
+        tgt = result_node.get_field("target")
+        if not tgt:
+            continue
+        member = (parse_structural_id(result_node.id)[1], tgt)
+        all_result_targets.add(member)
+        if result_node.get_field("carried"):
+            carried_result_targets_set.add(member)
+    if getattr(graph, "render_fresh_targets", None) is not None or carried_result_targets_set:
         result["total_result_targets"] = len(all_result_targets)
         result["carried_result_targets"] = len(carried_result_targets_set)
 

@@ -639,7 +639,7 @@ A line number means nothing without its origin, and producers disagree: the `lin
 
 A test that returned no result is awaiting one, and nothing else is known about it. The inference this replaces -- reading a verdict for one test off the results of its neighbours, in the same file or the same application -- was built to work around test files that supposedly could not carry their own `Verifies:` annotation. They can, in every language the tool reads tests in, so the workaround bought nothing and cost the distinction: a deselected tier, an unbuilt target and a crashed runner all left their assertions reported as passing on the strength of tests that say nothing about them. Its failing half was worse, blaming an *Assertion* for a sibling test's failure, which REQ-d00292-D forbids one level down. Aggregate results still say something real about an application, and that is where they are read: the line-coverage dimension, which measures the code rather than the *Traceability*.
 
-I weighs a carried result as it weighs a fresh one, because a reporting command executes nothing and reads whatever is on disk: a carried result and a fresh one are each their own target's latest artifact, and neither is stale relative to the other. Both stand as results of the test they name, and both are weighed alike.
+I weighs a carried result as it weighs a fresh one, because a reporting command executes nothing and reads whatever is on disk: a carried result is still its target's latest artifact, and its verdict stands until a run replaces it. Both stand as results of the test they name, and both are weighed alike. Whether the current tree produced a result is stated beside its verdict (REQ-d00323-F) and never changes it.
 
 K states the outcome the scanning side owes the crediting side: without per-test identity and extent, the line-level dimensions computed here have nothing to intersect implementation ranges against, and a framework's tests can only ever be credited at file granularity. The obligation is deliberately language-neutral — it fixes what attribution must yield, not whether a given language earns built-in support or is served through an external command.
 
@@ -1719,13 +1719,29 @@ D. Where a run names the test targets that ran fresh, the system SHALL treat as 
 
 E. When the system states how many test targets with results were carried, the system SHALL count each test target of each federation member separately.
 
+F. The system SHALL treat as carried every result of a test target whose results the judgement under REQ-d00311 reports as stale.
+
+G. When the system reports a failed result that is carried because the results of its test target are stale, the system SHALL state why those results are stale.
+
+H. When an ingested result is carried, the system SHALL state how many test targets with results were carried.
+
+I. The system SHALL treat as carried the line coverage of a test target whose results the judgement under REQ-d00311 reports as stale.
+
+J. When every line coverage that contributes to a figure is carried, the system SHALL mark that figure as carried.
+
+K. When the system reports a figure that carried line coverage contributes to, the system SHALL state why that line coverage is stale.
+
 ### Rationale
 
 The carried mark exists for the reader who must not mistake old evidence for new. A figure built from carried results and shown without the mark makes that mistake for them, so the mark follows the evidence wherever the evidence is counted. C names the conducted case because a requirement credited only through the requirements that refine it has no results of its own, and the mark must not depend on where the results are attached.
 
 A run of the invoking repository's test targets executes no target of another member, so a selection of fresh targets cannot have made another member's results fresh. Two members can each declare a target with the same name, so E keeps two targets from being counted as one.
 
-*End* *Carried Result Provenance* | **Hash**: 67d6d8ea
+A result whose fingerprint judgement is stale was produced by a tree other than the one being reported on, whatever the invocation selected, so F counts it as carried and every surface that marks carried evidence marks it. Carried evidence keeps its verdict (REQ-d00254-I): a stale failing result is a failure that the current tree has not run again, and it is never read as a pass. G gives the reason beside the failure, because a reader who reruns the target clears it and a reader who does not must know the failure may describe a tree that no longer exists. H states the count on every run that holds carried results, because staleness reaches a run that selected nothing as well as a selective one.
+
+A test target's line coverage is measured by the same run as its results, so it is stale exactly when they are. I, J and K apply the rule for results to the figures line coverage makes -- the executed lines, and the *Assertion* credit taken from them: a figure built only from line coverage the current tree did not produce is marked, and a report of it says why the coverage is stale.
+
+*End* *Carried Result Provenance* | **Hash**: c64d2571
 
 ## REQ-d00327: Origin of a Recorded Source Path
 

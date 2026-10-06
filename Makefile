@@ -1,17 +1,11 @@
 .PHONY: setup test test-e2e test-browser test-stress test-all help
 
-# The hooks resolve this tree's elspais through this directory, and the test
-# targets run its pytest. Naming it once here is what makes that one place.
+# The hooks and .githooks/run-target put this directory first on PATH, so the
+# test targets run its pytest and its elspais. Naming it once here is what
+# makes that one place.
 VENV := .venv
 PY := $(CURDIR)/$(VENV)/bin/python
-
-# The git hooks resolve `elspais` and `pytest` by name and warn (or decline the
-# destructive `elspais fix` stage) when PATH resolves them outside this tree.
-# The e2e tier needs it for a second reason: the `stub` test target in
-# tests/fixtures/e2e-standard/.elspais.toml shells out to a bare `python`, and
-# without the venv on PATH it fails with exit 127.
 VENV_PATH := PATH="$(CURDIR)/$(VENV)/bin:$$PATH"
-PYTEST := $(VENV_PATH) $(PY) -m pytest
 
 setup: ## Set up development environment
 	git config core.hooksPath .githooks
@@ -31,23 +25,27 @@ setup: ## Set up development environment
 	@echo "  Git hooks installed from .githooks/"
 	@echo "  Run 'make test' to verify."
 
-# The run the pre-commit hook makes, in parallel on half the processors and
-# fingerprinted into the `elspais-unit` target's output area.
-test: ## Run unit/integration tests in parallel, with per-test coverage
-	$(VENV_PATH) .githooks/with-fingerprint elspais-unit .githooks/run-unit-tier
+# Every test target below runs through .githooks/run-target: fingerprinted
+# into its target's output area, as `elspais checks` reads it, and refused
+# while a run of the same target -- a hook's or another make's -- is in
+# progress in this worktree, because a second run empties the first one's
+# output area as it starts.
 
-# The same two-pass run the pre-push hook makes, fingerprinted into the
-# `elspais-e2e` target's output area so `elspais checks` reads its results.
+# The run the pre-commit hook makes, in parallel on half the processors.
+test: ## Run unit/integration tests in parallel, with per-test coverage
+	.githooks/run-target elspais-unit .githooks/run-unit-tier
+
+# The same two-pass run the pre-push hook makes.
 test-e2e: ## Run e2e subprocess tests (parallel pass, then serial pass)
-	$(VENV_PATH) .githooks/with-fingerprint elspais-e2e .githooks/run-e2e-tier
+	.githooks/run-target elspais-e2e .githooks/run-e2e-tier
 
 # Without coverage, as their targets in .elspais.toml run: the unit tier
 # alone measures line coverage.
 test-browser: ## Run browser tests
-	$(PYTEST) -m browser --no-cov
+	.githooks/run-target elspais-browser bash -c 'pytest -m browser -q --no-cov --junitxml="$$ELSPAIS_TARGET_OUTPUT/junit.xml" -o junit_family=xunit1'
 
 test-stress: ## Run the concurrency stress battery
-	$(PYTEST) -m stress --no-cov
+	.githooks/run-target elspais-stress bash -c 'pytest tests/stress -m stress -q --no-cov --junitxml="$$ELSPAIS_TARGET_OUTPUT/junit.xml" -o junit_family=xunit1'
 
 # Each tier the way its own target runs it, one after another: two pytest
 # sessions in one worktree collide on coverage data, so this target never

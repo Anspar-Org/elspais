@@ -10,6 +10,7 @@ the returned FederatedGraph as `render_fresh_targets` for the renderer.
 from pathlib import Path
 
 from elspais.graph.GraphNode import NodeKind
+from tests.core.graph_test_helpers import record_run
 
 _SPEC = """\
 ### REQ-p00001: Test Req
@@ -35,21 +36,12 @@ def _make_two_target_project(tmp_path: Path) -> Path:
     """Build an on-disk project with two [[scanning.test.targets]] entries.
 
     Each target ("a", "b") has its own results directory with a single
-    passing JUnit XML file, so build_graph() ingests two RESULT nodes,
-    one per target.
+    passing JUnit XML file, recorded as a run of the tree, so build_graph()
+    ingests two fresh RESULT nodes, one per target.
     """
     project = tmp_path / "project"
     (project / "spec").mkdir(parents=True)
     (project / "spec" / "reqs.md").write_text(_SPEC, encoding="utf-8")
-
-    (project / ".results" / "a").mkdir(parents=True)
-    (project / ".results" / "a" / "TEST-a.xml").write_text(
-        _JUNIT_TEMPLATE.format(name="a"), encoding="utf-8"
-    )
-    (project / ".results" / "b").mkdir(parents=True)
-    (project / ".results" / "b" / "TEST-b.xml").write_text(
-        _JUNIT_TEMPLATE.format(name="b"), encoding="utf-8"
-    )
 
     (project / ".elspais.toml").write_text(
         """\
@@ -79,6 +71,9 @@ match = "aggregate"
 """,
         encoding="utf-8",
     )
+    # Each target's results come from a run of this tree, so they are fresh.
+    record_run(project, "a", {"TEST-a.xml": _JUNIT_TEMPLATE.format(name="a")})
+    record_run(project, "b", {"TEST-b.xml": _JUNIT_TEMPLATE.format(name="b")})
     return project
 
 
@@ -103,7 +98,7 @@ def test_result_nodes_tagged_carried(tmp_path):
 
 # Verifies: REQ-d00254-I
 def test_result_nodes_not_carried_when_no_fresh_targets(tmp_path):
-    """Absent --targets selector: every target's results are fresh (not carried)."""
+    """Absent --targets selector, results this tree produced are not carried."""
     from elspais.graph.factory import build_graph
 
     project = _make_two_target_project(tmp_path)

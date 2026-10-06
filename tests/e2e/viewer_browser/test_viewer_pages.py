@@ -1293,6 +1293,38 @@ class TestEnvironmentTagRendering:
             f"{rows.count()} rows, {tags.count()} tags"
         )
 
+    # Verifies: REQ-d00323-G
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00323_G_each_stale_result_shows_why_it_is_stale(
+        self, page_environments, viewer_url_environments
+    ):
+        """Results whose target recorded no fingerprint are each marked stale,
+        and the mark names that reason.
+
+        The stale mark is a tag of its own beside the environment tag, so the
+        environments still read exactly as they did.
+        """
+        page_environments.goto(viewer_url_environments, wait_until="networkidle")
+        panel = _open_results_panel(page_environments, "REQ-d00001", "A")
+
+        stale = panel.locator(".result-stale")
+        stale.first.wait_for(state="visible", timeout=10_000)
+
+        rows = panel.locator(".assertion-test-item")
+        assert stale.count() == rows.count(), (
+            f"every stale result row should carry a stale tag: "
+            f"{rows.count()} rows, {stale.count()} tags"
+        )
+        for i in range(stale.count()):
+            tag = stale.nth(i)
+            assert tag.inner_text().strip() == "stale"
+            assert tag.get_attribute("title") == "no fingerprint was recorded for its results"
+
+        envs = panel.locator(".result-environment")
+        found = sorted(envs.nth(i).inner_text().strip() for i in range(envs.count()))
+        assert found == ["chromium", "firefox"], f"expected both projects, got {found}"
+
     # Verifies: REQ-d00294-F
     @pytest.mark.browser
     @pytest.mark.e2e

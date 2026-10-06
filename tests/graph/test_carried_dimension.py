@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from elspais.graph.aggregation import absolute_tier
+from tests.core.graph_test_helpers import record_run
 
 _SPEC = """\
 # Requirements
@@ -156,8 +157,9 @@ def _make_project(
     *,
     refiner: str | None = None,
     parent_own_result: bool = False,
+    unrecorded: frozenset[str] = frozenset(),
 ) -> Path:
-    """Build an on-disk project with two targets ('a' fresh, 'b' carried).
+    """Build an on-disk project with two targets, 'a' and 'b'.
 
     - REQ-d00001-A is verified only by target 'a' (test_a, passing).
     - REQ-d00002-A is verified only by target 'b' (test_b, passing).
@@ -168,6 +170,10 @@ def _make_project(
     the parent REQ-d00010 is added, so the parent is credited through the
     refiner's results. With ``parent_own_result``, the parent also carries a
     passing test of its own in target 'b' (test_p).
+
+    Each target's results are written as a recorded run of the tree, so they
+    are fresh, except for a target named in ``unrecorded``: its results are
+    written with no Result Fingerprint, so they are stale.
     """
     project = tmp_path / "project"
     (project / "spec").mkdir(parents=True)
@@ -188,12 +194,6 @@ def _make_project(
         "# Verifies: REQ-d00003-A\ndef test_c():\n    pass\n", encoding="utf-8"
     )
 
-    (project / ".results" / "a").mkdir(parents=True)
-    (project / ".results" / "a" / "results.xml").write_text(_RESULTS_A, encoding="utf-8")
-    (project / ".results" / "b").mkdir(parents=True)
-    (project / ".results" / "b" / "results.xml").write_text(
-        _RESULTS_PARENT_IN_B if parent_own_result else _RESULTS_B, encoding="utf-8"
-    )
     if parent_own_result:
         (project / "tests" / "test_p.py").write_text(
             "# Verifies: REQ-d00010-A\ndef test_p():\n    pass\n", encoding="utf-8"
@@ -201,6 +201,16 @@ def _make_project(
 
     (project / ".elspais.toml").write_text(_CONFIG, encoding="utf-8")
     subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    results = {
+        "a": _RESULTS_A,
+        "b": _RESULTS_PARENT_IN_B if parent_own_result else _RESULTS_B,
+    }
+    for target, text in results.items():
+        if target in unrecorded:
+            (project / ".results" / target).mkdir(parents=True)
+            (project / ".results" / target / "results.xml").write_text(text, encoding="utf-8")
+        else:
+            record_run(project, target, {"results.xml": text})
     return project
 
 
@@ -252,8 +262,9 @@ def test_carried_failing_result_still_reports_failing_tier(tmp_path):
 
 # Verifies: REQ-d00254-I
 def test_verified_dimension_carried_defaults_false_without_fresh_targets(tmp_path):
-    """Absent --targets selector (fresh_targets=None): nothing is carried,
-    so verified.carried is False for every requirement."""
+    """Absent --targets selector (fresh_targets=None), results this tree
+    produced are not carried, so verified.carried is False for every
+    requirement."""
     from elspais.graph.factory import build_graph
 
     project = _make_project(tmp_path)
@@ -351,7 +362,8 @@ def test_a_parent_with_its_own_result_and_a_refiner_is_carried_only_when_both_ar
 
 # Verifies: REQ-d00323-B+C
 def test_no_parent_is_carried_without_a_fresh_target_selection(tmp_path: Path) -> None:
-    """With no selection, nothing is carried, conducted credit included."""
+    """With no selection, results this tree produced are not carried,
+    conducted credit included."""
     project = _make_project(tmp_path, refiner="REQ-d00002")
 
     verified = _build(project, None).find_by_id("REQ-d00010")
@@ -406,3 +418,141 @@ def test_trace_marks_a_parent_credited_by_carried_refiner_results_as_baseline(
     cell = _passing_cell(capsys.readouterr().out, "REQ-d00010")
     assert cell.startswith("1/1 (100%)")
     assert ("(baseline)" in cell) is marked
+
+
+_NO_FINGERPRINT = "no fingerprint was recorded for its results"
+
+
+def _results_by_target(graph) -> dict[str, set[tuple[bool, str]]]:
+    """Each target's RESULT nodes as ``{target: {(carried, stale_reason)}}``."""
+    from elspais.graph.GraphNode import NodeKind
+
+    found: dict[str, set[tuple[bool, str]]] = {}
+    for node in graph.iter_by_kind(NodeKind.RESULT):
+        found.setdefault(node.get_field("target"), set()).add(
+            (bool(node.get_field("carried")), node.get_field("stale_reason"))
+        )
+    return found
+
+
+def _stale_project(tmp_path: Path, how: str) -> Path:
+    """A project whose target 'b' holds stale results, made stale *how*."""
+    if how == "no-fingerprint":
+        return _make_project(tmp_path, unrecorded=frozenset({"b"}))
+    project = _make_project(tmp_path)
+    with (project / "tests" / "test_b.py").open("a", encoding="utf-8") as fh:
+        fh.write("# changed after the run\n")
+    return project
+
+
+# Verifies: REQ-d00323-F
+@pytest.mark.parametrize("fresh_targets", [None, {"a", "b"}], ids=["no-selection", "every-target"])
+def test_results_a_run_of_this_tree_produced_are_not_carried(
+    tmp_path: Path, fresh_targets: set[str] | None
+) -> None:
+    graph = _build(_make_project(tmp_path), fresh_targets)
+
+    assert _results_by_target(graph) == {"a": {(False, "")}, "b": {(False, "")}}
+
+
+# Verifies: REQ-d00323-F
+@pytest.mark.parametrize("fresh_targets", [None, {"a", "b"}], ids=["no-selection", "every-target"])
+@pytest.mark.parametrize("how", ["no-fingerprint", "input-changed"])
+def test_results_the_current_tree_did_not_produce_are_carried_whatever_was_selected(
+    tmp_path: Path, how: str, fresh_targets: set[str] | None
+) -> None:
+    """Staleness carries a target's results even where the run names it fresh."""
+    graph = _build(_stale_project(tmp_path, how), fresh_targets)
+
+    results = _results_by_target(graph)
+    reasons = {reason for _, reason in results["b"]}
+    assert {carried for carried, _ in results["b"]} == {True}
+    (reason,) = reasons
+    if how == "no-fingerprint":
+        assert reason == _NO_FINGERPRINT
+        # Target 'a' was recorded and nothing changed since: it stays fresh.
+        assert results["a"] == {(False, "")}
+    else:
+        assert reason.startswith("inputs changed since it ran:")
+        assert "tests/test_b.py" in reason
+    verified = graph.find_by_id("REQ-d00002").get_metric("rollup_metrics").verified
+    assert verified.carried is True
+
+
+# Verifies: REQ-d00323-F
+def test_trace_marks_stale_results_as_baseline_on_a_run_that_selected_nothing(
+    tmp_path: Path,
+) -> None:
+    from elspais.commands.trace import format_markdown
+
+    graph = _build(_make_project(tmp_path, unrecorded=frozenset({"b"})), None)
+    out = "\n".join(format_markdown(graph))
+
+    assert "(baseline)" in _passing_cell(out, "REQ-d00002")
+    assert "(baseline)" not in _passing_cell(out, "REQ-d00001")
+    assert "> Legend:" in out
+    assert "results or line coverage the current tree did not produce (stale)" in out
+
+
+# Verifies: REQ-d00323-F
+def test_output_this_invocation_captured_is_not_judged_stale(tmp_path: Path) -> None:
+    """A target whose output was captured is its own run, whatever the disk holds.
+
+    Target 'b' has results on disk with no fingerprint, which would be stale
+    if read from there; its captured output is read instead.
+    """
+    from elspais.graph.factory import build_graph
+
+    project = _make_project(tmp_path, unrecorded=frozenset({"b"}))
+    graph = build_graph(
+        config_path=project / ".elspais.toml",
+        repo_root=project,
+        captured_results={"b": _RESULTS_B},
+    )
+
+    assert _results_by_target(graph)["b"] == {(False, "")}
+
+
+def _health_inputs(tmp_path: Path, stale: bool):
+    from elspais.config import get_config
+
+    project = _make_project(tmp_path, unrecorded=frozenset({"b"}) if stale else frozenset())
+    return _build(project, None), get_config(project / ".elspais.toml")
+
+
+# Verifies: REQ-d00323-G
+@pytest.mark.parametrize("stale", [True, False], ids=["stale", "fresh"])
+def test_a_failure_from_stale_results_fails_and_says_why(tmp_path: Path, stale: bool) -> None:
+    """A stale failure still fails at its severity, and names the reason."""
+    from elspais.commands.health import check_test_results
+
+    graph, config = _health_inputs(tmp_path, stale)
+
+    check = check_test_results(graph, config)
+
+    assert check.passed is False
+    assert check.severity == "warning"
+    (finding,) = [f for f in check.findings if "test_c" in f.message]
+    if stale:
+        assert f"(stale results: {_NO_FINGERPRINT})" in finding.message
+        assert "1 of the failures are from stale results" in check.message
+        assert check.details["stale_failed"] == 1
+    else:
+        assert "stale" not in finding.message
+        assert "stale" not in check.message
+        assert check.details["stale_failed"] == 0
+
+
+# Verifies: REQ-d00323-G
+@pytest.mark.parametrize("stale", [True, False], ids=["stale", "fresh"])
+def test_the_passing_dimension_says_its_failures_include_stale_results(
+    tmp_path: Path, stale: bool
+) -> None:
+    from elspais.commands.health import check_dimension_coverage
+
+    graph, config = _health_inputs(tmp_path, stale)
+
+    check = check_dimension_coverage(graph, "verified", config=config)
+
+    assert "FAILURES DETECTED" in check.message
+    assert ("stale results the current tree did not produce" in check.message) is stale

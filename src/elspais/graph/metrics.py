@@ -276,6 +276,10 @@ class LineCoverage:
             Aggregate-only tooling records none, and without them no
             attribution figure can be computed for any requirement
             (REQ-d00258-W).
+        carried: Whether every measurement behind these lines is line
+            coverage the current tree did not produce (REQ-d00323-I+J).
+        stale_reason: Why stale line coverage contributing here is stale,
+            where any does (REQ-d00323-K); empty otherwise.
     """
 
     total_lines: int = 0
@@ -283,6 +287,8 @@ class LineCoverage:
     covered_lines: float = 0.0
     has_measurement: bool = False
     has_contexts: bool = False
+    carried: bool = False
+    stale_reason: str = ""
 
     @property
     def has_attribution(self) -> bool:
