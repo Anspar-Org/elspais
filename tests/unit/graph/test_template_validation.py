@@ -723,7 +723,7 @@ class TestUnusedTemplateWarns:
         """A template with no inbound Satisfies SHOULD warn (Phase 4 follow-up).
 
         The dedicated federated-diagnostics warnings channel does not yet
-        exist (it's part of Phase 4/5 of CUR-1353). When that API lands,
+        exist. When that API lands,
         removing the skip marker will reveal a real test against the
         warnings channel.
         """

@@ -1,6 +1,6 @@
 # Verifies: REQ-d00082-E, REQ-p00014-T
 """Regression: configured assertion separator/multi-separator combinations
-must parse correctly end-to-end (CUR-1568 Task 13).
+must parse correctly end-to-end.
 
 Root cause: the boundary between a requirement ID and its first assertion
 label was hardcoded to the "-"/"_" characters, ignoring the configured

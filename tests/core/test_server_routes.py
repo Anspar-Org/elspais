@@ -671,7 +671,7 @@ class TestGitBranchMonorepo:
 class TestFileContent:
     """REQ-d00200-G: /api/file-content resolves files via node_id ownership.
 
-    Covers CUR-1357: the endpoint accepts an optional ``node_id`` query
+    The endpoint accepts an optional ``node_id`` query
     parameter and, when supplied and known to the federated graph,
     resolves the file against that node's owning repo root via
     ``FederatedGraph.repo_root_for``. Unknown / missing ``node_id``
@@ -844,7 +844,7 @@ implements = ["dev", "ops", "prd"]
     def test_file_content_associate_node_id_resolves_to_assoc_repo(self, federated_client):
         """node_id pointing at an associate-repo node reads from assoc_root.
 
-        This is the core CUR-1357 behavior: ``state.repo_root`` is the
+        This is the core behavior: ``state.repo_root`` is the
         core repo, but the file lives in the associate repo, and
         ``repo_root_for(node_id)`` redirects resolution to the associate.
         """
@@ -874,7 +874,7 @@ implements = ["dev", "ops", "prd"]
     def test_file_content_repo_name_routes_to_associate(self, federated_client):
         """repo_name=assoc routes path resolution to the associate repo root.
 
-        CUR-1357 Copilot feedback: ``node_id`` is unreliable for FILE node
+        ``node_id`` is unreliable for FILE node
         ids (they legitimately collide across federated repos). The
         ``repo_name`` query param is the canonical disambiguator —
         consumers that know the owning RepoEntry name can pass it to

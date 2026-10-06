@@ -370,7 +370,7 @@ def test_REQ_o00062_Q_writes_after_a_save_survive_across_surfaces_to_disk(daemon
     graph ACROSS a save's rebuild-and-swap, so an accepted write on either
     side reaches the other side and reaches disk.
 
-    This is the exact sequence that reproduced the CUR-1829 data loss before
+    This is the exact sequence that reproduced the data loss before
     SharedServerState: ``save_mutations`` rebuilt and reassigned only the MCP
     side's graph reference, after which a guarded, *accepted* viewer HTTP
     write landed in a graph the MCP side no longer served and the next save

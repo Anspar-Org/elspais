@@ -417,7 +417,7 @@ class MarkdownAssembler:
                 )
 
             # Rewrite relative raster/vector image references to absolute
-            # paths anchored at the owning repo (TOOL-31).
+            # paths anchored at the owning repo.
             if "![" in line:
                 line = self._resolve_image_paths(line, file_path, owning_repo_root=owning_repo_root)
 

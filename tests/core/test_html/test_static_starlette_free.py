@@ -1,5 +1,5 @@
 # Verifies: REQ-p00006-A
-"""Guard: the static HTML generate path must not import starlette (CUR-1698).
+"""Guard: the static HTML generate path must not import starlette.
 
 `elspais viewer --static` ships under the ``[trace-view]`` extra, which does NOT
 install starlette (that lives in ``[all]`` / ``[trace-review]``). The static

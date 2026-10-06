@@ -1359,6 +1359,16 @@
           "default": null,
           "title": "Line Base"
         },
+        "results_origin": {
+          "default": "",
+          "title": "Results Origin",
+          "type": "string"
+        },
+        "coverage_origin": {
+          "default": "",
+          "title": "Coverage Origin",
+          "type": "string"
+        },
         "resources": {
           "items": {
             "type": "string"

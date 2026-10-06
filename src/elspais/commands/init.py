@@ -273,7 +273,7 @@ _FIELD_COMMENTS: dict[str, str] = {
     "scanning.test.targets.name": "Unique label for this target (required)",
     "scanning.test.targets.cwd": (
         'Directory relative to repo root where the command runs (default "."); '
-        "relative source paths in its coverage report are read from it"
+        'a relative source path is read from it where the origin is "working-directory"'
     ),
     "scanning.test.targets.command": (
         "Shell command executed by `checks --run-tests` and `test`;"
@@ -294,7 +294,7 @@ _FIELD_COMMENTS: dict[str, str] = {
         " file_patterns, skip_dirs, skip_files (default: every file)"
     ),
     "scanning.test.targets.match": (
-        '"source" (per-file) | "aggregate" (whole-app green/red, default)'
+        '"source" (per-file, default) | "aggregate" (green/red per target cwd)'
     ),
     "scanning.test.targets.groups": (
         "Groups this target belongs to (default: the `default` group)"
@@ -309,6 +309,19 @@ _FIELD_COMMENTS: dict[str, str] = {
     "scanning.test.targets.environment": (
         '"results-path" | "suite-hostname" -- where the environment a result'
         " was recorded in is read from (default: none)"
+    ),
+    "scanning.test.targets.line_base": (
+        "0 | 1 -- the number this target's producer counts source lines from"
+        " (default: the reporter's own)"
+    ),
+    "scanning.test.targets.results_origin": (
+        '"repository-root" | "working-directory" -- where a relative source path'
+        " in the results is read from (default: the reporter's own, the repository root)"
+    ),
+    "scanning.test.targets.coverage_origin": (
+        '"repository-root" | "working-directory" -- where a relative source path'
+        " in the coverage data is read from (default: the reporter's own, the"
+        " working directory)"
     ),
     "scanning.test.targets.credit_coverage": (
         '"off" | "tested" | "verified" -- lcov_tested dimension credit (default off)'
@@ -941,6 +954,10 @@ def generate_config(
         ),
         'reporter = "pytest-json"',
         'results = "pytest.json"',
+        "# Tip: a relative path in results is read from the repository root, and",
+        "#   one in coverage from cwd. A target whose runner writes otherwise says",
+        '#   so: results_origin = "working-directory" | coverage_origin =',
+        '#   "repository-root". See: elspais docs test-targets (Path Origins)',
         "",
         "-- Playwright/JUnit example (feeds journey + step UAT coverage) --",
         "[[scanning.test.targets]]",

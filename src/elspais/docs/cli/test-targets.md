@@ -11,8 +11,8 @@ suite.  Each entry tells elspais two things:
    where results are pre-produced), the `reporter` that parses output, and
    optional `coverage` file to ingest.
 2. **How to match results back to assertions** -- `match` selects between
-   per-test source attribution (with file-granular fallback) or whole-app
-   aggregate credit, and `credit_coverage` controls the `lcov_tested` dimension.
+   per-test source attribution (with file-granular fallback) or aggregate
+   credit per target `cwd`, and `credit_coverage` controls the `lcov_tested` dimension.
 
 ### Produce vs ingest split
 
@@ -221,7 +221,7 @@ later `summary` or `trace` names as fresh, with `--targets last-run`.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `name` | string | (required) | Unique label for this target; appears in output |
-| `cwd` | string | `""` (repo root) | Directory relative to repo root where the command runs, and the base for relative source paths in its coverage report |
+| `cwd` | string | `""` (repo root) | Directory relative to repo root where the command runs, and the base for a relative source path wherever the origin that applies is `"working-directory"` |
 | `command` | string | (omit in CI) | Shell command to execute when `--run-tests` is passed |
 | `reporter` | string | (required) | Parser format -- one of the names in the reporters table below |
 | `results` | string | `""` | Glob pattern for result files (file-channel reporters), relative to the target's folder |
@@ -230,6 +230,9 @@ later `summary` or `trace` names as fresh, with `--targets last-run`.
 | `match` | string | `"source"` | `"source"` or `"aggregate"` -- matching strategy |
 | `classname` | string | `""` (the reporter's own) | `"python-module"` or `"source-file"` -- how this target's results name the test that produced them |
 | `environment` | string | `""` (the reporter's own) | `"results-path"` or `"suite-hostname"` -- where the environment a result was recorded in is read from |
+| `line_base` | integer | unset (the reporter's own) | `0` or `1` -- the number this target's producer counts source lines from |
+| `results_origin` | string | `""` (the reporter's own) | `"repository-root"` or `"working-directory"` -- where a relative source path in this target's results is read from (see [Path Origins](#path-origins)) |
+| `coverage_origin` | string | `""` (the reporter's own) | `"repository-root"` or `"working-directory"` -- where a relative source path in this target's coverage data is read from (see [Path Origins](#path-origins)) |
 | `groups` | list | `[]` (the `default` group) | Which groups this target belongs to |
 | `resources` | list | `[]` | Declared shared resources this target uses; two targets naming a common one never run at the same time (see [Concurrent Targets](#concurrent-targets)) |
 | `credit_coverage` | string | `"off"` | `"off"`, `"tested"`, or `"verified"` -- lcov_tested credit |
@@ -241,12 +244,69 @@ target with `cwd = "app"` still writes `coverage = "lcov.info"`. `cwd` does
 not move the folder.
 
 `cwd` sets where the command runs. It is also the base for a relative source
-path inside the coverage report, because the measuring tool writes the path
-from there. Flutter writes `SF:lib/src/end_event.dart` for a package in `app/`,
-and elspais reads that line as `app/lib/src/end_event.dart`. A target without
-`cwd` runs in the repository root, and its relative paths are read from the
-root. An absolute path is read as it stands. A path that names no scanned file
-under that base credits nothing.
+path wherever the origin that applies is the working directory -- by default,
+every path in the coverage data. See [Path Origins](#path-origins).
+
+### Path Origins
+
+A relative source path means nothing without the directory it starts from, and
+producers disagree about that directory. One runner, run from `app/`, writes
+`tests/test_a.py`; another, run from the same place, writes
+`app/tests/test_a.py` on purpose. Each reporter therefore declares the origin
+its paths are read from, and a target may replace that declaration:
+
+- `"repository-root"` reads a relative path from the root of the repository
+  that owns the target.
+- `"working-directory"` reads it from the target's `cwd`.
+
+The "Path origin" column of the reporters table below gives each reporter's
+declaration: every results reporter elspais provides declares
+`"repository-root"`, and every coverage reporter declares
+`"working-directory"`. A target that declares neither key reads its paths from
+those origins. `results_origin` replaces the origin for the target's results,
+and `coverage_origin` for its coverage data. The two are separate because a
+target's results and its coverage are usually written by different tools.
+
+Override the origin when a runner departs from its format's convention -- most
+often a runner started in `cwd` that records paths relative to that directory.
+pytest writes each nodeid relative to its rootdir, the directory of the ini
+file that governs the run, not relative to where it was started: a pytest
+whose rootdir is `app/` (its ini file lives there) writes nodeids that begin
+`tests/` and needs the override, while one whose ini file is at the repository
+root writes nodeids that begin `app/tests/` and needs none. A runner that
+records repository-relative paths from a subdirectory needs no override for
+its results.
+
+The origin reaches every path a result records: the file that declares its
+test, the file that executed it, and the path inside a name that carries one,
+such as a pytest nodeid or a dotted Python module path. A name read in the
+`"source-file"` form of `classname` is matched by its trailing components among
+the target's own tests, so no origin applies to it. An absolute path is read as
+it stands, and an *Evidence Snapshot* is always read from the repository root,
+whatever the target declares.
+
+```toml
+[[scanning.test.targets]]
+name           = "app"
+cwd            = "app"
+command        = "pytest --json-report --json-report-file=$ELSPAIS_TARGET_OUTPUT/report.json"
+reporter       = "pytest-json"
+results        = "report.json"
+results_origin = "working-directory"   # pytest's rootdir is app/ (app/pyproject.toml), so nodeids start tests/
+```
+
+Flutter writes `SF:lib/src/end_event.dart` for a package in `app/`, and elspais
+reads that coverage line as `app/lib/src/end_event.dart`. A coverage path that
+names no scanned file under its origin credits nothing. Where no path in a
+target's coverage names a scanned file, `elspais checks` reports the coverage
+file under `tests.ingestion_fault`, naming the origin it was read from and one
+path as recorded. The test names in per-test coverage contexts (a pytest nodeid
+such as `tests/test_a.py::test_x`) are written by the test runner, not the
+coverage tool, so the path in each one is read from the target's results origin
+rather than its coverage origin. A result whose path names no test file scanned
+for its target binds to no test; `elspais checks` reports it under
+`tests.unmatched_results`, naming the path as recorded and the origin it was
+read from, so the declaration to change is visible.
 
 ## Reporters and Matching
 
@@ -255,15 +315,15 @@ under that base credits nothing.
 <!-- generated: reporters -->
 <!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
 
-| Reporter | Channel | Kind | Description |
-| --- | --- | --- | --- |
-| `coverage-json` | file | coverage | Parses the JSON report `coverage json` (coverage.py) writes, in either its aggregate or its per-context form, into per-file line coverage. |
-| `coverage-sqlite` | file | coverage | Reads coverage.py's own `.coverage` SQLite data file through coverage.py's public API, so per-test contexts are read compactly rather than through a JSON expansion of them. Needs the `coverage` package (`elspais[coverage]`) importable, and degrades to unattributed coverage where it is not. |
-| `evidence-snapshot` | file | results | Reads the `results.jsonl` of an Evidence Snapshot. A build reads it for each target that has not run in the tree and that the run does not execute, from the directory `[scanning.test] evidence` names, tagging those results carried. Such a target owes no coverage file in that build, because the snapshot holds none. |
-| `flutter-machine` | stdout | results | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the file and line where each test is declared, and the file that executed it, so `match = "source"` binds each result to its test, including a test declared in a shared file that a runner file executes. A test run in a browser records no Dart line, so its result binds by the test's full name. Each result also carries its duration and the output its test printed. |
-| `junit` | file | results | Parses JUnit XML result files matched by the `results` glob. Honours an optional per-`<testcase>` `file` attribute (a real source path) and `line` attribute, so `match = "source"` can bind to a scanned test node. |
-| `lcov` | file | coverage | Parses an LCOV report -- the `lcov.info` that `flutter test --coverage` and most language toolchains write -- into per-file line coverage. |
-| `pytest-json` | file | results | Parses the report pytest's `--json-report` writes, matched by the `results` glob. |
+| Reporter | Channel | Kind | Path origin | Description |
+| --- | --- | --- | --- | --- |
+| `coverage-json` | file | coverage | `working-directory` | Parses the JSON report `coverage json` (coverage.py) writes, in either its aggregate or its per-context form, into per-file line coverage. |
+| `coverage-sqlite` | file | coverage | `working-directory` | Reads coverage.py's own `.coverage` SQLite data file through coverage.py's public API, so per-test contexts are read compactly rather than through a JSON expansion of them. Needs the `coverage` package (`elspais[coverage]`) importable, and degrades to unattributed coverage where it is not. |
+| `evidence-snapshot` | file | results | `repository-root` | Reads the `results.jsonl` of an Evidence Snapshot. A build reads it for each target that has not run in the tree and that the run does not execute, from the directory `[scanning.test] evidence` names, tagging those results carried. Such a target owes no coverage file in that build, because the snapshot holds none. |
+| `flutter-machine` | stdout | results | `repository-root` | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the file and line where each test is declared, and the file that executed it, so `match = "source"` binds each result to its test, including a test declared in a shared file that a runner file executes. A test run in a browser records no Dart line, so its result binds by the test's full name. Each result also carries its duration and the output its test printed. |
+| `junit` | file | results | `repository-root` | Parses JUnit XML result files matched by the `results` glob. Honours an optional per-`<testcase>` `file` attribute (a real source path) and `line` attribute, so `match = "source"` can bind to a scanned test node. |
+| `lcov` | file | coverage | `working-directory` | Parses an LCOV report -- the `lcov.info` that `flutter test --coverage` and most language toolchains write -- into per-file line coverage. |
+| `pytest-json` | file | results | `repository-root` | Parses the report pytest's `--json-report` writes, matched by the `results` glob. |
 
 These are the reporters the tool is built with. `register_reporter()` admits
 further formats at run time, so a project that registers one has a reporter
@@ -374,7 +434,7 @@ credit_coverage = "verified"
 `--coverage-path` writes the lcov report into the target's folder,
 `.results/app/`. `coverage` names the report relative to that folder. The
 `SF:` paths inside the report are relative to the package, and elspais reads
-them from `cwd`.
+them from `cwd`, the origin every coverage reporter declares.
 
 ### Two-package example (one with a shared DB)
 
@@ -593,9 +653,10 @@ this target's `cwd`, and binds only where it picks out exactly one of them.
 Where it picks out none, or more than one, the result binds to nothing and
 `elspais checks` reports it under `tests.unmatched_results` saying which
 happened -- a name pointing at a file that is not there, or two files sharing
-one name.  Post-processing the XML to inject `file="<repo-relative path>"` into
-each `<testcase>` still works and takes precedence, since a producer that names
-the source file leaves nothing to resolve.
+one name.  Post-processing the XML to inject a `file="<path>"` into each
+`<testcase>` still works and takes precedence, since a producer that names the
+source file leaves nothing to resolve. That path is read from the target's
+results origin (see [Path Origins](#path-origins)).
 
 A result whose source file resolves but whose line matches no test in it binds
 to every test in that file. It names no test, so it credits no assertion:
@@ -698,6 +759,12 @@ match = "source"
 
 # Minimum fraction of impl lines that must be covered (0.0 = any).
 # min_coverage_fraction = 0.0
+
+# Where a relative source path is read from: "repository-root" or
+# "working-directory" (this target's cwd). Omit to take the reporter's own:
+# the repository root for results, the working directory for coverage.
+# results_origin = "working-directory"
+# coverage_origin = "repository-root"
 ```
 
 ## CI Usage

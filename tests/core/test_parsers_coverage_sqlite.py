@@ -1,5 +1,5 @@
 # Verifies: REQ-d00254-G, REQ-d00258-W
-"""Tests for CoverageSqliteParser (coverage.py native `.coverage` DB, CUR-1568).
+"""Tests for CoverageSqliteParser (coverage.py native `.coverage` DB).
 
 Builds a tiny *real* `.coverage` SQLite data file by driving coverage.py's
 own API against a throwaway module, with two fake per-test contexts (mirrors
@@ -213,7 +213,7 @@ class TestParse:
         self, cov_fixture: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """When `coverage` is not importable, parse() returns {} rather
-        than raising -- code_tested.immediate_direct stays 0, no crash (CUR-1568)."""
+        than raising -- code_tested.immediate_direct stays 0, no crash."""
         import builtins
 
         _, cov_path = cov_fixture

@@ -254,7 +254,7 @@ class TestTermNotFound:
 
 
 # ---------------------------------------------------------------------------
-# TestTermRepoNameAndPath (REQ-d00242-B / CUR-1357 disambiguation fields)
+# TestTermRepoNameAndPath (REQ-d00242-B disambiguation fields)
 # ---------------------------------------------------------------------------
 
 
@@ -338,7 +338,7 @@ def _make_federated_app(tmp_path: Path) -> TestClient:
 
 
 class TestTermRepoNameAndPath:
-    """Validates CUR-1357 disambiguation fields on /api/term/{key}.
+    """Validates the disambiguation fields on /api/term/{key}.
 
     The endpoint must surface:
       - ``repo_name`` — the owning federated RepoEntry.name, used by the
@@ -403,7 +403,7 @@ class TestTermRepoNameAndPath:
     def test_outer_federation_overwrites_stale_repo_name(self, tmp_path: Path) -> None:
         """Outer federation must overwrite repo_name stamped by an inner build.
 
-        Regression for CUR-1357: when ``factory.build_graph`` builds an
+        When ``factory.build_graph`` builds an
         associate via an inner ``FederatedGraph.from_single`` first, the
         inner ``_merge_terms`` stamps every TermEntry with the associate's
         ``[project].name``. The host's outer federation then wraps the
@@ -465,13 +465,11 @@ class TestTermRepoNameAndPath:
     def test_scan_terms_uses_req_namespace_not_repo_name(self, tmp_path: Path) -> None:
         """TermRef.namespace must be the REQ-prefix, not the host-side RepoEntry.name.
 
-        Regression for CUR-1357: ``_scan_terms`` previously passed
-        ``namespace=entry.name`` to ``scan_graph``, which stamped every
-        discovered TermRef with the host-side RepoEntry handle (e.g.
-        ``"hht_diary"``) instead of the REQ-id prefix
-        (``[project].namespace``, e.g. ``"DIARY"``). The terms API
-        surfaces ``ref.namespace`` to the viewer, so callers saw the
-        wrong namespace label on every cross-repo term reference.
+        ``_scan_terms`` must stamp every discovered TermRef with the REQ-id
+        prefix (``[project].namespace``, e.g. ``"DIARY"``), not the
+        host-side RepoEntry handle (e.g. ``"hht_diary"``). The terms API
+        surfaces ``ref.namespace`` to the viewer, so the wrong value puts
+        the wrong namespace label on every cross-repo term reference.
         """
         assoc_root = tmp_path / "assoc"
         assoc_root.mkdir()

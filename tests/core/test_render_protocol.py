@@ -1019,7 +1019,7 @@ class TestRenderRoundTrip:
 
     # Verifies: REQ-d00131-I
     def test_render_hash_headings_inside_assertions_become_named_sections(self, tmp_path):
-        """CUR-1199: With SECTION_HDR=#{1,6}, ### headings inside ## Assertions
+        """With SECTION_HDR=#{1,6}, ### headings inside ## Assertions
         exit the assertion_block and become named sections.
 
         SECTION_HDR.7 > ASSERT_SUB_HASH_HDR.6: any hash heading in the assertion
@@ -1116,7 +1116,7 @@ class TestRenderRoundTrip:
 
     # Verifies: REQ-d00131-I
     def test_render_hash_heading_before_assertions_becomes_named_section(self, tmp_path):
-        """CUR-1199: With SECTION_HDR=#{1,6}, ### heading immediately after
+        """With SECTION_HDR=#{1,6}, ### heading immediately after
         ## Assertions exits the assertion_block as a named section.
 
         The ## Assertions block is empty (no assertions captured), so it is

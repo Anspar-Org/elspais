@@ -357,7 +357,7 @@ def test_REQ_d00237_C_single_underscore_wrong_marking():
 
 # Verifies: REQ-d00237-C
 def test_REQ_d00237_C_wrong_case_term_still_detected():
-    # Guards the case-insensitive term pre-filter (CUR-1521)
+    # Guards the case-insensitive term pre-filter.
     # Term defined lowercase "widget" but appears as "Widget" (capital W)
     # wrapped in a wrong-marking delimiter. The emphasis/word regexes use
     # re.IGNORECASE, so the case-insensitive pre-filter must not drop this.

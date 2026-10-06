@@ -319,7 +319,7 @@ class TestIntegratesHierarchyLevels:
     def _build_associate_consumer_federation(self, tmp_path: Path):
         """Inline federation where the CONSUMER lives in an ASSOCIATE repo.
 
-        CUR-1521: the root repo declares TWO associates (A and B). A
+        The root repo declares TWO associates (A and B). A
         requirement in associate A declares ``Integrates:`` a requirement in
         associate B. Because A's per-repo build does not know B's ids, the
         Integrates target is recorded as a cross-repo INTEGRATES *broken
@@ -384,7 +384,7 @@ class TestIntegratesHierarchyLevels:
 
     # Verifies: REQ-d00252-C
     def test_REQ_d00252_C_integrates_wires_single_edge_no_cycle(self, tmp_path):
-        """CUR-1521 regression: a consumer in an ASSOCIATE repo that
+        """Regression: a consumer in an ASSOCIATE repo that
         ``Integrates:`` a requirement in another associate must produce exactly
         ONE INTEGRATES edge (consumer -> library). The pre-fix code wired a
         SECOND, reverse edge (library -> consumer) via the generic

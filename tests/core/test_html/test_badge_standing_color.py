@@ -1,6 +1,6 @@
 # Verifies: REQ-d00292-F+G
 # Verifies: REQ-d00292-H
-"""Badge COLOR decoupled from severity (CUR-1568).
+"""Badge COLOR decoupled from severity.
 
 Coverage severity is overloaded to drive three things: the requirement-badge
 COLOR, combined-bucket dragging, and the ``elspais checks`` gate. Deriving badge
@@ -78,8 +78,8 @@ def _all_full_rollup():
 def test_info_severity_partial_badge_is_yellow_not_yellow_green():
     """A partial uat_verified dimension configured ``partial="info"`` (purely to
     keep CI non-failing) must STILL badge YELLOW (the honest partial standing),
-    NOT the severity-derived yellow-green. This is the CUR-1568 bug: severity
-    was recoloring the badge."""
+    NOT the severity-derived yellow-green: severity must not recolor the
+    badge."""
     r = _all_full_rollup()
     # uat_coverage full over {A}; uat_verified only HALF-covers A -> partial
     # (relative to the uat-covered denominator {A}).

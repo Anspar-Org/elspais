@@ -1,5 +1,5 @@
 # Verifies: REQ-d00254-D
-"""// Implements: coverage attribution (CUR-1533).
+"""// Implements: coverage attribution.
 
 ``_citation_extents`` answers a whole file at once, because three of its four
 bounds are relationships BETWEEN citations rather than properties of any one
@@ -63,7 +63,7 @@ def _make_dart_code_ref(implements, source_path, marker_line):
 
 def _credit(**kwargs):
     defaults = {
-        "app_dirs": ("lib",),
+        "cwds": ("lib",),
         "coverage_dirs": ("lib",),
         "assertion_credit": "tested",
         "min_coverage_fraction": 0.0,
@@ -557,7 +557,7 @@ class TestReferenceDivisionIsInvariant:
 
         annotate_coverage(
             graph,
-            _credit(app_dirs=("src",), coverage_dirs=("src",)),
+            _credit(cwds=("src",), coverage_dirs=("src",)),
         )
         rollup: RollupMetrics = req.get_metric("rollup_metrics")
         assert rollup is not None
@@ -595,7 +595,7 @@ class TestContinuedCitationAttributesTheCodeBeneath:
     def test_two_line_citation_attributes_the_executable_lines_below(self, tmp_path):
         graph, _file_node = _build_module_level_project(tmp_path, SPELLINGS["continued-list"])
         req = graph.find_by_id("REQ-d00001")
-        annotate_coverage(graph, _credit(app_dirs=("src",), coverage_dirs=("src",)))
+        annotate_coverage(graph, _credit(cwds=("src",), coverage_dirs=("src",)))
         rollup: RollupMetrics = req.get_metric("rollup_metrics")
         assert rollup is not None
 

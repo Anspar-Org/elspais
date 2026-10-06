@@ -1,8 +1,8 @@
 # Verifies: REQ-d00248-A
 """End-to-end idempotency regression guard for `elspais fix`.
 
-Cross-cutting regression test for CUR-1199 markdown render hygiene fixes
-(Tasks 1-3): fenced code block preservation, emphasis stripping at
+Cross-cutting regression test for markdown render hygiene: fenced code
+block preservation, emphasis stripping at
 user-text capture sites (term names, journey actor/goal/context), and
 REMAINDER emphasis handling.
 
@@ -119,7 +119,7 @@ _JOURNEY_CONTENT = (
 
 @pytest.fixture(scope="module")
 def project(tmp_path_factory):
-    """Build a minimal project that exercises CUR-1199 bug-trigger content."""
+    """Build a minimal project that exercises the render-hygiene bug-trigger content."""
     root = tmp_path_factory.mktemp("e2e_idempotency")
 
     cfg = base_config(
@@ -262,6 +262,6 @@ class TestFixIdempotency:
         changed = [path for path in before if before[path] != after[path]]
         assert not changed, (
             f"second `elspais fix` modified files (expected no-op): {changed}\n"
-            f"This is the regression signature for CUR-1199 markdown render hygiene "
+            f"This is the regression signature for markdown render hygiene "
             f"(fenced code preservation, emphasis stripping, REMAINDER round-trip)."
         )

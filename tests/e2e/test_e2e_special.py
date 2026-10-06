@@ -562,7 +562,7 @@ class TestFixFailsWhenAuthorMissing:
 
 
 # ---------------------------------------------------------------------------
-# TOOL-39: daemon reuse must not serve results built from pre-change config
+# Daemon reuse must not serve results built from pre-change config
 # ---------------------------------------------------------------------------
 
 
