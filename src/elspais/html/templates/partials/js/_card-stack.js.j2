@@ -1352,7 +1352,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
                 // A result the current tree did not produce is marked, with
                 // the reason its results are stale.
                 if (r.stale_reason) {
-                    html += '<span class="result-environment result-stale" title="' + escapeAttr(r.stale_reason) + '">stale</span>';
+                    html += '<span class="result-stale" title="' + escapeAttr(r.stale_reason) + '">stale</span>';
                 }
                 html += '</div>';
             });
@@ -1826,7 +1826,7 @@ function renderAssertionResults(panel, reqId, label, data) {
         }
         {# Implements: REQ-d00323-F+G #}
         if (r.stale_reason) {
-            html += '<span class="result-environment result-stale" title="' + escapeAttr(r.stale_reason) + '">stale</span>';
+            html += '<span class="result-stale" title="' + escapeAttr(r.stale_reason) + '">stale</span>';
         }
         html += '</div>';
     }
