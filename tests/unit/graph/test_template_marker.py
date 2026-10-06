@@ -1,7 +1,7 @@
 # Verifies: REQ-p00014-E
 """Tests for the author-declared ``**Template**`` metadata-line marker.
 
-Phase 1 of CUR-1353 (cross-repo template support): authors mark a
+Authors mark a
 requirement as a template by adding the no-value ``**Template**`` flag
 to the pipe-separated metadata line. The parser sets
 ``stereotype=Stereotype.TEMPLATE`` on the resulting node, and

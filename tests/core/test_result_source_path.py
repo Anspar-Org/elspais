@@ -1,5 +1,5 @@
 # Verifies: REQ-d00254-A
-"""RESULT nodes record their source result-file path (CUR-1533)."""
+"""RESULT nodes record their source result-file path."""
 
 from elspais.graph.GraphNode import NodeKind
 from elspais.graph.parsers import ParsedContent

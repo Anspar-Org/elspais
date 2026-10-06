@@ -7,11 +7,11 @@ Produces the same per-file dict shape as ``CoverageJsonParser`` (see that
 module's docstring) so the factory's coverage-annotation loop needs no
 format-specific handling beyond ``can_parse()`` detection.
 
-Rationale (CUR-1568): the JSON reporter's ``show_contexts`` option expands
-the per-line contexts map into the report, which for elspais's own ~4600-test
-suite produced a ~9.4 GB coverage.json and ~22 GB-RSS graph builds. The same
-context data lives compactly in the ``.coverage`` SQLite database (~5 MB for
-this repo) -- coverage.py already wrote it, we just weren't reading it.
+Rationale: the JSON reporter's ``show_contexts`` option expands the
+per-line contexts map into the report, which for a large suite makes the
+report and the graph build that reads it enormous. The same context data
+lives compactly in the ``.coverage`` SQLite database that coverage.py
+already writes.
 
 Does **not** create graph nodes; the factory uses parsed data to annotate
 existing FILE nodes.

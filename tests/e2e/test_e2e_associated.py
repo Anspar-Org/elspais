@@ -547,7 +547,7 @@ class TestMCPAssociatedSubtree:
 
 
 # ---------------------------------------------------------------------------
-# Test: Cross-repo /api/file-content lookup (CUR-1357)
+# Test: Cross-repo /api/file-content lookup
 # Verifies: REQ-d00200-G
 # Unique layout — keeps per-test build so we can drive a fresh daemon
 # against a federated project with named (allowed_roots-aware) associates.
@@ -558,11 +558,10 @@ class TestMCPAssociatedSubtree:
 class TestFileContentCrossRepo:
     """REQ-d00200-G: /api/file-content resolves associate-repo files via node_id.
 
-    Phase 1 of CUR-1357 adds an optional ``node_id`` query parameter to
-    ``/api/file-content``. When supplied, the server resolves the file
-    against the owning repo's root via ``FederatedGraph.repo_root_for``
-    instead of the federation root. This e2e test drives the change
-    against a real daemon over HTTP.
+    ``/api/file-content`` takes an optional ``node_id`` query parameter.
+    When supplied, the server resolves the file against the owning repo's
+    root via ``FederatedGraph.repo_root_for`` instead of the federation
+    root. This e2e test drives it against a real daemon over HTTP.
     """
 
     def _build_federated_project(self, tmp_path):
@@ -677,7 +676,7 @@ class TestAssociatedMutations:
 
 
 # ---------------------------------------------------------------------------
-# Test: Federation write/index scope (CUR-1419 / REQ-d00253)
+# Test: Federation write/index scope (REQ-d00253)
 # Verifies: REQ-d00253-B, REQ-d00253-C, REQ-d00253-D
 # B: fix writes primary-only.  C: INDEX/term-index primary-only.
 # D: MCP rejects associate mutations.
@@ -1700,7 +1699,7 @@ class TestFederationContributionInvariance:
             "DDD-d00005",
             "DDD-d00006",
         ]
-        # presumed_foreign is False for both (TOOL-58): see the c_unresolved
+        # presumed_foreign is False for both: see the c_unresolved
         # note in test_entry_point_changes_the_member_set_not_a_member_
         # contribution above.
         assert d_both["unresolved"] == [
@@ -1819,16 +1818,15 @@ class TestFederationContributionInvariance:
 
         # c's references only ever point at members present under both
         # entry points, so its unresolved-reference set does not move.
-        # presumed_foreign is False here (TOOL-58): a post-hoc federation
-        # pass no longer stamps it onto an ordinary unresolved reference,
-        # pending Task 9's per-class severity replacement.
+        # presumed_foreign is False here: no federation pass stamps it onto
+        # an ordinary unresolved reference.
         c_unresolved = [("CCC-d00005", "BBB-d99999", "implements", False)]
         assert from_a["c"]["unresolved"] == c_unresolved, f"{from_a['c']['unresolved']}"
         assert from_b["c"]["unresolved"] == c_unresolved, f"{from_b['c']['unresolved']}"
 
         # b's does: BBB-d00002 -> AAA-d00001 resolves against a member
         # under one entry point and stays unresolved under the other.
-        # presumed_foreign is False (TOOL-58): see the c_unresolved note above.
+        # presumed_foreign is False: see the c_unresolved note above.
         assert from_a["b"]["unresolved"] == [], (
             f"b's reference into a should resolve when a is a federation "
             f"member: {from_a['b']['unresolved']}"

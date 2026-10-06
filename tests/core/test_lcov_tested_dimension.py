@@ -1,5 +1,5 @@
 # Verifies: REQ-d00254-B
-"""RollupMetrics exposes a separate lcov_tested dimension (CUR-1533)."""
+"""RollupMetrics exposes a separate lcov_tested dimension."""
 
 from elspais.graph.metrics import CoverageDimension, RollupMetrics
 

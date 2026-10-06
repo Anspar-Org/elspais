@@ -262,7 +262,7 @@ coverage = "coverage.json"
     def test_coverage_json_contexts_annotate_line_contexts(self, tmp_path: Path) -> None:
         """A coverage.json with a per-line `contexts` map (coverage.py
         dynamic contexts, e.g. from `--cov-context=test` + `show_contexts`)
-        annotates the FILE node with a `line_contexts` field (CUR-1568)."""
+        annotates the FILE node with a `line_contexts` field."""
         import json
 
         config_file = tmp_path / ".elspais.toml"
@@ -387,8 +387,7 @@ coverage = "coverage.json"
     def test_coverage_sqlite_annotates_file_node_and_contexts(self, tmp_path: Path) -> None:
         """A `.coverage` SQLite target (coverage.py's native data file)
         annotates FILE nodes with line_coverage AND line_contexts, restoring
-        per-test attribution without the JSON `show_contexts` blowup
-        (CUR-1568)."""
+        per-test attribution without the JSON `show_contexts` blowup."""
         coverage = pytest.importorskip("coverage")
 
         config_file = tmp_path / ".elspais.toml"
@@ -461,7 +460,7 @@ coverage = ".coverage"
         outside the scanned dirs) must never have their per-line context
         lists materialized -- the factory passes a FILE-node-resolution
         predicate to the sqlite parser so contexts_by_lineno() is only
-        called for resolvable files (CUR-1568 hardening)."""
+        called for resolvable files."""
         coverage = pytest.importorskip("coverage")
 
         config_file = tmp_path / ".elspais.toml"

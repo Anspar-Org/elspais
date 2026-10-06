@@ -650,12 +650,11 @@ class TestTemplateInstantiation:
         assert clone.get_field("parse_line") == original.get_field("parse_line")
 
 
-# CUR-1353 Phase 2: `TestFileBasedAttribution` (former REQ-p00014-D coverage)
-# was removed alongside the `_attribute_template_refs` machinery. CODE that
-# declares `Implements: <template-assertion>` now lands a direct IMPLEMENTS
-# edge on the template assertion — no per-file redirection to instance clones.
-# See tests/unit/graph/test_template_validation.py::TestImplementsTemplateIsLegal
-# for the replacement coverage.
+# CODE that declares `Implements: <template-assertion>` lands a direct
+# IMPLEMENTS edge on the template assertion — no per-file redirection to
+# instance clones. See
+# tests/unit/graph/test_template_validation.py::TestImplementsTemplateIsLegal
+# for that coverage.
 
 
 class TestMCPStereotypeSerialization:

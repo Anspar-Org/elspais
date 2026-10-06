@@ -1588,9 +1588,9 @@ class TestGetMutationLog:
     def test_window_is_the_most_recent_entries_newest_first(self, mutation_graph):
         """A truncated window holds the MOST RECENT entries, newest first.
 
-        The pre-fix behavior (CUR-1829) returned the OLDEST ``limit`` entries
-        while claiming to be the most recent, so ``current_tip`` derived from
-        that window named a mid-log entry the tip guard would reject.
+        A window holding the OLDEST ``limit`` entries while claiming to be
+        the most recent would make ``current_tip`` name a mid-log entry the
+        tip guard rejects.
         """
         pytest.importorskip("mcp")
         from elspais.mcp.server import _get_mutation_log, _mutate_update_title

@@ -788,7 +788,7 @@ def _compute_code_tested(
                 indirect_count += 1
 
     # Implements: REQ-d00254-G
-    # Per-test attribution (coverage.py dynamic contexts, CUR-1568): a line
+    # Per-test attribution (coverage.py dynamic contexts): a line
     # counts as DIRECT when one of its recorded contexts belongs to a test
     # that VERIFIES this requirement. Context string format (pytest-cov
     # `--cov-context=test`): "path::Class::func|run" or "path::func|run"
@@ -813,13 +813,13 @@ def _normalize_run_context(ctx: str) -> str | None:
 
     Returns None when the context should not credit direct attribution:
     the empty/global context (code executed outside any test), or a
-    "|setup"/"|teardown" fixture-phase context (see CUR-1568 decision above
-    -- only "|run" contexts count). Reuses ``build_test_id_from_nodeid`` (the
+    "|setup"/"|teardown" fixture-phase context (only "|run" contexts count,
+    as the comment above explains). Reuses ``build_test_id_from_nodeid`` (the
     canonical pytest-nodeid normalizer) rather than re-parsing nodeids here.
 
     Pure str -> str|None mapping over a small alphabet of context strings
     (one per test x phase) reused across many lines/requirements in a single
-    annotation pass, so it is memoized with ``lru_cache`` (CUR-1568).
+    annotation pass, so it is memoized with ``lru_cache``.
     """
     # Imported here: test_identity imports from the graph package, whose
     # __init__ imports this module, so a top-level import is circular
@@ -1559,7 +1559,7 @@ def annotate_coverage(
 
         # Process TEST children to find RESULT nodes
         validated_indirect_labels: set[str] = set()
-        # CUR-1557: track whether every verified signal (pass credit or
+        # Track whether every verified signal (pass credit or
         # failure flag, across all three credit paths below) came from a
         # carried (baseline) RESULT. verified_saw_signal stays False if this
         # requirement got no verified signal at all -- populate_test_dimensions

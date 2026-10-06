@@ -11,9 +11,6 @@ Validates:
 - REQ-d00132-A: render_save identifies dirty files and renders to disk
 - REQ-d00132-E: mutation log cleared after save
 - REQ-d00132-F: derives implements/refines from live graph edges
-
-Note: This file was migrated from replay_mutations_to_disk (persistence.py)
-to render_save (graph/render.py) as part of CUR-1082 Task 2.
 """
 
 from __future__ import annotations

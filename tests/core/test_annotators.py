@@ -453,8 +453,8 @@ class TestAnnotateGraphGitState:
     """Tests for annotate_graph_git_state function."""
 
     # Verifies: REQ-d00050-A
-    def test_REQ_CUR879_A_annotate_graph_git_state_annotates_all_nodes(self):
-        """REQ-CUR879-A: annotate_graph_git_state annotates all requirement nodes."""
+    def test_annotate_graph_git_state_annotates_all_nodes(self):
+        """annotate_graph_git_state annotates all requirement nodes."""
         from pathlib import Path
         from unittest.mock import patch
 
@@ -483,8 +483,8 @@ class TestAnnotateGraphGitState:
         assert node_o.get_metric("is_branch_changed") is True
 
     # Verifies: REQ-d00050-A
-    def test_REQ_CUR879_B_annotate_graph_git_state_fails_silently(self):
-        """REQ-CUR879-B: annotate_graph_git_state fails silently when git unavailable."""
+    def test_annotate_graph_git_state_fails_silently(self):
+        """annotate_graph_git_state fails silently when git unavailable."""
         from pathlib import Path
         from unittest.mock import patch
 

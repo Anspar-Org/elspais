@@ -1,7 +1,7 @@
 # Verifies: REQ-p00014-K
 """HTML viewer affordance for cross-repo template provenance.
 
-CUR-1353 Phase 9: when an INSTANCE clone of a foreign-repo template
+When an INSTANCE clone of a foreign-repo template
 shows up in the HTML viewer, the user must see:
 
 1. Where the template is defined (``template_repo``).
@@ -247,7 +247,7 @@ class TestTemplateProvenanceInRenderedHTML:
             )
 
 
-# ─── CUR-1353 Phase 11: uniform template_repo + satisfier rollup ─────────────
+# ─── Uniform template_repo + satisfier rollup ─────────────
 
 
 def _build_in_repo_satisfies(tmp_path: Path) -> tuple[Path, object]:

@@ -182,9 +182,8 @@ class TestResolveSpecDirInfo:
         assert info.level_names == {}
 
 
-# TestClassifyNode (path-based classifier) was removed in CUR-1199 Task 7.
-# Replaced by repo-name attribution via FederatedGraph.repo_for(); coverage
-# now lives in `tests/commands/test_index_repo_attribution.py`.
+# Repo-name attribution via FederatedGraph.repo_for() is covered in
+# `tests/commands/test_index_repo_attribution.py`.
 
 
 class TestRegenerateIndexAlignment:
@@ -365,8 +364,7 @@ class TestRegenerateIndexAlignment:
     def test_REQ_d00052_G_multi_dir_shows_subsections(self, tmp_path):
         """Multiple spec dirs within a repo get ### subsections within a level.
 
-        Restored after CUR-1199 Task 7 follow-up: repo-attribution and
-        spec-dir classification are independent dimensions, so a single-repo
+        Repo-attribution and spec-dir classification are independent dimensions, so a single-repo
         project with multiple spec dirs still shows per-dir subsections.
         """
         dir_a = tmp_path / "spec_a"
@@ -390,8 +388,7 @@ class TestRegenerateIndexAlignment:
         args = argparse.Namespace(git_root=tmp_path)
 
         # Federation config must declare both spec dirs so _repo_spec_dirs
-        # picks them up (the bare-TraceGraph fallback that used the caller's
-        # spec_dirs list was removed in CUR-1357 Task 3).
+        # picks them up; nothing falls back to the caller's spec_dirs list.
         fed = FederatedGraph.from_single(
             graph,
             config={

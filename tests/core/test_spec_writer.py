@@ -591,7 +591,7 @@ class TestAddChangelogEntry:
 
 
 # ---------------------------------------------------------------------------
-# Subheading false-positive regression  (CUR-1003)
+# Subheading false-positive regression
 # ---------------------------------------------------------------------------
 
 # The bug: _find_next_req_header used `^#+ [A-Z]+-` which matched subheadings
@@ -644,7 +644,7 @@ B. The system SHALL deliver an OS-level push notification.
 
 
 class TestSubheadingFalsePositiveRegression:
-    """Regression tests for CUR-1003: subheadings inside REQ body falsely
+    """Regression tests: subheadings inside REQ body falsely
     detected as requirement boundaries.
 
     The old regex `^#+ [A-Z]+-` matched subheadings like `### OS-Level` or

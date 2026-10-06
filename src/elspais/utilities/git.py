@@ -1803,7 +1803,7 @@ def generate_checkpoint_message(repo_root: Path, spec_dir: str = "spec") -> str:
         return ""
 
     # Attempt to carry forward the ticket prefix from the last commit
-    # (e.g. "[CUR-1082]") so the message passes commit-msg hooks.
+    # (e.g. "[ABC-123]") so the message passes commit-msg hooks.
     try:
         last = subprocess.run(
             ["git", "log", "-1", "--format=%s"],

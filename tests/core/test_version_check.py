@@ -1,4 +1,3 @@
-# Validates CUR-883: version check and upgrade instructions
 """Tests for elspais.utilities.version_check."""
 
 from __future__ import annotations

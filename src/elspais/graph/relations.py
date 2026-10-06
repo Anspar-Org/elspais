@@ -88,8 +88,8 @@ class EdgeKind(Enum):
         :meth:`contributes_to_coverage`, which classifies leaf-evidence edges
         (TEST/CODE/JNY) and is relied on by reachability checks.
 
-        Currently only ``REFINES`` conducts; req->req ``IMPLEMENTS`` keeps its
-        binary EXPLICIT/INFERRED contribution (see CUR-1329 scope note).
+        Only ``REFINES`` conducts; req->req ``IMPLEMENTS`` keeps its binary
+        EXPLICIT/INFERRED contribution.
 
         Returns:
             True if edges of this type conduct child coverage upward.

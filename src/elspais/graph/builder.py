@@ -5589,7 +5589,7 @@ class GraphBuilder:
                 ``[project].name`` in config). Used to tag in-repo
                 INSTANCE clones with ``template_repo`` so the viewer's
                 provenance affordance fires uniformly for both in-repo
-                and cross-repo INSTANCE nodes (CUR-1353 Phase 11).
+                and cross-repo INSTANCE nodes.
             link_results_to_tests: When True (default), a RESULT node
                 with a ``test_id`` queues a YIELDS pending link to the
                 matching TEST node; an unresolved target becomes a broken

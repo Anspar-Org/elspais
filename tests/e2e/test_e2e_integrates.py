@@ -1,5 +1,5 @@
 # Verifies: REQ-d00252
-"""End-to-end test for the ``Integrates:`` cross-repo reference (CUR-1419).
+"""End-to-end test for the ``Integrates:`` cross-repo reference.
 
 Drives the real ``elspais`` CLI against the ``e2e-integrates`` fixture
 (``app`` consumer + ``library`` associate) to verify that a requirement
