@@ -1508,6 +1508,9 @@ def _build_repository(
 
             _record_declined_files(builder, domain_file, "code", repo_root)
 
+    # The targets whose results this build carried from an Evidence Snapshot.
+    carried_targets: set[str] = set()
+
     # 6. Scan test directories from testing config
     if scan_tests:
         testing_cfg = typed_config.scanning.test
@@ -1650,6 +1653,8 @@ def _build_repository(
                     scanned_tests=scanned,
                     reporter="evidence-snapshot",
                 )
+                if carried_here:
+                    carried_targets.add(target.name)
                 return True
 
             for target in typed_config.scanning.test.targets:
@@ -1856,6 +1861,11 @@ def _build_repository(
         _resolved_root = repo_root.resolve()
         for target in typed_config.scanning.test.targets:
             if not target.coverage:
+                continue
+            # Implements: REQ-d00322-O
+            # A target whose results were carried did not run in this tree,
+            # and the snapshot holds no coverage, so no coverage file is owed.
+            if target.name in carried_targets:
                 continue
             # cwd-escape guard: skip targets whose cwd resolves outside the repo root
             cwd_path = (repo_root / target.cwd) if target.cwd else repo_root

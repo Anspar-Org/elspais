@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from elspais.cli import main
-from elspais.commands.health import check_test_results_stale
+from elspais.commands.health import check_ingestion_faults, check_test_results_stale
 from elspais.config import get_config
 from elspais.graph import NodeKind
 from elspais.graph.factory import build_graph
@@ -181,6 +181,36 @@ def test_a_member_without_results_reads_its_snapshot_carried(tmp_path, monkeypat
     assert all(r.get_field("carried") for r in results)
     assert all(r.get_field("result_file") == f"{_EVIDENCE}/results.jsonl" for r in results)
     assert {r.get_field("status") for r in results} == {"passed"}
+
+
+# Verifies: REQ-d00322-O, REQ-d00322-L
+def test_a_member_target_carried_from_its_snapshot_owes_no_coverage_file(
+    tmp_path, monkeypatch, capsys
+):
+    """A consumer's checks do not ask a member for coverage its snapshot carried."""
+    root, lib = _federation(tmp_path, monkeypatch)
+    config_path = lib / ".elspais.toml"
+    text = config_path.read_text(encoding="utf-8")
+    patched = text.replace('match = "source"\n', 'match = "source"\ncoverage = "lcov.info"\n')
+    assert patched != text
+    config_path.write_text(patched, encoding="utf-8")
+    _git(lib, "commit", "-q", "-am", "coverage")
+    _lib_snapshot_without_results(tmp_path, monkeypatch, lib)
+    monkeypatch.chdir(root)
+
+    graph = build_graph(repo_root=root)
+
+    assert _lib_results(graph)
+    assert all(r.get_field("carried") for r in _lib_results(graph))
+    assert [a for a in graph.unread_artifacts(namespace="LIB") if a.artifact == "coverage"] == []
+    check = check_ingestion_faults(graph, get_config(None, root))
+    assert not [f for f in check.findings if f.repo == "lib"], [f.message for f in check.findings]
+
+    capsys.readouterr()
+    main(["checks", "--tests", "--format", "json"])
+    checks = {c["name"]: c for c in json.loads(capsys.readouterr().out)["checks"]}
+    lib_faults = [f for f in checks["tests.ingestion_fault"]["findings"] if f["repo"] == "lib"]
+    assert lib_faults == []
 
 
 # Verifies: REQ-d00322-L

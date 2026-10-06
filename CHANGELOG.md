@@ -4,6 +4,10 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-123
+
+- **A target whose results are carried from an Evidence Snapshot owes no coverage file (REQ-d00322-O)** -- a project that federates a member committing an Evidence Snapshot read that member's results from the snapshot, but the coverage pass still looked for each of the member's coverage files. The snapshot holds no coverage, so `elspais checks --tests` reported `tests.ingestion_fault` for every member target that declares `coverage`, and `--lenient` did not soften it. A target whose results are carried did not run in the tree that carries them, so the build now looks for no coverage file for it. A target that ran in the tree and left no coverage file is still reported.
+
 ### TOOL-75
 
 - **Breaking: `[validation] strict_hierarchy` is withdrawn; `spec.hierarchy_levels` takes its severity from `[rules.severity]` (REQ-d00212-P+X, REQ-d00285-D+E)** -- the boolean decided both the severity of a hierarchy deviation and whether it counted against the run, outside the one severity setting every other check reads. A configuration that still carries it is refused when it is read, naming what to write instead: `strict_hierarchy = false` becomes `"spec.hierarchy_levels" = "info"` under `[rules.severity]`, or the line is deleted, since `info` is the default; `strict_hierarchy = true` becomes `"spec.hierarchy_levels" = "warning"`. `off` withholds the check, `warning` fails a non-lenient `checks` run (so a project moving from `true` to `"warning"` still has its gate trip), and `error` fails every run, lenient or not. A project that never wrote the setting sees no change: deviations are listed at `info`.
