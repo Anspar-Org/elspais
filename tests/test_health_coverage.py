@@ -1380,6 +1380,34 @@ class TestCheckExternalTests:
         assert "(failed)" in located[("tests/test_f.py", 5)]
         assert "(awaiting a result)" in located[("tests/test_n.py", 7)]
 
+    # Verifies: REQ-d00323-G
+    @pytest.mark.parametrize(
+        ("status", "verdict"),
+        [("failed", "failed"), ("passed", "passed"), ("skipped", "awaiting a result")],
+    )
+    def test_a_verdict_read_from_stale_results_says_why_they_are_stale(self, status, verdict):
+        """G: a reader who does not rerun the target must know the verdict may
+        describe another tree; a test awaiting a result has no verdict to qualify."""
+        from elspais.graph import NodeKind
+
+        graph = self._graph(("tests/test_out.py", 9, status))
+        test = graph.find_by_id("test:tests/test_out.py:9")
+        results = [c for c in test.iter_children() if c.kind == NodeKind.RESULT]
+        assert results
+        for result in results:
+            result.set_field("stale_reason", "no fingerprint recorded")
+
+        check = check_external_tests(graph, {})
+
+        (finding,) = check.findings
+        if verdict == "awaiting a result":
+            assert "(awaiting a result)" in finding.message
+            assert "stale" not in finding.message
+        else:
+            assert f"({verdict}; stale results: no fingerprint recorded)" in finding.message
+        # The reason sits beside the verdict and never changes it.
+        assert check.passed is (status != "failed")
+
     # Verifies: REQ-d00276-C
     def test_configuring_off_withholds_the_report(self):
         """C: a project may decide a failing outsider is not its problem. Set

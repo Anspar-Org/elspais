@@ -113,6 +113,26 @@ def _chromium_refusal() -> str | None:
     return None
 
 
+def _bare_python_refusal(markexpr: str) -> str | None:
+    """Why the e2e tier cannot run a fixture target here, or None.
+
+    A fixture's test target runs a bare `python`, which a shell without this
+    checkout's venv on PATH may not have; the test running it then fails with
+    exit 127, which says nothing about the code.
+    """
+    import shutil
+
+    if not _selects_marker_set(markexpr, frozenset({"e2e"})):
+        return None
+    if shutil.which("python") is not None:
+        return None
+    return (
+        "this session selects e2e tests, and a fixture's test target runs a bare "
+        "`python`, which is not on PATH. Put this checkout's venv first: "
+        'PATH="$PWD/.venv/bin:$PATH" (the hooks and `make test-e2e` do).'
+    )
+
+
 def _missing_extras_refusal(markexpr: str) -> str | None:
     """Why this session would quietly skip tests it was asked to run, or None.
 
@@ -222,7 +242,11 @@ def pytest_configure(config):
     # A tier must run what it selects or say why it did not. An extra the
     # suite needs and the environment lacks turns tests into skips, and a run
     # that skipped them is indistinguishable from one that passed them.
-    refusal = _missing_extras_refusal(config.getoption("markexpr", default="") or "")
+    markexpr = config.getoption("markexpr", default="") or ""
+    refusal = _missing_extras_refusal(markexpr)
+    if refusal is not None:
+        raise pytest.UsageError(refusal)
+    refusal = _bare_python_refusal(markexpr)
     if refusal is not None:
         raise pytest.UsageError(refusal)
 

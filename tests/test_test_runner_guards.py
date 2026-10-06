@@ -9,6 +9,7 @@ touches this checkout's own `.results/`.
 """
 
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -227,6 +228,140 @@ def test_a_live_python_writers_shard_survives_a_narrow_columns(tmp_path, spawn):
     assert live.exists(), "the shard of a live python process was swept"
 
 
+def test_pid_args_prints_a_live_processs_whole_command_line(tmp_path, spawn):
+    """Read where no exported COLUMNS can cut it short."""
+    state = tmp_path / "state"
+    proc = _fake_run(state, spawn)
+
+    result = _lib('tier_pid_args "$1"', str(proc.pid), COLUMNS="10")
+
+    assert result.returncode == 0, result.stderr
+    assert str(state / "run.sh") in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# A process whose command line nothing can read
+# ---------------------------------------------------------------------------
+
+_UNSHARE = shutil.which("unshare")
+
+
+def _proc_can_be_hidden() -> bool:
+    """Whether a private mount namespace can cover /proc here."""
+    if _UNSHARE is None:
+        return False
+    probe = subprocess.run(
+        [
+            _UNSHARE,
+            "--user",
+            "--map-root-user",
+            "--mount",
+            "bash",
+            "-c",
+            "mount -t tmpfs none /proc && ! [ -r /proc/self/cmdline ]",
+        ],
+        capture_output=True,
+        timeout=30,
+    )
+    return probe.returncode == 0
+
+
+_needs_hidden_proc = pytest.mark.skipif(
+    not _proc_can_be_hidden(),
+    reason="no unprivileged mount namespace in which /proc can be covered",
+)
+
+
+def _lib_unreadable(tmp_path: Path, body: str, *args: str) -> subprocess.CompletedProcess:
+    """Run *body* with the lib sourced where no command line can be read.
+
+    /proc is covered by an empty tmpfs, and PATH holds only the tools the lib
+    needs besides `ps`, so neither source of a command line is available.
+    Liveness still answers: `kill -0` asks the kernel, not /proc.
+    """
+    tools = tmp_path / "tools"
+    tools.mkdir(exist_ok=True)
+    for name in ("cat", "sed", "rm", "tr"):
+        found = shutil.which(name)
+        assert found is not None, name
+        link = tools / name
+        if not link.exists():
+            link.symlink_to(found)
+    assert shutil.which("ps", path=str(tools)) is None
+    script = f'mount -t tmpfs none /proc || exit 99; export PATH="{tools}"; . "{_LIB}"; {body}'
+    return subprocess.run(
+        [_UNSHARE, "--user", "--map-root-user", "--mount", shutil.which("bash"), "-c", script]
+        + ["_", *args],
+        capture_output=True,
+        text=True,
+        env=_env(),
+        timeout=60,
+    )
+
+
+@_needs_hidden_proc
+def test_pid_args_fails_where_no_command_line_can_be_read(tmp_path, spawn):
+    other = spawn(["sleep", "30"])
+
+    result = _lib_unreadable(tmp_path, 'tier_pid_args "$1"', str(other.pid))
+
+    assert result.returncode == 1, result.stderr
+    assert result.stdout == ""
+
+
+@_needs_hidden_proc
+def test_a_live_pid_whose_command_line_cannot_be_read_is_alive(tmp_path, spawn):
+    """Unreadable is not "something else": the run is judged on liveness alone."""
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "pid").write_text(f"{spawn(['sleep', '30']).pid}\n")
+
+    result = _lib_unreadable(tmp_path, 'tier_run_alive "$1"', str(state))
+
+    assert result.returncode == 0, result.stderr
+
+
+@_needs_hidden_proc
+def test_the_sweep_keeps_a_shard_whose_live_writer_cannot_be_read(tmp_path, spawn):
+    root = tmp_path / "root"
+    root.mkdir()
+    live = _shard(root, spawn(["sleep", "30"]).pid)
+    dead = _shard(root, _dead_pid())
+
+    result = _lib_unreadable(tmp_path, 'tier_sweep_dead_coverage_shards "$1"', str(root))
+
+    assert result.returncode == 0, result.stderr
+    assert live.exists(), "the shard of a live process was swept on an unreadable command line"
+    assert not dead.exists(), "a shard whose writer is dead survived the sweep"
+
+
+# ---------------------------------------------------------------------------
+# tier_execute
+# ---------------------------------------------------------------------------
+
+
+def test_a_hook_run_refuses_while_another_run_is_in_progress(tmp_path, spawn):
+    """A run under another key may be one a person started from a terminal."""
+    state = tmp_path / "state"
+    root = tmp_path / "root"
+    root.mkdir()
+    _fake_run(state, spawn)
+
+    result = _lib(
+        'tier_execute "$1" "$2" "$3" sample "" true',
+        str(state),
+        "a-key-no-run-holds",
+        str(root),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "1"
+    assert "another sample run is in progress" in result.stderr
+    assert "started from a terminal" in result.stderr
+    assert str(state / "log") in result.stderr
+    assert (state / "run.sh").read_text() == "#!/bin/bash\nsleep 30\n"
+
+
 # ---------------------------------------------------------------------------
 # tier_execute_foreground
 # ---------------------------------------------------------------------------
@@ -425,3 +560,31 @@ def test_an_xdist_worker_does_not_probe_chromium(clean_guard_env):
 )
 def test_selects_marker_set_truth_table(markexpr, names, expected):
     assert tests_conftest._selects_marker_set(markexpr, frozenset(names)) is expected
+
+
+# ---------------------------------------------------------------------------
+# conftest: a bare `python` an e2e fixture target runs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("markexpr", "python", "refused"),
+    [
+        (_E2E_EXPR, None, True),
+        (_E2E_EXPR, "/usr/bin/python", False),
+        (_UNIT_EXPR, None, False),
+    ],
+    ids=["e2e-without-python", "e2e-with-python", "unit-without-python"],
+)
+def test_bare_python_refusal(monkeypatch, markexpr, python, refused):
+    monkeypatch.setattr("shutil.which", lambda name, *a, **k: python if name == "python" else None)
+
+    refusal = tests_conftest._bare_python_refusal(markexpr)
+
+    if not refused:
+        assert refusal is None
+        return
+    assert refusal is not None
+    assert "PATH" in refusal
+    assert ".venv/bin" in refusal
+    assert "make setup" not in refusal

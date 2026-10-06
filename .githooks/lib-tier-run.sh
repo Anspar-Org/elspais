@@ -29,6 +29,28 @@
 # Sourced by unit-verdict, e2e-verdict and run-target (which the Makefile's
 # test targets call). Do not run a tier any other way.
 
+# tier_pid_args <pid> -- print the command line of a live process.
+#
+# Read from /proc where there is one, which no terminal width can cut short;
+# otherwise from `ps -ww`, which asks for the whole line. Returns 1 when
+# neither can say -- a slim container ships no `ps` -- and the caller then
+# decides on liveness alone rather than reading an empty line as "something
+# else".
+tier_pid_args() {
+    if [ -r "/proc/$1/cmdline" ]; then
+        tr '\0' ' ' < "/proc/$1/cmdline"
+        return 0
+    fi
+    if command -v ps > /dev/null 2>&1; then
+        _pargs=$(ps -ww -o args= -p "$1" 2>/dev/null) || _pargs=""
+        if [ -n "$_pargs" ]; then
+            printf '%s\n' "$_pargs"
+            return 0
+        fi
+    fi
+    return 1
+}
+
 # Remove coverage shards abandoned by runs that are no longer alive.
 #
 # The owning pid is in the filename, so this is decided per file rather than
@@ -44,7 +66,8 @@ tier_sweep_dead_coverage_shards() {
         # else is a number reused after the writer died, and its shard is
         # abandoned like any other.
         if kill -0 "$_spid" 2>/dev/null; then
-            case "$(ps -ww -o args= -p "$_spid" 2>/dev/null)" in
+            if ! _sargs=$(tier_pid_args "$_spid"); then continue; fi
+            case "$_sargs" in
                 *python*|*pytest*) continue ;;
             esac
         fi
@@ -67,7 +90,7 @@ tier_run_alive() {
     _rpid=$(cat "$_dir/pid" 2>/dev/null) || return 1
     [ -n "$_rpid" ] || return 1
     kill -0 "$_rpid" 2>/dev/null || return 1
-    _rargs=$(ps -ww -o args= -p "$_rpid" 2>/dev/null) || return 1
+    if ! _rargs=$(tier_pid_args "$_rpid"); then return 0; fi
     case "$_rargs" in
         *"$_dir/run.sh"*) return 0 ;;
     esac
@@ -197,7 +220,8 @@ tier_execute() {
             tier_wait "$_dir"
             return 0
         fi
-        echo "ERROR: a $_label run for a different tree is in progress (pid $(cat "$_dir/pid"))." >&2
+        echo "ERROR: another $_label run is in progress (pid $(cat "$_dir/pid")): one for a different" >&2
+        echo "       tree, or one started from a terminal." >&2
         echo "       Two runs of one tier in one worktree overwrite each other's results" >&2
         echo "       and coverage data. Wait for it to finish; its output is in $_dir/log." >&2
         echo 1

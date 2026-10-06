@@ -184,7 +184,8 @@ Every elspais build reads each target's output area: the results pattern
 coverage, and the fingerprint decides whether those results are fresh.
 
 - `tests.results` counts the ingested results by status, and says how many
-  come from stale results.
+  come from stale results; `tests.external` names the stale reason beside a
+  verdict read from stale results.
 - `tests.results_stale` reports each target whose fingerprint judgement is
   stale: no fingerprint, or an input changed since or during the run.
 - `tests.run_in_progress` reports a target whose fingerprint records a start
@@ -210,15 +211,15 @@ the same key and runs the tier otherwise. Nothing in elspais reads them, and
 | --- | --- | --- | --- |
 | Results an earlier run left in `.results/` | all | Removed as an input to a test: e2e tests work in private copies of a fixture or of this checkout, which carry no `.results/`, and no unit test reads the live checkout's output areas. Kept as an input to a report | A report marks results the current tree did not produce as carried, and `tests.results_stale` names why |
 | A cached verdict | unit, e2e | Kept, for passes only: a failed run removes the record, so a failure never decides what the next run says | The hook prints that the tree is cached as passed; `ELSPAIS_UNIT_FORCE=1` or `ELSPAIS_E2E_FORCE=1` runs it again |
-| A run in progress in the same worktree | all | Kept: starting a second run of one target empties the first one's output area | `lib-tier-run.sh` refuses, naming the run's pid and log. A recorded pid counts only while that process is running the recorded run, so a pid reused by an unrelated process reads as a run that ended |
+| A run in progress in the same worktree | all | Kept: starting a second run of one target empties the first one's output area | `lib-tier-run.sh` refuses, naming the run's pid and log. A recorded pid counts only while that process is running the recorded run, so a pid reused by an unrelated process reads as a run that ended. `elspais checks --run-tests` starts a target's run without this guard |
 | Coverage shards (`.coverage.<host>.pid<N>.*`) | unit | Kept: pytest-cov writes one per process and combines them at the end | Before a run, `lib-tier-run.sh` removes every shard whose writer is not a live Python process, so a killed run's shard cannot fail the next run's teardowns |
 | This checkout's build | e2e, browser | Kept: the tiers spawn `elspais` | `tests/conftest.py` fails each e2e and browser test when the program it would spawn does not import elspais from this checkout, and `e2e-verdict` refuses to start under such an interpreter |
-| The venv first on `PATH` | e2e | Kept: a fixture's target shells out to a bare `python` | The hooks and `run-target` put `.venv/bin` first on `PATH`; run by hand without it, the build check above refuses |
+| The venv first on `PATH` | e2e | Kept: a fixture's target shells out to a bare `python` | The hooks and `run-target` put `.venv/bin` first on `PATH`. A session selecting e2e tests where no `python` is on `PATH` stops with a usage error saying so; the program the tests spawn is found in this checkout's venv whatever `PATH` says |
 | The `mcp` extra | all | Kept | A session without it stops with a usage error naming `make setup`, unless `ELSPAIS_TEST_WITHOUT` names `mcp` |
 | The `browser` extra and chromium | e2e, browser | Kept | A session whose marker expression selects browser tests stops with a usage error naming `make setup`, unless `ELSPAIS_TEST_WITHOUT` names `browser`; `pytest -m browser` without playwright stops whatever that variable says |
 | `ELSPAIS_TEST_WORKERS` | unit, e2e | Kept, as an override of half the available processors | A value that is not a positive whole number stops the tier with a message naming the variable |
 | Git's hook environment (`GIT_DIR` and the rest) | all | Removed: `tests/conftest.py` and `unit-verdict` clear it | Never |
-| The developer's daemon, home and Claude configuration | e2e | Removed: each e2e test works in its own copy with its own daemon, on a port its viewer bound, with a private home for the claude CLI | Never |
+| The developer's daemon, home and Claude configuration | e2e | Removed: each e2e test that runs elspais works in its own copy with its own daemon, on a port its viewer bound, with a private home for the claude CLI | Never |
 | `pandoc`, `xelatex`, the `claude` CLI | e2e | Kept, as optional tools | The tests needing them skip, and the skip reason names the missing tool; the claude CLI test also skips inside a Claude Code session |
 
 ## Required Tools

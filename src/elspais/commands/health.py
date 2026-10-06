@@ -3499,10 +3499,25 @@ def check_external_tests(
     ):
         for test in nodes:
             file_path, line = _fault_location(graph, test.id, None)
+            # Implements: REQ-d00323-G
+            # A verdict read from stale results says why it may describe
+            # another tree.
+            stale = next(
+                (
+                    r.get_field("stale_reason")
+                    for r in test.iter_children()
+                    if r.kind == NK.RESULT and r.get_field("stale_reason")
+                ),
+                "",
+            )
+            stale_note = (
+                f"; stale results: {stale}" if stale and verdict_word != "awaiting a result" else ""
+            )
             findings.append(
                 HealthFinding(
                     message=(
-                        f"{test.get_label() or test.id} ({verdict_word}) reaches no requirement"
+                        f"{test.get_label() or test.id} ({verdict_word}{stale_note}) "
+                        f"reaches no requirement"
                     ),
                     node_id=test.id,
                     file_path=file_path,
@@ -4114,6 +4129,8 @@ def check_test_results_stale(
 
     findings: list[HealthFinding] = []
     judged = 0
+    # Targets of one member share their inputs, so each is read once.
+    digest_cache: dict[Path, str] = {}
     for entry in graph.iter_repos():
         member = _validate_config(entry.config)
         # Implements: REQ-d00322-K+L
@@ -4128,7 +4145,7 @@ def check_test_results_stale(
             if finding is not None:
                 findings.append(finding)
         for target in member.scanning.test.targets:
-            verdict = judge(entry.repo_root, member, target.name)
+            verdict = judge(entry.repo_root, member, target.name, digest_cache=digest_cache)
             # Implements: REQ-d00311-N
             # A run in progress is reported by `tests.run_in_progress`.
             if verdict.state in ("absent", "running"):
