@@ -19,15 +19,28 @@
 # run therefore blocks the following commit for a reason that is nowhere in
 # the code.
 #
-# So the tier is run in its own session. The hook waits on it and relays its
-# output, but nothing that reaches the hook reaches the run. A hook that is
-# killed and invoked again ATTACHES to the run still going rather than
-# starting a second one, so the minutes already spent are never thrown away —
-# and if the run finished while no hook was watching, it has already recorded
-# its own verdict, so the next invocation is a cache hit.
+# So the tier is run in its own process group. The hook waits on it and
+# relays its output, but nothing that reaches the hook reaches the run. A
+# hook that is killed and invoked again ATTACHES to the run still going
+# rather than starting a second one, so the minutes already spent are never
+# thrown away — and if the run finished while no hook was watching, it has
+# already recorded its own verdict, so the next invocation is a cache hit.
 #
 # Sourced by unit-verdict, e2e-verdict and run-target (which the Makefile's
 # test targets call). Do not run a tier any other way.
+
+# tier_require <command> -- stop naming the command when it is not on PATH.
+#
+# Every dependency this runner cannot do without is checked here, once, at
+# the point it is needed, rather than discovered as an unexplained failure
+# partway through a run.
+tier_require() {
+    if ! command -v "$1" > /dev/null 2>&1; then
+        echo "ERROR: this machine has no '$1', which the test runner requires." >&2
+        return 1
+    fi
+    return 0
+}
 
 # tier_pid_args <pid> -- print the command line of a live process.
 #
@@ -102,6 +115,25 @@ tier_run_key() {
     if [ -f "$_dir/key" ]; then cat "$_dir/key" 2>/dev/null; fi
 }
 
+# tier_tail_until <pid> <file> -- relay a growing file until <pid> exits.
+#
+# The portable replacement for GNU `tail -f --pid=`, which BSD tail (macOS)
+# does not accept at all. Follows in the background, polls the pid, then
+# stops the follower once the writer is gone -- giving it a moment first so
+# the last lines written before exit are not lost to the poll's timing.
+tier_tail_until() {
+    _tu_pid="$1"
+    _tu_file="$2"
+    tail -f -n +1 "$_tu_file" 2>/dev/null &
+    _tu_tpid=$!
+    while kill -0 "$_tu_pid" 2>/dev/null; do
+        sleep 0.2
+    done
+    sleep 0.3
+    kill "$_tu_tpid" 2>/dev/null
+    wait "$_tu_tpid" 2>/dev/null
+}
+
 # tier_prepare <state-dir> <key> <repo-root> <finisher-or-empty> <cmd> [args...]
 #
 # Writes <state-dir>/{key,log,cmd.sh,run.sh} and clears {pid,rc}. run.sh is
@@ -148,11 +180,16 @@ tier_start() {
     _dir="$1"
     tier_prepare "$@"
 
-    # setsid puts it in a session of its own: the hook's process group can be
-    # signalled without reaching it. </dev/null so it never blocks on a
-    # terminal that is going away, and its output goes to the log rather than
-    # to a stdout that may close under it.
-    setsid bash "$_dir/run.sh" < /dev/null > /dev/null 2>&1 &
+    # Bash job control (enabled here for this one launch, regardless of the
+    # caller's own setting) puts a background job in a process group of its
+    # own: the hook's process group can be signalled without reaching it.
+    # This is what `setsid` was used for -- util-linux, and absent on macOS
+    # -- but a session of its own is more isolation than the run needs; its
+    # own process group is the same immunity to a process-group signal, and
+    # bash job control gives it on every platform this runner supports.
+    # </dev/null so it never blocks on a terminal that is going away, and its
+    # output goes to the log rather than to a stdout that may close under it.
+    (set -m; bash "$_dir/run.sh" < /dev/null > /dev/null 2>&1 &)
 
     _waited=0
     while [ ! -f "$_dir/pid" ] && [ "$_waited" -lt 50 ]; do
@@ -185,7 +222,7 @@ tier_wait() {
         # user watching nothing.
         # Order matters: `>&2` first, so stdout takes the caller's real
         # stderr, and only then is tail's own stderr discarded.
-        tail -f -n +1 --pid="$_rpid" "$_dir/log" >&2 2>/dev/null
+        tier_tail_until "$_rpid" "$_dir/log" >&2 2>/dev/null
     fi
 
     _waited=0
@@ -213,6 +250,11 @@ tier_execute() {
     _label="$4"
     shift 4
     # What remains is tier_start's tail: the finisher, then the command.
+
+    if ! tier_require tail; then
+        echo 1
+        return 0
+    fi
 
     if tier_run_alive "$_dir"; then
         if [ "$(tier_run_key "$_dir")" = "$_key" ]; then
@@ -251,6 +293,10 @@ tier_execute_foreground() {
     _label="$3"
     shift 3
 
+    if ! tier_require tail; then
+        return 1
+    fi
+
     if tier_run_alive "$_dir"; then
         echo "ERROR: a $_label run is already in progress in this worktree (pid $(cat "$_dir/pid"))." >&2
         echo "       Two runs of one tier in one worktree overwrite each other's results" >&2
@@ -261,9 +307,9 @@ tier_execute_foreground() {
     tier_sweep_dead_coverage_shards "$_root"
     tier_prepare "$_dir" "foreground $$" "$_root" "" "$@"
     # The log is shown as it is written, and kept for whoever asks later.
-    # The run is the foreground job, so an interrupt reaches it; the relay
-    # ends with this shell, whichever way this shell ends.
-    tail -f -n +1 --pid="$$" "$_dir/log" 2>/dev/null &
+    # The run is the foreground job, so an interrupt reaches it; the relay is
+    # stopped explicitly below, whichever way the run ends.
+    tail -f -n +1 "$_dir/log" 2>/dev/null &
     _tpid=$!
     bash "$_dir/run.sh"
     # Let the relay print what the run wrote last before it is stopped.

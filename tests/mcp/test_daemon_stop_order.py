@@ -108,6 +108,12 @@ class TestStopWaitsForTheProcess:
         held-open client keeps from ever finishing -- is escalated to a kill
         it cannot decline, so one working tree is not left with a process
         that neither stops nor can be replaced."""
+        if sys.platform != "linux":
+            pytest.skip(
+                "process_is_daemon identifies a stand-in through /proc/<pid>/cmdline, "
+                "which only Linux provides; ps on macOS reports the resolved "
+                "executable path rather than the spoofed argv[0] the stand-in relies on"
+            )
         proc = _spawn_stand_in(_IGNORE_SIGTERM, wait_for_ready=True)
         record = _write_daemon_record(tmp_path, proc.pid)
         try:
@@ -214,6 +220,12 @@ class TestTheStopperOwnsTheDeadline:
         save runs in. Writing a spec file is not atomic, so a kill that
         arrived first would truncate one -- the loss the whole stop routine
         is arranged to prevent."""
+        if sys.platform != "linux":
+            pytest.skip(
+                "process_is_daemon identifies a stand-in through /proc/<pid>/cmdline, "
+                "which only Linux provides; ps on macOS reports the resolved "
+                "executable path rather than the spoofed argv[0] the stand-in relies on"
+            )
         import signal as signal_module
         import time as time_module
 
@@ -381,6 +393,12 @@ class TestStopSignalsOnlyADaemon:
         The stranger's own survival has no assertion of its own; it is the
         cost of the record being unverified, which E is what makes checkable.
         """
+        if sys.platform != "linux":
+            pytest.skip(
+                "process_is_daemon identifies a stranger through /proc/<pid>/cmdline, "
+                "which only Linux provides; with no /proc this platform cannot say, "
+                "so the stop proceeds without the confident refusal this test expects"
+            )
         from elspais.mcp import daemon as daemon_module
 
         sent: list[int] = []
