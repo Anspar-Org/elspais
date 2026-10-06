@@ -13,6 +13,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -336,6 +337,170 @@ def test_the_sweep_keeps_a_shard_whose_live_writer_cannot_be_read(tmp_path, spaw
 
 
 # ---------------------------------------------------------------------------
+# tier_start / tier_wait / tier_tail_until
+# ---------------------------------------------------------------------------
+
+
+def test_tier_start_survives_a_signal_to_its_callers_process_group(tmp_path):
+    """The detached run's process group must differ from its caller's.
+
+    `tier_start` backgrounds the run under bash job control (`set -m`) so it
+    lands in a process group of its own; a signal to the CALLER's process
+    group must not reach it. A driver script calls `tier_start`, reports its
+    own pgid and the detached run's pgid, then idles; the test kills the
+    driver's whole process group from the outside (as `spawn`'s teardown
+    does) and checks the detached run still finishes -- by writing a marker a
+    half-killed run never would.
+    """
+    state = tmp_path / "state"
+    root = tmp_path / "root"
+    root.mkdir()
+    marker = tmp_path / "marker"
+    out = tmp_path / "driver-out"
+    driver = tmp_path / "driver.sh"
+    driver.write_text(
+        f"""#!/bin/bash
+. "{_LIB}"
+tier_start {state!s} k1 {root!s} "" bash -c 'sleep 1; touch {marker!s}'
+_dpid=$(cat {state!s}/pid)
+printf 'detached_pgid=%s\\n' "$(ps -o pgid= -p "$_dpid" | tr -d ' ')" > {out!s}
+printf 'driver_pgid=%s\\n' "$(ps -o pgid= -p $$ | tr -d ' ')" >> {out!s}
+sleep 30
+"""
+    )
+
+    proc = subprocess.Popen(
+        ["bash", str(driver)],
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        for _ in range(100):
+            if out.exists() and out.read_text().count("\n") >= 2:
+                break
+            time.sleep(0.1)
+        lines = dict(line.split("=", 1) for line in out.read_text().splitlines())
+        detached_pgid = lines["detached_pgid"]
+        driver_pgid = lines["driver_pgid"]
+        assert detached_pgid != driver_pgid, "the detached run shares its driver's process group"
+
+        driver_group = os.getpgid(proc.pid)
+        os.killpg(driver_group, signal.SIGTERM)
+        proc.wait(timeout=10)
+
+        time.sleep(1.5)
+        assert marker.exists(), "the detached run died with the driver it outlives by design"
+    finally:
+        if proc.poll() is None:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            proc.wait(timeout=10)
+        # The detached run's own process group may still hold a sleeping
+        # `bash run.sh`; it exits on its own once the marker is written, and
+        # nothing in this test depends on reaping it further.
+
+
+def test_tier_wait_relays_growing_output_in_order_and_returns_promptly(tmp_path):
+    """`tier_wait` must tail a run's log as it grows and stop soon after the
+    run's pid exits, echoing the run's own exit code on stdout."""
+    state = tmp_path / "state"
+    root = tmp_path / "root"
+    root.mkdir()
+
+    start = time.monotonic()
+    result = _lib(
+        'tier_start "$1" k1 "$2" "" '
+        "bash -c 'echo line-one; sleep 0.3; echo line-two; sleep 0.3; echo line-three; exit 7'; "
+        'tier_wait "$1"',
+        str(state),
+        str(root),
+    )
+    elapsed = time.monotonic() - start
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "7"
+    stderr_lines = [line for line in result.stderr.splitlines() if line.strip()]
+    assert stderr_lines == ["line-one", "line-two", "line-three"]
+    assert elapsed < 5, "tier_wait took suspiciously long to notice the run had exited"
+
+
+# ---------------------------------------------------------------------------
+# tier_require
+# ---------------------------------------------------------------------------
+
+_REQUIRED_TOOLS = ("cat", "sed", "rm", "tr", "mkdir", "kill", "ps", "bash", "sleep", "true")
+
+
+def _tools_dir_without(tmp_path: Path, missing: str) -> Path:
+    """A PATH holding every tool the library needs except *missing*."""
+    tools = tmp_path / "tools"
+    tools.mkdir(exist_ok=True)
+    for name in _REQUIRED_TOOLS:
+        if name == missing:
+            continue
+        found = shutil.which(name)
+        assert found is not None, name
+        link = tools / name
+        if not link.exists():
+            link.symlink_to(found)
+    assert shutil.which(missing, path=str(tools)) is None
+    return tools
+
+
+def test_tier_require_names_the_missing_command(tmp_path):
+    tools = _tools_dir_without(tmp_path, "tail")
+
+    result = _lib('tier_require "$1"', "tail", PATH=str(tools))
+
+    assert result.returncode == 1
+    assert "'tail'" in result.stderr
+    assert "test runner requires" in result.stderr
+    assert result.stdout == ""
+
+
+def test_tier_execute_echoes_1_and_returns_0_where_tail_is_missing(tmp_path):
+    """tier_execute's calling convention: failure is echoed, not returned."""
+    state = tmp_path / "state"
+    root = tmp_path / "root"
+    root.mkdir()
+    tools = _tools_dir_without(tmp_path, "tail")
+
+    result = _lib(
+        'tier_execute "$1" "$2" "$3" sample "" true',
+        str(state),
+        "some-key",
+        str(root),
+        PATH=str(tools),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "1"
+    assert "'tail'" in result.stderr
+    assert "test runner requires" in result.stderr
+    # The check happens before tier_prepare: nothing was ever started.
+    assert not state.exists()
+
+
+def test_tier_execute_foreground_returns_1_directly_where_tail_is_missing(tmp_path):
+    """tier_execute_foreground's ordinary-shell convention: 1 is returned."""
+    state = tmp_path / "state"
+    root = tmp_path / "root"
+    root.mkdir()
+    tools = _tools_dir_without(tmp_path, "tail")
+
+    result = _foreground(state, root, "true", PATH=str(tools))
+
+    assert result.returncode == 1
+    assert "'tail'" in result.stderr
+    assert "test runner requires" in result.stderr
+    assert not state.exists()
+
+
+# ---------------------------------------------------------------------------
 # tier_execute
 # ---------------------------------------------------------------------------
 
@@ -367,13 +532,14 @@ def test_a_hook_run_refuses_while_another_run_is_in_progress(tmp_path, spawn):
 # ---------------------------------------------------------------------------
 
 
-def _foreground(state: Path, root: Path, *cmd: str) -> subprocess.CompletedProcess:
+def _foreground(state: Path, root: Path, *cmd: str, **env: str) -> subprocess.CompletedProcess:
     return _lib(
         'tier_execute_foreground "$@"; exit $?',
         str(state),
         str(root),
         "sample",
         *cmd,
+        **env,
     )
 
 
