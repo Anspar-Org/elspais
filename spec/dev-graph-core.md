@@ -593,7 +593,7 @@ E. A reporter registry SHALL map each `reporter` format name to a parser and an 
 
 F. For each configured target, the system SHALL obtain the reporter's output (captured from the command's stdout for stdout-channel reporters, or read from the `results` glob for file-channel reporters), build RESULT nodes carrying the real test-file path (`source_file`, repo-relative) and the target's `match` mode, and ingest the target's `coverage` file. Coverage crediting SHALL be derived from the targets' `credit_coverage`/`min_coverage_fraction`. File-channel results SHALL additionally record where each result was recorded — the results artifact's repo-relative path and, when derivable from the artifact (e.g. one JUnit `<testcase>` per line), the per-result line — as provenance distinct from the test's source path, and result links in reporting surfaces SHALL point at that artifact location.
 
-G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step reference (in the configured reference form) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the file and line at which the result's test is declared to the specific test node at that `(path, line)`, or, where the result records no usable line, resolving its recorded name as REQ-d00284 states. A result that binds at neither scope SHALL credit nothing. `aggregate` SHALL derive the per-app green/red signal, which informs the line-coverage dimension only.
+G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step reference (in the configured reference form) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the file and line at which the result's test is declared to the specific test node at that `(path, line)`, or, where the result records no usable line, resolving its recorded name as REQ-d00284 states. A result that binds at neither scope SHALL credit nothing. `aggregate` SHALL derive a green/red signal per target working directory, which informs the line-coverage dimension only.
 
 H. `elspais checks --run-tests` SHALL accept a `--targets` selector naming a subset of `[[scanning.test.targets]]` to execute; an unknown target name SHALL be an error, and an absent selector SHALL execute the targets a run executes when no selection is made (REQ-d00283). The same `--targets` flag on `summary`/`trace` SHALL mark provenance without executing anything.
 
@@ -663,6 +663,8 @@ Z places a result where its citations are. A project that runs one scenario agai
 
 ### Changelog
 
+- 2026-10-05 | 06c0380b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-05 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-141: the aggregate signal is named per target working directory (G)
 - 2026-10-05 | 3c5b3090 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-05 | - | - | Michael Lewis (<michael@anspar.org>) | a relative source path in a coverage artifact resolves from the origin that applies to that artifact, which REQ-d00327 defines (Y)
 - 2026-10-03 | 6efe844f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -709,7 +711,7 @@ Z places a result where its citations are. A project that runs one scenario agai
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 3c5b3090
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 06c0380b
 
 ---
 

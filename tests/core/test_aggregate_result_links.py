@@ -86,7 +86,7 @@ class TestAggregateMode:
         result_nodes = list(graph.iter_by_kind(NodeKind.RESULT))
         result_ids = {n.id for n in result_nodes}
         assert "result-dart-1" in result_ids, (
-            "RESULT node must be iterable by kind so _compute_app_status can find it"
+            "RESULT node must be iterable by kind so _compute_cwd_status can find it"
         )
 
     def test_no_broken_reference_in_aggregate_mode(self):

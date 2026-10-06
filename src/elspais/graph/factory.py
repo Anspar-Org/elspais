@@ -1107,7 +1107,7 @@ def _derive_credit_config(targets):
     _unmatched = "verified" if any(_t.match == "aggregate" for _t in targets) else "off"
     _min_frac = max((_t.min_coverage_fraction for _t in targets), default=0.0)
     return CoverageCreditConfig(
-        app_dirs=_tgt_dirs,
+        cwds=_tgt_dirs,
         unmatched_credit=_unmatched,
         coverage_dirs=_tgt_dirs,
         assertion_credit=_assertion_credit,

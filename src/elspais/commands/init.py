@@ -294,7 +294,7 @@ _FIELD_COMMENTS: dict[str, str] = {
         " file_patterns, skip_dirs, skip_files (default: every file)"
     ),
     "scanning.test.targets.match": (
-        '"source" (per-file) | "aggregate" (whole-app green/red, default)'
+        '"source" (per-file, default) | "aggregate" (green/red per target cwd)'
     ),
     "scanning.test.targets.groups": (
         "Groups this target belongs to (default: the `default` group)"

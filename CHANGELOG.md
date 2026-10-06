@@ -6,6 +6,8 @@ All notable changes to elspais will be documented in this file.
 
 ### TOOL-141
 
+- **The aggregate signal is named per target `cwd` (REQ-d00254-G)** -- the green/red signal that `match = "aggregate"` derives is keyed by each target's working directory, and the code, the requirement and the docs now call it that instead of an "app". The `init` template's hint for `match` now names `"source"` as the default, which it is.
+
 - **A relative source path in results and coverage is read from a declared origin (REQ-d00327-A+B+C+D+E+F)** -- each reporter declares whether the relative paths it records start at the repository root or at the test target's `cwd`, and a target replaces that with `results_origin` or `coverage_origin` under `[[scanning.test.targets]]`. A runner that records paths relative to its own working directory, such as pytest whose rootdir is the target's `cwd`, now binds its results to their tests where `results_origin = "working-directory"` is declared. The origin reaches every path a result records, including the path inside a pytest nodeid or a dotted Python module name. Every results reporter elspais provides declares `repository-root` and every coverage reporter declares `working-directory`, so a project that declares neither binds exactly as before. The reporters table in `elspais docs test-targets` gives each reporter's origin, and an unknown origin value is refused when the configuration is read.
 
 - **The test names in per-test coverage contexts follow the results origin (REQ-d00327-H)** -- coverage data names the test that executed a line as the test runner wrote it, so a target whose results are read from its `cwd` keeps the lines its coverage attributes to each test.
