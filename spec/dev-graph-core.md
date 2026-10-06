@@ -573,6 +573,49 @@ Case and padding are admitted rather than tolerated. A configuration that accept
 
 *End* *Reading a Reference* | **Hash**: 02eb02ff
 
+---
+
+## REQ-d00328: Satisfying Named Assertions
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00014-A
+
+A `Satisfies:` declaration may name *Assertions* of a template requirement rather than the whole requirement. This states what such a declaration copies.
+
+### Assertions
+
+A. When a `Satisfies:` declaration names an *Assertion* of a template requirement, the declaring requirement SHALL hold a copy of that requirement that holds the named *Assertion*.
+
+B. When a `Satisfies:` declaration names an *Assertion* of a template requirement, the declaring requirement SHALL hold, beneath the copy of that requirement, a copy of the template subtree, as REQ-p00014-B defines it, of each template requirement that refines that *Assertion* or refines its requirement without naming an *Assertion*.
+
+C. A declaring requirement SHALL hold at most one copy of each original, however many of its `Satisfies:` declarations produce a copy of that original.
+
+D. A copied requirement SHALL hold only those *Assertions* of its original that a `Satisfies:` declaration of the declaring requirement names, or that a copied template subtree including the original holds.
+
+E. A copied refinement SHALL name only *Assertions* that the copy of its target holds.
+
+F. The system SHALL make the same copy whichever repositories of the federation own the template requirement and the template requirements that refine it.
+
+G. The system SHALL report each `Satisfies:` declaration whose target has no copy in the declaring requirement.
+
+H. After a mutation or its undo, each copy SHALL equal the copy that a build makes from the text a save would write.
+
+### Rationale
+
+The requirement is the unit every report shows, so a declaration naming an *Assertion* copies the requirement that holds it, restricted to what was named. REQ-p00014-K then makes the copy a requirement like any other, and it appears wherever requirements appear.
+
+A template requirement that refines a named *Assertion* carries part of that obligation, so it is copied with it. A refinement naming the whole requirement refines each of its *Assertions*, as conduction reads it (REQ-d00069-J), so it is copied too. A refinement naming only *Assertions* that were not named is not copied.
+
+A copy is named by its declaring requirement and its original, so one declaring requirement can hold only one copy of an original. A, D and REQ-p00014-B together fix what that one copy holds when several declarations reach the original: each named *Assertion*, and every *Assertion* where a whole template subtree containing the original is copied. The result does not depend on the order the declarations were read in. E keeps a copied refinement from conducting coverage into an *Assertion* the copy does not hold.
+
+A declaration that produces no copy is otherwise invisible: no requirement holds the missing obligation and no report has a row for it. G makes the absence a finding, whatever the reason, including the faults REQ-p00014-G and REQ-p00014-J already classify.
+
+### Changelog
+
+- 2026-10-06 | 6e65b3ba | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-06 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-142: initial authoring: what a Satisfies naming Assertions copies
+
+*End* *Satisfying Named Assertions* | **Hash**: 6e65b3ba
+
 ## REQ-d00254: Test Evidence: Attribution, Ingestion, and Coverage Crediting
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00051

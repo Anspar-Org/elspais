@@ -246,9 +246,9 @@ class TestBuilderSatisfiesEdge:
         assert len(satisfies_edges) == 1
         assert satisfies_edges[0].target.id == "REQ-p00044::REQ-p80001"
 
-    # Verifies: REQ-d00069-G
+    # Verifies: REQ-d00069-G, REQ-d00328-A+D
     def test_REQ_d00069_G_satisfies_assertion_target(self):
-        """Satisfies: REQ-p80001-A creates edge to cloned assertion subtree."""
+        """Satisfies: REQ-p80001-A copies the requirement holding A alone."""
         from tests.core.graph_test_helpers import build_graph
 
         template = make_requirement(
@@ -270,8 +270,15 @@ class TestBuilderSatisfiesEdge:
         declaring_node = graph.find_by_id("REQ-p00044")
         satisfies_edges = list(declaring_node.iter_edges_by_kind(EdgeKind.SATISFIES))
         assert len(satisfies_edges) == 1
-        # Assertion-level satisfies still clones the assertion's parent REQ
-        assert satisfies_edges[0].target.id == "REQ-p00044::REQ-p80001-A"
+        # The edge lands on the copy of the requirement and names the label.
+        assert satisfies_edges[0].target.id == "REQ-p00044::REQ-p80001"
+        assert satisfies_edges[0].assertion_targets == ["A"]
+        copy = graph.find_by_id("REQ-p00044::REQ-p80001")
+        assert copy.kind == NodeKind.REQUIREMENT
+        assert [c.id for c in copy.iter_children(edge_kinds={EdgeKind.STRUCTURES})] == [
+            "REQ-p00044::REQ-p80001-A"
+        ]
+        assert graph.find_by_id("REQ-p00044::REQ-p80001-B") is None
 
     # Verifies: REQ-d00069-G
     def test_REQ_d00069_G_multiple_satisfies(self):

@@ -17,7 +17,7 @@
 | REQ-p00005 | Multi-Repository Requirements                    | prd-features.md | f7cd689c |
 | REQ-p00006 | Interactive Traceability Viewer                  | prd-features.md | 185217a3 |
 | REQ-p00013 | End-to-End Tests Exercise the Installed Command  | prd-core.md     | 1b5c65b2 |
-| REQ-p00014 | Satisfies Relationship                           | prd-features.md | ca4892c1 |
+| REQ-p00014 | Satisfies Relationship                           | prd-features.md | 9b546669 |
 | REQ-p00015 | Complete and Current Reporting                   | prd-core.md     | 0871b750 |
 | REQ-p00016 | NOT APPLICABLE Status                            | prd-features.md | 2211802a |
 | REQ-p00017 | Reference Integrity Under Mutation               | prd-core.md     | e4e7f863 |
@@ -234,6 +234,7 @@
 | REQ-d00325 | Changelog Reason for a Saved Change                           | dev-graph-file-nodes.md | 4ebffc32 |
 | REQ-d00326 | Path-Shaped Skip Patterns                                     | dev-graph-config.md     | 797c3fe4 |
 | REQ-d00327 | Origin of a Recorded Source Path                              | dev-graph-core.md       | 0faeeab4 |
+| REQ-d00328 | Satisfying Named Assertions                                   | dev-graph-core.md       | 6e65b3ba |
 
 ## User Journeys
 

@@ -4,6 +4,18 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-142
+
+- **A `Satisfies:` naming an Assertion copies the requirement holding it (REQ-d00328-A+D)** -- such a declaration produced one copied Assertion that no requirement held, so the copy had no row in `elspais trace` or the viewer tree. The declaring requirement now holds a copy of the template requirement, `X::T`, holding only the Assertions its declarations name, and the SATISFIES edge carries their labels. The copy is a requirement like any other copy and appears wherever one does. Ids of the form `X::T-A` now name an Assertion of that copy.
+
+- **The template requirements refining a named Assertion are copied with it (REQ-d00328-B+E)** -- each template requirement that refines the named Assertion, or the whole requirement, is copied beneath the requirement copy with its own subtree. One that refines only Assertions nobody named is not copied, and a copied refinement names only Assertions the copy holds.
+
+- **One copy of each original per declaring requirement (REQ-d00328-C)** -- `Satisfies: T-A, T-C`, `Satisfies: T-A+B` and a whole-template `Satisfies: T` beside `T-A` each make one copy of `T`, holding everything the declarations ask of it, in one repository or across a federation (REQ-d00328-F). A multi-assertion item naming another member's template is read label by label, as it is in that member, and is reported label by label when that member lacks the template.
+
+- **Every `Satisfies:` that copies nothing is reported (REQ-d00328-G)** -- a missing Assertion, a target not marked Template, a missing template in another repository and an Assertion retired by a mutation are each reported once as an unresolved `Satisfies:` reference.
+
+- **Mutations remake the copies a rebuild would make (REQ-d00328-H)** -- retiring, deleting or bringing back a template Assertion, editing it, or deleting a template requirement remakes every copy of each declaring requirement it reaches, in the declaring requirement's own repository or another, and undo restores what was there.
+
 ### TOOL-110
 
 - **Results the current tree did not produce are marked in every report (REQ-d00323-F+G+H)** -- a target's results whose *Result Fingerprint* judgement is stale (no fingerprint, or an input changed since or during the run) are now carried on every run, not only after a `--targets` selection. `trace` marks the figure they make `(baseline)`, `summary` adds its `*` and the carried-target footnote (and `carried_result_targets` in json and csv) on any run holding them, `tests.results` states how many results are stale and names the reason beside each stale failure, the `tests.*` coverage checks say when a failure comes from stale results, and MCP result entries and the viewer's result rows carry the reason. A stale failure still fails: it is a failure the current tree has not run again, never a pass. A run whose results are all fresh renders as before.

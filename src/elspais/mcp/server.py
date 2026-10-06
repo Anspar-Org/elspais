@@ -400,7 +400,11 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             parent = edge.source
             if parent.kind == NodeKind.REQUIREMENT:
                 ref_id = parent.id
-                if edge.assertion_targets:
+                # Implements: REQ-d00328-A
+                # A SATISFIES edge's labels name the copy's *Assertions*,
+                # which the declaring requirement named; they are not the
+                # parent's own, so no citation of the parent is spelled.
+                if edge.assertion_targets and edge.kind != EK.SATISFIES:
                     # The citation is spelled under the grammar of the
                     # repository owning the cited requirement, naming every
                     # label the edge carries.
@@ -1604,6 +1608,13 @@ def _get_requirement(graph: FederatedGraph, req_id: str) -> dict[str, Any]:
             edge.kind in (EK.IMPLEMENTS, EK.REFINES, EK.SATISFIES)
             and edge.source.kind == NodeKind.REQUIREMENT
         ):
+            # Implements: REQ-d00328-C
+            # Each Assertion one requirement's Satisfies: names lands its own
+            # edge on the one copy; the requirement is one parent.
+            if any(
+                p["id"] == edge.source.id and p["edge_kind"] == edge.kind.value for p in req_parents
+            ):
+                continue
             req_parents.append(
                 {
                     "id": edge.source.id,

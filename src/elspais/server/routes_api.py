@@ -461,6 +461,11 @@ def _compute_incoming_links(node: Any) -> list[dict[str, Any]]:
         src = edge.source
         title = src.get_label() or src.id
         if edge.kind == EdgeKind.SATISFIES and src.kind == NodeKind.REQUIREMENT:
+            # Implements: REQ-d00328-C
+            # Each declaration a requirement makes lands its own edge on the
+            # one copy, and the requirement is listed once.
+            if any(link["id"] == src.id for link in satisfied_links):
+                continue
             satisfied_links.append(
                 _entry(
                     src,

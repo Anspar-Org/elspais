@@ -47,6 +47,39 @@ of the form `declaring_id::original_id`. Each clone gets `Stereotype.INSTANCE`
 and an INSTANCE edge back to its template original, and the STRUCTURES and
 REFINES edges among the originals are recreated among the clones.
 
+## Satisfying named assertions
+
+A `Satisfies:` may name assertions of a template instead of the whole
+template:
+
+```text
+# APP-p00002: Parsing Only
+**Level**: PRD | **Status**: Approved
+**Satisfies**: LIB-p00001-A
+
+A. SHALL log every parse.
+
+*End* *Parsing Only*
+```
+
+The copy is still a requirement, so it is a row in `elspais trace` and a card
+in the viewer like any other copy. `APP-p00002::LIB-p00001` holds only the
+named assertion `LIB-p00001-A`. Each template REQ that refines `LIB-p00001-A`,
+or refines `LIB-p00001` without naming an assertion, is copied beneath it with
+its own subtree. A template REQ that refines only `LIB-p00001-B` is not
+copied.
+
+A requirement holds one copy of each original. `Satisfies: LIB-p00001-A,
+LIB-p00001-B` and `Satisfies: LIB-p00001-A+B` both make one
+`APP-p00002::LIB-p00001` holding both assertions. A copy that a whole-template
+`Satisfies:` also reaches holds every assertion. A copied refinement names only
+the assertions its target's copy holds.
+
+Retiring, removing or bringing back a template assertion or requirement remakes
+the copies it touches. The result is the copy a build of the changed text
+makes, and undo restores what was there before. A `Satisfies:` whose target the
+tool cannot copy is reported, as the validation matrix below lists.
+
 ## Cross-repo Satisfies
 
 For templates owned by an associated repository, add the upstream repo to
