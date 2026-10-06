@@ -1040,6 +1040,17 @@ class LineAggregate:
     req_with_attribution: int = 0
     has_measurement: bool = False
     has_contexts: bool = False
+    # Implements: REQ-d00323-J+K
+    # Whether a measured requirement's lines came from fresh coverage, and
+    # from carried coverage, and why carried coverage is stale.
+    measured_fresh: bool = False
+    measured_carried: bool = False
+    stale_reason: str = ""
+
+    @property
+    def carried(self) -> bool:
+        """Whether every measurement behind the figure is carried coverage."""
+        return self.measured_carried and not self.measured_fresh
 
     @property
     def has_attribution(self) -> bool:
@@ -1077,6 +1088,13 @@ def _accumulate_lines(agg: LineAggregate, lines: LineCoverage) -> None:
         agg.req_with_attribution += 1
     agg.has_measurement = agg.has_measurement or lines.has_measurement
     agg.has_contexts = agg.has_contexts or lines.has_contexts
+    if lines.has_measurement:
+        if lines.carried:
+            agg.measured_carried = True
+        else:
+            agg.measured_fresh = True
+    if lines.stale_reason and not agg.stale_reason:
+        agg.stale_reason = lines.stale_reason
 
 
 # Implements: REQ-d00254-B
@@ -1371,6 +1389,8 @@ def collect_coverage(
                 "code_tested_attributed": agg.lines.attributed_lines,
                 "code_tested_measured": agg.lines.has_measurement,
                 "code_tested_has_contexts": agg.lines.has_contexts,
+                # Implements: REQ-d00323-J
+                "code_tested_carried": agg.lines.carried,
                 **_measure_fields("implemented", agg.implemented),
                 **_measure_fields("tested", agg.tested),
                 **_measure_fields("passing", agg.passing),

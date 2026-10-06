@@ -1264,13 +1264,10 @@ def code_tested_no_attribution_project(tmp_path):
         "# Implements: REQ-d00001\nx = 1\ny = 2\nz = 3\n", encoding="utf-8"
     )
 
-    (project / ".results" / "a").mkdir(parents=True)
-    (project / ".results" / "a" / "lcov.info").write_text(
-        "SF:src/main.py\nDA:1,1\nDA:2,1\nDA:3,1\nDA:4,1\nLF:4\nLH:4\nend_of_record\n",
-        encoding="utf-8",
-    )
-
     (project / ".elspais.toml").write_text(_CODE_TESTED_CONFIG, encoding="utf-8")
+    # The coverage comes from a run of this tree, so it is fresh.
+    lcov = "SF:src/main.py\nDA:1,1\nDA:2,1\nDA:3,1\nDA:4,1\nLF:4\nLH:4\nend_of_record\n"
+    record_run(project, "a", {"lcov.info": lcov})
     return project
 
 
@@ -1294,32 +1291,29 @@ def code_tested_context_carrying_project(tmp_path):
         "# Implements: REQ-d00001\nx = 1\ny = 2\nz = 3\n", encoding="utf-8"
     )
 
-    (project / ".results" / "a").mkdir(parents=True)
-    (project / ".results" / "a" / "coverage.json").write_text(
-        json.dumps(
-            {
-                "files": {
-                    "src/main.py": {
-                        "executed_lines": [1, 2, 3, 4],
-                        "missing_lines": [],
-                        "summary": {"num_statements": 4, "covered_lines": 4},
-                        # Contexts recorded, but the test they name verifies
-                        # nothing in this project.
-                        "contexts": {
-                            "2": ["tests/test_unrelated.py::test_other|run"],
-                            "3": ["tests/test_unrelated.py::test_other|run"],
-                        },
-                    }
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
-
     (project / ".elspais.toml").write_text(
         _CODE_TESTED_CONFIG.replace('"lcov.info"', '"coverage.json"'),
         encoding="utf-8",
     )
+    # The coverage comes from a run of this tree, so it is fresh.
+    coverage = json.dumps(
+        {
+            "files": {
+                "src/main.py": {
+                    "executed_lines": [1, 2, 3, 4],
+                    "missing_lines": [],
+                    "summary": {"num_statements": 4, "covered_lines": 4},
+                    # Contexts recorded, but the test they name verifies
+                    # nothing in this project.
+                    "contexts": {
+                        "2": ["tests/test_unrelated.py::test_other|run"],
+                        "3": ["tests/test_unrelated.py::test_other|run"],
+                    },
+                }
+            }
+        }
+    )
+    record_run(project, "a", {"coverage.json": coverage})
     return project
 
 

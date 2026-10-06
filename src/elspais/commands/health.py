@@ -3144,6 +3144,16 @@ def check_dimension_coverage(
             f"{fmt_assertion_count(agg.tested_failed)} failed / "
             f"{fmt_assertion_count(agg.tested_awaiting)} awaiting a result"
         )
+    # Implements: REQ-d00323-K
+    # Line-coverage credit taken from stale coverage says why it is stale.
+    if dimension == "lcov_tested" and total_covered > 1e-9:
+        from elspais.graph.aggregation import aggregate_line_coverage
+
+        lines_stale = aggregate_line_coverage(
+            graph, config=config, level_filter=level_filter
+        ).stale_reason
+        if lines_stale:
+            msg_parts.append(f"credited from stale line coverage ({lines_stale})")
     if has_any_failures:
         msg_parts.append("FAILURES DETECTED")
         # Implements: REQ-d00323-G
@@ -3255,6 +3265,17 @@ def check_line_coverage(graph, config=None, level_filter=None) -> HealthCheck:
         details["attributed_pct"] = round(attributed_pct, 1)
     else:
         msg_parts.append("per-test attribution not available from this coverage data")
+    # Implements: REQ-d00323-J+K
+    # Lines measured by a run the current tree did not produce are stated as
+    # such, with the reason the coverage is stale.
+    details["carried"] = agg.carried
+    if agg.stale_reason:
+        whole = "all" if agg.carried else "some"
+        msg_parts.append(
+            f"{whole} from stale line coverage the current tree did not produce "
+            f"({agg.stale_reason})"
+        )
+        details["stale_reason"] = agg.stale_reason
 
     return HealthCheck(
         name="code.code_tested",

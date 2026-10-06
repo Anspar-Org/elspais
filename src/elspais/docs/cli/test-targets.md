@@ -78,6 +78,12 @@ among the carried ones, and `tests.results` states how many results are
 stale. A stale failure is still a failure, and its finding states why the
 results are stale. Run the target again to replace it.
 
+The target's line coverage is measured by the same run, so it is carried by
+the same rule. A line figure made only of carried coverage is marked the same
+way -- `(baseline)` in a `trace` cell, `*` in a `summary` cell with a footnote
+-- and `code.code_tested` states why the coverage is stale. So does the
+`lcov_tested` credit taken from it.
+
 A target's **inputs** are every file in the repository by default, whether or
 not git tracks it. Three sets of paths are never inputs: the output root, the
 *Evidence Snapshot* directory that `[scanning.test] evidence` names, and the

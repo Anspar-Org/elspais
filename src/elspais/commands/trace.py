@@ -583,6 +583,11 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
         data[f"code_tested_{PART_ATTRIBUTED}"] = (
             ct.attributed_lines if _lines_measured(ct) and ct.has_attribution else None
         )
+        # Implements: REQ-d00323-J
+        # A line figure made only of coverage the current tree did not
+        # produce is marked as a carried verdict is.
+        if data["code_tested"] and ct.carried:
+            data["code_tested"] = f"{data['code_tested']} (baseline)"
         # Implements: REQ-d00254-I
         # The whole figure discloses its provenance in the cell as well, for a
         # reader reading the table rather than selecting the bit.
@@ -607,6 +612,9 @@ def _get_node_data(node, graph: FederatedGraph, *, assertion_labels: bool = Fals
                 data["lcov_tested"] = f"{label_str} ({lt_pct}%)"
             else:
                 data["lcov_tested"] = f"lcov {lt_pct}%"
+            # Implements: REQ-d00323-J
+            if lt.carried:
+                data["lcov_tested"] = f"{data['lcov_tested']} (baseline)"
         else:
             data["lcov_tested"] = None
     else:
@@ -866,6 +874,10 @@ def format_markdown(
                 has_baseline_marker = True
             if "—" in verified_cell:
                 has_not_run_marker = True
+        # Implements: REQ-d00323-J
+        for line_key in ("code_tested", "lcov_tested"):
+            if line_key in cols and "(baseline)" in (data.get(line_key) or ""):
+                has_baseline_marker = True
         # Implements: REQ-d00258-U
         # The breakdown is already inside the Tested cell (one cell in every
         # format); this only decides whether the key explaining it is worth
@@ -889,7 +901,8 @@ def format_markdown(
     if has_baseline_marker:
         legend.append(
             "`(baseline)` = carried: from a run that this invocation did not make, or from "
-            "results the current tree did not produce (stale); verdict still honored"
+            "results or line coverage the current tree did not produce (stale); "
+            "verdict still honored"
         )
     if has_not_run_marker:
         legend.append("`—` = target not run and no baseline (skipped, not a regression)")

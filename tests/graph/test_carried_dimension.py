@@ -491,7 +491,7 @@ def test_trace_marks_stale_results_as_baseline_on_a_run_that_selected_nothing(
     assert "(baseline)" in _passing_cell(out, "REQ-d00002")
     assert "(baseline)" not in _passing_cell(out, "REQ-d00001")
     assert "> Legend:" in out
-    assert "results the current tree did not produce (stale)" in out
+    assert "results or line coverage the current tree did not produce (stale)" in out
 
 
 # Verifies: REQ-d00323-F

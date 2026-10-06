@@ -1351,6 +1351,11 @@ def _build_repository(
     """
     typed_config = _validate_config(config)
 
+    # Implements: REQ-d00323-F+I
+    # Why each target's artifacts on disk are stale, "" where they are fresh,
+    # judged once per target and read by the results and the coverage alike.
+    stale_by_target: dict[str, str] = {}
+
     # 2. Resolve spec directories
     if spec_dirs is None:
         spec_dirs = get_spec_directories(None, config, repo_root)
@@ -1782,6 +1787,7 @@ def _build_repository(
                     if _verdict.state == "stale":
                         carried = True
                         stale_reason_here = stale_reason(_verdict)
+                    stale_by_target[target.name] = stale_reason_here
                 if target.name in _captured:
                     _ingest_target_results(
                         builder,
@@ -1874,7 +1880,12 @@ def _build_repository(
         from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
         from elspais.graph.parsers.results.coverage_sqlite import CoverageSqliteParser
         from elspais.graph.parsers.results.lcov import LcovParser
-        from elspais.utilities.fingerprint import run_in_progress, target_folder
+        from elspais.utilities.fingerprint import (
+            judge,
+            run_in_progress,
+            stale_reason,
+            target_folder,
+        )
 
         lcov_parser = LcovParser()
         cov_json_parser = CoverageJsonParser()
@@ -1979,11 +1990,23 @@ def _build_repository(
             _record_parser_diagnostics(
                 graph, cov_parser, "coverage", target.name, str(cov_path), repo_root
             )
+            # Implements: REQ-d00323-I
+            # Coverage the current tree did not produce is carried, by the
+            # judgement its target's results get. Output this invocation
+            # captured is its own run.
+            if target.name in (captured_results or {}):
+                cov_stale = ""
+            elif target.name in stale_by_target:
+                cov_stale = stale_by_target[target.name]
+            else:
+                _cov_verdict = judge(repo_root, typed_config, target.name)
+                cov_stale = stale_reason(_cov_verdict) if _cov_verdict.state == "stale" else ""
             for source_file, data in parsed_cov.items():
                 cov_node = _resolve_coverage_file_node(graph, source_file, cwd_path, repo_root)
                 if cov_node is None:
                     continue
                 cov_node.set_field("line_coverage", data["line_coverage"])
+                cov_node.set_field("line_coverage_stale_reason", cov_stale)
                 cov_node.set_field("executable_lines", data["executable_lines"])
                 # Implements: REQ-d00254-Q
                 # A file whose source could not be re-analysed has executed

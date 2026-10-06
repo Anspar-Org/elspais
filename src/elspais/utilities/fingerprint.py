@@ -349,13 +349,18 @@ def run_in_progress(folder: Path) -> dict[str, Any] | None:
 
 
 def results_present(repo_root: Path, config: Any, target: Any) -> bool:
-    """Return whether the results pattern of a file-channel target matches a file.
+    """Return whether the output area of a target holds anything a run wrote.
 
-    The pattern names files inside the output area of the target.
+    That is a file its results pattern matches, or its coverage file: a
+    target that declares only coverage still leaves results of its run to
+    judge. Both name files inside the output area of the target.
     """
+    folder = target_folder(repo_root, config, target.name)
+    # Implements: REQ-d00323-I
+    if target.coverage and (folder / target.coverage).is_file():
+        return True
     if not target.results:
         return False
-    folder = target_folder(repo_root, config, target.name)
     return any(Path(f).is_file() for f in glob(str(folder / target.results), recursive=True))
 
 

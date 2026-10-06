@@ -767,11 +767,21 @@ def _compute_code_tested(
     # count that means both.
     file_coverage: dict[str, dict[int, int]] = {}
     has_any_contexts = False
+    # Implements: REQ-d00323-I+J+K
+    # Carried when every measured file's coverage is stale; the first reason
+    # met is the one a report states.
+    stale_reasons: list[str] = []
+    any_fresh = False
     for fid in lines_by_file:
         fn = files[fid]
         lc = fn.get_field("line_coverage")
         if lc is not None:
             file_coverage[fid] = lc
+            reason = fn.get_field("line_coverage_stale_reason") or ""
+            if reason:
+                stale_reasons.append(reason)
+            else:
+                any_fresh = True
         if fn.get_field("line_contexts"):
             has_any_contexts = True
     has_any_coverage = bool(file_coverage)
@@ -802,6 +812,8 @@ def _compute_code_tested(
         covered_lines=indirect_count,
         has_measurement=has_any_coverage,
         has_contexts=has_any_contexts,
+        carried=has_any_coverage and not any_fresh,
+        stale_reason=stale_reasons[0] if stale_reasons else "",
     )
 
 
@@ -1054,6 +1066,7 @@ def _compute_lcov_tested(
     file_app: dict[str, str | None] = {}
     file_credit: dict[str, CoverageCreditConfig] = {}
     file_owner: dict[str, str | None] = {}
+    file_stale: dict[str, str] = {}
 
     for edge in node.iter_outgoing_edges():
         if edge.kind != EdgeKind.IMPLEMENTS:
@@ -1075,6 +1088,7 @@ def _compute_lcov_tested(
         if lc is None:
             continue
         file_cov.setdefault(rel, lc)
+        file_stale.setdefault(rel, fn.get_field("line_coverage_stale_reason") or "")
         file_app.setdefault(rel, _match_app_dir(rel, credit.app_dirs))
         file_credit.setdefault(rel, credit)
         file_owner.setdefault(rel, owner)
@@ -1140,12 +1154,22 @@ def _compute_lcov_tested(
     has_failures = False
     failing_labels: set[str] = set()
 
+    # Implements: REQ-d00323-I+J
+    # The credit is carried when every file it was taken from holds line
+    # coverage the current tree did not produce.
+    credited_files = {rel for lines in direct_lines.values() for rel, _ in lines} | {
+        rel for rel, _ in blanket_lines
+    }
+    credited_files &= set(file_cov)
+    carried = bool(credited_files) and all(file_stale.get(rel) for rel in credited_files)
+
     metrics.lcov_tested = CoverageDimension(
         total=len(labels),
         has_failures=has_failures,
         failing_labels=failing_labels,
         immediate_direct_by_label=dict(direct_pct),
         immediate_indirect_by_label=dict(blanket_pct),
+        carried=carried,
     )
 
 

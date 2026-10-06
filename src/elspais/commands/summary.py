@@ -452,6 +452,11 @@ def _cell(level_row: dict, key: str, carry: str = "") -> str:
         return cell
     if spec.dimension == "verified":
         cell += carry
+    # Implements: REQ-d00323-J
+    # A line figure made only of coverage the current tree did not produce
+    # is marked as a carried Passing figure is, and footnoted below.
+    if spec.dimension in LINE_DIMENSIONS and level_row.get("code_tested_carried"):
+        cell += "*"
     # Implements: REQ-d00258-U+V
     # The breakdown QUALIFIES the Tested figure, so it rides inside that
     # figure's cell in every format. Given cells of its own it read as three
@@ -675,6 +680,15 @@ def _file_bound_sentence(data: dict) -> str | None:
     )
 
 
+#: The footnote a carried line figure points at (REQ-d00323-J).
+_CARRIED_LINES_NOTE = "line coverage from a run the current tree did not produce (stale)"
+
+
+def _carried_lines(data: dict) -> bool:
+    """Whether a level's line figure is made only of carried coverage."""
+    return any(lv.get("code_tested_carried") for lv in data.get("levels") or [])
+
+
 # Implements: REQ-d00254-I
 def _render_text(data: dict, config: dict | None = None) -> str:
     carried = data.get("carried_result_targets", 0) or 0
@@ -763,6 +777,10 @@ def _render_text(data: dict, config: dict | None = None) -> str:
     if carried > 0:
         lines.append("")
         lines.append(f"* {carried}/{total_targets} test results from previous runs")
+    # Implements: REQ-d00323-J
+    if _carried_lines(data):
+        lines.append("")
+        lines.append(f"* {_CARRIED_LINES_NOTE}")
 
     lines.append("")
     return "\n".join(lines) + "\n"
@@ -867,6 +885,10 @@ def _render_markdown(data: dict, config: dict | None = None) -> str:
     if carried > 0:
         lines.append("")
         lines.append(f"* {carried}/{total_targets} test results from previous runs")
+    # Implements: REQ-d00323-J
+    if _carried_lines(data):
+        lines.append("")
+        lines.append(f"* {_CARRIED_LINES_NOTE}")
 
     meta = data.get("meta")
     if meta:

@@ -196,7 +196,8 @@ coverage, and the fingerprint decides whether those results are fresh.
   `trace`, MCP and the viewer read the RESULT nodes. A result whose target's
   results are stale is carried: `trace` marks its figure `(baseline)`,
   `summary` counts its target as carried, and a failure among them still
-  fails and says why its results are stale.
+  fails and says why its results are stale. The unit target's line coverage
+  is carried by the same rule, and `code.code_tested` says why it is stale.
 - `--targets last-run` reads `.results/.elspais-last-run.json`.
 
 Two files belong to the hooks alone. `.results/.test-cache-unit` holds the

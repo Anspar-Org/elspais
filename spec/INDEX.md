@@ -229,7 +229,7 @@
 | REQ-d00320 | Viewer Edit Controls State What They Do                       | dev-traceview-review.md | e8010396 |
 | REQ-d00321 | Static View Embedded Content                                  | dev-traceview-review.md | 736babc4 |
 | REQ-d00322 | Evidence Snapshot                                             | dev-graph-core.md       | 5885653b |
-| REQ-d00323 | Carried Result Provenance                                     | dev-graph-core.md       | 28858010 |
+| REQ-d00323 | Carried Result Provenance                                     | dev-graph-core.md       | c64d2571 |
 | REQ-d00324 | Refusal of a Retired Configuration Value                      | dev-graph-config.md     | 530fb06a |
 | REQ-d00325 | Changelog Reason for a Saved Change                           | dev-graph-file-nodes.md | 4ebffc32 |
 | REQ-d00326 | Path-Shaped Skip Patterns                                     | dev-graph-config.md     | 797c3fe4 |
