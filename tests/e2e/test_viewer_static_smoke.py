@@ -1,7 +1,7 @@
 # Verifies: REQ-p00006-A
 """Smoke test: `elspais viewer --static` renders without errors.
 
-Guards CUR-1692. The static viewer's HTMLGenerator crashed with
+Guards against the static viewer's HTMLGenerator crashing with
 `TreeRow.__init__() missing 1 required positional argument: 'is_unsaved'`
 whenever a TEST node had RESULT children (the RESULT-under-TEST render path),
 exiting non-zero and writing an empty file while still printing "Generated:".

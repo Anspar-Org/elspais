@@ -11,6 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from elspais.config.schema import PATH_ORIGIN_CWD, PATH_ORIGIN_ROOT, PATH_ORIGINS
 from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
 from elspais.graph.parsers.results.coverage_sqlite import CoverageSqliteParser
 from elspais.graph.parsers.results.junit_xml import JUnitXMLParser
@@ -52,6 +53,13 @@ class ReporterSpec:
     # the wrong thing is worse than no label, so a project says which of the
     # two its producer writes.
     environment: str = ""
+    # Implements: REQ-d00327-A
+    # Where a relative source path this format records starts: the repository
+    # root or the target's working directory. Declared here, where the
+    # format is known, and overridable per target -- the same arrangement
+    # that REQ-d00254-O makes for the origin a producer counts lines from. Empty
+    # takes the origin of the format's kind, below.
+    path_origin: str = ""
     # Implements: REQ-d00286-E
     # What this format is, in the one sentence the published table of reporters
     # prints. It is declared beside the registration so the table and the
@@ -59,6 +67,25 @@ class ReporterSpec:
     # sentence here is refused when the table is rendered, rather than reaching
     # a reader as an empty cell.
     description: str = ""
+
+    # Implements: REQ-d00327-A+D+E
+    # A results format reads its paths from the repository root and a
+    # coverage format from the target's working directory, unless it declares
+    # otherwise. Those are the origins each kind was always read from, so a
+    # project that declares nothing binds as it did.
+    # An origin outside the declarable ones is refused rather than read as the
+    # repository root, so a misspelt declaration cannot move every path its
+    # reporter records without a word.
+    def __post_init__(self) -> None:
+        if self.path_origin and self.path_origin not in PATH_ORIGINS:
+            origins = ", ".join(f'"{o}"' for o in PATH_ORIGINS)
+            raise ValueError(
+                f"reporter {self.name!r}: path_origin must be empty or one of {origins},"
+                f" not {self.path_origin!r}"
+            )
+        if not self.path_origin:
+            default = PATH_ORIGIN_CWD if self.kind == "coverage" else PATH_ORIGIN_ROOT
+            object.__setattr__(self, "path_origin", default)
 
 
 REPORTER_REGISTRY: dict[str, ReporterSpec] = {}

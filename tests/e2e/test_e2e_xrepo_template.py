@@ -1,5 +1,5 @@
 # Verifies: REQ-p00014
-"""E2E tests for cross-repo template instantiation (CUR-1353).
+"""E2E tests for cross-repo template instantiation.
 
 Drives the real ``elspais`` CLI against the ``e2e-xrepo-template`` fixture
 (library + app + tenant) to verify:

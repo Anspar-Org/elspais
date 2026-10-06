@@ -87,7 +87,7 @@ def test_tree_data_survives_requirement_cycle(tmp_path):
     via the graph edge API.
 
     # Verifies: REQ-d00211
-    # TODO(CUR-1521): replace with a dedicated cycle-handling REQ
+    # TODO: replace with a dedicated cycle-handling REQ
     """
     from elspais.graph.GraphNode import NodeKind
     from elspais.graph.relations import EdgeKind

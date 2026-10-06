@@ -563,12 +563,11 @@ class TestClaimForResolverProbe:
     def test_claim_for_caches_resolvers(self, tmp_path: Path) -> None:
         """``_claim_for`` must not rebuild ``IdResolver`` on every call.
 
-        Phase 8 of CUR-1353: cross-repo broken-ref probes are O(repos *
-        broken_refs) in the pre-cache implementation because each call
-        to ``_claim_for`` invokes ``build_resolver(entry.config)`` once
-        per associated repo. Caching resolvers at federation
-        construction (lazy, keyed by repo name) turns this into a
-        one-time O(repos) cost.
+        Without a cache, cross-repo broken-ref probes are O(repos *
+        broken_refs), because each call to ``_claim_for`` invokes
+        ``build_resolver(entry.config)`` once per associated repo. Caching
+        resolvers at federation construction (lazy, keyed by repo name)
+        makes this a one-time O(repos) cost.
 
         This test pins the cache invariant: any cold-path probe should
         populate the cache for the matched repo, and subsequent probes

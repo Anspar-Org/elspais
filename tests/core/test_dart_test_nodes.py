@@ -2,7 +2,7 @@
 """Integration: .dart test files parsed through the full parse->build pipeline
 produce one TEST node per test() call, anchored at the test() line.
 
-Exercises the two-part fix for CUR-1533 Task 2:
+Exercises both parts of the .dart test-node pipeline:
   a) dispatch_test routes .dart files to dart_prescan (not text_prescan).
   b) The builder's line-based-id else branch keys on func_line (the test()
      call-site line) rather than content.start_line (the comment line).

@@ -1,7 +1,7 @@
 # Verifies: REQ-p00014-K
 """Instance assertion coverage inherits from the template original.
 
-These tests pin the CUR-1353 Phase 5 contract:
+These tests pin the coverage-inheritance contract:
 
 - ``direct_coverage_for(node)`` counts coverage evidence on a node,
   dispatched by ``NodeKind``: ASSERTIONs walk the parent REQ's outgoing

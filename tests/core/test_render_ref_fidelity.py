@@ -1,5 +1,5 @@
 # Verifies: REQ-d00132
-"""Render-fidelity tests for edge-derived reference lists (CUR-1829 Task 9, Defect 3).
+"""Render-fidelity tests for edge-derived reference lists.
 
 Validates REQ-d00132-F: renders derive Implements/Refines from live graph
 edges -- deleting a node's last edge must remove the reference from the
@@ -428,7 +428,6 @@ class TestMutationBrokenRefLeftovers:
 
 # ---------------------------------------------------------------------------
 # Rename / delete coherence for broken references and rendered leftovers
-# (CUR-1829 Task 9 follow-up defects A/B/C in graph/builder.py)
 # ---------------------------------------------------------------------------
 
 # A second on-disk fixture: a **Template** target gives us a broken reference

@@ -224,9 +224,8 @@ def pytest_configure(config):
     # tier's module opens with `pytest.importorskip("playwright")`, so without
     # the `browser` extra installed the module never imports, pytest records a
     # single skip, and `pytest -m browser` exits 0 having run nothing — a run
-    # that looks exactly like a passing one. CUR-1829 declared the extra to
-    # answer that, but declaring it installs nothing, so the tier went on
-    # reporting green. Asking for the marker explicitly is an unambiguous
+    # that looks exactly like a passing one. Declaring the extra installs
+    # nothing, so it does not prevent that. Asking for the marker explicitly is an unambiguous
     # statement of intent, and an intent the run cannot honour is an error
     # rather than a silence.
     if _selects_marker(config.getoption("markexpr", default="") or "", "browser"):

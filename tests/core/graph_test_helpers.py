@@ -141,7 +141,7 @@ def make_requirement(
         start_line: Start line in source
         end_line: End line in source
         hash_value: Optional content hash
-        template: Whether this requirement is marked as a template (CUR-1353)
+        template: Whether this requirement is marked as a template
 
     Returns:
         ParsedContent ready for GraphBuilder.add_parsed_content()

@@ -64,20 +64,19 @@ from elspais.utilities.patterns import FederatedIdReader, IdResolver, build_reso
 _log = logging.getLogger(__name__)
 
 
-# Implements: REQ-d00254-Y
-def _resolve_coverage_file_node(graph, source_file, working_dir, repo_root):
-    """The FILE node a coverage artifact's source path names, or None.
+# Implements: REQ-d00254-Y, REQ-d00327-C
+def _placed_in_repo(path: str, origin_dir: Path, repo_root: Path) -> str | None:
+    """*path* as a repo-relative POSIX path, read from *origin_dir*, or None.
 
-    A relative path is read against *working_dir*, the directory the target
-    ran in, because the measuring tool wrote it from there. An absolute path
-    is read as it stands. A path that names no scanned file of this
-    repository resolves to nothing.
+    A relative path is read from *origin_dir*, the origin that applies to the
+    data that recorded it. An absolute path is read as it stands. A path that
+    lands outside the repository has no repo-relative form.
 
     The path is placed in the repository as written first, and through
     symbolic links second: a tool may record either spelling.
     """
     root = Path(repo_root).absolute()
-    named = Path(os.path.normpath(Path(working_dir).absolute() / source_file))
+    named = Path(os.path.normpath(Path(origin_dir).absolute() / path))
     try:
         rel = named.relative_to(Path(os.path.normpath(root)))
     except ValueError:
@@ -85,9 +84,91 @@ def _resolve_coverage_file_node(graph, source_file, working_dir, repo_root):
             rel = named.resolve().relative_to(root.resolve())
         except ValueError:
             return None
+    return rel.as_posix()
+
+
+# Implements: REQ-d00254-Y, REQ-d00327-B+E
+def _resolve_coverage_file_node(graph, source_file, origin_dir, repo_root):
+    """The FILE node a coverage artifact's source path names, or None.
+
+    A relative path is read from *origin_dir*, the directory the origin that
+    applies to the artifact names. A path that names no scanned file of this
+    repository resolves to nothing.
+    """
+    rel = _placed_in_repo(source_file, origin_dir, repo_root)
+    if rel is None:
+        return None
     # Coverage is ingested into the repository whose graph this is, so the
     # id is written in that repository's namespace.
-    return graph.find_by_id(make_file_id(graph.namespace, rel.as_posix()))
+    return graph.find_by_id(make_file_id(graph.namespace, rel))
+
+
+# Implements: REQ-d00327-A+B+F
+def _origin_dir(
+    spec, declared: str, working_dir: Path, repo_root: Path, *, foreign: bool
+) -> tuple[str, Path]:
+    """The origin that applies to a target's data, and the directory it names.
+
+    The target's declaration replaces the reporter's, except for data in a
+    format other than the target's own (an *Evidence Snapshot*), which is
+    read by that format's declaration alone.
+    """
+    from elspais.config.schema import PATH_ORIGIN_CWD
+
+    origin = spec.path_origin if foreign else (declared or spec.path_origin)
+    return origin, (working_dir if origin == PATH_ORIGIN_CWD else repo_root)
+
+
+# Implements: REQ-d00327-H
+def _context_origin_dir(target, working_dir: Path, repo_root: Path) -> Path:
+    """The directory the test names in a target's coverage contexts are read from.
+
+    That is the origin of the target's results: the target's own declaration,
+    else its results reporter's. A target whose reporter is not registered has
+    no declaration to read, so its names are read from the repository root.
+    """
+    from elspais.graph.parsers.results.registry import REPORTER_REGISTRY
+
+    spec = REPORTER_REGISTRY.get(target.reporter)
+    if spec is None:
+        from elspais.config.schema import PATH_ORIGIN_CWD
+
+        return working_dir if target.results_origin == PATH_ORIGIN_CWD else repo_root
+    return _origin_dir(spec, target.results_origin, working_dir, repo_root, foreign=False)[1]
+
+
+# Implements: REQ-d00327-H
+def _placed_contexts(
+    contexts: dict[int, list[str]], origin_dir: Path, repo_root: Path
+) -> dict[int, list[str]]:
+    """*contexts* with the path in each test name made repo-relative from *origin_dir*.
+
+    A context is ``<nodeid>|<phase>``; the path is the nodeid's part before
+    its first ``::``. A context naming no such path, an absolute path, or a
+    path outside the repository is kept as recorded. Contexts read from the
+    repository root are returned unchanged.
+    """
+    if Path(origin_dir).absolute() == Path(repo_root).absolute():
+        return contexts
+    placed: dict[str, str] = {}
+
+    def _place(ctx: str) -> str:
+        if ctx in placed:
+            return placed[ctx]
+        result = ctx
+        nodeid, sep, phase = ctx.rpartition("|")
+        path, colons, rest = nodeid.partition("::")
+        if sep and colons and path and not os.path.isabs(path):
+            rel = _placed_in_repo(path, origin_dir, repo_root)
+            if rel is not None:
+                result = f"{rel}::{rest}|{phase}"
+        placed[ctx] = result
+        return result
+
+    return {
+        line: [_place(c) if isinstance(c, str) else c for c in ctxs]
+        for line, ctxs in contexts.items()
+    }
 
 
 # Implements: REQ-d00254-F, REQ-d00254-I
@@ -292,6 +373,7 @@ def _ingest_target_results(
     """
     from elspais.graph.parsers import ParsedContent
     from elspais.graph.parsers.results.registry import get_reporter
+    from elspais.utilities.test_identity import test_id_path, with_test_id_path
 
     reporter_name = reporter or target.reporter
     try:
@@ -319,6 +401,13 @@ def _ingest_target_results(
         line_base = spec.line_base
     form = spec.classname if reporter else (target.classname or spec.classname)
     env_source = spec.environment if reporter else (target.environment or spec.environment)
+    path_origin, origin_dir = _origin_dir(
+        spec,
+        target.results_origin,
+        (repo_root / target.cwd) if target.cwd else repo_root,
+        repo_root,
+        foreign=bool(reporter),
+    )
 
     if spec.kind != "results":
         # Suppressed deliberately: this is routing, not a condition. A
@@ -364,6 +453,11 @@ def _ingest_target_results(
         rec["test_id"] = None
         if len(matches) == 1:
             rec["source_path"] = matches[0]
+            # Implements: REQ-d00327-C
+            # The form reads the name by its trailing components among the
+            # tests scanned for this target, so the path it yields is already
+            # repo-relative and no origin is applied to it again.
+            rec["source_named"] = True
         else:
             rec["name_match"] = "ambiguous" if matches else "unmatched"
             rec["name_candidates"] = matches
@@ -406,14 +500,21 @@ def _ingest_target_results(
 
     repo_root_resolved = Path(repo_root).resolve()
 
-    # Implements: REQ-d00311-P
-    def _repo_relative_or_kept(raw: str | None) -> str | None:
+    # Implements: REQ-d00311-P, REQ-d00327-C
+    def _repo_relative_or_kept(raw: str | None, *, recorded: bool = True) -> str | None:
         # An absolute path inside the repository, or inside the root the run
-        # executed in, becomes repo-relative. A relative path, or one under
-        # neither root, is kept as it is. A path that no longer exists
-        # resolves to itself, so the recorded root still matches it.
-        if not raw or not os.path.isabs(raw):
+        # executed in, becomes repo-relative. A relative path the producer
+        # *recorded* is read from the origin that applies to this target's
+        # results; any other relative path is kept. A path under neither
+        # root, or read from its origin to a place outside the repository, is
+        # kept as it is. A path that no longer exists resolves to itself, so
+        # the recorded root still matches it.
+        if not raw:
             return raw
+        if not os.path.isabs(raw):
+            if not recorded:
+                return raw
+            return _placed_in_repo(raw, origin_dir, repo_root) or raw
         resolved = Path(raw).resolve(strict=False)
         for root in (repo_root_resolved, recorded_root):
             if root is None:
@@ -427,7 +528,42 @@ def _ingest_target_results(
     count = 0
     for rec in result_records:
         raw_src = rec.get("source_path", "")
-        source_file = _repo_relative_or_kept(raw_src) or ""
+        if rec.get("source_named"):
+            # Already the repo-relative path of the scanned test the
+            # result's name picked out.
+            source_file = raw_src
+        else:
+            source_file = _repo_relative_or_kept(raw_src) or ""
+
+        # Implements: REQ-d00327-C
+        # A test ID built from a recorded name carries the path that name
+        # records, and is matched as it stands, so that path is read from
+        # the same origin before the ID is matched.
+        test_id = rec.get("test_id")
+        id_path = test_id_path(test_id) if test_id else None
+        if id_path and not os.path.isabs(id_path):
+            placed = _placed_in_repo(id_path, origin_dir, repo_root)
+            if placed is not None and placed != id_path:
+                test_id = with_test_id_path(test_id, placed)
+                id_path = placed
+
+        # Implements: REQ-d00327-G
+        # The relative path this result binds through, where it names no
+        # test file scanned for this target, with the origin it was read
+        # from: a path read from the wrong origin binds to nothing, and the
+        # report of that result names both so an author can see which.
+        if test_id:
+            recorded_rel, placed_rel = test_id_path(rec.get("test_id")), id_path
+        else:
+            recorded_rel, placed_rel = raw_src, source_file
+        unscanned_path = None
+        if (
+            recorded_rel
+            and not rec.get("source_named")
+            and not os.path.isabs(recorded_rel)
+            and placed_rel not in scanned_tests
+        ):
+            unscanned_path = recorded_rel
 
         # root_path is set only by flutter-machine for testWidgets() calls
         # whose test.line is a framework wrapper rather than the user call site.
@@ -441,7 +577,9 @@ def _ingest_target_results(
         # Results-file provenance (REQ-d00254): repo-relative path + line of
         # the artifact that recorded this result, distinct from source_file
         # (the TEST's source, which stays the RESULT->TEST match key).
-        result_file = _repo_relative_or_kept(rec.get("result_file") or None)
+        # The artifact's own path is the tool's, never the producer's, so no
+        # origin applies to it.
+        result_file = _repo_relative_or_kept(rec.get("result_file") or None, recorded=False)
         result_line = rec.get("result_line")
 
         # Implements: REQ-d00294-A+B
@@ -500,7 +638,7 @@ def _ingest_target_results(
             "message": rec.get("message"),
             # Implements: REQ-d00322-M
             "output": rec.get("output"),
-            "test_id": rec.get("test_id"),
+            "test_id": test_id,
             "source_path": raw_src,
             "source_file": source_file,
             "match": target.match,
@@ -518,6 +656,9 @@ def _ingest_target_results(
             # Implements: REQ-d00284-C
             "name_match": rec.get("name_match"),
             "name_candidates": rec.get("name_candidates"),
+            # Implements: REQ-d00327-G
+            "path_origin": path_origin,
+            "unscanned_path": unscanned_path,
         }
         content = ParsedContent(
             content_type="test_result",
@@ -971,7 +1112,7 @@ def _derive_credit_config(targets):
     _unmatched = "verified" if any(_t.match == "aggregate" for _t in targets) else "off"
     _min_frac = max((_t.min_coverage_fraction for _t in targets), default=0.0)
     return CoverageCreditConfig(
-        app_dirs=_tgt_dirs,
+        cwds=_tgt_dirs,
         unmatched_credit=_unmatched,
         coverage_dirs=_tgt_dirs,
         assertion_credit=_assertion_credit,
@@ -1885,6 +2026,7 @@ def _build_repository(
         from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
         from elspais.graph.parsers.results.coverage_sqlite import CoverageSqliteParser
         from elspais.graph.parsers.results.lcov import LcovParser
+        from elspais.graph.parsers.results.registry import get_reporter as _cov_spec
         from elspais.utilities.fingerprint import (
             judge,
             run_in_progress,
@@ -1895,6 +2037,14 @@ def _build_repository(
         lcov_parser = LcovParser()
         cov_json_parser = CoverageJsonParser()
         cov_sqlite_parser = CoverageSqliteParser()
+        # Each reader under the name of the reporter that declares it, in the
+        # order a file's format is tried, so the origin its reporter declares
+        # can be read once the format is known.
+        cov_parsers = (
+            ("lcov", lcov_parser),
+            ("coverage-json", cov_json_parser),
+            ("coverage-sqlite", cov_sqlite_parser),
+        )
         _resolved_root = repo_root.resolve()
         for target in typed_config.scanning.test.targets:
             if not target.coverage:
@@ -1956,13 +2106,11 @@ def _build_repository(
                     )
                 )
                 continue
-            if lcov_parser.can_parse(cov_path):
-                cov_parser = lcov_parser
-            elif cov_json_parser.can_parse(cov_path):
-                cov_parser = cov_json_parser
-            elif cov_sqlite_parser.can_parse(cov_path):
-                cov_parser = cov_sqlite_parser
-            else:
+            cov_reporter, cov_parser = next(
+                ((name, p) for name, p in cov_parsers if p.can_parse(cov_path)),
+                (None, None),
+            )
+            if cov_parser is None:
                 # Implements: REQ-d00285-G
                 _log.debug("target %r: unrecognised coverage format: %s", target.name, cov_path)
                 graph.record_ingestion_fault(
@@ -1975,6 +2123,22 @@ def _build_repository(
                     target=target.name,
                 )
                 continue
+            # Implements: REQ-d00327-B+E, REQ-d00254-Y
+            # A relative path in the coverage data is read from the origin the
+            # target declares for its coverage, or else from the one the
+            # reporter of the format declares.
+            cov_origin, cov_origin_dir = _origin_dir(
+                _cov_spec(cov_reporter),
+                target.coverage_origin,
+                cwd_path,
+                repo_root,
+                foreign=False,
+            )
+            # Implements: REQ-d00327-H
+            # A per-test context names its test as the test runner wrote it,
+            # so the path in that name is read from the origin of the target's
+            # results, not from the origin of its coverage data.
+            ctx_origin_dir = _context_origin_dir(target, cwd_path, repo_root)
             # Binary formats (e.g. the .coverage SQLite DB) can't be
             # text-decoded -- their parser ignores `content` and reopens
             # `source_path` directly (see CoverageSqliteParser.binary).
@@ -1988,7 +2152,7 @@ def _build_repository(
                 # for measured files that actually resolve to a FILE node --
                 # unresolvable ones (test files, out-of-tree sources) are
                 # discarded by the annotation loop below anyway.
-                def _wanted(source_file: str, _cwd: Path = cwd_path) -> bool:
+                def _wanted(source_file: str, _cwd: Path = cov_origin_dir) -> bool:
                     return (
                         _resolve_coverage_file_node(graph, source_file, _cwd, repo_root) is not None
                     )
@@ -2011,10 +2175,14 @@ def _build_repository(
             else:
                 _cov_verdict = judge(repo_root, typed_config, target.name)
                 cov_stale = stale_reason(_cov_verdict) if _cov_verdict.state == "stale" else ""
+            attached = 0
             for source_file, data in parsed_cov.items():
-                cov_node = _resolve_coverage_file_node(graph, source_file, cwd_path, repo_root)
+                cov_node = _resolve_coverage_file_node(
+                    graph, source_file, cov_origin_dir, repo_root
+                )
                 if cov_node is None:
                     continue
+                attached += 1
                 cov_node.set_field("line_coverage", data["line_coverage"])
                 cov_node.set_field("line_coverage_stale_reason", cov_stale)
                 cov_node.set_field("executable_lines", data["executable_lines"])
@@ -2026,7 +2194,24 @@ def _build_repository(
                 if not data.get("source_analysed", True):
                     cov_node.set_field("source_analysed", False)
                 if data.get("contexts"):
-                    cov_node.set_field("line_contexts", data["contexts"])
+                    cov_node.set_field(
+                        "line_contexts",
+                        _placed_contexts(data["contexts"], ctx_origin_dir, repo_root),
+                    )
+            # Implements: REQ-d00327-I
+            # Coverage read from the wrong origin attaches to no file and
+            # credits no lines, which reads as a run that exercised nothing.
+            if parsed_cov and not attached:
+                graph.record_ingestion_fault(
+                    path=_repo_relative(cov_path, repo_root),
+                    stage="coverage",
+                    cause=(
+                        f"no file this coverage measures is a scanned file when read "
+                        f"from the {cov_origin} origin (one recorded path: "
+                        f"{next(iter(parsed_cov))!r}), so no lines were credited"
+                    ),
+                    target=target.name,
+                )
 
     # Link TEST nodes to CODE nodes via import analysis.
     # This creates TEST→CODE edges that enable transitive coverage:

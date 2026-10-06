@@ -1843,16 +1843,16 @@ class TestRoundTripFidelity:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Test: get_project_summary() change metrics - CUR-879
+# Test: get_project_summary() change metrics
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestGetProjectSummaryChanges:
-    """Tests for get_project_summary() change metrics (CUR-879)."""
+    """Tests for get_project_summary() change metrics."""
 
     # Verifies: REQ-o00061-B
-    def test_REQ_CUR879_D_project_summary_includes_change_metrics(self, sample_graph):
-        """REQ-CUR879-D: get_project_summary returns non-zero change metrics."""
+    def test_project_summary_includes_change_metrics(self, sample_graph):
+        """get_project_summary returns non-zero change metrics."""
         pytest.importorskip("mcp")
         from unittest.mock import patch
 
@@ -1890,16 +1890,16 @@ class TestGetProjectSummaryChanges:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Test: get_changed_requirements() - CUR-879
+# Test: get_changed_requirements()
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 class TestGetChangedRequirements:
-    """Tests for get_changed_requirements() tool (CUR-879)."""
+    """Tests for get_changed_requirements() tool."""
 
     # Verifies: REQ-o00061-B
-    def test_REQ_CUR879_E_get_changed_requirements_returns_changed(self, sample_graph):
-        """REQ-CUR879-E: get_changed_requirements returns changed requirements."""
+    def test_get_changed_requirements_returns_changed(self, sample_graph):
+        """get_changed_requirements returns changed requirements."""
         pytest.importorskip("mcp")
         from unittest.mock import patch
 
@@ -1948,8 +1948,8 @@ class TestGetChangedRequirements:
         assert result["summary"]["uncommitted"] >= 1
 
     # Verifies: REQ-o00061-B
-    def test_REQ_CUR879_F_get_changed_requirements_empty_when_clean(self, sample_graph):
-        """REQ-CUR879-F: get_changed_requirements returns empty when no changes."""
+    def test_get_changed_requirements_empty_when_clean(self, sample_graph):
+        """get_changed_requirements returns empty when no changes."""
         pytest.importorskip("mcp")
         from unittest.mock import patch
 

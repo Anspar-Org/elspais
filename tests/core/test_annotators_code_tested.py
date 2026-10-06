@@ -253,7 +253,7 @@ def _build_req_code_test_with_contexts(
     Mirrors ``_build_req_with_code`` above -- the citation is the comment line
     above the code it speaks for -- but adds a verifying TEST node (via
     ``make_test_ref``) and ``line_contexts`` so per-test direct attribution
-    (CUR-1568) can be exercised.
+    can be exercised.
     """
     req = make_requirement(
         "REQ-p00001",
@@ -295,7 +295,7 @@ def _build_req_code_test_with_contexts(
 
 
 class TestCodeTestedDirectFromContexts:
-    """Direct attribution via coverage.py per-test dynamic contexts (CUR-1568)."""
+    """Direct attribution via coverage.py per-test dynamic contexts."""
 
     def test_contexts_attribute_direct_lines(self):
         """Lines whose recorded context names a verifying test count as direct."""

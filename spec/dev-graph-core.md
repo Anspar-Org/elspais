@@ -593,7 +593,7 @@ E. A reporter registry SHALL map each `reporter` format name to a parser and an 
 
 F. For each configured target, the system SHALL obtain the reporter's output (captured from the command's stdout for stdout-channel reporters, or read from the `results` glob for file-channel reporters), build RESULT nodes carrying the real test-file path (`source_file`, repo-relative) and the target's `match` mode, and ingest the target's `coverage` file. Coverage crediting SHALL be derived from the targets' `credit_coverage`/`min_coverage_fraction`. File-channel results SHALL additionally record where each result was recorded — the results artifact's repo-relative path and, when derivable from the artifact (e.g. one JUnit `<testcase>` per line), the per-result line — as provenance distinct from the test's source path, and result links in reporting surfaces SHALL point at that artifact location.
 
-G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step reference (in the configured reference form) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the file and line at which the result's test is declared to the specific test node at that `(path, line)`, or, where the result records no usable line, resolving its recorded name as REQ-d00284 states. A result that binds at neither scope SHALL credit nothing. `aggregate` SHALL derive the per-app green/red signal, which informs the line-coverage dimension only.
+G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step reference (in the configured reference form) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the file and line at which the result's test is declared to the specific test node at that `(path, line)`, or, where the result records no usable line, resolving its recorded name as REQ-d00284 states. A result that binds at neither scope SHALL credit nothing. `aggregate` SHALL derive a green/red signal per target working directory, which informs the line-coverage dimension only.
 
 H. `elspais checks --run-tests` SHALL accept a `--targets` selector naming a subset of `[[scanning.test.targets]]` to execute; an unknown target name SHALL be an error, and an absent selector SHALL execute the targets a run executes when no selection is made (REQ-d00283). The same `--targets` flag on `summary`/`trace` SHALL mark provenance without executing anything.
 
@@ -629,7 +629,7 @@ W. An estate-wide figure of executed implementation lines that belong to a requi
 
 X. Line figures that a surface states beside each other SHALL each be taken over the same set of files.
 
-Y. When a coverage artifact of a test target records a relative source path, the system SHALL resolve that path against the working directory of that test target.
+Y. When a coverage artifact of a test target records a relative source path, the system SHALL resolve that path from the origin that applies to that coverage artifact.
 
 Z. When a result records that its test is declared in a file other than the file that executed it, the system SHALL bind that result to the test at the file and line where the test is declared.
 
@@ -657,12 +657,16 @@ R, S and T give a citation in a test file one place to bind. A test's extent is 
 
 W and X keep the difference between two line figures a count of lines. A line that two requirements implement is one line that ran, so a figure counting it once per requirement is in a different unit from a figure counting lines in files, and subtracting one from the other gives a number that looks like a count and is not one. The same holds for figures taken over different files: a file left out of one figure and kept in another moves the difference by exactly the lines nobody could measure.
 
-Y anchors a relative path to the place the measuring tool ran, because that is the place the tool wrote it from: Flutter writes a path relative to its package, and coverage.py writes one relative to its working directory when it records relative files. Where an artifact is stored says nothing about where it was measured. A target that declares no working directory runs in the repository root, and a member of a federation resolves the working directory of its own targets against its own root. A path that names no scanned file under that directory credits nothing.
+Y anchors a relative path to the origin its producer wrote it from, which REQ-d00327 has each reporter declare and lets a target replace. For coverage that origin is normally the place the measuring tool ran: Flutter writes a path relative to its package, and coverage.py writes one relative to its working directory when it records relative files. Where an artifact is stored says nothing about where it was measured. A target that declares no working directory runs in the repository root, and a member of a federation resolves the working directory of its own targets against its own root. A path that names no scanned file under its origin credits nothing.
 
 Z places a result where its citations are. A project that runs one scenario against several backends declares the test once, in a shared file, and executes it through a small runner file for each backend. The test's `Verifies:` citations live at the declaration, so a result bound to the runner file reaches no test, and a result bound to the runner file at the declared line reaches the wrong one. Where the producer records the declaring location, that location is the test's identity.
 
 ### Changelog
 
+- 2026-10-05 | 06c0380b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-05 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-141: the aggregate signal is named per target working directory (G)
+- 2026-10-05 | 3c5b3090 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-05 | - | - | Michael Lewis (<michael@anspar.org>) | a relative source path in a coverage artifact resolves from the origin that applies to that artifact, which REQ-d00327 defines (Y)
 - 2026-10-03 | 6efe844f | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-03 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a result that records no usable line binds at test scope by its recorded name (G)
 - 2026-10-02 | ec793007 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -707,7 +711,7 @@ Z places a result where its citations are. A project that runs one scenario agai
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 6efe844f
+*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 06c0380b
 
 ---
 
@@ -1738,3 +1742,50 @@ A result whose fingerprint judgement is stale was produced by a tree other than 
 A test target's line coverage is measured by the same run as its results, so it is stale exactly when they are. I, J and K apply the rule for results to the figures line coverage makes -- the executed lines, and the *Assertion* credit taken from them: a figure built only from line coverage the current tree did not produce is marked, and a report of it says why the coverage is stale.
 
 *End* *Carried Result Provenance* | **Hash**: c64d2571
+
+## REQ-d00327: Origin of a Recorded Source Path
+
+**Level**: dev | **Status**: Draft | **Implements**: -
+**Refines**: REQ-d00254-F+Y, REQ-d00284-C
+
+A relative source path in a result or in coverage data is read from an origin that is declared, so a result binds to the test it names whichever convention its producer follows.
+
+### Assertions
+
+A. Each reporter SHALL declare the origin from which the relative source paths it records are read, as either the repository root or the working directory of the test target.
+
+B. Where a test target declares an origin for its results or for its coverage data, the system SHALL read that data from the origin the test target declares in place of the origin of the reporter.
+
+C. Before the system matches a result against a test, the system SHALL read each relative source path that the result records from the origin that applies to that result, whether the result records that path as a location or within the name of its test.
+
+D. Each results reporter that the tool provides SHALL declare the repository root as its origin.
+
+E. Each coverage reporter that the tool provides SHALL declare the working directory of the test target as its origin.
+
+F. The system SHALL read a relative source path that an *Evidence Snapshot* holds from the repository root, whatever origin the test target declares.
+
+G. When a result binds to no test and a relative source path that the result records names no file scanned for its test target, the report of that result SHALL name that path as recorded and the origin from which the system read it.
+
+H. The system SHALL read the relative source path in the name of a test that coverage data records for a line from the origin that applies to the results of its test target.
+
+I. When the coverage data of a test target measures at least one file and no measured file, read from the origin that applies to that data, is a file scanned for the project, the system SHALL report that coverage data with the origin from which the system read it and one source path as recorded.
+
+### Rationale
+
+Producers disagree about where a relative path starts. One runner writes a path relative to the directory it ran in, and another, run from the same subdirectory, writes one relative to the repository root on purpose. Neither convention can be assumed for every producer, and a path read from the wrong origin names no file, so the result binds to no test and its evidence is lost. This is the same arrangement REQ-d00254-O makes for the line numbers a producer counts: the reporter states what its format usually carries, and a target states otherwise for a producer that departs from it.
+
+D and E fix the built-in declarations to the origins the tool has always read from, so a project that declares nothing binds as before. B speaks of results and coverage data apart because a target's results and its coverage are usually written by different tools, each with its own convention. In a federation, the repository root is the root of the member that owns the test target.
+
+C reaches every path a result records: the file that declares its test, the file that executed it, and a path that the name of its test carries, as the name form declared under REQ-d00284 reads it. F holds because an *Evidence Snapshot* stores paths already made relative to the repository root, so a target's own declaration would read them a second time.
+
+G extends the report REQ-d00284-C makes of a result matched to no test. A path read from the wrong origin is the commonest cause of such a result, and naming the path and its origin tells an author which declaration to change.
+
+H holds because coverage data names the test that executed a line as the test runner wrote that name, not as the coverage tool writes its own paths. The name is matched against the same tests a result is, so it is read from the same origin, and a test whose results bind keeps the lines its coverage attributes to it.
+
+I is the counterpart of G for coverage data. Coverage read from the wrong origin attaches to no file, and the target is credited no lines, which reads exactly as a run that exercised nothing. Naming the origin and a path as recorded tells an author which declaration to change.
+
+### Changelog
+
+- 2026-10-05 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: a relative source path in results and coverage data is read from an origin declared per reporter and replaceable per test target
+
+*End* *Origin of a Recorded Source Path* | **Hash**: 0faeeab4

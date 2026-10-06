@@ -5589,13 +5589,13 @@ class GraphBuilder:
                 ``[project].name`` in config). Used to tag in-repo
                 INSTANCE clones with ``template_repo`` so the viewer's
                 provenance affordance fires uniformly for both in-repo
-                and cross-repo INSTANCE nodes (CUR-1353 Phase 11).
+                and cross-repo INSTANCE nodes.
             link_results_to_tests: When True (default), a RESULT node
                 with a ``test_id`` queues a YIELDS pending link to the
                 matching TEST node; an unresolved target becomes a broken
                 reference.  Set to False for aggregate/lcov
                 result-crediting mode (e.g. Dart/Flutter): RESULT nodes
-                are still created and feed ``_compute_app_status``, but
+                are still created and feed ``_compute_cwd_status``, but
                 no per-test YIELDS link is created so unmatched test_ids
                 never produce broken references.
         """
@@ -6643,12 +6643,18 @@ class GraphBuilder:
             # rather than silently contributing no verdict.
             "name_match": data.get("name_match"),
             "name_candidates": data.get("name_candidates"),
+            # Implements: REQ-d00327-G
+            # The origin this result's relative paths were read from, and the
+            # path it binds through where that names no test file scanned for
+            # its target, so a result binding to nothing can say why.
+            "path_origin": data.get("path_origin"),
+            "unscanned_path": data.get("unscanned_path"),
         }
         self._nodes[result_id] = node
 
         # Queue edge to parent TEST node if test_id is provided.
         # In aggregate result-crediting mode (link_results_to_tests=False)
-        # the RESULT node exists to feed _compute_app_status but no
+        # the RESULT node exists to feed _compute_cwd_status but no
         # per-test YIELDS link is created -- unmatched test_ids must not
         # become broken references (applies only when default link mode is
         # enabled).

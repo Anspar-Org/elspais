@@ -719,7 +719,7 @@ class TestCrossRepoRendering:
 
 
 # ---------------------------------------------------------------------------
-# Image path resolution (TOOL-31 / TOOL-32)
+# Image path resolution
 # ---------------------------------------------------------------------------
 
 
@@ -736,7 +736,7 @@ class TestImagePathResolution:
 
     render_pdf() writes assembled markdown to a temp file in /tmp/, so any
     image reference left relative resolves to nothing and the image is
-    silently dropped from the PDF (TOOL-31). The assembler must rewrite
+    silently dropped from the PDF. The assembler must rewrite
     relative raster/vector refs to absolute paths anchored at the source
     file's directory in the file's owning repo.
     """
@@ -758,7 +758,7 @@ class TestImagePathResolution:
 
     # Verifies: REQ-p00080-H
     def test_REQ_p00080_H_parent_relative_image_resolved(self, tmp_path):
-        """A ../docs/... ref (the TOOL-31 repro) resolves to the repo's docs tree."""
+        """A ../docs/... ref resolves to the repo's docs tree."""
         asm, root = _image_asm(tmp_path)
         (root / "spec").mkdir()
         (root / "docs" / "urs-extracted-images").mkdir(parents=True)
@@ -814,7 +814,7 @@ class TestImagePathResolution:
 
     # Verifies: REQ-p00080-H
     def test_REQ_p00080_H_associate_image_resolves_through_owning_repo(self, tmp_path):
-        """Federated composition (TOOL-32): an associate-owned file's image
+        """Federated composition: an associate-owned file's image
         must resolve against the ASSOCIATE repo root, not the root repo's."""
         fed, root_dir, assoc_dir = _make_federated_overview_graph(tmp_path)
         # Same relative path exists in BOTH repos; the associate's copy

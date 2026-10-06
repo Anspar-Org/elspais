@@ -1,6 +1,8 @@
 # Validates REQ-d00054-A
 """Tests for test_identity.py - Test identity utilities for canonical TEST node IDs."""
 
+import pytest
+
 from elspais.utilities.test_identity import (
     build_test_id,
     build_test_id_from_nodeid,
@@ -285,3 +287,43 @@ class TestBuildTestIdFromNodeid:
         """Complex parametrize suffix with multiple values is stripped."""
         result = build_test_id_from_nodeid("tests/test_foo.py::TestBar::test_func[a-b-c]")
         assert result == "test:tests/test_foo.py::TestBar::test_func"
+
+
+class TestTheSourcePathATestIdCarries:
+    """The path inside a test ID is read and replaced as a whole component.
+
+    The helpers are reached through their module: a module-level name
+    starting ``test_`` would be collected by pytest as a test.
+    """
+
+    # Verifies: REQ-d00327-C
+    @pytest.mark.parametrize(
+        "test_id,path",
+        [
+            ("test:tests/test_a.py::TestB::test_c", "tests/test_a.py"),
+            ("test:tests/test_a.py::test_c", "tests/test_a.py"),
+            ("test:tests/test_a.py", "tests/test_a.py"),
+            ("code:tests/test_a.py::test_c", None),
+            ("test:", None),
+        ],
+        ids=["class", "function", "file-only", "not-a-test-id", "empty"],
+    )
+    def test_the_path_is_read_from_the_id(self, test_id, path):
+        from elspais.utilities import test_identity
+
+        assert test_identity.test_id_path(test_id) == path
+
+    # Verifies: REQ-d00327-C
+    @pytest.mark.parametrize(
+        "test_id,expected",
+        [
+            ("test:tests/test_a.py::TestB::test_c", "test:app/tests/test_a.py::TestB::test_c"),
+            ("test:tests/test_a.py", "test:app/tests/test_a.py"),
+            ("code:tests/test_a.py::test_c", "code:tests/test_a.py::test_c"),
+        ],
+        ids=["class", "file-only", "not-a-test-id"],
+    )
+    def test_the_path_is_replaced_and_the_name_kept(self, test_id, expected):
+        from elspais.utilities import test_identity
+
+        assert test_identity.with_test_id_path(test_id, "app/tests/test_a.py") == expected

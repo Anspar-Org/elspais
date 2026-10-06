@@ -356,10 +356,17 @@ def test_the_parser_numbers_lines_by_line_feeds_alone():
     assert (second["name"], second["result_line"]) == ("m", 2)
 
 
-# Verifies: REQ-d00322-J, REQ-d00254-O, REQ-d00294-C
+# Verifies: REQ-d00322-J, REQ-d00254-O, REQ-d00294-C, REQ-d00327-F
 @pytest.mark.parametrize(
     "setting",
-    ["line_base = 0", 'environment = "suite-hostname"', 'environment = "results-path"'],
+    [
+        "line_base = 0",
+        'environment = "suite-hostname"',
+        'environment = "results-path"',
+        # Under this origin the snapshot's repo-relative paths would read as
+        # test/test/..., naming no file.
+        'cwd = "test"\nresults_origin = "working-directory"',
+    ],
 )
 def test_the_targets_own_reporter_settings_do_not_apply_to_the_snapshot(tmp_path, setting):
     """The snapshot's lines are in the tool's own numbering and carry no environment."""

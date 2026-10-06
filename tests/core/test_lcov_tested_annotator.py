@@ -3,7 +3,7 @@
 
 The dimension measures which implementation lines a run executed. It is
 credited in its own right and never folded into a *Traceability* dimension,
-and it carries no verdict of its own: an application's red is one aggregate
+and it carries no verdict of its own: a target cwd's red is one aggregate
 result, and blaming every line-credited assertion for it names assertions no
 failing test aimed at.
 """
@@ -46,7 +46,7 @@ def _build(*, covered, result_status="passed", credit_mode="verified", min_frac=
     # lines 10,11,12; `covered` selects which are hit
     fn.set_field("line_coverage", {ln: (1 if ln in covered else 0) for ln in (10, 11, 12)})
     credit = CoverageCreditConfig(
-        app_dirs=("provenance",),
+        cwds=("provenance",),
         coverage_dirs=("provenance",),
         assertion_credit=credit_mode,
         min_coverage_fraction=min_frac,
@@ -66,8 +66,8 @@ def test_lcov_tested_credited_any_execution_green():
 
 # Verifies: REQ-d00254-A, REQ-d00254-B
 @pytest.mark.parametrize("credit_mode", ["verified", "tested"])
-def test_lcov_tested_carries_no_verdict_when_app_red(credit_mode):
-    """A red application flags nothing here, whatever the credit mode.
+def test_lcov_tested_carries_no_verdict_when_cwd_red(credit_mode):
+    """A red target cwd flags nothing here, whatever the credit mode.
 
     The credit itself still lands -- the executed line is measured -- so the
     absent failure flag is the annotator declining to attribute one aggregate

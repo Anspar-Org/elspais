@@ -490,7 +490,7 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
                     break
             if template_id is not None:
                 properties["template_id"] = template_id
-        # CUR-1353 Phase 11: satisfier REQs (those declaring `Satisfies:`)
+        # Satisfier REQs (those declaring `Satisfies:`)
         # expose a combined own-plus-inherited coverage rollup so the
         # viewer can show how much of the satisfier obligation is met by
         # the satisfier's own concrete assertions vs the inherited
@@ -507,7 +507,7 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
                     "total": rollup.total,
                     "covered_fraction": rollup.covered_fraction,
                 }
-        # CUR-1419: consumer REQs declaring `Integrates:` inherit the
+        # Consumer REQs declaring `Integrates:` inherit the
         # library node's implemented/passing coverage (REQ-d00277-C: what the
         # library's declared tests returned) across INTEGRATES
         # edges. Surface the live overlay so viewers can show inherited

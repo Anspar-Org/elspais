@@ -1,8 +1,8 @@
 # Verifies: REQ-d00254-A
-"""A test with no result of its own draws no verdict from its application.
+"""A test with no result of its own draws no verdict from its target cwd.
 
 The test node below declares ``Verifies:`` and is scanned, so its assertion is
-tested; what never arrives is a result naming that test. The application it
+tested; what never arrives is a result naming that test. The target cwd it
 belongs to reports green, red, or nothing at all, and none of the three says
 anything about this test -- the assertion stays awaiting a result in every
 case.
@@ -18,7 +18,7 @@ from tests.core.graph_test_helpers import (
     make_test_result,
 )
 
-CREDIT = CoverageCreditConfig(app_dirs=("provenance",), unmatched_credit="verified")
+CREDIT = CoverageCreditConfig(cwds=("provenance",), unmatched_credit="verified")
 
 
 def _build(result_status):
@@ -31,7 +31,7 @@ def _build(result_status):
     )
     contents = [req, test]
     if result_status is not None:
-        # A RESULT belonging to the same application, but naming another test.
+        # A RESULT belonging to the same target cwd, but naming another test.
         contents.append(
             make_test_result(
                 "r1",
@@ -43,15 +43,15 @@ def _build(result_status):
     return build_graph(*contents)
 
 
-@pytest.mark.parametrize("app_status", ["passed", "failed", None])
-def test_app_verdict_never_reaches_a_test_of_its_own(app_status):
+@pytest.mark.parametrize("cwd_status", ["passed", "failed", None])
+def test_cwd_verdict_never_reaches_a_test_of_its_own(cwd_status):
     """Green, red and silent all leave the assertion awaiting a result.
 
-    ``unmatched_credit = "verified"`` is armed and the application's aggregate
+    ``unmatched_credit = "verified"`` is armed and the target cwd's aggregate
     status is computed, so the arming is not what withholds the credit: the
     verdict simply belongs to other tests.
     """
-    g = _build(app_status)
+    g = _build(cwd_status)
     annotate_coverage(g, CREDIT)
     m = g.find_by_id("REQ-p00001").get_metric("rollup_metrics")
 

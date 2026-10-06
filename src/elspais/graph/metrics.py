@@ -8,7 +8,7 @@ This module defines the data structures for centralized coverage tracking:
 - RollupMetrics: Aggregated metrics for a requirement node
 
 It also exposes lightweight inherited-coverage query helpers used by the
-template / Satisfies pattern (CUR-1353 Phase 5):
+template / Satisfies pattern:
 
 - direct_coverage_for(node): count coverage evidence on a node, dispatched
   by NodeKind. For ASSERTIONs, walks the parent REQ's outgoing
@@ -128,7 +128,7 @@ class CoverageDimension:
             empty.
         carried: True when every verified signal contributing to this
             dimension came from a "carried" (baseline, not freshly-run)
-            RESULT node (CUR-1557). Provenance only -- never affects
+            RESULT node. Provenance only -- never affects
             ``tier``, which is driven solely by ``has_failures``/coverage.
             Only meaningful on the ``verified`` dimension; other dimensions
             leave this at its default (``False``).
@@ -331,7 +331,7 @@ class RollupMetrics:
     - verified: TEST results passing for assertions
     - uat_coverage: JNY Validates coverage of assertions
     - uat_verified: JNY results passing for assertions
-    - lcov_tested: Coverage-based "tested" credit, kept SEPARATE from verified (CUR-1533)
+    - lcov_tested: Coverage-based "tested" credit, kept SEPARATE from verified
 
     Beside them ``code_tested`` is a :class:`LineCoverage` -- a measurement in
     LINES, not assertions, and so not a coverage dimension at all.
@@ -346,7 +346,7 @@ class RollupMetrics:
     verified: CoverageDimension = field(default_factory=CoverageDimension)
     uat_coverage: CoverageDimension = field(default_factory=CoverageDimension)
     uat_verified: CoverageDimension = field(default_factory=CoverageDimension)
-    # CUR-1533: coverage-based "tested & passing" credit, kept SEPARATE from
+    # Coverage-based "tested & passing" credit, kept SEPARATE from
     # `verified` (which is // Verifies:-based). Assertion-granular.
     lcov_tested: CoverageDimension = field(default_factory=CoverageDimension)
 
@@ -506,7 +506,7 @@ class RollupMetrics:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Inherited-coverage query helpers (CUR-1353 Phase 5 / REQ-p00014-K)
+# Inherited-coverage query helpers (REQ-p00014-K)
 # ──────────────────────────────────────────────────────────────────────────
 
 

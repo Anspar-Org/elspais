@@ -830,7 +830,7 @@ function buildCardHtml(nodeId, data, collapsed) {
     // Combined coverage rollup (satisfier REQs only): own concrete-assertion
     // coverage merged with inherited template-assertion coverage. Surfaced
     // by _serialize_node_generic when the REQ has outbound SATISFIES edges
-    // and the rollup total is non-zero. See CUR-1353 Phase 11.
+    // and the rollup total is non-zero.
     if (props.satisfier_rollup && props.satisfier_rollup.total > 0) {
         var sr = props.satisfier_rollup;
         var pct = Math.round((sr.covered_fraction || 0) * 100);
@@ -848,7 +848,7 @@ function buildCardHtml(nodeId, data, collapsed) {
     // implemented/passing coverage inherited from the external associate
     // (library) node this requirement integrates, across the INTEGRATES edge.
     // Surfaced by _serialize_node_generic when the REQ has integrations.
-    // See CUR-1419 / REQ-d00252-D. Fields differ from satisfier_rollup:
+    // See REQ-d00252-D. Fields differ from satisfier_rollup:
     // implemented_covered/total + verified_covered/total (no covered_fraction).
     // NOTE (REQ-d00277-C): despite the `verified_*` field names (kept for
     // wire compatibility), the value is the tested_and_passing() Passing

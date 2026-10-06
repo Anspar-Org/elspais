@@ -1,4 +1,4 @@
-"""Changelog entry rendering — MD034-safe author emails (CUR-1716)."""
+"""Changelog entry rendering — MD034-safe author emails."""
 
 # Verifies: REQ-d00131-K
 

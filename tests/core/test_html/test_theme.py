@@ -321,7 +321,7 @@ class TestSeverityCatalog:
     # Verifies: REQ-d00293-A
     def test_failing_severity_has_own_color_distinct_from_error(self):
         """The toolbar's "failing" coverage chip resolves through the theme
-        catalog like the other severities (CUR-1568), with its own color_key
+        catalog like the other severities, with its own color_key
         so it stays visually distinct from severity.error/"missing"."""
         from elspais.html.theme import get_catalog
 
@@ -407,7 +407,7 @@ class TestSeverityCatalog:
         'partial' state: uat 'partial' tier maps to severity 'warning' (yellow),
         not 'info' (yellow-green). UAT 'none' stays 'info' so a journey-less
         requirement is not dragged down (see test_bucket_full_despite_uat_none).
-        Colors represent the real state (CUR-1568)."""
+        Colors represent the real state."""
         from elspais.graph.metrics import CoverageDimension, RollupMetrics
         from elspais.html.generator import compute_coverage_tiers
 

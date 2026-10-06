@@ -33,7 +33,6 @@ from typing import TYPE_CHECKING, Any
 from elspais.config.schema import ElspaisConfig
 from elspais.graph.aggregation import FAILING_STATUSES, PASSING_STATUSES
 from elspais.graph.parsers.directives import counted_assertion_labels
-from elspais.utilities.test_identity import build_test_id_from_nodeid
 
 
 def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
@@ -46,9 +45,9 @@ def _validate_config(config: dict[str, Any]) -> ElspaisConfig:
 # Implements: REQ-d00254-A+B+F
 @dataclass(frozen=True)
 class CoverageCreditConfig:
-    """CUR-1533 crediting config, derived from [[scanning.test.targets]]."""
+    """Coverage crediting config, derived from [[scanning.test.targets]]."""
 
-    app_dirs: tuple[str, ...] = ()
+    cwds: tuple[str, ...] = ()
     unmatched_credit: str = "off"  # "off" | "verified"
     coverage_dirs: tuple[str, ...] = ()
     assertion_credit: str = "off"  # "off" | "tested" | "verified"
@@ -100,10 +99,10 @@ def _as_policy(credit: CoverageCreditConfig | CreditPolicy | None) -> CreditPoli
 
 
 # Implements: REQ-d00254-A
-def _match_app_dir(path: str | None, app_dirs: tuple[str, ...]) -> str | None:
-    """Return the app dir whose segments appear deepest in ``path``.
+def _match_cwd(path: str | None, cwds: tuple[str, ...]) -> str | None:
+    """Return the target cwd whose segments appear deepest in ``path``.
 
-    Matches each app dir as a contiguous run of path segments; when several
+    Matches each cwd as a contiguous run of path segments; when several
     match, the one starting at the greatest segment index wins (tiebreak:
     longer dir string). Returns None when nothing matches.
     """
@@ -112,7 +111,7 @@ def _match_app_dir(path: str | None, app_dirs: tuple[str, ...]) -> str | None:
     segs = [s for s in path.replace("\\", "/").split("/") if s]
     best: str | None = None
     best_key: tuple[int, int] = (-1, -1)
-    for d in app_dirs:
+    for d in cwds:
         dparts = [s for s in d.strip("/").replace("\\", "/").split("/") if s]
         if not dparts:
             continue
@@ -127,21 +126,21 @@ def _match_app_dir(path: str | None, app_dirs: tuple[str, ...]) -> str | None:
 
 
 # Implements: REQ-d00254-A
-def _compute_app_status(graph, app_dirs: tuple[str, ...]) -> dict[str, str]:
-    """Map app dir -> 'green'|'red' from RESULT node statuses (CUR-1533).
+def _compute_cwd_status(graph, cwds: tuple[str, ...]) -> dict[str, str]:
+    """Map target cwd -> 'green'|'red' from RESULT node statuses.
 
-    The one-repository case of ``_compute_app_status_by_owner``: every
-    result answers to the same declared app dirs.
+    The one-repository case of ``_compute_cwd_status_by_owner``: every
+    result answers to the same declared target cwds.
     """
-    policy = CreditPolicy(default=CoverageCreditConfig(app_dirs=app_dirs))
-    return _compute_app_status_by_owner(graph, policy).get(None, {})
+    policy = CreditPolicy(default=CoverageCreditConfig(cwds=cwds))
+    return _compute_cwd_status_by_owner(graph, policy).get(None, {})
 
 
 # Implements: REQ-d00261-E
-def _compute_app_status_by_owner(graph, policy: CreditPolicy) -> dict[str | None, dict[str, str]]:
-    """Map repository -> its own app-dir statuses.
+def _compute_cwd_status_by_owner(graph, policy: CreditPolicy) -> dict[str | None, dict[str, str]]:
+    """Map repository -> its own cwd statuses.
 
-    A result belongs to the repository that recorded it, and the app dirs it
+    A result belongs to the repository that recorded it, and the target cwds it
     can match are the ones that repository declares. Two repositories that
     both call their test directory ``tests`` therefore keep separate
     verdicts instead of one deciding the other's.
@@ -151,18 +150,21 @@ def _compute_app_status_by_owner(graph, policy: CreditPolicy) -> dict[str | None
     failed: dict[tuple[str | None, str], bool] = {}
     for r in graph.nodes_by_kind(NodeKind.RESULT):
         owner = policy.owner_of(r)
-        app_dirs = policy.for_owner(owner).app_dirs
-        if not app_dirs:
+        cwds = policy.for_owner(owner).cwds
+        if not cwds:
             continue
-        app = _match_app_dir(r.get_field("source_path"), app_dirs)
-        if app is None:
+        # Implements: REQ-d00327-C
+        # The path read from its origin, which carries the target's cwd
+        # whichever origin the producer wrote it from.
+        cwd = _match_cwd(r.get_field("source_file") or r.get_field("source_path"), cwds)
+        if cwd is None:
             continue
         status = (r.get_field("status") or "").lower()
         is_fail = status in FAILING_STATUSES
-        failed[(owner, app)] = failed.get((owner, app), False) or is_fail
+        failed[(owner, cwd)] = failed.get((owner, cwd), False) or is_fail
     result: dict[str | None, dict[str, str]] = {}
-    for (owner, app), is_fail in failed.items():
-        result.setdefault(owner, {})[app] = "red" if is_fail else "green"
+    for (owner, cwd), is_fail in failed.items():
+        result.setdefault(owner, {})[cwd] = "red" if is_fail else "green"
     return result
 
 
@@ -796,7 +798,7 @@ def _compute_code_tested(
                 indirect_count += 1
 
     # Implements: REQ-d00254-G
-    # Per-test attribution (coverage.py dynamic contexts, CUR-1568): a line
+    # Per-test attribution (coverage.py dynamic contexts): a line
     # counts as DIRECT when one of its recorded contexts belongs to a test
     # that VERIFIES this requirement. Context string format (pytest-cov
     # `--cov-context=test`): "path::Class::func|run" or "path::func|run"
@@ -823,14 +825,19 @@ def _normalize_run_context(ctx: str) -> str | None:
 
     Returns None when the context should not credit direct attribution:
     the empty/global context (code executed outside any test), or a
-    "|setup"/"|teardown" fixture-phase context (see CUR-1568 decision above
-    -- only "|run" contexts count). Reuses ``build_test_id_from_nodeid`` (the
+    "|setup"/"|teardown" fixture-phase context (only "|run" contexts count,
+    as the comment above explains). Reuses ``build_test_id_from_nodeid`` (the
     canonical pytest-nodeid normalizer) rather than re-parsing nodeids here.
 
     Pure str -> str|None mapping over a small alphabet of context strings
     (one per test x phase) reused across many lines/requirements in a single
-    annotation pass, so it is memoized with ``lru_cache`` (CUR-1568).
+    annotation pass, so it is memoized with ``lru_cache``.
     """
+    # Imported here: test_identity imports from the graph package, whose
+    # __init__ imports this module, so a top-level import is circular
+    # whenever test_identity is the first of the two to be imported.
+    from elspais.utilities.test_identity import build_test_id_from_nodeid
+
     nodeid, sep, phase = ctx.rpartition("|")
     if not sep or phase != "run" or not nodeid:
         return None
@@ -891,7 +898,7 @@ def _under_dirs(rel_path: str, dirs: tuple[str, ...]) -> bool:
     """True if rel_path is within one of dirs. '.' (or empty dirs) matches all."""
     if not dirs or "." in dirs:
         return True
-    return _match_app_dir(rel_path, dirs) is not None
+    return _match_cwd(rel_path, dirs) is not None
 
 
 # Implements: REQ-d00254-D
@@ -1041,13 +1048,13 @@ def attributed_lines(code_node, file_node, region_cache: dict) -> set[int]:
 
 # Implements: REQ-d00254-B
 def _compute_lcov_tested(
-    node, metrics, policy: CreditPolicy, app_status_by_owner, region_cache: dict | None = None
+    node, metrics, policy: CreditPolicy, cwd_status_by_owner, region_cache: dict | None = None
 ) -> None:
-    """Credit the lcov_tested dimension from covered // Implements: lines (CUR-1533).
+    """Credit the lcov_tested dimension from covered // Implements: lines.
 
     Line-coverage credit is decided per implementing file, under the settings
     of the repository that holds it: its coverage directories, its minimum
-    fraction and its app status (REQ-d00261-E).
+    fraction and its cwd status (REQ-d00261-E).
     """
     from elspais.graph import NodeKind
     from elspais.graph.metrics import CoverageDimension
@@ -1063,7 +1070,7 @@ def _compute_lcov_tested(
     direct_lines: dict[str, set[tuple[str, int]]] = {}
     blanket_lines: set[tuple[str, int]] = set()
     file_cov: dict[str, dict[int, int]] = {}
-    file_app: dict[str, str | None] = {}
+    file_cwd: dict[str, str | None] = {}
     file_credit: dict[str, CoverageCreditConfig] = {}
     file_owner: dict[str, str | None] = {}
     file_stale: dict[str, str] = {}
@@ -1089,7 +1096,7 @@ def _compute_lcov_tested(
             continue
         file_cov.setdefault(rel, lc)
         file_stale.setdefault(rel, fn.get_field("line_coverage_stale_reason") or "")
-        file_app.setdefault(rel, _match_app_dir(rel, credit.app_dirs))
+        file_cwd.setdefault(rel, _match_cwd(rel, credit.cwds))
         file_credit.setdefault(rel, credit)
         file_owner.setdefault(rel, owner)
         rng = {
@@ -1375,7 +1382,7 @@ def annotate_coverage(
     from elspais.graph.relations import EdgeKind
 
     policy = _as_policy(credit)
-    app_status_by_owner = _compute_app_status_by_owner(graph, policy)
+    cwd_status_by_owner = _compute_cwd_status_by_owner(graph, policy)
     region_cache: dict = {}
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
@@ -1576,7 +1583,7 @@ def annotate_coverage(
 
         # Process TEST children to find RESULT nodes
         validated_indirect_labels: set[str] = set()
-        # CUR-1557: track whether every verified signal (pass credit or
+        # Track whether every verified signal (pass credit or
         # failure flag, across all three credit paths below) came from a
         # carried (baseline) RESULT. verified_saw_signal stays False if this
         # requirement got no verified signal at all -- populate_test_dimensions
@@ -1687,7 +1694,7 @@ def annotate_coverage(
 
         # Compute code_tested dimension from coverage data
         _compute_code_tested(node, metrics, region_cache)
-        _compute_lcov_tested(node, metrics, policy, app_status_by_owner, region_cache)
+        _compute_lcov_tested(node, metrics, policy, cwd_status_by_owner, region_cache)
 
         # Store in node metrics
         node.set_metric("rollup_metrics", metrics)

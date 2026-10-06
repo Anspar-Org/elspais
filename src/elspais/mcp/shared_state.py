@@ -4,9 +4,9 @@ The unified daemon serves two mutation surfaces over one graph: the MCP
 tools (sync functions FastMCP runs on worker threads) and the viewer's
 HTTP routes (async handlers on the event loop). Both must always
 dereference the same graph, including across rebuilds — two references
-kept "in sync" is how accepted writes get silently dropped (CUR-1829
-stress finding: one save_mutations split the surfaces and a guarded,
-accepted HTTP write never reached disk).
+kept "in sync" is how accepted writes get silently dropped: a rebuild
+that swaps one reference and not the other leaves a guarded, accepted
+write on a graph no save will ever reach.
 
 SharedServerState is that single point of dereference. It is a dict
 (the MCP tools' historical ``_state`` shape: "graph", "config",

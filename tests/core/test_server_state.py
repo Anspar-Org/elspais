@@ -371,7 +371,7 @@ A. The system SHALL swap the graph inside the shared holder on rebuild.
         """Validates REQ-o00062-Q: an MCP write after a rebuild lands in the
         graph AppState now serves, not in a stale pre-rebuild reference.
 
-        This is the CUR-1829 split-brain regression at unit scope: before
+        This is the split-brain regression at unit scope: before
         SharedServerState, the rebuild reassigned only one side's graph and
         the other side's accepted writes went to a discarded object.
         """

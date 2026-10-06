@@ -148,8 +148,7 @@ class TestFederatedGraphReadOnly:
     def test_REQ_d00200_B_from_single_raises_on_missing_project_name(self) -> None:
         """KeyError signals a caller bug: from_single requires config['project']['name'].
 
-        The host-repo-name refactor (CUR-1357) deleted the resolve_host_repo_name
-        fallback so production code reads the project name directly. A config
+        Production code reads the project name directly, with no fallback. A config
         without [project] (or with no name field) means the caller didn't go
         through load_config()/get_config() — that's a code bug to surface
         rather than silently substitute a placeholder.

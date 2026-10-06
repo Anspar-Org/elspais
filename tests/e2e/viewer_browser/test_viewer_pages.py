@@ -683,7 +683,7 @@ class TestJourneyVerdictBrowser:
         # Verifies: REQ-d00256
         """Each verifying-test row shows a status chip plus exactly ONE
         clickable source link (calling showSource) -- not the same path text
-        rendered twice with no link (the CUR-1568 bug).
+        rendered twice with no link.
 
         Checks:
         - The revealed step-1 panel contains exactly one <a> link
@@ -705,7 +705,7 @@ class TestJourneyVerdictBrowser:
 
         # Badge sizing parity: the step badge must render at the shared
         # assertion-badge size (0.65rem), not the ballooned inherited size
-        # from a `font: inherit` override (CUR-1568).
+        # from a `font: inherit` override.
         badge_rem = page_journey.evaluate(
             "(el) => parseFloat(getComputedStyle(el).fontSize) "
             "/ parseFloat(getComputedStyle(document.documentElement).fontSize)",

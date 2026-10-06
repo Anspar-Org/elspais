@@ -4852,7 +4852,7 @@ def check_uat_results(graph: FederatedGraph, config: dict[str, Any] | None = Non
     )
 
 
-# Implements: REQ-d00284-C
+# Implements: REQ-d00284-C, REQ-d00327-G
 def check_unmatched_results(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:
@@ -4885,6 +4885,14 @@ def check_unmatched_results(
             detail = f"matched {len(candidates)} tests: {', '.join(candidates)}"
         else:
             detail = "matched no test"
+        # Implements: REQ-d00327-G
+        unscanned = result.get_field("unscanned_path")
+        if unscanned and not candidates:
+            origin = result.get_field("path_origin") or "?"
+            detail += (
+                f"; its recorded path {unscanned!r}, read from the {origin!r} origin, "
+                f"names no test file scanned for this target"
+            )
         findings.append(
             HealthFinding(
                 message=(f"target {target!r}: result named {recorded!r} {detail}"),

@@ -23,7 +23,7 @@ class TestDeriveCreditConfig:
         """Empty target list → CoverageCreditConfig() defaults."""
         result = _derive_credit_config([])
         assert result == CoverageCreditConfig(
-            app_dirs=(),
+            cwds=(),
             coverage_dirs=(),
             unmatched_credit="off",
             assertion_credit="off",
@@ -76,7 +76,7 @@ class TestDeriveCreditConfig:
         result = _derive_credit_config(targets)
         assert result.unmatched_credit == "off"
 
-    def test_app_dirs_excludes_empty_and_dot(self) -> None:
+    def test_cwds_exclude_empty_and_dot(self) -> None:
         """cwd='' and cwd='.' are excluded; non-trivial cwds are included."""
         targets = [
             _make_target(name="a", cwd=""),
@@ -85,14 +85,14 @@ class TestDeriveCreditConfig:
             _make_target(name="d", cwd="packages/core"),
         ]
         result = _derive_credit_config(targets)
-        assert result.app_dirs == ("packages/app", "packages/core")
+        assert result.cwds == ("packages/app", "packages/core")
         assert result.coverage_dirs == ("packages/app", "packages/core")
 
-    def test_app_dirs_and_coverage_dirs_are_identical(self) -> None:
-        """app_dirs and coverage_dirs always carry the same tuple."""
+    def test_cwds_and_coverage_dirs_are_identical(self) -> None:
+        """cwds and coverage_dirs always carry the same tuple."""
         targets = [_make_target(name="a", cwd="lib")]
         result = _derive_credit_config(targets)
-        assert result.app_dirs == result.coverage_dirs
+        assert result.cwds == result.coverage_dirs
 
     def test_min_coverage_fraction_is_max_across_targets(self) -> None:
         """min_coverage_fraction = max of all target values."""
@@ -116,5 +116,5 @@ class TestDeriveCreditConfig:
         result = _derive_credit_config(targets)
         assert result.unmatched_credit == "verified"
         assert result.assertion_credit == "off"
-        assert result.app_dirs == ("app",)
+        assert result.cwds == ("app",)
         assert result.min_coverage_fraction == 0.0
