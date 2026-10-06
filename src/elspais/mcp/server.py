@@ -203,6 +203,12 @@ def _serialize_result_entry(result_node: Any, graph: FederatedGraph) -> dict[str
     runner = result_node.get_field("runner_file")
     if runner and runner != result_node.get_field("source_file"):
         entry["runner_file"] = runner
+    # Implements: REQ-d00323-F+G
+    # A result the current tree did not produce says why, so a reader does
+    # not take it for evidence about this tree. Absent for a fresh result.
+    stale = result_node.get_field("stale_reason")
+    if stale:
+        entry["stale_reason"] = stale
     return entry
 
 
@@ -560,7 +566,15 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             "classname": node.get_field("classname", ""),
         }
         # Implements: REQ-d00294-G
-        for field_name in ("result_file", "result_line", "environment", "runner_file"):
+        # Implements: REQ-d00323-F+G
+        for field_name in (
+            "result_file",
+            "result_line",
+            "environment",
+            "runner_file",
+            "carried",
+            "stale_reason",
+        ):
             value = node.get_field(field_name)
             if value:
                 properties[field_name] = value

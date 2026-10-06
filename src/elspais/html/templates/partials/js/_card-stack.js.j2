@@ -1348,6 +1348,12 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
                 if (r.runner_file) {
                     html += '<span class="result-environment" title="File that executed this result">run by ' + escapeHtml(r.runner_file) + '</span>';
                 }
+                {# Implements: REQ-d00323-F+G #}
+                // A result the current tree did not produce is marked, with
+                // the reason its results are stale.
+                if (r.stale_reason) {
+                    html += '<span class="result-environment result-stale" title="' + escapeAttr(r.stale_reason) + '">stale</span>';
+                }
                 html += '</div>';
             });
             html += '</div>';
@@ -1817,6 +1823,10 @@ function renderAssertionResults(panel, reqId, label, data) {
         // The runner file says which run of a shared scenario this is.
         if (r.runner_file) {
             html += '<span class="result-environment" title="File that executed this result">run by ' + escapeHtml(r.runner_file) + '</span>';
+        }
+        {# Implements: REQ-d00323-F+G #}
+        if (r.stale_reason) {
+            html += '<span class="result-environment result-stale" title="' + escapeAttr(r.stale_reason) + '">stale</span>';
         }
         html += '</div>';
     }

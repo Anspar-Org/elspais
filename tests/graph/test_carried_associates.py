@@ -20,6 +20,7 @@ import pytest
 from elspais.graph.aggregation import collect_coverage
 from elspais.graph.factory import build_graph
 from elspais.graph.GraphNode import NodeKind, parse_structural_id
+from tests.core.graph_test_helpers import record_run
 
 _SPEC = """\
 # Requirements
@@ -131,19 +132,21 @@ def _make_repo(
     (root / "spec").mkdir(parents=True)
     (root / "spec" / "reqs.md").write_text(_SPEC.format(ns=ns), encoding="utf-8")
     (root / "tests").mkdir()
-    for number, (target, test) in enumerate(zip(("a", second), tests, strict=True), start=1):
+    for number, test in enumerate(tests, start=1):
         (root / "tests" / f"{test}.py").write_text(
             f"# Verifies: {ns}-d0000{number}-A\ndef {test}():\n    pass\n",
             encoding="utf-8",
-        )
-        (root / ".results" / target).mkdir(parents=True)
-        (root / ".results" / target / "results.xml").write_text(
-            _RESULTS.format(suite=f"{name}-{target}", test=test), encoding="utf-8"
         )
     (root / ".elspais.toml").write_text(
         _CONFIG.format(name=name, ns=ns, second=second, extra=extra), encoding="utf-8"
     )
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    # Each target's results come from a run of this tree, so they are fresh
+    # and only the fresh-target selection carries any of them.
+    for target, test in zip(("a", second), tests, strict=True):
+        record_run(
+            root, target, {"results.xml": _RESULTS.format(suite=f"{name}-{target}", test=test)}
+        )
 
 
 @pytest.fixture

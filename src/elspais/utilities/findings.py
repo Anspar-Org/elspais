@@ -388,7 +388,8 @@ _DESCRIPTIONS: dict[str, str] = {
     "tests.results": (
         "The pass/fail status of every ingested result. One test that runs in "
         "several environments writes one result in each of them, so the count "
-        "is a count of results, not of tests"
+        "is a count of results, not of tests. A result whose target's results are "
+        "stale counts by its status, and a failure among them states why they are stale"
     ),
     "tests.results_stale": (
         "Test results whose inputs changed since they ran, that carry no fingerprint, "

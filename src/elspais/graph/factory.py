@@ -265,6 +265,7 @@ def _ingest_target_results(
     *,
     namespace: str,
     carried: bool = False,
+    stale_reason: str = "",
     scanned_tests: frozenset[str] = frozenset(),
     results_pattern: str = "",
     results_base: Path | None = None,
@@ -281,6 +282,9 @@ def _ingest_target_results(
 
     ``reporter`` names the format *results_text* is in, where it is not the
     one the target declares: an *Evidence Snapshot*'s lines for the target.
+
+    ``stale_reason`` says why the target's results are stale, where the
+    judgement of their *Result Fingerprint* finds them so.
 
     ``recorded_root`` is the root the target's *Result Fingerprint* records.
     An absolute path under it is read relative to it, so results keep
@@ -501,6 +505,7 @@ def _ingest_target_results(
             "source_file": source_file,
             "match": target.match,
             "carried": carried,
+            "stale_reason": stale_reason,
             "target": target.name,
             "line": rec.get("line"),
             "root_line": rec.get("root_line"),
@@ -1589,10 +1594,16 @@ def _build_repository(
             from elspais.graph.builder import UnreadArtifact
             from elspais.utilities.fingerprint import (
                 FINGERPRINT_NAME,
+                judge,
                 read_fingerprint,
                 run_in_progress,
+                stale_reason,
                 target_folder,
             )
+
+            # Targets share their inputs, so every judgement of this build
+            # reads each input once.
+            _digest_cache: dict[Path, str] = {}
 
             _captured = captured_results or {}
             from elspais.graph.parsers.results.registry import get_reporter as _get_reporter
@@ -1757,6 +1768,20 @@ def _build_repository(
                 recorded_root = (
                     Path(_recorded) if isinstance(_recorded, str) and _recorded else None
                 )
+                # Implements: REQ-d00323-F+G
+                # Results on disk that the current tree did not produce are
+                # carried, whatever this invocation selected. The judgement is
+                # the one `tests.results_stale` reports, and its reason rides
+                # on each result so a failure can say why it may be out of
+                # date. Output this invocation captured is its own run.
+                stale_reason_here = ""
+                if target.name not in _captured:
+                    _verdict = judge(
+                        repo_root, typed_config, target.name, digest_cache=_digest_cache
+                    )
+                    if _verdict.state == "stale":
+                        carried = True
+                        stale_reason_here = stale_reason(_verdict)
                 if target.name in _captured:
                     _ingest_target_results(
                         builder,
@@ -1789,6 +1814,7 @@ def _build_repository(
                                     str(Path(f)),
                                     namespace=typed_config.project.namespace,
                                     carried=carried,
+                                    stale_reason=stale_reason_here,
                                     scanned_tests=target_tests,
                                     # Implements: REQ-d00294-C
                                     # The pattern and the directory it was

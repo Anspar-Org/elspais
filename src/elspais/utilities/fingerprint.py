@@ -407,6 +407,21 @@ def judge(
     return Freshness(target=target_name, state="fresh", fingerprint=fingerprint)
 
 
+# Implements: REQ-d00311-E+F, REQ-d00323-G
+def stale_reason(verdict: Freshness) -> str:
+    """Return why a stale verdict is stale, in words a finding can quote.
+
+    The one wording of the reason, so the freshness finding and a failure
+    read from stale results say the same thing.
+    """
+    if verdict.reason == "no-fingerprint":
+        return "no fingerprint was recorded for its results"
+    shown = ", ".join(verdict.changed[:5])
+    more = f" and {len(verdict.changed) - 5} more" if len(verdict.changed) > 5 else ""
+    when = "while it ran" if verdict.reason == "changed-during-run" else "since it ran"
+    return f"inputs changed {when}: {shown}{more}"
+
+
 def last_run_path(repo_root: Path, config: Any) -> Path:
     """Return the path of the file that names the last run's executed targets."""
     return output_root(repo_root, config) / LAST_RUN_NAME

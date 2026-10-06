@@ -209,8 +209,9 @@ evidence, so it is counted over assertions and decomposes into the same three
 scalars every assertion-counted figure does.
 
 `verified.carried` is the provenance behind the Passing figure: whether the
-verdict was carried from a baseline rather than produced by the run being
-reported. It is not a number, so a table states it as a word -- `baseline` or
+verdict was carried from a baseline -- a run the invocation did not make, or
+stale results the current tree did not produce -- rather than produced by the
+run being reported. It is not a number, so a table states it as a word -- `baseline` or
 `fresh` -- while json states a boolean, or `null` where no verdict was taken.
 `trace` offers it; `summary` does not, having no per-requirement bit to state,
 and discloses carried results for the report as a whole instead.

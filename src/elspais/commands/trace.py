@@ -888,7 +888,8 @@ def format_markdown(
     legend = []
     if has_baseline_marker:
         legend.append(
-            "`(baseline)` = carried from a prior run (not re-run this PR, verdict still honored)"
+            "`(baseline)` = carried: from a run that this invocation did not make, or from "
+            "results the current tree did not produce (stale); verdict still honored"
         )
     if has_not_run_marker:
         legend.append("`—` = target not run and no baseline (skipped, not a regression)")

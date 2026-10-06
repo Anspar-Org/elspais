@@ -70,6 +70,14 @@ the tree of the repository naming it is stale, and the finding names the
 snapshot directory. A federation member's snapshot is judged against that
 member's tree.
 
+Every report that reads results applies the same judgement. A result of a
+target whose results are stale was produced by a tree other than the one
+being reported on, so it is **carried** whatever the invocation selected:
+`trace` marks the figure it makes `(baseline)`, `summary` counts its target
+among the carried ones, and `tests.results` states how many results are
+stale. A stale failure is still a failure, and its finding states why the
+results are stale. Run the target again to replace it.
+
 A target's **inputs** are every file in the repository by default, whether or
 not git tracks it. Three sets of paths are never inputs: the output root, the
 *Evidence Snapshot* directory that `[scanning.test] evidence` names, and the
@@ -1055,7 +1063,8 @@ per-requirement `verified` value, depending on whether prior result data
 exists for them:
 
 - **`(baseline)`** — carried. The target has existing RESULT data from a
-  previous run; that verdict is reused and rendered with a `(baseline)`
+  previous run, or its results are stale (see the freshness judgement
+  above); that verdict is reused and rendered with a `(baseline)`
   suffix (e.g. `4/4 100% (baseline)`). A requirement credited through the
   requirements that refine it carries the suffix when every result behind
   its figure, its own and those conducted to it, was carried, and loses it
@@ -1091,9 +1100,10 @@ appended:
 The `N/M` counts are distinct RESULT targets, a target of each federation
 member counted separately even where two members use one name: `M` targets
 have any result data at all, `N` of those were carried (not freshly produced this
-invocation). A full run (no `--targets`, or `--targets` covering every
-result-bearing target) has zero carried targets, so neither the `*` nor the
-footnote appears — output is unchanged from before this flag existed. The
+invocation, or stale). A full run (no `--targets`, or `--targets` covering every
+result-bearing target) whose results are all fresh has zero carried targets,
+so neither the `*` nor the footnote appears. Stale results are carried on any
+run, so they bring the `*` and the footnote with them. The
 `json`/`csv` formats expose the same counts as structured fields
 (`carried_result_targets`, `total_result_targets`) instead of the `*`.
 

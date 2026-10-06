@@ -1713,10 +1713,18 @@ D. Where a run names the test targets that ran fresh, the system SHALL treat as 
 
 E. When the system states how many test targets with results were carried, the system SHALL count each test target of each federation member separately.
 
+F. The system SHALL treat as carried every result of a test target whose results the judgement under REQ-d00311 reports as stale.
+
+G. When the system reports a failed result that is carried because the results of its test target are stale, the system SHALL state why those results are stale.
+
+H. When an ingested result is carried, the system SHALL state how many test targets with results were carried.
+
 ### Rationale
 
 The carried mark exists for the reader who must not mistake old evidence for new. A figure built from carried results and shown without the mark makes that mistake for them, so the mark follows the evidence wherever the evidence is counted. C names the conducted case because a requirement credited only through the requirements that refine it has no results of its own, and the mark must not depend on where the results are attached.
 
 A run of the invoking repository's test targets executes no target of another member, so a selection of fresh targets cannot have made another member's results fresh. Two members can each declare a target with the same name, so E keeps two targets from being counted as one.
 
-*End* *Carried Result Provenance* | **Hash**: 67d6d8ea
+A result whose fingerprint judgement is stale was produced by a tree other than the one being reported on, whatever the invocation selected, so F counts it as carried and every surface that marks carried evidence marks it. Carried evidence keeps its verdict (REQ-d00254-I): a stale failing result is a failure that the current tree has not run again, and it is never read as a pass. G gives the reason beside the failure, because a reader who reruns the target clears it and a reader who does not must know the failure may describe a tree that no longer exists. H states the count on every run that holds carried results, because staleness reaches a run that selected nothing as well as a selective one.
+
+*End* *Carried Result Provenance* | **Hash**: 28858010

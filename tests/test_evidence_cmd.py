@@ -200,7 +200,7 @@ def test_the_written_report_presents_the_snapshots_run_as_its_own(tmp_path, monk
 
     report = (root / _EVIDENCE / "TRACEABILITY.md").read_text(encoding="utf-8")
     assert "(baseline)" not in report
-    assert "carried from a prior run" not in report
+    assert "= carried" not in report
     assert "> Legend:" not in report
 
 

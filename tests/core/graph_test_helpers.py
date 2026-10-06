@@ -855,3 +855,27 @@ def comparable_mutation_result(body: dict) -> dict:
             key: value for key, value in body["mutation"].items() if key not in ("id", "timestamp")
         }
     return body
+
+
+# === Results a run of the current tree produced ===
+
+
+def record_run(repo_root: Path, target: str, files: dict[str, str]) -> Path:
+    """Write *files* into the output area of *target* as one recorded run of it.
+
+    The run starts before the files are written and finishes after them, as
+    the runner does. The results therefore carry a Result Fingerprint of the
+    tree and read as fresh. Write every input first: a later change to one
+    makes the results stale. Return the output area.
+    """
+    from elspais.config import load_config
+    from elspais.utilities.fingerprint import finish_run, start_run
+
+    config = load_config(Path(repo_root) / ".elspais.toml")
+    folder = start_run(repo_root, config, target)
+    for name, text in files.items():
+        path = folder / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    finish_run(repo_root, config, target)
+    return folder

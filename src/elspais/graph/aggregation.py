@@ -1429,28 +1429,27 @@ def collect_coverage(
             ],
         }
 
-    # Implements: REQ-d00254-I
-    # Carry-forward provenance (distinct RESULT target names + how many are
-    # carried baselines) is meaningful only for a selective run, so
-    # a selective run isn't a silent no-op on rendered output. Omit it entirely
-    # otherwise, so a full run stays byte-identical to the pre-selectivity
-    # output in every format (JSON keys and the CSV row included).
-    if getattr(graph, "render_fresh_targets", None) is not None:
-        from elspais.graph.GraphNode import parse_structural_id
+    # Implements: REQ-d00254-I, REQ-d00323-E+H
+    # Carry-forward provenance: the distinct result targets and how many of
+    # them are carried. It is stated for a selective run, and for any run
+    # holding a carried result -- results its tree did not produce are
+    # carried whatever was selected. Otherwise it is omitted, so a run whose
+    # every result is its own states nothing about carrying in any format.
+    from elspais.graph.GraphNode import parse_structural_id
 
-        # Implements: REQ-d00323-E
-        # A target is named within its member: two members may each declare
-        # a target of one name, and those are two targets.
-        all_result_targets: set[tuple[str, str]] = set()
-        carried_result_targets_set: set[tuple[str, str]] = set()
-        for result_node in graph.iter_by_kind(NodeKind.RESULT):
-            tgt = result_node.get_field("target")
-            if not tgt:
-                continue
-            member = (parse_structural_id(result_node.id)[1], tgt)
-            all_result_targets.add(member)
-            if result_node.get_field("carried"):
-                carried_result_targets_set.add(member)
+    # A target is named within its member: two members may each declare
+    # a target of one name, and those are two targets.
+    all_result_targets: set[tuple[str, str]] = set()
+    carried_result_targets_set: set[tuple[str, str]] = set()
+    for result_node in graph.iter_by_kind(NodeKind.RESULT):
+        tgt = result_node.get_field("target")
+        if not tgt:
+            continue
+        member = (parse_structural_id(result_node.id)[1], tgt)
+        all_result_targets.add(member)
+        if result_node.get_field("carried"):
+            carried_result_targets_set.add(member)
+    if getattr(graph, "render_fresh_targets", None) is not None or carried_result_targets_set:
         result["total_result_targets"] = len(all_result_targets)
         result["carried_result_targets"] = len(carried_result_targets_set)
 
