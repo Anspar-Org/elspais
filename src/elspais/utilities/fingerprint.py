@@ -1,4 +1,4 @@
-# Implements: REQ-d00311-A+B+C+D+I+J+K+L+M+N+P, REQ-d00312-A+B+D
+# Implements: REQ-d00311-A+B+C+D+I+J+K+L+M+N+P, REQ-d00312-A+B+D, REQ-d00329-B
 """Record the fingerprint of a test target's run, and judge the freshness of its results.
 
 Terms:
@@ -8,7 +8,8 @@ Terms:
   The command of the target writes its results and coverage there.
 - A result fingerprint is a statement of one run of a target. It holds a
   manifest: the path and the content digest of each input, and the times the
-  run started and finished, and the root of the tree it executed in.
+  run started and finished, and the root of the tree it executed in. Where the
+  run reported one, it also holds the exit status of the target's command.
 
 A run writes its fingerprint into the output area when the run starts. The
 results are fresh while the manifest matches the inputs on disk. The manifest
@@ -309,12 +310,19 @@ class RunNotStarted(Exception):
     """A caller tried to finish a run that no ``start`` began."""
 
 
-def finish_run(repo_root: Path, config: Any, target_name: str) -> dict[str, Any]:
+def finish_run(
+    repo_root: Path, config: Any, target_name: str, exit_status: int | None = None
+) -> dict[str, Any]:
     """Finish a run of a target. Record each input that changed during the run.
 
     This function accepts only a run that ``start_run`` began. ``start_run``
     empties the output area. Without that step, result files from an earlier
     run would carry the fingerprint of this run.
+
+    *exit_status* is the exit status of the target's command, where the
+    caller knows it. A target declaring ``file_results`` reads its test
+    files' result from it, so a run that records none leaves those files
+    awaiting a result.
 
     Raises:
         RunNotStarted: No run of the target is in progress.
@@ -331,6 +339,9 @@ def finish_run(repo_root: Path, config: Any, target_name: str) -> dict[str, Any]
         )
     manifest = compute_manifest(root, config, target)
     fingerprint["changed_during_run"] = differences(fingerprint["manifest"], manifest)
+    # Implements: REQ-d00329-B
+    if exit_status is not None:
+        fingerprint["exit_status"] = exit_status
     fingerprint["finished_at"] = _now()
     _write_fingerprint(folder, fingerprint)
     return fingerprint
@@ -348,14 +359,31 @@ def run_in_progress(folder: Path) -> dict[str, Any] | None:
     return fingerprint
 
 
+# Implements: REQ-d00329-B
+def recorded_exit_status(folder: Path) -> int | None:
+    """Return the exit status the finished run in the output area *folder* recorded, or ``None``.
+
+    A run in progress has recorded no exit status yet, and a run finished
+    without one reports none.
+    """
+    fingerprint = read_fingerprint(folder)
+    if fingerprint is None or not fingerprint.get("finished_at"):
+        return None
+    status = fingerprint.get("exit_status")
+    return status if isinstance(status, int) and not isinstance(status, bool) else None
+
+
 def results_present(repo_root: Path, config: Any, target: Any) -> bool:
     """Return whether the output area of a target holds anything a run wrote.
 
-    That is a file its results pattern matches, or its coverage file: a
+    That is a file its results pattern matches, its coverage file, or, for a
+    target declaring ``file_results``, the exit status its run recorded: a
     target that declares only coverage still leaves results of its run to
-    judge. Both name files inside the output area of the target.
+    judge. Each names something inside the output area of the target.
     """
     folder = target_folder(repo_root, config, target.name)
+    if target.file_results and recorded_exit_status(folder) is not None:
+        return True
     # Implements: REQ-d00323-I
     if target.coverage and (folder / target.coverage).is_file():
         return True

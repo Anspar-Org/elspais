@@ -1,4 +1,4 @@
-# Implements: REQ-d00311-H+I
+# Implements: REQ-d00311-H+I, REQ-d00329-B
 """``elspais fingerprint start|finish TARGET``: record a run that elspais did not execute.
 
 A git hook or a CI job that runs the tests of a target calls ``start`` before
@@ -30,7 +30,7 @@ def run(args: argparse.Namespace) -> int:
             folder = start_run(repo_root, config, args.target)
             print(folder)
         else:
-            fingerprint = finish_run(repo_root, config, args.target)
+            fingerprint = finish_run(repo_root, config, args.target, exit_status=args.exit_status)
             changed = fingerprint.get("changed_during_run") or []
             if changed:
                 print(

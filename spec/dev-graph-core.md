@@ -1069,11 +1069,11 @@ E. Reporting SHALL NOT alter what the evidence credits: the *Assertion* SHALL re
 
 F. Where a dimension counts no *Assertion* of a requirement at all, the tool SHALL report that once for the requirement rather than once for each *Assertion* the evidence names.
 
-G. A citation in a scanned test file that binds to no test SHALL be reported.
+G. A citation in a scanned test file that binds to neither a test nor its file SHALL be reported.
 
-H. A citation that binds to no test SHALL contribute no coverage to the assertions it names.
+H. A citation that binds to neither a test nor its file SHALL contribute no coverage to the assertions it names.
 
-I. If a result binds to tests only through the file that holds them, then the tool SHALL report that result, naming the artifact that holds it and the tests it could have bound to.
+I. If a result other than a file-level *Result Record* binds to tests only through the file that holds them, then the tool SHALL report that result, naming the artifact that holds it and the tests it could have bound to.
 
 J. The severity of the report of results that bind only through a file SHALL be what the project configures for it, or a warning where the project configures nothing.
 
@@ -1093,6 +1093,8 @@ I, J and K answer for a result the tool read and then declined to count. A resul
 
 ### Changelog
 
+- 2026-10-06 | 56658f72 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-06 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-143: a citation bound to its file is neither reported nor withheld, and a file-level result is not reported as binding only through its file (G-I)
 - 2026-10-01 | bf276438 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-01 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-96: a result that binds only through the file holding its tests is reported, at a warning by default, and a report itemising its evidence states their number whatever that finding's severity (I-K)
 - 2026-08-25 | 01a8f7d7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -1101,7 +1103,7 @@ I, J and K answer for a result the tool read and then declined to count. A resul
 - 2026-08-18 | 2f1e6599 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-17 | b7624174 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Uncredited Coverage Evidence* | **Hash**: bf276438
+*End* *Uncredited Coverage Evidence* | **Hash**: 56658f72
 
 ## REQ-d00276: Tests Outside the Requirement Estate
 
@@ -1832,3 +1834,52 @@ I is the counterpart of G for coverage data. Coverage read from the wrong origin
 - 2026-10-05 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: a relative source path in results and coverage data is read from an origin declared per reporter and replaceable per test target
 
 *End* *Origin of a Recorded Source Path* | **Hash**: 0faeeab4
+
+## REQ-d00329: Test File Results From a Command's Exit Status
+
+**Level**: dev | **Status**: Draft | **Implements**: -
+**Refines**: REQ-d00254-A+E+T, REQ-d00274-G+H+I, REQ-d00277-C
+
+Some test files report only through the exit status of the command that runs them. This requirement credits such a file at the granularity it can honestly offer: the file.
+
+### Assertions
+
+A. Each test target SHALL be able to declare that the exit status of its command is the result of each test file that the target scans.
+
+B. The system SHALL record the exit status of the command of a test target that declares file-level results in the output area of that target.
+
+C. When the recorded exit status of a test target that declares file-level results is success, the system SHALL hold a passing file-level *Result Record* for each test file that the target scans.
+
+D. When the recorded exit status of a test target that declares file-level results is failure, the system SHALL hold a failing file-level *Result Record* for each test file that the target scans.
+
+E. A file-level *Result Record* SHALL be identified by the test target it was read from and the test file that it stands for.
+
+F. In a test file that a test target that declares file-level results scans, a citation that is neither inside a test nor written directly above a test or a group that holds a test SHALL bind to the file.
+
+G. A file-level *Result Record* SHALL bind to each citation bound to its file and to each test in its file that no *Result Record* naming that test binds to.
+
+H. Where a *Result Record* naming a test binds to that test in a file that has a file-level *Result Record*, the *Result Record* naming that test SHALL decide the verdict of the citations bound to that test.
+
+I. Where a test target that declares file-level results has no recorded exit status, each citation bound to a file that the target scans SHALL be reported as awaiting a result.
+
+J. A citation bound to a file SHALL be credited as a citation bound to a test whose results are the file-level *Result Records* of that file.
+
+### Rationale
+
+Some tests are module-level assertions run in a bare interpreter. The interpreter exits non-zero at the first failure and writes no per-test record, so a reporter that expects one per test never sees a verdict, and the file's citations stay awaiting a result however often it passes. The exit status is the only verdict such a file gives, and it is a true statement about the file.
+
+A puts the file-level reading under the project's declaration because only the project knows that the command's exit stands for the file. REQ-d00254-A forbids reading a verdict for a test off its neighbours' results. A file-level *Result Record* is a different thing: the result the file itself produced, declared as such, and a target that declares nothing still gets no verdict from its file. The exit status says nothing about which file failed, so C and D give each file the target scans the same verdict. A failing command therefore fails every citation it decides, and a target that runs one file per command is what keeps that verdict precise.
+
+B records the exit status where the target's results already live, so a run that executes no target reads the same verdict as the run that produced it, and the status is carried or fresh exactly as the target's other results are. I keeps a target whose command never reported an exit status from being read as passing or failing; with no exit status no file-level *Result Record* exists, so a test in such a file that no *Result Record* naming it binds to is awaiting a result under REQ-d00254-A.
+
+E identifies a file-level result as REQ-d00294-B identifies a result read from a command's output: by the target, with the file standing in for a position because there is exactly one such result for each file.
+
+F gives a citation in such a file a place to bind. A module-level assertion is inside no test and above none, so under REQ-d00254-T it binds to no test; F binds it to its file instead, and REQ-d00274-G and H report and withhold only a citation that binds to neither. G and H let one target mix both kinds of evidence: where a runner wrote a result naming a test, that result is the more precise one and decides its test; the file-level result binds only to what no such result reaches. Because a file-level result binds to the tests it decides, REQ-d00254-A's condition of a test with no *Result Record* does not hold for them. A test file that a file-level target scans is a file a configured target can execute, so REQ-d00276-E does not report it.
+
+J makes a citation bound to a file count wherever a citation bound to a test counts: the file stands as the test REQ-d00277-C asks for, so Passing follows the file's verdict. REQ-d00274-I reports a result that should have named a test and fell back to its file; a file-level *Result Record* is the file's own declared result, so that report does not include it.
+
+### Changelog
+
+- 2026-10-06 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-143: a test file that reports only through its command's exit status is credited at file granularity (A-J)
+
+*End* *Test File Results From a Command's Exit Status* | **Hash**: 9abdd787

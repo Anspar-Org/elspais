@@ -1378,6 +1378,11 @@
         },
         "inputs": {
           "$ref": "#/$defs/ScanningKindConfig"
+        },
+        "file_results": {
+          "default": false,
+          "title": "File Results",
+          "type": "boolean"
         }
       },
       "required": [

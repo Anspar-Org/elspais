@@ -218,10 +218,13 @@ def run(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
+    # Implements: REQ-d00329-E
+    # A target declaring file-level results holds results with no reporter,
+    # so it is selected and then refused by name rather than left out.
     selected = sorted(
         t.name
         for t in config.scanning.test.targets
-        if t.reporter and (only is None or t.name in only)
+        if (t.reporter or t.file_results) and (only is None or t.name in only)
     )
 
     if executes:

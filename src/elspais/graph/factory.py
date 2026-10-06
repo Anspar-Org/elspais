@@ -48,6 +48,7 @@ from elspais.graph.GraphNode import (
     GraphNode,
     NodeKind,
     make_file_id,
+    make_file_result_id,
     make_result_id,
 )
 from elspais.graph.parsers import ParserRegistry
@@ -186,6 +187,23 @@ def _tests_named(name: str, scanned: frozenset[str]) -> list[str]:
     if not needle:
         return []
     return sorted(p for p in scanned if p == needle or p.endswith("/" + needle))
+
+
+# Implements: REQ-d00284-B, REQ-d00329-A+C+D
+def _target_prefix(target, repo_root: Path) -> str | None:
+    """The repo-relative directory prefix of the test files *target* scans.
+
+    ``""`` is the repository root, which holds every scanned test file.
+    ``None`` where the target's working directory lies outside the
+    repository, so it scans nothing.
+    """
+    resolved_root = repo_root.resolve()
+    cwd_path = (repo_root / target.cwd) if target.cwd else repo_root
+    try:
+        cwd_rel = str(cwd_path.resolve().relative_to(resolved_root))
+    except ValueError:
+        return None
+    return "" if cwd_rel in ("", ".") else cwd_rel.rstrip("/") + "/"
 
 
 # Implements: REQ-d00285-A
@@ -666,6 +684,135 @@ def _ingest_target_results(
             end_line=result_line or 1,
             raw_text="",
             parsed_data=parsed_data,
+        )
+        builder.add_parsed_content(content)
+        count += 1
+    return count
+
+
+# Implements: REQ-d00329-A+C+D+E+I
+def _ingest_file_results(
+    builder,
+    target,
+    repo_root: Path,
+    typed_config: ElspaisConfig,
+    scanned_test_files: set[str],
+    *,
+    namespace: str,
+    carried: bool,
+    captured: bool,
+    evidence_only: bool,
+) -> int:
+    """Add the file-level result of each test file *target* scans.
+
+    The result of each file is the exit status the target's last finished
+    run recorded in its *Result Fingerprint*: success passes every file, and
+    anything else fails every file. Where no exit status is recorded, no
+    file-level result is added, so the citations those files hold await a
+    result. Returns the count of RESULT nodes added.
+    """
+    from elspais.graph.builder import UnreadArtifact
+    from elspais.graph.parsers import ParsedContent
+    from elspais.graph.parsers.results.registry import get_reporter
+    from elspais.utilities.fingerprint import (
+        FINGERPRINT_NAME,
+        recorded_exit_status,
+        run_in_progress,
+        target_folder,
+    )
+
+    prefix = _target_prefix(target, repo_root)
+    if prefix is None:
+        # The per-test pass reports a working directory outside the
+        # repository for a target with a reporter.
+        if not target.reporter:
+            builder.record_ingestion_fault(
+                path=str(target.cwd or ""),
+                stage="target",
+                cause=(
+                    f"working directory {target.cwd!r} resolves outside the "
+                    f"repository, so no results were read for this target"
+                ),
+                target=target.name,
+            )
+        return 0
+
+    # Where the target also reads per-test results, the per-test pass has
+    # already recorded an unread results artifact for it.
+    try:
+        reads_per_test = bool(target.reporter) and get_reporter(target.reporter).kind == "results"
+    except KeyError:
+        reads_per_test = True
+    area = target_folder(repo_root, typed_config, target.name)
+    fingerprint_path = _repo_relative(area / FINGERPRINT_NAME, repo_root)
+
+    # An Evidence Snapshot holds no file-level result.
+    if evidence_only:
+        if not reads_per_test:
+            builder.record_unread_artifact(
+                UnreadArtifact(
+                    target=target.name, artifact="results", path=fingerprint_path, reason="absent"
+                )
+            )
+        return 0
+
+    # Implements: REQ-d00311-N
+    running = run_in_progress(area)
+    if running is not None and not captured:
+        if not reads_per_test:
+            builder.record_unread_artifact(
+                UnreadArtifact(
+                    target=target.name,
+                    artifact="results",
+                    path=fingerprint_path,
+                    reason="running",
+                    started_at=str(running.get("started_at", "")),
+                )
+            )
+        return 0
+
+    # Implements: REQ-d00329-I
+    status = recorded_exit_status(area)
+    if status is None:
+        if not reads_per_test:
+            builder.record_unread_artifact(
+                UnreadArtifact(
+                    target=target.name, artifact="results", path=fingerprint_path, reason="absent"
+                )
+            )
+        return 0
+
+    # Implements: REQ-d00329-C+D+E
+    passed = status == 0
+    failure = f"the command of target {target.name!r} exited with status {status}"
+    count = 0
+    for rel in sorted(f for f in scanned_test_files if not prefix or f.startswith(prefix)):
+        content = ParsedContent(
+            content_type="test_result",
+            start_line=1,
+            end_line=1,
+            raw_text="",
+            parsed_data={
+                "id": make_file_result_id(namespace, target.name, rel),
+                "status": "passed" if passed else "failed",
+                "name": rel,
+                "classname": "",
+                "duration": 0.0,
+                "message": None if passed else failure,
+                "test_id": None,
+                "source_path": rel,
+                "source_file": rel,
+                "match": "file",
+                "carried": carried,
+                "target": target.name,
+                "line": None,
+                "root_line": None,
+                "root_file": None,
+                "runner_file": None,
+                "result_file": None,
+                "result_line": None,
+                "environment": None,
+            },
         )
         builder.add_parsed_content(content)
         count += 1
@@ -1704,6 +1851,14 @@ def _build_repository(
 
             scanned_test_files: set[str] = set()
             resolved_root = repo_root.resolve()
+            # Implements: REQ-d00329-F
+            # The test files of a target declaring file-level results are
+            # those under its working directory, as for every target.
+            file_result_prefixes = [
+                prefix
+                for target in testing_cfg.targets
+                if target.file_results and (prefix := _target_prefix(target, repo_root)) is not None
+            ]
             for path in test_scan.directories:
                 # Implements: REQ-d00212-Q+W, REQ-d00241-G
                 # The ignore configuration governs the test kind too:
@@ -1727,11 +1882,21 @@ def _build_repository(
                         # The candidates a result's recorded name is
                         # resolved among, gathered as they are scanned.
                         try:
-                            scanned_test_files.add(
-                                str(Path(source_path).resolve().relative_to(resolved_root))
-                            )
+                            rel_test = str(Path(source_path).resolve().relative_to(resolved_root))
                         except ValueError:
-                            pass
+                            rel_test = None
+                        if rel_test is not None:
+                            scanned_test_files.add(rel_test)
+                            # Implements: REQ-d00329-F
+                            # A citation that found no test binds to its
+                            # file, where a target's exit status is the
+                            # file's result.
+                            if (
+                                parsed_content.content_type == "test_ref"
+                                and parsed_content.parsed_data.get("binds_to_test") is False
+                                and any(rel_test.startswith(p) for p in file_result_prefixes)
+                            ):
+                                parsed_content.parsed_data["binds_to_file"] = True
                     builder.add_parsed_content(parsed_content, file_node=fn)
 
                 _record_declined_files(builder, domain_file, "test", repo_root)
@@ -1859,11 +2024,7 @@ def _build_repository(
                 # The candidates are the tests scanned under this target's own
                 # cwd: a name matching a file some other target scans says
                 # nothing about where this result came from.
-                try:
-                    cwd_rel = str(cwd_path.resolve().relative_to(resolved_root))
-                except ValueError:
-                    cwd_rel = ""
-                prefix = "" if cwd_rel in ("", ".") else cwd_rel.rstrip("/") + "/"
+                prefix = _target_prefix(target, repo_root) or ""
                 target_tests = frozenset(
                     f for f in scanned_test_files if not prefix or f.startswith(prefix)
                 )
@@ -2011,6 +2172,23 @@ def _build_repository(
                         UnreadArtifact(
                             target=target.name, artifact="results", path="", reason="absent"
                         )
+                    )
+
+            # Implements: REQ-d00329-A+C+D+E+I
+            # The file-level results of each target declaring that its
+            # command's exit status is the result of each test file it scans.
+            for target in typed_config.scanning.test.targets:
+                if target.file_results:
+                    _ingest_file_results(
+                        builder,
+                        target,
+                        repo_root,
+                        typed_config,
+                        scanned_test_files,
+                        namespace=typed_config.project.namespace,
+                        carried=fresh_targets is not None and target.name not in fresh_targets,
+                        captured=target.name in _captured,
+                        evidence_only=evidence_only,
                     )
 
     graph = builder.build()

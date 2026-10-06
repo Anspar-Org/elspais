@@ -4,6 +4,10 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-143
+
+- **A test file that reports only through its command's exit status is credited at file granularity (REQ-d00329)** -- a test target can declare `file_results = true`. The exit status of its command is then the result of each test file it scans: success passes every one of them, and any other status fails every one of them. A citation in such a file that sits inside no test and above none binds to the file instead of being reported by `tests.unbound_citation`, and its `Verifies:` relationship is credited and decided by the file's result. A target can also declare a `reporter`: a result naming a test still decides that test, and the file's result decides the rest. `elspais checks --run-tests` and `elspais test` record the exit status in the target's Result Fingerprint, and `elspais fingerprint finish TARGET --exit-status N` records it for a run elspais did not execute. Until a finished run records one, the citations the file's result would decide await a result. Such a target needs no `reporter` for its `command`.
+
 ### TOOL-142
 
 - **A `Satisfies:` naming an Assertion copies the requirement holding it (REQ-d00328-A+D)** -- such a declaration produced one copied Assertion that no requirement held, so the copy had no row in `elspais trace` or the viewer tree. The declaring requirement now holds a copy of the template requirement, `X::T`, holding only the Assertions its declarations name, and the SATISFIES edge carries their labels. The copy is a requirement like any other copy and appears wherever one does. Ids of the form `X::T-A` now name an Assertion of that copy.

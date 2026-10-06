@@ -280,7 +280,8 @@ _FIELD_COMMENTS: dict[str, str] = {
         " omit in CI (ingest pre-produced files)"
     ),
     "scanning.test.targets.reporter": (
-        'Parser format: "flutter-machine" | "junit" | "pytest-json"'
+        'Parser format: "flutter-machine" | "junit" | "pytest-json";'
+        " optional for a command when file_results is true"
     ),
     "scanning.test.targets.results": (
         "Glob for result files (file-channel reporters: junit, pytest-json),"
@@ -328,6 +329,10 @@ _FIELD_COMMENTS: dict[str, str] = {
     ),
     "scanning.test.targets.min_coverage_fraction": (
         "Minimum fraction of impl lines that must be covered (0.0 to 1.0)"
+    ),
+    "scanning.test.targets.file_results": (
+        "true: the command's exit status is the result of each test file the"
+        " target scans (default false)"
     ),
     "scanning.journey": "User journey file scanning",
     "scanning.journey.directories": "Directories to scan for journey files",
@@ -958,6 +963,15 @@ def generate_config(
         "#   one in coverage from cwd. A target whose runner writes otherwise says",
         '#   so: results_origin = "working-directory" | coverage_origin =',
         '#   "repository-root". See: elspais docs test-targets (Path Origins)',
+        "",
+        "-- Test files that report only through the command's exit status --",
+        "The exit status is the result of each test file under cwd; a citation",
+        "in such a file that binds to no test binds to the file.",
+        "[[scanning.test.targets]]",
+        'name         = "scripts"',
+        'cwd          = "tests/scripts"',
+        'command      = "python check_layout.py"',
+        "file_results = true",
         "",
         "-- Playwright/JUnit example (feeds journey + step UAT coverage) --",
         "[[scanning.test.targets]]",

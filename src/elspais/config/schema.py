@@ -760,6 +760,11 @@ class TestTargetConfig(_StrictModel):
     # file patterns include files. Skipped directories and files exclude files.
     # If inputs is empty, then every file in the repository is an input.
     inputs: ScanningKindConfig = Field(default_factory=ScanningKindConfig)
+    # Implements: REQ-d00329-A
+    # Whether the exit status of this target's command is the result of each
+    # test file the target scans. It stands beside the reporter rather than in
+    # its place, so one target can hold per-test results and file-level ones.
+    file_results: bool = False
 
     # Implements: REQ-d00283-X
     @field_validator("name")
@@ -823,10 +828,20 @@ class TestTargetConfig(_StrictModel):
             raise ValueError("min_coverage_fraction must be in [0.0, 1.0]")
         return v
 
+    # Implements: REQ-d00329-A
     @model_validator(mode="after")
     def _require_reporter(self) -> TestTargetConfig:
-        if (self.command or self.results) and not self.reporter:
-            raise ValueError("reporter is required when command or results is set")
+        # A target whose command's exit status is its files' result has a
+        # verdict with no reporter. A results pattern always names files a
+        # reporter must read.
+        if self.results and not self.reporter:
+            raise ValueError("reporter is required when results is set")
+        if self.command and not self.reporter and not self.file_results:
+            raise ValueError(
+                "reporter is required when command is set, unless file_results = true "
+                "makes the command's exit status the result of each test file the "
+                "target scans"
+            )
         return self
 
 

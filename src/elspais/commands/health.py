@@ -4872,6 +4872,11 @@ def check_unmatched_results(
             continue
         if result.get_field("match") == "aggregate":
             continue  # an aggregate result names no test and never matches one
+        # Implements: REQ-d00329-G+H
+        # A file-level result names its file, and decides only what no
+        # per-test result there reaches, which can be nothing.
+        if result.get_field("match") == "file":
+            continue
         target = result.get_field("target") or "?"
         recorded = result.get_field("classname") or result.get_field("name") or result.id
         candidates = result.get_field("name_candidates") or []
@@ -5122,10 +5127,15 @@ def _target_outcomes(graph: FederatedGraph, expected_targets: tuple[str, ...]) -
                 )
         absent = [item for item in unread if item.reason == "absent"]
         results_absent = {item.target for item in absent if item.artifact == "results"}
-        # A target whose reporter reads results, and whose results were not
-        # recorded as absent, left results: it ran.
+        # A target whose reporter reads results, or whose command's exit
+        # status is its files' result, and whose results were not recorded as
+        # absent, left results: it ran.
         reads_results: set[str] = set()
         for target in _validate_config(entry.config).scanning.test.targets:
+            # Implements: REQ-d00329-A
+            if target.file_results:
+                reads_results.add(target.name)
+                continue
             try:
                 if target.reporter and get_reporter(target.reporter).kind == "results":
                     reads_results.add(target.name)
@@ -5155,6 +5165,17 @@ def _target_outcomes(graph: FederatedGraph, expected_targets: tuple[str, ...]) -
 
 def _absent_results_cause(item: Any) -> str:
     """Return why no results were read for a target the run executed or expected."""
+    from elspais.utilities.fingerprint import FINGERPRINT_NAME
+
+    # Implements: REQ-d00329-I
+    # A target whose command's exit status is its files' result records it
+    # in its Result Fingerprint, which is the path the build names.
+    if item.path and Path(item.path).name == FINGERPRINT_NAME:
+        return (
+            "no finished run of this target recorded the exit status of its command, "
+            "which is the result of each test file it scans, so its files await a "
+            "result for a target this run executed or expected"
+        )
     if item.path:
         return (
             "no file matched this target's results pattern, so no test results were "

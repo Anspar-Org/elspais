@@ -1,4 +1,4 @@
-# Implements: REQ-d00249-B+C+L+M, REQ-d00312-D, REQ-d00311-B+C, REQ-d00314-C+D
+# Implements: REQ-d00249-B+C+L+M, REQ-d00312-D, REQ-d00311-B+C, REQ-d00314-C+D, REQ-d00329-B
 """Configured test-target dispatcher for the checks run-tests feature.
 
 With a ``concurrency`` of one, each entry in ``[[scanning.test.targets]]`` that
@@ -17,8 +17,8 @@ of it, because lines from targets running together arrive interleaved.
 
 Before a target runs, this module empties the output area and writes the
 fingerprint. After the command exits, this module records each input that
-changed during the run. ``ELSPAIS_TARGET_OUTPUT`` gives the command the path of
-its output area.
+changed during the run, and the exit status of the command.
+``ELSPAIS_TARGET_OUTPUT`` gives the command the path of its output area.
 """
 
 from __future__ import annotations
@@ -476,7 +476,15 @@ def _run_targets(
                 f"<<< {target.name}: FAILED (spawn error: {exc}) ({elapsed:.1f}s)",
                 file=sys.stderr,
             )
-        finish_run(repo_root, config, target.name)
+        # Implements: REQ-d00329-B+I
+        # A command that could not be spawned never exited, so it records no
+        # exit status and its files await a result.
+        finish_run(
+            repo_root,
+            config,
+            target.name,
+            exit_status=None if result.error else result.returncode,
+        )
         results.append(result)
         if fail_fast and result.returncode != 0:
             break
@@ -591,7 +599,12 @@ def _run_one_attributed(
             sys.stderr,
             f"<<< {target.name}: FAILED (spawn error: {exc}) ({elapsed:.1f}s)\n",
         )
-    finish_run(repo_root, config, target.name)
+    # Implements: REQ-d00329-B+I
+    # A command that could not be spawned never exited, so it records no
+    # exit status and its files await a result.
+    finish_run(
+        repo_root, config, target.name, exit_status=None if result.error else result.returncode
+    )
     return result, ("".join(list(kept)) if kept is not None else None)
 
 

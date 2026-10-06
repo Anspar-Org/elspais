@@ -102,9 +102,16 @@
 - REQ-d00082-K
 - REQ-d00082-L
 - REQ-d00254-A
+- REQ-d00274-I
 - REQ-d00294-A
+- REQ-d00329-C
+- REQ-d00329-D
+- REQ-d00329-E
+- REQ-d00329-G
+- REQ-d00329-H
 - REQ-d00294:section:0
 - REQ-d00294:section:1
+- REQ-d00329:section:1
 
 ## Specification
 

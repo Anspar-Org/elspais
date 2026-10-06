@@ -131,6 +131,16 @@ ELSPAIS_TARGET_OUTPUT="$out" pytest tests/ --junitxml="$out/junit.xml"
 elspais fingerprint finish unit            # notes inputs that changed meanwhile
 ```
 
+A target declaring [`file_results`](#file_results) reads the result of each
+test file from the exit status of its command, so its `finish` passes that
+status:
+
+```bash
+out=$(elspais fingerprint start scripts)
+ELSPAIS_TARGET_OUTPUT="$out" python tests/check_layout.py
+elspais fingerprint finish scripts --exit-status $?
+```
+
 elspais refuses a `finish` that no `start` began. The reason is that `start`
 empties the folder. Consequently, elspais cannot stamp results that already
 sit in the folder as the results of a run. Every recorder computes the
@@ -153,7 +163,8 @@ a bracketed run names the target with `--targets` rather than `last-run`.
 
 The fingerprint is the JSON file `.elspais-run.json` in the target's folder.
 Its `version` field states the format. Its `root` field names the directory
-the run executed in. Its `inputs` field lists one object for each input file,
+the run executed in. Its `exit_status` field, where the run recorded one,
+holds the exit status of the target's command. Its `inputs` field lists one object for each input file,
 with a `path` field and a `digest` field. The digest is the
 SHA-256 of the file's content. No path is ever a JSON key. Consequently, a
 secret scanner that looks for a secret-like key beside a long hex value finds
@@ -237,7 +248,7 @@ later `summary` or `trace` names as fresh, with `--targets last-run`.
 | `name` | string | (required) | Unique label for this target; appears in output |
 | `cwd` | string | `""` (repo root) | Directory relative to repo root where the command runs, and the base for a relative source path wherever the origin that applies is `"working-directory"` |
 | `command` | string | (omit in CI) | Shell command to execute when `--run-tests` is passed |
-| `reporter` | string | (required) | Parser format -- one of the names in the reporters table below |
+| `reporter` | string | (required with `results`, or with `command` unless `file_results`) | Parser format -- one of the names in the reporters table below |
 | `results` | string | `""` | Glob pattern for result files (file-channel reporters), relative to the target's folder |
 | `coverage` | string | `""` | Path to an lcov.info, coverage.py JSON or `.coverage` file (format auto-detected), relative to the target's folder |
 | `inputs` | table | every file | The files whose change makes this target's results stale: `directories`, `file_patterns`, `skip_dirs`, `skip_files` |
@@ -251,6 +262,7 @@ later `summary` or `trace` names as fresh, with `--targets last-run`.
 | `resources` | list | `[]` | Declared shared resources this target uses; two targets naming a common one never run at the same time (see [Concurrent Targets](#concurrent-targets)) |
 | `credit_coverage` | string | `"off"` | `"off"`, `"tested"`, or `"verified"` -- lcov_tested credit |
 | `min_coverage_fraction` | float | `0.0` | Fraction of impl lines that must be covered (0.0-1.0) |
+| `file_results` | bool | `false` | The exit status of `command` is the result of each test file the target scans (see [file_results](#file_results)) |
 
 The target's folder is `<output_root>/<name>`, from the repository root.
 elspais reads `results` and `coverage` from that folder. Consequently, a
@@ -411,6 +423,46 @@ red.  When green (at least one result ingested, zero failures), all
 `// Verifies:` assertions in scope receive credit.  Use this when per-test
 attribution is lossy or the test runner output does not round-trip test
 identifiers cleanly.
+
+### file_results
+
+Some test files report only through the exit status of the command that runs
+them. A module of top-level assertions run by a bare interpreter is one: it
+exits non-zero at its first failed assertion, and it writes no per-test
+record. `file_results = true` makes the exit status of the target's command
+the result of each test file the target scans. Those are the scanned test
+files under the target's `cwd`, or every scanned test file where `cwd` is the
+repository root.
+
+```toml
+[[scanning.test.targets]]
+name         = "scripts"
+cwd          = "tests/scripts"
+command      = "python check_layout.py"
+file_results = true
+```
+
+The run records the exit status in the target's
+[fingerprint file](#the-fingerprint-file). A status of 0 passes every test
+file the target scans, and any other status fails every one of them. A
+failing command therefore fails every citation its result decides. A target
+that runs one file for each command keeps that verdict precise.
+
+In such a file, a citation that no test encloses, and that is written above
+no test, binds to the file itself. Its `Verifies:` relationship is then
+credited, and the file's result decides it. In any other test file, such a
+citation binds to nothing, and `tests.unbound_citation` reports it.
+
+A target can declare both a `reporter` and `file_results`. A per-test result
+that binds to a test decides the citations of that test. The file's result
+decides the citations bound to the file, and those of each test no per-test
+result reaches. A target declaring `file_results` needs no `reporter` for its
+`command`.
+
+Until a finished run records an exit status, the citations the file's result
+would decide stay awaiting a result. `elspais fingerprint finish` records no
+status unless it is given `--exit-status`. An Evidence Snapshot holds no
+file-level result, so `elspais evidence write` refuses a target that has one.
 
 ### credit_coverage
 
@@ -779,6 +831,10 @@ match = "source"
 # the repository root for results, the working directory for coverage.
 # results_origin = "working-directory"
 # coverage_origin = "repository-root"
+
+# true: the command's exit status is the result of each test file the
+# target scans, for files whose runner writes no per-test record.
+# file_results = false
 ```
 
 ## CI Usage

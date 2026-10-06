@@ -5835,6 +5835,11 @@ class GraphBuilder:
         self._pending_source_result_links: list[
             tuple[str, str, int | None, str | None, int | None]
         ] = []
+        # Implements: REQ-d00329-G+H
+        # File-level RESULT nodes, each with the repo-relative test file it
+        # stands for. Each is linked once every per-test result is linked,
+        # because it decides only the tests no per-test result reaches.
+        self._pending_file_result_links: list[tuple[str, str]] = []
         # Implements: REQ-d00222-A
         self._pending_terms: list[tuple[str, dict]] = []  # (node_id, parsed_data)
         # Implements: REQ-p00014-B
@@ -6659,7 +6664,12 @@ class GraphBuilder:
         # answer and nothing else's: a citation the parser never judged (a
         # test function emitted by the unlinked-test pass, a name-carried
         # reference) leaves the key absent and is bound by construction.
-        binds_to_test = data.get("binds_to_test") is not False
+        # Implements: REQ-d00329-F+J
+        # A citation bound to its file, in a file whose target's exit status
+        # is the file's result, is credited as a citation bound to a test:
+        # the file's result reaches it.
+        binds_to_file = bool(data.get("binds_to_file"))
+        binds_to_test = binds_to_file or data.get("binds_to_test") is not False
 
         if test_id not in self._nodes:
             node = GraphNode(
@@ -6691,6 +6701,9 @@ class GraphBuilder:
             # it does not get is the relationship below.
             if not binds_to_test:
                 node.set_field("binds_to_test", False)
+            # Implements: REQ-d00329-F
+            if binds_to_file:
+                node.set_field("binds_to_file", True)
             self._nodes[test_id] = node
         elif content.raw_text:
             # Implements: REQ-d00131-G
@@ -6841,6 +6854,11 @@ class GraphBuilder:
         if test_id and self._link_results_to_tests and data.get("match") != "aggregate":
             # Implements: REQ-d00127-E
             self._pending_links.append((result_id, test_id, EdgeKind.YIELDS, {}))
+        elif data.get("match") == "file" and self._link_results_to_tests:
+            # Implements: REQ-d00329-G+H
+            source_file = node.get_field("source_file")
+            if source_file:
+                self._pending_file_result_links.append((result_id, source_file))
         elif data.get("match") == "source" and self._link_results_to_tests:
             # Implements: REQ-d00254-G
             # Source-matching reporters (e.g. flutter-machine) emit no test_id;
@@ -7580,6 +7598,42 @@ class GraphBuilder:
                     for test_node in tests_by_file.get(source_file, ()):
                         test_node.link(result_node, EdgeKind.YIELDS)
                     result_node.set_field("match_scope", "file")
+
+        # Implements: REQ-d00329-G+H+J
+        # A file-level result decides each test in its file that no per-test
+        # result reaches, and each citation bound to the file itself. Every
+        # per-test result is linked above, so a test holding one keeps its
+        # own verdict, and a group holding such a test counts as reached.
+        if self._pending_file_result_links:
+            from elspais.graph.annotators import result_names_no_test
+
+            tests_in_file: dict[str, list[GraphNode]] = {}
+            for candidate in self._nodes.values():
+                if candidate.kind is not NodeKind.TEST:
+                    continue
+                file_node = candidate.file_node()
+                rel = file_node.get_field("relative_path") if file_node else None
+                if rel:
+                    tests_in_file.setdefault(rel, []).append(candidate)
+
+            def _reached_per_test(test_node: GraphNode) -> bool:
+                return any(
+                    result.kind is NodeKind.RESULT
+                    and result.get_field("match") != "file"
+                    and not result_names_no_test(result)
+                    for result in test_node.iter_children(edge_kinds={EdgeKind.YIELDS})
+                )
+
+            undecided = {
+                rel: [t for t in tests if not _reached_per_test(t)]
+                for rel, tests in tests_in_file.items()
+            }
+            for result_id, source_file in self._pending_file_result_links:
+                result_node = self._nodes.get(result_id)
+                if result_node is None:
+                    continue
+                for test_node in undecided.get(source_file, ()):
+                    test_node.link(result_node, EdgeKind.YIELDS)
 
         # Implements: REQ-d00132-F, REQ-d00132-G
         # Re-scope the stored implements/refines fields to unresolved

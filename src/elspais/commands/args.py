@@ -1191,6 +1191,10 @@ class FingerprintFinishArgs:
     target: tyro.conf.Positional[str]
     """Name of the [[scanning.test.targets]] entry that was run."""
 
+    # Implements: REQ-d00329-B
+    exit_status: int | None = None
+    """Exit status of the target's command: the result of each file a file_results target scans."""
+
 
 FingerprintAction = (
     Annotated[FingerprintStartArgs, tyro.conf.subcommand("start")]
