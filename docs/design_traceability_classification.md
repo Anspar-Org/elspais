@@ -87,8 +87,9 @@ name for the two answers is what REQ-d00285-F forbids.
 The per-file `code.references_resolve` and `tests.references_resolve` checks,
 which asked only whether a CODE/TEST node had a direct parent edge to a
 REQUIREMENT or ASSERTION, are subsumed by the reachability-based
-`*.uncited_file` checks. Reference resolution itself remains checked on the spec side, by
-`spec.implements_resolve` and `spec.refines_resolve`.
+`*.uncited_file` checks. Reference resolution itself is checked by the
+`references.*` checks, one per class of how far reading a reference reached,
+whichever keyword introduced it.
 
 ### Reachability API
 

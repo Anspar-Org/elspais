@@ -609,8 +609,12 @@ A copy is named by its declaring requirement and its original, so one declaring 
 
 A declaration that produces no copy is otherwise invisible: no requirement holds the missing obligation and no report has a row for it. G makes the absence a finding, whatever the reason, including the faults REQ-p00014-G and REQ-p00014-J already classify.
 
+H holds for every copy a `Satisfies:` declaration makes, whether the declaration names *Assertions* or the whole requirement. A mutation can change what a copy holds or whether it exists, so the graph after the mutation must hold the copies a build of the saved text holds, and the graph after its undo must hold the copies held before the mutation.
+
 ### Changelog
 
+- 2026-10-06 | 6e65b3ba | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: sync changelog hash
+- 2026-10-06 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-142: H holds for whole-requirement copies too
 - 2026-10-06 | 6e65b3ba | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-06 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-142: initial authoring: what a Satisfies naming Assertions copies
 

@@ -83,6 +83,7 @@ from elspais.graph.template_subtree import (
     copy_name_diagnostic,
     declared_originals,
     instantiate_subtree,
+    owning_requirement,
     satisfies_target_fault,
     stereotype_matrix_fault,
     subtree_nodes,
@@ -240,6 +241,31 @@ def _edge_record(edge: Any) -> tuple[str, str, str, dict[str, Any], list[str]]:
     )
 
 
+# Implements: REQ-o00062-G
+def _ids_before(entry: MutationEntry) -> dict[str, str]:
+    """The identifier each node a rename moved held before the rename.
+
+    A record made after a rename names the renamed nodes by their new
+    identifiers, and undo reads it once they hold their former ones again.
+    """
+    renamed: dict[str, str] = {}
+    if entry.operation not in ("rename_node", "rename_assertion"):
+        return renamed
+    old_id, new_id = entry.before_state.get("id"), entry.after_state.get("id")
+    if old_id and new_id:
+        renamed[new_id] = old_id
+    for old_child_id, new_child_id in entry.after_state.get("child_ids_renamed", []):
+        renamed[new_child_id] = old_child_id
+    return renamed
+
+
+def _stereotype_value(stereotype: Any) -> str | None:
+    """*stereotype* as plain data: its value, or None where none is set."""
+    if stereotype is None:
+        return None
+    return stereotype.value if isinstance(stereotype, Stereotype) else str(stereotype)
+
+
 # Implements: REQ-p00014-B, REQ-p00017-H
 def _mirror_onto_instances(node: GraphNode, parent: GraphNode) -> None:
     """Give each copy of *node* its text, and each copy of *parent* its hash.
@@ -257,7 +283,13 @@ def _mirror_onto_instances(node: GraphNode, parent: GraphNode) -> None:
 
 
 def _detach_citation(node: GraphNode, citer: GraphNode, kind: EdgeKind) -> None:
-    """Remove the edge a citation of the *Assertion* *node* produced."""
+    """Remove the edge a citation of *node*, an *Assertion* or a requirement, produced."""
+    if node.kind == NodeKind.REQUIREMENT:
+        for edge in list(node.iter_outgoing_edges()):
+            if edge.kind == kind and edge.target is citer and not edge.assertion_targets:
+                node.remove_edge(edge)
+                return
+        return
     label = node.get_field("label", "")
     for parent in node.iter_parents():
         if parent.kind != NodeKind.REQUIREMENT:
@@ -1214,6 +1246,7 @@ class TraceGraph:
         if old_id and new_id:
             self._retarget_broken_refs(new_id, old_id)
         self._restore_journey_bodies(entry)
+        self._restore_changed_copies(entry)
 
     # Implements: REQ-o00062-G
     def _undo_update_title(self, entry: MutationEntry) -> None:
@@ -1223,6 +1256,7 @@ class TraceGraph:
         if node_id in self._index and old_title is not None:
             self._index[node_id].set_label(old_title)
             self._restore_journey_bodies(entry)
+        self._restore_changed_copies(entry)
 
     # Implements: REQ-o00062-G
     def _undo_change_status(self, entry: MutationEntry) -> None:
@@ -1231,18 +1265,28 @@ class TraceGraph:
         old_status = entry.before_state.get("status")
         if node_id in self._index and old_status is not None:
             self._index[node_id].set_field("status", old_status)
+        self._restore_changed_copies(entry)
 
     # Implements: REQ-o00062-G
     def _undo_set_stereotype(self, entry: MutationEntry) -> None:
-        """Undo a set_stereotype operation (node + assertion children)."""
+        """Undo a set_stereotype operation (node + assertion children).
+
+        Each node takes back the stereotype it held, including none.
+        """
         node = self._index.get(entry.target_id)
+        if node is not None:
+            self._unbind_citations(node, entry.after_state.get("resolved_citations", []))
+        self._restore_changed_copies(entry)
+        self._restore_refinements(entry.after_state.get("rejudged_refinements", []))
         old = entry.before_state.get("stereotype")
-        if node is not None and old is not None:
-            node.set_field("stereotype", Stereotype(old))
+        if node is not None:
+            node.set_field("stereotype", Stereotype(old) if old is not None else None)
         for child_id, child_old in entry.before_state.get("assertion_stereotypes", {}).items():
             child = self._index.get(child_id)
             if child is not None:
-                child.set_field("stereotype", Stereotype(child_old))
+                child.set_field(
+                    "stereotype", Stereotype(child_old) if child_old is not None else None
+                )
 
     # Implements: REQ-o00062-G
     def _undo_add_requirement(self, entry: MutationEntry) -> None:
@@ -1255,6 +1299,7 @@ class TraceGraph:
             # Remove edges
             for parent in list(node.iter_parents()):
                 parent.unlink(node)
+        self._restore_reclassed_faults(entry)
 
     # Implements: REQ-o00062-P
     @staticmethod
@@ -1340,6 +1385,7 @@ class TraceGraph:
         for record in reversed(entry.before_state.get("withdrawn_copies", [])):
             if "member_ids" in record and "member" not in record:
                 self._restore_copy(record, self._index.get)
+        self._restore_reclassed_faults(entry)
 
     # Stored ref fields hold UNRESOLVED leftovers only (REQ-d00132-F/G):
     # build() strips refs that became edges, and the mutation paths below
@@ -1566,10 +1612,19 @@ class TraceGraph:
 
     # Implements: REQ-o00062-G
     def _undo_add_assertion(self, entry: MutationEntry) -> None:
-        """Undo an add assertion operation."""
+        """Undo an add assertion operation.
+
+        The requirement takes back its hash before the copies made of it are
+        restored, since a restored copy says what its original says.
+        """
         assertion_id = entry.target_id
         if assertion_id in self._index:
-            node = self._index.pop(assertion_id)
+            node = self._index[assertion_id]
+            parent = self._index.get(entry.before_state.get("parent_id", ""))
+            if parent is not None and "parent_hash" in entry.before_state:
+                parent.set_field("hash", entry.before_state["parent_hash"])
+            self._unbind_citations(node, entry.after_state.get("resolved_citations", []))
+            self._index.pop(assertion_id)
             for parent in list(node.iter_parents()):
                 parent.unlink(node)
                 # Restore parent hash (even if None)
@@ -1662,6 +1717,7 @@ class TraceGraph:
             parent_id = entry.before_state.get("parent_id")
             if parent_id and parent_id in self._index and "parent_hash" in entry.before_state:
                 self._index[parent_id].set_field("hash", entry.before_state["parent_hash"])
+        self._restore_changed_copies(entry)
 
     # Implements: REQ-o00062-G
     def _undo_journey_body_mutation(self, entry: MutationEntry) -> None:
@@ -1975,6 +2031,19 @@ class TraceGraph:
         # Store cascaded pairs so _undo_rename_node can reverse them.
         entry.after_state["child_ids_renamed"] = child_ids_renamed
 
+        # Implements: REQ-p00017-B, REQ-d00328-H
+        # A Satisfies: renders the references its requirement declared, so
+        # each one naming the renamed requirement is respelled. A copy is
+        # named for the requirement declaring it and for its original, so
+        # each copy either of them names is made again.
+        if node.kind == NodeKind.REQUIREMENT:
+            entry.before_state["respelled_satisfies"] = self.respell_satisfies(
+                lambda resolver: self._successor_for_rename(resolver, old_id, new_id)
+            )
+            entry.before_state["withdrawn_copies"] = self._remake_changed_copies(
+                [node], declaring=node
+            )
+
         # Implements: REQ-d00230-C
         update_anchors_on_rename(self._comment_index, old_id, new_id, self.repo_root)
 
@@ -2215,6 +2284,9 @@ class TraceGraph:
 
         node.set_label(new_title)
         self._reconcile_journey_bodies(node)
+        # Implements: REQ-d00328-H
+        # A copy holds its original's title.
+        entry.before_state["withdrawn_copies"] = self._remake_changed_copies([node])
         self._mutation_log.append(entry)
         return entry
 
@@ -2246,6 +2318,9 @@ class TraceGraph:
         )
 
         node.set_field("status", new_status)
+        # Implements: REQ-d00328-H
+        # A copy holds its original's status.
+        entry.before_state["withdrawn_copies"] = self._remake_changed_copies([node])
         self._mutation_log.append(entry)
         return entry
 
@@ -2254,10 +2329,11 @@ class TraceGraph:
         """Set or clear a requirement's ``**Template**`` marker.
 
         Mirrors the author-declaration path (see ``_add_requirement``): the
-        node AND its assertion children are stamped TEMPLATE together (or
-        restored to CONCRETE), so a toggled template renders identically to
-        a parsed one. INSTANCE nodes are read-only synthetic content and
-        cannot be (un)templated.
+        node AND its assertion children are stamped TEMPLATE together, or
+        the node is restored to CONCRETE and its assertion children left
+        unmarked, so a toggled requirement holds what a parsed one holds.
+        INSTANCE nodes are read-only synthetic content and cannot be
+        (un)templated.
 
         Args:
             node_id: The requirement node ID to update.
@@ -2279,7 +2355,7 @@ class TraceGraph:
         if node.kind != NodeKind.REQUIREMENT:
             raise ValueError(f"'{node_id}' is not a requirement")
 
-        old = node.get_field("stereotype") or Stereotype.CONCRETE
+        old = node.get_field("stereotype")
         if old == Stereotype.INSTANCE:
             raise ValueError(
                 f"'{node_id}' is an instance (read-only synthetic content); "
@@ -2287,26 +2363,44 @@ class TraceGraph:
             )
         new = Stereotype.TEMPLATE if is_template else Stereotype.CONCRETE
 
-        assertion_before: dict[str, str] = {}
+        assertion_before: dict[str, str | None] = {}
         for child in node.iter_children():
             if child.kind == NodeKind.ASSERTION:
-                cs = child.get_field("stereotype") or Stereotype.CONCRETE
-                assertion_before[child.id] = cs.value if isinstance(cs, Stereotype) else str(cs)
+                assertion_before[child.id] = _stereotype_value(child.get_field("stereotype"))
 
         entry = MutationEntry(
             operation="set_stereotype",
             target_id=node_id,
             before_state={
-                "stereotype": old.value if isinstance(old, Stereotype) else str(old),
+                "stereotype": _stereotype_value(old),
                 "assertion_stereotypes": assertion_before,
             },
             after_state={"stereotype": new.value},
         )
 
+        # A build stamps the *Assertions* of a template and leaves those of
+        # any other requirement unmarked.
         node.set_field("stereotype", new)
         for child in node.iter_children():
             if child.kind == NodeKind.ASSERTION:
-                child.set_field("stereotype", new)
+                child.set_field("stereotype", new if is_template else None)
+
+        # Implements: REQ-p00014-G, REQ-d00328-G+H
+        # Whether a refinement joins the requirement, and whether a
+        # Satisfies: may copy it, turn on its marker. Each refinement it
+        # takes part in is judged again, then each copy of it, or of a
+        # template whose refinements changed, is made again as a build
+        # judges it, and each Satisfies: the marker refused is judged again.
+        rejudged = self._rejudge_refinements(node)
+        entry.after_state["rejudged_refinements"] = rejudged
+        originals = [node]
+        for record in rejudged:
+            cited = self._index.get(record["cited_id"])
+            if cited is not None and cited not in originals:
+                originals.append(cited)
+        entry.before_state["withdrawn_copies"] = self._remake_changed_copies(originals)
+        if is_template:
+            entry.after_state["resolved_citations"] = self._admit_satisfies(node)
 
         self._mutation_log.append(entry)
         return entry
@@ -2439,6 +2533,11 @@ class TraceGraph:
         else:
             # No parent - this is a root node
             self._roots.append(node)
+
+        # Implements: REQ-p00014-R, REQ-d00272-A
+        # A reference to an *Assertion* of the new requirement now reaches
+        # the requirement and misses only the *Assertion*.
+        entry.before_state["reclassed_faults"] = self.reclass_faults_naming(req_id)
 
         self._mutation_log.append(entry)
         return entry
@@ -2634,6 +2733,11 @@ class TraceGraph:
         entry.before_state["orphaned_child_ids"] = orphaned_children
         entry.before_state["structured_child_ids"] = [c.id for c in structured]
 
+        # Implements: REQ-p00014-R, REQ-d00272-A
+        # A reference to one of its *Assertions* now names a requirement
+        # nothing holds, which is as far as reading it reaches.
+        entry.before_state["reclassed_faults"] = self.reclass_faults_naming(node_id)
+
         self._mutation_log.append(entry)
         return entry
 
@@ -2809,6 +2913,16 @@ class TraceGraph:
 
         self._relabel_assertion(node, parent, new_label)
         self._recompute_requirement_hash(parent)
+
+        # Implements: REQ-p00017-B, REQ-d00328-H
+        # Each Satisfies: naming the *Assertion* is respelled, and each copy
+        # of its requirement is made again under the new label.
+        entry.before_state["respelled_satisfies"] = self.respell_satisfies(
+            lambda resolver: self._successor_for_relabel(
+                resolver, parent.id, {old_label: new_label}
+            )
+        )
+        entry.before_state["withdrawn_copies"] = self._remake_changed_copies([parent])
 
         # Implements: REQ-p00017-B
         # A journey naming this assertion holds the old label in its cached
@@ -3011,6 +3125,9 @@ class TraceGraph:
             label=assertion_text,
         )
         assertion_node._content = {"label": label, **directive_fields(assertion_text)}
+        # A build stamps every *Assertion* of a template as the template.
+        if parent.get_field("stereotype") == Stereotype.TEMPLATE:
+            assertion_node.set_field("stereotype", Stereotype.TEMPLATE)
 
         # Add to index and link to parent
         self._index[assertion_id] = assertion_node
@@ -3040,6 +3157,12 @@ class TraceGraph:
             },
             affects_hash=True,
         )
+
+        # Implements: REQ-p00017-H, REQ-d00328-H
+        # A reference naming the new label reaches it, as a build of the
+        # saved text binds it, and each copy of the requirement is made
+        # again with it.
+        entry.after_state["resolved_citations"] = self._resolve_citations(assertion_node, parent)
 
         self._mutation_log.append(entry)
         return entry
@@ -3192,6 +3315,328 @@ class TraceGraph:
         """
         return self._withdraw_copies_of([node], failing=frozenset({node.id}))
 
+    # Implements: REQ-p00014-G, REQ-d00328-H
+    def _rejudge_refinements(self, node: GraphNode) -> list[dict[str, Any]]:
+        """Judge again each refinement the requirement *node* takes part in.
+
+        The validation matrix admits a refinement by the markers of the
+        requirements it joins, so a change to *node*'s marker can refuse a
+        refinement it admitted, or admit one it refused. A refused one is
+        cut and reported under the refusal; an admitted one is bound, as a
+        build binds it. A refusal another member holds is reported by the
+        federation, which holds that member. Returns one record per
+        change, naming the requirement cited, which undo reads.
+        """
+        records: list[dict[str, Any]] = []
+        edges = [
+            *(e for e in node.iter_outgoing_edges() if e.kind == EdgeKind.REFINES),
+            *(e for e in node.iter_incoming_edges() if e.kind == EdgeKind.REFINES),
+        ]
+        for edge in edges:
+            cited, citer = edge.source, edge.target
+            targets = (
+                [
+                    child
+                    for child in cited.iter_children(edge_kinds={EdgeKind.STRUCTURES})
+                    if child.kind == NodeKind.ASSERTION
+                    and child.get_field("label") in edge.assertion_targets
+                ]
+                if edge.assertion_targets
+                else [cited]
+            )
+            refused = [
+                fault
+                for target in targets
+                if (
+                    fault := stereotype_matrix_fault(
+                        citer, target, citer.id, target.id, EdgeKind.REFINES
+                    )
+                )
+                is not None
+            ]
+            if not refused:
+                continue
+            record: dict[str, Any] = {
+                "refinement_cut": True,
+                "edge": _edge_record(edge),
+                "source_id": citer.id,
+                "cited_id": cited.id,
+            }
+            cited.remove_edge(edge)
+            if self._index.get(citer.id) is citer:
+                record["faults"] = [self._withdraw_citation(citer, f) for f in refused]
+            else:
+                record["refused"] = [_fault_record(f) for f in refused]
+            records.append(record)
+        for fault in list(self._unresolved_references):
+            citer = self._index.get(fault.source_id)
+            target = self._refinement_admitted(fault, node, self._index.get)
+            if citer is not None and target is not None:
+                records.append(self._bind_refinement(citer, target, fault))
+        return records
+
+    # Implements: REQ-p00014-G
+    def _refinement_admitted(
+        self, fault: ReferenceFault, node: GraphNode, find: Any, resolver: Any = None
+    ) -> GraphNode | None:
+        """The node a refused ``Refines:`` *fault* names, where the matrix now admits it.
+
+        Only a refinement joining *node*, whose marker changed, is judged
+        again. *resolver* reads the target in the grammar of the repository
+        owning it and *find* returns the node it names.
+        """
+        if (
+            fault.edge_kind != EdgeKind.REFINES.value
+            or fault.fault_class is not FaultClass.FORBIDDEN
+        ):
+            return None
+        resolver = resolver if resolver is not None else self.resolver
+        parsed = resolver.parse(fault.target_id)
+        target = find(resolver.render_canonical(parsed)) if parsed is not None else None
+        citer = find(fault.source_id)
+        if target is None or citer is None or assertion_is_retired(target):
+            return None
+        if citer is not node and owning_requirement(target) is not node:
+            return None
+        if stereotype_matrix_fault(citer, target, citer.id, fault.target_id, EdgeKind.REFINES):
+            return None
+        return target
+
+    def _bind_refinement(
+        self, citer: GraphNode, target: GraphNode, fault: ReferenceFault
+    ) -> dict[str, Any]:
+        """Bind the refused refinement *fault* the matrix now admits."""
+        record = self._bind_citation(citer, target, fault)
+        record["refinement_bound"] = True
+        record["cited_id"] = (owning_requirement(target) or target).id
+        return record
+
+    # Implements: REQ-o00062-G
+    def _restore_refinements(self, records: list[dict[str, Any]]) -> None:
+        """Undo ``_rejudge_refinements`` for what this graph holds.
+
+        A refinement joining a node another member holds is joined again by
+        the federation, which can find that node.
+        """
+        for record in reversed(records):
+            if "member" in record or "refused" in record:
+                continue
+            citer = self._index.get(record["source_id"])
+            if citer is None:
+                continue
+            if record.get("refinement_bound"):
+                target = self._index.get(record["target_id"])
+                if target is not None:
+                    self._unbind_citation(citer, target, record)
+                continue
+            for change in reversed(record.get("faults", [])):
+                self._restore_citation(citer, change)
+            source_id, target_id, kind, metadata, targets = record["edge"]
+            source, target = self._index.get(source_id), self._index.get(target_id)
+            if source is not None and target is not None:
+                TraceGraph._restore_edge_attrs(
+                    source.link(target, EdgeKind(kind), list(targets)), metadata, targets
+                )
+
+    # Implements: REQ-d00328-H
+    def _remake_changed_copies(
+        self, originals: list[GraphNode], declaring: GraphNode | None = None
+    ) -> list[dict[str, Any]]:
+        """Remake the copies a change to *originals*, or to *declaring*, changes.
+
+        A copy holds what its original holds, under an identifier composed
+        from the declaring requirement's and the original's, so a change to
+        either changes the copy a build of the saved text makes. Returns the
+        records undo reads.
+        """
+        records = self._withdraw_copies_of(originals, failing=frozenset())
+        if declaring is not None and any(
+            e.kind == EdgeKind.SATISFIES and self._index.get(e.target.id) is e.target
+            for e in declaring.iter_outgoing_edges()
+        ):
+            records.append(self._remake_copies(declaring, frozenset(), frozenset()))
+        return records
+
+    # Implements: REQ-o00062-G
+    def _restore_changed_copies(self, entry: MutationEntry) -> None:
+        """Undo the copies, and the ``Satisfies:`` text, a mutation changed here.
+
+        Runs once the mutated node is back as it was, so a copy restored
+        says what its original says again. A record made after a rename
+        names the renamed nodes as the rename left them, so it is read
+        through their former identifiers.
+        """
+        renamed = _ids_before(entry)
+
+        def find(node_id: str) -> GraphNode | None:
+            return self._index.get(renamed.get(node_id, node_id))
+
+        for record in reversed(entry.before_state.get("withdrawn_copies", [])):
+            if "member_ids" in record and "member" not in record:
+                self._restore_copy(record, find)
+        self.restore_satisfies(
+            [r for r in entry.before_state.get("respelled_satisfies", []) if "member" not in r]
+        )
+
+    # Implements: REQ-p00017-B, REQ-p00014-U
+    def respell_satisfies(self, successor_for: Any, grammar: Any = None) -> list[dict[str, Any]]:
+        """Respell each ``Satisfies:`` reference this graph holds that a rename names.
+
+        A requirement renders its ``Satisfies:`` list from the references it
+        declared rather than from edges, so a rename reaches that text only
+        by respelling them. *successor_for* takes a grammar and returns the
+        map from a reference, in the spelling that grammar normalizes it to,
+        to its new spelling, or to None where it names nothing renamed. The
+        grammar is the one *grammar* returns -- that of the repository owning
+        the renamed identifier -- or this graph's own, and it is asked for
+        only where a requirement declares a ``Satisfies:``. Returns one record
+        per requirement changed, which undo and the save read.
+        """
+        declaring = [
+            node
+            for node in self.iter_by_kind(NodeKind.REQUIREMENT)
+            if node.get_field("stereotype") != Stereotype.INSTANCE
+            and node.get_field("satisfies_refs")
+        ]
+        if not declaring:
+            return []
+        resolver = grammar() if grammar is not None else self.resolver
+        successor = successor_for(resolver)
+        records: list[dict[str, Any]] = []
+        for node in declaring:
+            declared = list(node.get_field("satisfies_refs") or [])
+            respelled = [successor(resolver.normalize_ref(ref)) or ref for ref in declared]
+            if respelled != declared:
+                node.set_field("satisfies_refs", respelled)
+                records.append({"node_id": node.id, "before": declared, "after": respelled})
+        return records
+
+    # Implements: REQ-o00062-G
+    def restore_satisfies(self, records: list[dict[str, Any]]) -> None:
+        """Undo ``respell_satisfies`` for the *records* this graph holds."""
+        for record in reversed(records):
+            node = self._index.get(record["node_id"])
+            if node is not None:
+                node.set_field("satisfies_refs", list(record["before"]))
+
+    # Implements: REQ-p00014-G, REQ-d00328-B+H
+    def _admit_satisfies(self, node: GraphNode) -> list[dict[str, Any]]:
+        """Copy what each ``Satisfies:`` refused for *node*'s marker now names.
+
+        *node* has just been marked **Template**, so a reference to it, or to
+        one of its *Assertions*, that the validation matrix refused is judged
+        again and copied as a build copies it. Each copy already holding
+        *node* is then remade, as the bringing back of an *Assertion*
+        remakes them. Returns one record per change, which undo reads.
+        """
+        resolved: list[dict[str, Any]] = []
+        project_name = self._project_name()
+        for fault in list(self._unresolved_references):
+            citer = self._index.get(fault.source_id)
+            original = self._satisfies_original(fault, node)
+            if citer is not None and original is not None:
+                resolved.append(
+                    self._make_satisfies_copy(
+                        citer, original, fault, lambda _o: (project_name, True)
+                    )
+                )
+        resolved.extend(self._withdraw_copies_of([node], failing=frozenset()))
+        return resolved
+
+    # Implements: REQ-p00014-G, REQ-d00328-B+H
+    def _satisfies_original(self, fault: ReferenceFault, node: GraphNode) -> GraphNode | None:
+        """The original a ``Satisfies:`` *fault* names that a build now copies, if one.
+
+        *node* has just changed: an *Assertion* brought back, which a
+        reference naming it as unknown now reaches, or a requirement marked
+        **Template**, which a reference to it or to one of its *Assertions*
+        the validation matrix refused may now reach.
+        """
+        if fault.edge_kind != EdgeKind.SATISFIES.value:
+            return None
+        if self._fault_names_assertion(fault, node, EdgeKind.SATISFIES):
+            return node
+        if fault.fault_class is not FaultClass.FORBIDDEN:
+            return None
+        parsed = self.resolver.parse(fault.target_id)
+        if parsed is None:
+            return None
+        target = self._index.get(self.resolver.render_canonical(parsed))
+        if target is None or owning_requirement(target) is not node:
+            return None
+        if satisfies_target_fault(target, fault.source_id, fault.target_id) is not None:
+            return None
+        return target
+
+    # Implements: REQ-p00014-R, REQ-d00272-A+S
+    def reclass_faults_naming(
+        self,
+        requirement_id: str,
+        resolver: Any = None,
+        classify: Any = None,
+        holds: Any = None,
+    ) -> list[dict[str, Any]]:
+        """Re-ask the class of each held reference that *requirement_id* decides.
+
+        Whether the requirement exists decides how far reading a reference
+        to one of its *Assertions* reached, whichever keyword introduced it,
+        so a mutation adding or removing the requirement changes that class.
+        A reference the validation matrix refused reached the requirement it
+        names, so once nothing holds that requirement, reading it reaches
+        only as far as a missing requirement. *resolver* reads the reference
+        in the grammar of the repository owning the requirement, this
+        graph's own unless a federation says otherwise; *classify* gives the
+        class reading reached, this graph's resolution class unless a
+        federation says otherwise; *holds* says whether that repository
+        holds the requirement. Returns one record per changed reference,
+        which undo reads.
+        """
+        resolver = resolver if resolver is not None else self.resolver
+        if holds is None:
+
+            def holds(node_id: str) -> bool:
+                return self._index.get(node_id) is not None
+
+        waiting = (FaultClass.UNKNOWN_REQUIREMENT, FaultClass.UNKNOWN_ASSERTION)
+        refused_and_gone = not holds(requirement_id)
+        changed: list[dict[str, Any]] = []
+        for i, fault in enumerate(self._unresolved_references):
+            refused = fault.fault_class is FaultClass.FORBIDDEN
+            if fault.fault_class not in waiting and not (refused and refused_and_gone):
+                continue
+            parsed = resolver.parse(resolver.normalize_ref(fault.target_id))
+            if parsed is None or parsed.fqn != requirement_id:
+                continue
+            if not parsed.assertions and not refused:
+                continue
+            # A refusal's explanation described the requirement it reached.
+            unread = replace(fault, diagnostic="") if refused else fault
+            if classify is not None:
+                reached = classify(unread)
+            else:
+                reached = replace(unread, fault_class=self._resolution_class(fault.target_id))
+            if reached == fault:
+                continue
+            self._unresolved_references[i] = reached
+            changed.append({"before": _fault_record(fault), "after": _fault_record(reached)})
+        return changed
+
+    # Implements: REQ-o00062-G
+    def restore_reclassed_faults(self, records: list[dict[str, Any]]) -> None:
+        """Undo ``reclass_faults_naming`` for the *records* this graph holds."""
+        for record in reversed(records):
+            after = _fault_from_record(record["after"])
+            for i, held in enumerate(self._unresolved_references):
+                if held == after:
+                    self._unresolved_references[i] = _fault_from_record(record["before"])
+                    break
+
+    def _restore_reclassed_faults(self, entry: MutationEntry) -> None:
+        """Undo the reclassing a mutation made in this graph."""
+        self.restore_reclassed_faults(
+            [r for r in entry.before_state.get("reclassed_faults", []) if "member" not in r]
+        )
+
     # Implements: REQ-p00017-H, REQ-p00014-B, REQ-p00014-G, REQ-d00328-G+H
     def _withdraw_copies_of(
         self,
@@ -3255,6 +3700,7 @@ class TraceGraph:
         excluded: frozenset[str],
         classify: Any = None,
         declared_ids: list[str] | None = None,
+        owner_of: Any = None,
     ) -> dict[str, Any]:
         """Remake every copy *declaring*'s ``Satisfies:`` declarations made.
 
@@ -3266,7 +3712,8 @@ class TraceGraph:
         an original. *classify*, when given, returns the fault a federation
         reports for an unresolved reference. *declared_ids*, when given,
         names originals the declarations named that the copies can no longer
-        reach. Returns the record undo reads.
+        reach. *owner_of*, when given, names the repository owning an
+        original, which a federation knows. Returns the record undo reads.
         """
         satisfied = [
             e
@@ -3303,18 +3750,49 @@ class TraceGraph:
             if classify is not None:
                 fault = classify(fault)
             faults.append(self._withdraw_citation(declaring, fault))
+        # Implements: REQ-p00014-G, REQ-d00328-G
+        # A target the validation matrix refuses is reported under that
+        # refusal and copied nowhere, as a build judges it.
+        copied: list[GraphNode] = []
+        for target in declared:
+            if target.id in failing:
+                continue
+            refusal = satisfies_target_fault(target, declaring.id, target.id)
+            if refusal is not None:
+                faults.append(self._withdraw_citation(declaring, refusal))
+                continue
+            copied.append(target)
         record["faults"] = faults
         project_name = self._project_name()
-        made = instantiate_subtree(
-            [t for t in declared if t.id not in failing],
-            declaring,
-            lambda orig_id: self.resolver.build_instance_id(declaring.id, orig_id),
-            lambda orig: (owners.get(orig.id, project_name), self._index.get(orig.id) is orig),
-            self._index,
-            excluded,
-        )
-        record["made_ids"] = [copy.id for copy in made.copies.values()]
-        self._admit_copy_roots(made.copies)
+
+        # A build copies the targets this graph holds first and judges which
+        # copies are roots, and a federation then extends those copies with
+        # what the targets another member holds ask of them; the remake
+        # makes them in that order.
+        def owning_repo(orig: GraphNode) -> tuple[str, bool]:
+            held_here = self._index.get(orig.id) is orig
+            if owner_of is not None and not held_here:
+                return owner_of(orig), held_here
+            # An *Assertion* the original gained since it was copied is owned
+            # where its requirement is.
+            requirement = owning_requirement(orig)
+            repo = owners.get(orig.id) or (owners.get(requirement.id) if requirement else None)
+            return repo or project_name, held_here
+
+        made_ids: list[str] = []
+        for held_here in (True, False):
+            made = instantiate_subtree(
+                [t for t in copied if (self._index.get(t.id) is t) == held_here],
+                declaring,
+                lambda orig_id: self.resolver.build_instance_id(declaring.id, orig_id),
+                owning_repo,
+                self._index,
+                excluded,
+            )
+            made_ids.extend(copy.id for copy in made.copies.values())
+            if held_here:
+                self._admit_copy_roots(made.copies)
+        record["made_ids"] = made_ids
         return record
 
     # Implements: REQ-d00128-I, REQ-d00328-H
@@ -3374,7 +3852,7 @@ class TraceGraph:
         """
         if record.get("satisfies_remade"):
             self._remove_copies(record.get("made_ids", []))
-            declaring = self._index.get(record["source_id"])
+            declaring = find(record["source_id"])
             if declaring is not None:
                 for fault in reversed(record.get("faults", [])):
                     self._restore_citation(declaring, fault)

@@ -20,7 +20,15 @@ All notable changes to elspais will be documented in this file.
 
 - **Every `Satisfies:` that copies nothing is reported (REQ-d00328-G)** -- a missing Assertion, a target not marked Template, a missing template in another repository and an Assertion retired by a mutation are each reported once as an unresolved `Satisfies:` reference.
 
-- **Mutations remake the copies a rebuild would make (REQ-d00328-H)** -- retiring, deleting or bringing back a template Assertion, editing it, or deleting a template requirement remakes every copy of each declaring requirement it reaches, in the declaring requirement's own repository or another, and undo restores what was there.
+- **Mutations remake the copies a rebuild would make (REQ-d00328-H)** -- retiring, deleting or bringing back a template Assertion, editing it, or deleting a template requirement remakes every copy of each declaring requirement it reaches, in the declaring requirement's own repository or another, and undo restores what was there. A status or title change, a rename of a requirement or an Assertion, a Template marker change and an added Assertion now do the same, for copies of a whole requirement and of named Assertions alike.
+
+- **A rename respells every `Satisfies:` naming what it renamed (REQ-p00017-B)** -- the `Satisfies:` text of each declaring requirement, in any member of the federation, now names the new identifier, and the save writes its file. An unresolved reference another member holds to a renamed requirement follows the rename too.
+
+- **A Template marker change judges each refinement again (REQ-p00014-G)** -- marking or unmarking a requirement as a Template now cuts and reports each `Refines:` the validation matrix refuses, and binds each one it now admits, as a build of the saved text does. Unmarking leaves the requirement's Assertions unmarked, as a parsed requirement holds them, and undo restores the marker each node held, including none. An Assertion added to a template is marked as the template.
+
+- **The class of an unresolved reference follows the requirement it names (REQ-p00014-R, REQ-d00272-A)** -- after a requirement is deleted, a reference to one of its Assertions is reported as naming a requirement no repository holds, as a rebuild reports it, whichever keyword introduced it and in whichever member holds it; a reference the validation matrix refused is reported the same way once the requirement it named is deleted; adding a requirement turns such a reference back into one naming a missing Assertion. Undo restores the class and the diagnostic.
+
+- **`spec.implements_resolve`, `spec.refines_resolve` and `spec.satisfies_resolve` are withdrawn (REQ-d00285-F)** -- they read fields no build records, so they never reported anything. Every unresolved or refused reference is reported by `references.unknown_namespace`, `references.unknown_requirement`, `references.unknown_assertion` or `references.forbidden`, whichever keyword introduced it. A `[rules.severity]` entry naming a withdrawn check is refused, naming the `[rules.references]` settings to use instead.
 
 ### TOOL-110
 

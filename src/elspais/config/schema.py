@@ -509,10 +509,16 @@ class RulesConfig(_StrictModel):
     @field_validator("severity")
     @classmethod
     def _v_severity_names(cls, v: dict[str, Any]) -> dict[str, Any]:
-        from elspais.utilities.findings import REGISTRY
+        from elspais.utilities.findings import REGISTRY, WITHDRAWN_CHECKS
 
         for name in v or {}:
             rule = REGISTRY.get(name)
+            if rule is None and name in WITHDRAWN_CHECKS:
+                raise ValueError(
+                    f"rules.severity.{name!r} names no check: the references it judged "
+                    f"are reported by {WITHDRAWN_CHECKS[name]}. Remove the entry and "
+                    f"set those instead."
+                )
             if rule is None:
                 raise ValueError(
                     f"rules.severity.{name!r} names no check. Run `elspais docs checks` "

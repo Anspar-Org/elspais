@@ -17,9 +17,7 @@ from elspais.commands.health import (
     check_spec_format_rules,
     check_spec_hierarchy_levels,
     check_spec_hierarchy_undefined_levels,
-    check_spec_implements_resolve,
     check_spec_no_duplicates,
-    check_spec_refines_resolve,
     check_spec_undefined_levels,
     check_test_results,
     run_spec_checks,
@@ -112,65 +110,6 @@ class TestCheckSpecNoDuplicatesFindings:
         assert isinstance(finding, HealthFinding)
         assert finding.node_id is not None, "Finding should have node_id"
         assert "REQ-p00001" in (finding.node_id or "")
-
-
-class TestCheckSpecImplementsResolveFindings:
-    """Findings should identify each unresolved implements reference."""
-
-    # Verifies: REQ-d00085-I
-    def test_REQ_d00085_I_unresolved_implements_have_findings(self, tmp_path: Path) -> None:
-        # The builder stores implements as pending edge links, not as a node
-        # field. The check function reads node.get_field("implements", []),
-        # so we construct the graph manually with the field set directly.
-        graph = TraceGraph()
-        node = GraphNode(
-            id="REQ-d00001",
-            kind=NodeKind.REQUIREMENT,
-            label="Dev Requirement",
-        )
-        node.set_field("level", "DEV")
-        node.set_field("status", "Active")
-        node.set_field("implements", ["REQ-p99999"])
-        graph._index["REQ-d00001"] = node
-
-        check = check_spec_implements_resolve(_fed(graph, tmp_path))
-
-        assert not check.passed, "Expected check to fail with unresolved implements"
-        assert len(check.findings) > 0, "Expected findings for unresolved implements"
-        finding = check.findings[0]
-        assert isinstance(finding, HealthFinding)
-        assert finding.node_id is not None, "Finding should have node_id (the 'from' req)"
-        assert "REQ-d00001" in (finding.node_id or "")
-        assert finding.message, "Finding should have a message"
-
-
-class TestCheckSpecRefinesResolveFindings:
-    """Findings should identify each unresolved refines reference."""
-
-    # Verifies: REQ-d00085-I
-    def test_REQ_d00085_I_unresolved_refines_have_findings(self, tmp_path: Path) -> None:
-        # Same issue as implements: the builder stores refines as pending
-        # edge links, not as a node field. Construct manually.
-        graph = TraceGraph()
-        node = GraphNode(
-            id="REQ-d00002",
-            kind=NodeKind.REQUIREMENT,
-            label="Dev Refines",
-        )
-        node.set_field("level", "DEV")
-        node.set_field("status", "Active")
-        node.set_field("refines", ["REQ-p88888"])
-        graph._index["REQ-d00002"] = node
-
-        check = check_spec_refines_resolve(_fed(graph, tmp_path))
-
-        assert not check.passed, "Expected check to fail with unresolved refines"
-        assert len(check.findings) > 0, "Expected findings for unresolved refines"
-        finding = check.findings[0]
-        assert isinstance(finding, HealthFinding)
-        assert finding.node_id is not None, "Finding should have node_id"
-        assert "REQ-d00002" in (finding.node_id or "")
-        assert finding.message, "Finding should have a message"
 
 
 class TestCheckSpecHierarchyLevelsFindings:

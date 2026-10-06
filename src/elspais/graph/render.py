@@ -1135,6 +1135,23 @@ def _mutation_reach(
             _mark_node_file(journey_id)
 
         # Implements: REQ-p00017-B, REQ-d00132-H
+        # A rename respells each Satisfies: reference naming what it renamed,
+        # in whichever member holds it, and the requirement renders that
+        # text from the references it declared.
+        # An unresolved reference another member holds to a renamed
+        # requirement follows it too, and renders from the stored reference.
+        for record in [
+            *(entry.before_state.get("respelled_satisfies", ()) or ()),
+            *(entry.after_state.get("references_renamed_elsewhere", ()) or ()),
+        ]:
+            citing = graph.find_by_id(record["node_id"])
+            if citing is not None and citing.kind == NodeKind.REQUIREMENT:
+                if id(citing) not in reached:
+                    by_citation.add(id(citing))
+                reached[id(citing)] = citing
+                _mark(citing.file_node())
+
+        # Implements: REQ-p00017-B, REQ-d00132-H
         # A rename respells each citation in code or a test that designates
         # what it renamed. The file is named by its id, which carries its
         # repository's namespace; a citing node's own id need not.

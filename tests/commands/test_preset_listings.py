@@ -144,10 +144,9 @@ def whole_run(faulted_graph, config):
 def test_unresolved_selects_exactly_the_three_unknown_reference_classes():
     """The unresolved listing is the references that read and named nothing.
 
-    Adding `spec.implements_resolve` and its siblings would list one
-    unresolved target twice under two names, which is the double-count the
-    class partition exists to prevent. A malformed reference never read as an
-    identifier, so it is not among them.
+    Each class is one condition, so one unresolved target is listed once,
+    under the class of how far reading it reached. A malformed reference
+    never read as an identifier, so it is not among them.
     """
     assert set(preset_checks("unresolved")) == _UNRESOLVED_CHECKS
     assert {cls for cls, _name, _desc in preset_reference_checks("unresolved")} == {
