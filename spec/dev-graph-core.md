@@ -400,6 +400,10 @@ E. The `fix` command auto-canonicalizes B and reports C to stderr
 F. The `validate` / health-check command reports B and C as
    findings with non-zero exit code.
 
+### Rationale
+
+This requirement sets the depth of each section heading inside its requirement. That depth is part of canonical form, which REQ-d00132-O and REQ-d00132-P bound. A rewrite moves a heading to the depth that its place in the requirement gives it, and keeps the heading and its words.
+
 ### Changelog
 
 - 2026-07-31 | 48fc2f11 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
