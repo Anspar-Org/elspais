@@ -4,6 +4,22 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-147
+
+- **A full `elspais fix` writes what it reports, with an associate linked (REQ-d00330-A+B, REQ-d00253-B)** -- with `federation.write_associates` false, the fix queued changelog entries for associate requirements it would never write. The save then declined to write anything, and the fix still printed `Fixing ...` and exited 0. Associate-owned requirements now receive no change at all. They keep their `[skipping]` lines, and the primary repository's output is byte-identical with or without the associate.
+
+- **A fix that does not write what it reported fails (REQ-d00330-D)** -- each reported change now reads `Fixed` or `Not fixed` after the save, and the run exits 1 and names the cause where any change was not written. A dry run also reports the `INDEX.md` regeneration that the real run performs. A settled run leaves the glossary and term index untouched.
+
+- **A fix named for one requirement changes only that requirement and its index row (REQ-d00330-C)** -- `elspais fix REQ-ID` rewrote every file needing canonical form and left `INDEX.md` stale. It now replaces only the target's own lines and updates the target's `INDEX.md` row. A named associate requirement that the write scope does not reach is refused.
+
+- **Canonical form keeps every heading and visible line (REQ-d00132-O+P)** -- a section holding only a definition list lost its heading on a rewrite, and text written after a definition list moved above it. Both now round-trip.
+
+- **A remedy outside the write scope says so (REQ-d00204-L)** -- a finding in an associate that the write scope does not reach no longer names `elspais fix` as its remedy. Instead, the remedy names the write scope.
+
+- **`elspais fix --mode` is removed** -- nothing read the option.
+
+- **A fix marks every term in one pass (REQ-d00237-G, REQ-d00248-A)** -- a term already marked was remembered at its position in the text before earlier terms were marked. Each mark inserted before it moved the text, so the remembered position came to cover another word, and that word stayed unmarked until a second fix. The remembered positions now move with each edit.
+
 ### TOOL-143
 
 - **A file-level target whose `cwd` holds no test file is reported (REQ-d00329-K)** -- a target declaring `file_results` credits nothing when its `cwd` holds no test file the target scans. `tests.ingestion_fault` now reports it, naming the target and its `cwd`, whether or not the command has run.

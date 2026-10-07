@@ -234,16 +234,21 @@ J. Findings attributed to repositories outside the invocation's write scope SHAL
 
 K. When the health checks run again over a graph that has not changed, they SHALL report the same findings as the run before.
 
+L. Where the remedy of a finding is a change to a repository outside the invocation's write scope, the remedy SHALL state that the write scope does not reach that repository.
+
 ### Rationale
 
 Without per-repo delegation, all nodes are validated against the root repo's config. When repos have different hierarchy rules, format rules, or changelog policies, this produces false positives (root config rejects valid associate nodes) or false negatives (root config allows invalid associate nodes). Per-repo delegation ensures each repo is validated by its own rules.
 
 F keeps configuration per member without narrowing what a reference can reach: a member's reference into an associate is judged by the member's rules and resolved where the target lives, so a per-member pass never reports a cross-repository target as missing. K is what lets a caller act on a count. A finding set that moved with the number of times a serving process had been asked would gate a change on the history of a session rather than on the state of the tree.
 
+L keeps a remedy true where it is read. A remedy that names an operation which, run from here, leaves the finding in place sends the caller round a loop the tool already knows will not close. Naming the write scope as the obstacle points the caller at the repository to work in, or at the scope to widen.
+
 Assertions H–J realize REQ-p00082's verdict-scoping invariants for the checks surface: a unresolved reference from the caller's repository *into* an org repository is the caller's bug and must gate the caller's change, while a malformed requirement *inside* a repository the caller cannot write to must never turn the command into noise by failing runs the caller cannot fix.
 
 ### Changelog
 
+- 2026-10-07 | c6193a97 | - | Michael Lewis (<michael@anspar.org>) | Add assertion L: a remedy outside the write scope says the write scope does not reach it
 - 2026-10-01 | 890fa7f1 | - | Michael Lewis (<michael@anspar.org>) | F restated by property: a member's nodes judged by its configuration, references resolved across the federation; K added: repeated runs report the same findings
 - 2026-09-12 | f3afb6e4 | - | Michael Lewis (<michael@anspar.org>) | E retired: an unreadable declaration is reported under REQ-d00202-M and N
 - 2026-09-12 | 62e03a0c | - | Michael Lewis (<michael@anspar.org>) | E now reports an unreadable repository, citing the declaration reaching it
@@ -256,7 +261,7 @@ Assertions H–J realize REQ-p00082's verdict-scoping invariants for the checks 
 - 2026-05-11 | 2313140d | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 2313140d | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Per-Repo Health Check Delegation* | **Hash**: 890fa7f1
+*End* *Per-Repo Health Check Delegation* | **Hash**: c6193a97
 ---
 
 ## REQ-d00252: External Library Integration via Integrates Keyword

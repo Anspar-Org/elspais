@@ -307,11 +307,17 @@ def _resolve_repo_info(
 
 
 def _build_index_content(
-    graph: FederatedGraph, spec_dirs: list[Path], include_associates: bool = False
+    graph: FederatedGraph,
+    spec_dirs: list[Path],
+    include_associates: bool = False,
+    hashes: dict[str, str] | None = None,
 ) -> tuple[Path, str, int, int]:
     """Render INDEX.md content without writing.
 
     Returns (output_path, content, req_count, jny_count).
+
+    ``hashes`` gives the hash to list for a requirement in place of the one
+    it was read with, for a requirement whose new hash is not yet on disk.
 
     Buckets nodes by ``(repo_name, spec_dir)``: repo attribution comes from
     ``FederatedGraph.repo_for()`` (fixes Bug 3 for foreign-repo nodes) and
@@ -459,7 +465,7 @@ def _build_index_content(
                 _fn = node.file_node()
                 _rp = _fn.get_field("relative_path") if _fn else None
                 filename = Path(_rp).name if _rp else ""
-                hash_val = node.hash or ""
+                hash_val = (hashes or {}).get(node.id, node.hash) or ""
                 rows.append([node.id, node.get_label(), filename, hash_val])
             lines.extend(_format_table(headers, rows))
             lines.append("")
@@ -493,6 +499,73 @@ def _build_index_content(
     output_path = spec_dirs[0] / "INDEX.md" if spec_dirs else Path("spec/INDEX.md")
     content = "\n".join(lines)
     return output_path, content, req_count, jny_count
+
+
+@dataclass
+class IndexRowUpdate:
+    """What bringing some INDEX.md rows up to date did."""
+
+    changed: bool  # a listed row differed and was (or would be) rewritten
+    unlisted: bool  # INDEX.md exists and lists none of a requirement's rows
+
+
+def _row_cells(line: str) -> list[str] | None:
+    """The padded cells of a table row, or None for any other line."""
+    if not (line.startswith("| ") and line.endswith(" |")) or line.startswith("| -"):
+        return None
+    return line[2:-2].split(" | ")
+
+
+# Implements: REQ-d00330-C
+def update_index_rows(
+    graph: FederatedGraph,
+    spec_dirs: list[Path],
+    hashes: dict[str, str],
+    include_associates: bool = False,
+    dry_run: bool = False,
+) -> IndexRowUpdate:
+    """Bring the INDEX.md rows listing the requirements of *hashes* up to date.
+
+    Each such row is replaced by the row a full regeneration would write,
+    padded to the widths its table already has, and every other line keeps
+    its bytes. A file that does not exist is left alone.
+    """
+    output_path, expected, _req_count, _jny_count = _build_index_content(
+        graph, spec_dirs, include_associates=include_associates, hashes=hashes
+    )
+    if not output_path.exists():
+        return IndexRowUpdate(changed=False, unlisted=False)
+
+    wanted: dict[str, list[str]] = {}
+    for line in expected.split("\n"):
+        cells = _row_cells(line)
+        if cells is not None and cells[0].strip() in hashes:
+            wanted[cells[0].strip()] = [cell.strip() for cell in cells]
+
+    current = output_path.read_text(encoding="utf-8")
+    lines = current.split("\n")
+    listed: set[str] = set()
+    for number, line in enumerate(lines):
+        cells = _row_cells(line)
+        if cells is None:
+            continue
+        row_id = cells[0].strip()
+        if row_id not in wanted:
+            continue
+        listed.add(row_id)
+        want = wanted[row_id]
+        if len(want) != len(cells):
+            continue
+        padded = (cell.ljust(len(old)) for cell, old in zip(want, cells, strict=True))
+        lines[number] = "| " + " | ".join(padded) + " |"
+
+    updated = "\n".join(lines)
+    changed = updated != current
+    if changed and not dry_run:
+        output_path.chmod(0o644)
+        output_path.write_text(updated, encoding="utf-8")
+        output_path.chmod(0o444)
+    return IndexRowUpdate(changed=changed, unlisted=any(i not in listed for i in wanted))
 
 
 def _regenerate_index(

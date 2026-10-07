@@ -1044,6 +1044,34 @@ B. The fixture exercising A SHALL cover every construct the renderer canonicaliz
 
 *End* *Fix Command Idempotency* | **Hash**: 99bb6d77
 
+## REQ-d00330: What a Fix Run Changes
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00004-A, REQ-p00015-B
+
+### Assertions
+
+A. A fix run SHALL write each change that a dry run of the same fix reports as a change it would make.
+
+B. A fix run over a whole repository SHALL resolve each finding whose remedy is that fix run, in every repository within its write scope.
+
+C. A fix run named for one requirement SHALL change only the text of that requirement and the rows of the generated index that list it.
+
+D. If a fix run writes none or only part of the changes it reports, then the fix run SHALL exit with a failure status.
+
+### Rationale
+
+The fix operation is the one place an author asks the tool to change text on its own judgement, and the author decides whether to run it from what the checks and the dry run say. A and B make those two previews true: what the dry run lists is what the run writes, and a finding that names the fix as its remedy is gone once the fix has run. A stale recorded hash is such a finding, and so is a part of a file whose text is not in canonical form.
+
+C keeps a named fix to the change its author asked for. An author who names one requirement reviews that requirement, and a diff that also carries tidying of its neighbours, in the same file or in other files, mixes a change they chose with changes they did not. The rows of the generated index that list the requirement record its hash, so they change with it.
+
+D gives a caller something to act on when the run falls short. REQ-p00015-B obliges the run to name each change it did not write and why; D makes the shortfall visible to a script or a hook, which reads the exit status and not the text. A change the run reports as skipped because the write scope does not reach it is not a change it reports making, so it does not count against D.
+
+### Changelog
+
+- 2026-10-07 | 89d14768 | - | Michael Lewis (<michael@anspar.org>) | New requirement: what a fix run changes, and its exit status when it falls short
+
+*End* *What a Fix Run Changes* | **Hash**: 89d14768
+
 # REQ-p00083: Durability of Uncommitted Work
 
 **Level**: prd | **Status**: Active | **Implements**: REQ-p00001

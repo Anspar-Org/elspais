@@ -1958,3 +1958,166 @@ class TestAssociateTargetsAreNotTheRootsRun:
         assert "--expect" in out.stderr
         assert "ZZZ" in out.stderr
         assert "LIB" in out.stderr
+
+
+# ---------------------------------------------------------------------------
+# Test: a full fix over a federation that excludes the associate from its
+# write scope (REQ-d00330, REQ-d00253-B/F, REQ-d00204-L).
+#
+# Builds its OWN isolated core + associate in tmp_path and runs `elspais fix`,
+# so it must not touch the shared module `project` fixture. Placed after the
+# other disk-writing tests.
+# ---------------------------------------------------------------------------
+
+
+def _staled(req: Requirement) -> str:
+    """The requirement's text with its recorded hash replaced by a stale one."""
+    import re as _re
+
+    return _re.sub(r"\*\*Hash\*\*: [0-9a-f]+", "**Hash**: deadbeef", req.render())
+
+
+def _faulted(report: dict) -> dict[str, set[str]]:
+    """The requirements spec.hash_integrity and spec.needs_rewrite fault, by check."""
+    faulted: dict[str, set[str]] = {"spec.hash_integrity": set(), "spec.needs_rewrite": set()}
+    for check in report["checks"]:
+        if check["name"] not in faulted or check["passed"]:
+            continue
+        if check["name"] == "spec.hash_integrity":
+            faulted[check["name"]] |= {m["id"] for m in check["details"]["mismatches"]}
+        else:
+            faulted[check["name"]] |= {f["node_id"] for f in check["findings"]}
+    return faulted
+
+
+class TestFullFixOutsideTheWriteScope:
+    """A full fix from the core resolves every core finding it reports and
+    leaves the associate, whose findings name the write scope as their remedy."""
+
+    CORE_STALE = ("REQ-p00001", "REQ-p00003")
+    CORE_UNTIDY = ("REQ-p00002", "REQ-p00003")
+    ASSOC_REQ = "XX-p00099"
+
+    def _build(self, tmp_path):
+        core_root = tmp_path / "core"
+        assoc_root = tmp_path / "assoc"
+
+        core_cfg = base_config(
+            name="fed-fix-core",
+            changelog_hash_current=True,
+            skip_files=["INDEX.md"],
+        )
+        core_cfg["cli_ttl"] = 0
+        core_cfg["associates"] = {"assoc": {"path": "../assoc", "namespace": "XX"}}
+
+        # Draft requirements: a stale hash needs no changelog entry, so the
+        # fix needs no author. A requirement written at heading depth 2 with
+        # its assertions heading at the same depth needs a canonical rewrite.
+        stale = Requirement(
+            "REQ-p00001",
+            "Stale Core",
+            "PRD",
+            status="Draft",
+            assertions=[("A", "The system SHALL validate input.")],
+        )
+        untidy = Requirement(
+            "REQ-p00002",
+            "Untidy Core",
+            "PRD",
+            status="Draft",
+            assertions=[("A", "The system SHALL log output.")],
+            heading_level=2,
+        )
+        both = Requirement(
+            "REQ-p00003",
+            "Stale Untidy Core",
+            "PRD",
+            status="Draft",
+            assertions=[("A", "The system SHALL keep records.")],
+            heading_level=2,
+        )
+        build_project(
+            core_root,
+            core_cfg,
+            extra_files={
+                "spec/prd-core.md": "# Core\n\n" + _staled(stale) + untidy.render(),
+                "spec/prd-more.md": "# More\n\n" + _staled(both),
+            },
+        )
+
+        # An Active associate requirement with a stale hash: under changelog
+        # enforcement, fixing it would queue a changelog entry for its file.
+        assoc = Requirement(
+            self.ASSOC_REQ,
+            "Associate PRD",
+            "PRD",
+            assertions=[("A", "The associate SHALL provide a feature.")],
+        )
+        build_associate(
+            assoc_root,
+            "assoc",
+            "XX",
+            "../core",
+            config_overrides={"changelog": {"hash_current": True}},
+            init_git=False,
+        )
+        (assoc_root / "spec").mkdir(parents=True, exist_ok=True)
+        (assoc_root / "spec" / "prd-assoc.md").write_text("# Assoc\n\n" + _staled(assoc))
+        from .helpers import init_git_repo
+
+        init_git_repo(assoc_root)
+
+        assert _git_porcelain(core_root) == "", "core repo dirty before fix"
+        assert _git_porcelain(assoc_root) == "", "associate repo dirty before fix"
+        return core_root, assoc_root
+
+    # Verifies: REQ-d00330-A, REQ-d00330-B, REQ-d00253-B, REQ-d00253-F, REQ-d00204-L
+    def test_dry_run_lists_then_fix_resolves_and_checks_are_clean(self, tmp_path):
+        core_root, assoc_root = self._build(tmp_path)
+
+        _code, before = _checks_json(core_root)
+        assert _faulted(before) == {
+            "spec.hash_integrity": {*self.CORE_STALE, self.ASSOC_REQ},
+            "spec.needs_rewrite": {*self.CORE_STALE, *self.CORE_UNTIDY, self.ASSOC_REQ},
+        }
+
+        dry = run_elspais("fix", "--dry-run", cwd=core_root)
+        assert dry.returncode == 0, dry.stderr + dry.stdout
+        planned = [ln for ln in dry.stdout.splitlines() if ln.startswith("Would fix ")]
+        planned_ids = {ln.removeprefix("Would fix ").split(":")[0] for ln in planned}
+        assert planned_ids == {*self.CORE_STALE, *self.CORE_UNTIDY}
+        assert any(ln.startswith(f"[skipping] {self.ASSOC_REQ}") for ln in dry.stdout.splitlines())
+        assert _git_porcelain(core_root) == "", "a dry run writes nothing"
+
+        fix = run_elspais("fix", cwd=core_root)
+        assert fix.returncode == 0, fix.stderr + fix.stdout
+        reported = [ln for ln in fix.stdout.splitlines() if ln.startswith(("Fixed", "Not fixed"))]
+        # Every change the dry run listed is written, and reported as written.
+        assert reported == [ln.replace("Would fix", "Fixed", 1) for ln in planned]
+        assert _git_porcelain(assoc_root) == "", (
+            f"associate written with write_associates=false: {_git_porcelain(assoc_root)!r}"
+        )
+
+        _code, after = _checks_json(core_root)
+        # Nothing the same fix can resolve is left; what is left lies in the
+        # associate, and its remedy names the write scope rather than the fix.
+        assert _faulted(after) == {
+            "spec.hash_integrity": {self.ASSOC_REQ},
+            "spec.needs_rewrite": {self.ASSOC_REQ},
+        }
+        remedies = [
+            c["remedy"]
+            for c in after["checks"]
+            if c["name"] in ("spec.hash_integrity", "spec.needs_rewrite") and not c["passed"]
+        ]
+        assert remedies and all("does not reach" in r for r in remedies), remedies
+        assert not any(r.startswith("elspais fix") for r in remedies), remedies
+
+        # A second fix finds nothing more to write.
+        settled = _git_porcelain(core_root)
+        again = run_elspais("fix", cwd=core_root)
+        assert again.returncode == 0, again.stderr + again.stdout
+        assert not any(
+            ln.startswith(("Fixed", "Not fixed", "Rewrote")) for ln in again.stdout.splitlines()
+        ), again.stdout
+        assert _git_porcelain(core_root) == settled

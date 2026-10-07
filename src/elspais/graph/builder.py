@@ -6741,6 +6741,12 @@ class GraphBuilder:
             # Preserve heading_level for section depth canonicalization (REQ-d00250-A)
             if "heading_level" in section:
                 section_node._content["heading_level"] = section["heading_level"]
+            # Implements: REQ-d00132-O
+            # Text that follows a definition list inside a section continues
+            # that section; it renders below the definition list, not under a
+            # second heading.
+            if section.get("continuation"):
+                section_node._content["continuation"] = True
             self._nodes[section_id] = section_node
             children_with_lines.append((section_line, section_node))
 

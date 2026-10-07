@@ -647,7 +647,7 @@ function buildAssertionHtml(nodeId, a, data) {
 function buildRemainderHtml(nodeId, rem, idx) {
     var h = '';
     var remId = rem.id || '';
-    var isPreamble = (rem.heading === 'preamble');
+    var isPreamble = (rem.heading === 'preamble' || rem.continuation === true);
     var isDefBlock = (rem.content_type === 'definition_block');
     h += '<div class="card-body-section-wrapper" data-remainder-id="' + escapeAttr(remId) + '" data-anchor="' + nodeId + '#section:' + escapeAttr(rem.heading || '') + '">';
     h += '<div class="card-body-section-heading">';

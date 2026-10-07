@@ -13,6 +13,10 @@ includes the bug-trigger content classes:
   - glossary term with emphasis-wrapped name (Bug 2)
   - user journey with emphasized actor field (Bug 4)
   - REMAINDER section between requirements containing emphasized text
+  - a requirement section holding only a definition list, and text written
+    after a definition list (REQ-d00248-B, REQ-d00132-O)
+  - a metadata block written in another spelling than its canonical one
+    (REQ-d00248-B, REQ-d00132-P)
 """
 
 from __future__ import annotations
@@ -67,6 +71,23 @@ _REQ_BODY_WITH_FENCED = (
     "Note the `inline-code` outside the fence as well.\n"
 )
 
+# Requirement prose around definition lists: a section whose only text is a
+# definition list, and text that follows one. Each keeps its heading and its
+# place when the fix brings the requirement into canonical form.
+_RATIONALE_WITH_DEFINITIONS = (
+    "Text before the list.\n"
+    "\n"
+    "Sprocket\n"
+    ": A toothed wheel that engages a chain.\n"
+    "\n"
+    "Text after the list.\n"
+    "\n"
+    "## Definitions\n"
+    "\n"
+    "Pinion\n"
+    ": The smaller of two meshing gears."
+)
+
 # Glossary file with an emphasis-wrapped term name (Bug 2).
 # Definition list syntax: term-line followed by ": definition".
 _GLOSSARY_CONTENT = (
@@ -112,6 +133,21 @@ _JOURNEY_CONTENT = (
 )
 
 
+# A requirement whose metadata block is spelled out of canonical form: its
+# fields out of order and no Implements field. Canonical form respells the
+# block and keeps what it declares (REQ-d00132-P).
+_RESPELLED_METADATA_REQ = (
+    "## REQ-p00004: Respelled\n"
+    "\n"
+    "**Status**: Draft | **Level**: PRD\n"
+    "\n"
+    "### Assertions\n"
+    "\n"
+    "A. The system SHALL keep its declarations.\n"
+    "\n"
+    "*End* *Respelled* | **Hash**: 00000000\n"
+)
+
 # ---------------------------------------------------------------------------
 # Module-scoped fixture: build the project once with the bug-trigger surface.
 # ---------------------------------------------------------------------------
@@ -126,9 +162,10 @@ def project(tmp_path_factory):
         name="e2e-idempotency",
         # Allow REMAINDER + journeys without hierarchy noise.
         allow_structural_orphans=True,
-        # Mirror the production self-config: exclude the generated output
-        # directory from spec scanning so glossary/term-index regeneration
-        # doesn't feed its own output back into the term dictionary.
+        # Mirror the production self-config and the `init` template: exclude
+        # the generated outputs (INDEX.md, the _generated directory) from spec
+        # scanning, so a fix never reads back and tidies a file it generates.
+        skip_files=["INDEX.md"],
         skip_dirs=["spec/_generated"],
     )
     # Enable terms output so `elspais fix` exercises the glossary
@@ -155,12 +192,28 @@ def project(tmp_path_factory):
         assertions=[("A", "The system SHALL send email notifications.")],
     )
 
+    prd3 = Requirement(
+        req_id="REQ-p00003",
+        title="Gearing",
+        level="PRD",
+        assertions=[("A", "The system SHALL transmit motion.")],
+        rationale=_RATIONALE_WITH_DEFINITIONS,
+    )
+
     # Spec file: REQ + REMAINDER between requirements + REQ.
     # write_spec_file concatenates Requirements; we need a REMAINDER block
     # between them, so build the file manually.
     spec_path = root / "spec" / "prd-core.md"
     spec_path.parent.mkdir(parents=True, exist_ok=True)
-    spec_text = prd.render() + _REMAINDER_PROSE + "\n" + prd2.render()
+    spec_text = (
+        prd.render()
+        + _REMAINDER_PROSE
+        + "\n"
+        + prd2.render()
+        + prd3.render()
+        + "\n"
+        + _RESPELLED_METADATA_REQ
+    )
     spec_path.write_text(spec_text)
 
     build_project(
@@ -235,6 +288,29 @@ class TestFixIdempotency:
         assert first.returncode == 0, (
             f"first `elspais fix` failed: stderr={first.stderr!r} stdout={first.stdout!r}"
         )
+
+        # Verifies: REQ-d00132-O
+        # The first run kept every heading and every line of text, in order.
+        settled = (project / "spec" / "prd-core.md").read_text()
+        for heading in ("Rationale", "Definitions"):
+            assert any(
+                line.lstrip("#").strip() == heading and line.startswith("#")
+                for line in settled.splitlines()
+            ), f"`elspais fix` dropped the {heading} heading:\n{settled}"
+        order = [
+            "Text before the list.",
+            "Sprocket",
+            "Text after the list.",
+            "Definitions",
+            "Pinion",
+        ]
+        positions = [settled.index(text) for text in order]
+        assert positions == sorted(positions), settled
+
+        # Verifies: REQ-d00132-P
+        # The metadata block is respelled in its one form, declaring the same.
+        assert "**Level**: prd | **Status**: Draft | **Implements**: -" in settled, settled
+        assert "**Status**: Draft | **Level**: PRD" not in settled
 
         # Commit so that any subsequent disk diffs are attributable to the
         # second `fix` run rather than to remnants of the first.

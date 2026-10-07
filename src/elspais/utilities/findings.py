@@ -74,6 +74,11 @@ class Severity(str, Enum):
 NO_KNOWN_REMEDY = "no command resolves this; resolve it by hand"
 
 
+# The opening of a remedy for a member the invocation's write scope does not
+# reach (REQ-d00204-L). A remedy opening with it is a sentence, not a command.
+OUTSIDE_WRITE_SCOPE = "the write scope of this run does not reach"
+
+
 @dataclass(frozen=True)
 class CheckRule:
     """What is registered about one check.
@@ -930,3 +935,48 @@ def remedy_for(check_name: str) -> str:
             f"{check_name!r} is not a registered check. Register it in "
             f"elspais.utilities.findings.REGISTRY so its findings can name a remedy."
         ) from None
+
+
+# Implements: REQ-d00204-L
+def remedy_outside_write_scope(check_name: str, members: list[str], *, in_scope: bool) -> str:
+    """The remedy of a check whose findings lie partly or wholly outside the write scope.
+
+    A remedy that changes files resolves nothing in a member this run cannot
+    write, so for each such member the remedy says the write scope does not
+    reach it and widens the scope. It does not send the reader to run the
+    command from that member's own root: what a finding asks of a member can
+    depend on the rest of the federation (a term another member defines), and
+    a run over that member alone would then find nothing to change.
+
+    Args:
+        check_name: The name the check reports under.
+        members: The name of each member outside the write scope that holds a
+            finding.
+        in_scope: Whether a finding also lies inside the write scope, where the
+            registered remedy resolves it as it stands.
+
+    Returns:
+        The registered remedy where it changes no file or ``members`` is
+        empty; otherwise the remedy naming each member it cannot reach.
+    """
+    remedy = remedy_for(check_name)
+    if not members or not remedy_changes_files(check_name):
+        return remedy
+    parts = [remedy] if in_scope else []
+    reach = ", ".join(members)
+    parts.append(
+        f"{OUTSIDE_WRITE_SCOPE} {reach} (federation.write_associates is false); "
+        f"set federation.write_associates to true, then run `{remedy}`"
+    )
+    return "; ".join(parts)
+
+
+def remedy_changes_files(check_name: str) -> bool:
+    """Whether a check's registered remedy writes the files it reports on."""
+    remedy = remedy_for(check_name)
+    return remedy == "elspais fix" or remedy.startswith("elspais fix ")
+
+
+def remedy_is_command(remedy: str) -> bool:
+    """Whether a remedy is a command to run, rather than a sentence to read."""
+    return remedy != NO_KNOWN_REMEDY and OUTSIDE_WRITE_SCOPE not in remedy

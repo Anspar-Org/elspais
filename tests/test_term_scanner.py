@@ -16,6 +16,7 @@ from elspais.graph.GraphNode import FileType, NodeKind
 from elspais.graph.term_scanner import (
     _canonicalize_text,
     _is_embedded_in_compound,
+    _shift_spans,
     _terms_longest_first,
     extract_comments,
     scan_graph,
@@ -1513,3 +1514,94 @@ def test_REQ_d00237_G_three_level_nest_longest_wins(order):
 
     surfaces = [r.surface_form for r in result]
     assert surfaces == ["Sponsor Portal Admin"]
+
+
+# =============================================================================
+# REQ-d00237-G / REQ-d00248-A: claimed spans follow the text as it is edited
+#
+# _canonicalize_text claims the span of each term it has already handled, so a
+# later (shorter) term does not match inside it. Marking a term moves every
+# character after it. A claimed span that is not moved with the text covers
+# other words, and a term standing there is left unmarked until a second pass.
+# =============================================================================
+
+
+def _td_sign_in() -> TermDictionary:
+    return _td_nested("Verification Code", "Email Address", "Password")
+
+
+_STYLES = {"*", "**"}
+
+
+# Verifies: REQ-d00237-G
+def test_REQ_d00237_G_canonicalize_marks_term_after_moved_claimed_span():
+    """An already-marked term after several insertions of a longer term does
+    not shield the unmarked term just before it."""
+    text = (
+        "Type the email address, confirm the email address, then sign in with "
+        "the email address and password; a *Verification Code* is sent."
+    )
+    result, repls = _canonicalize_text(text, _td_sign_in(), "*", _STYLES)
+
+    assert result == (
+        "Type the *Email Address*, confirm the *Email Address*, then sign in "
+        "with the *Email Address* and *Password*; a *Verification Code* is sent."
+    )
+    assert ("password", "*Password*") in repls
+
+
+# Verifies: REQ-d00237-G, REQ-d00248-A
+@pytest.mark.parametrize(
+    ("text", "markup_style"),
+    [
+        pytest.param(
+            "Type the email address, confirm the email address, then sign in with "
+            "the email address and password; a *Verification Code* is sent.",
+            "*",
+            id="unmarked-insertions-before-marked-term",
+        ),
+        pytest.param(
+            "Type the _email address_, confirm the _email address_, then the "
+            "_email address_ and password; a **Verification Code** is sent.",
+            "**",
+            id="wrong-delimiter-fix-grows-text",
+        ),
+        pytest.param(
+            "Type the email address, confirm the email address, then sign in with "
+            "the email address and password; a `*Verification Code*` is sent.",
+            "*",
+            id="marked-term-in-code-span",
+        ),
+        pytest.param(
+            "A *verification code* goes to the email address, then email address, "
+            "then email address and password; a *Verification Code* is sent.",
+            "*",
+            id="casing-fix-then-insertions",
+        ),
+    ],
+)
+def test_REQ_d00248_A_canonicalize_converges_in_one_pass(text, markup_style):
+    """A second pass over the first pass's output changes nothing."""
+    td = _td_sign_in()
+    first, _ = _canonicalize_text(text, td, markup_style, _STYLES)
+    second, repls = _canonicalize_text(first, td, markup_style, _STYLES)
+
+    assert repls == []
+    assert second == first
+
+
+# Verifies: REQ-d00237-G
+@pytest.mark.parametrize(
+    ("span", "expected"),
+    [
+        # The span IS the edited text: it maps onto the replacement.
+        pytest.param((10, 25), (10, 29), id="span-equals-edit"),
+        # A span ending where the edit starts does not move.
+        pytest.param((2, 10), (2, 10), id="span-ends-at-edit-start"),
+        # A span starting where the edit ends moves by the edit's growth.
+        pytest.param((25, 30), (29, 34), id="span-starts-at-edit-end"),
+    ],
+)
+def test_REQ_d00237_G_shift_spans_boundaries(span, expected):
+    """An edit replacing [10, 25) with 19 characters moves what follows by 4."""
+    assert _shift_spans([span], [(10, 25, 19)]) == [expected]
