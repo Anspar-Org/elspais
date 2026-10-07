@@ -170,7 +170,7 @@
 | REQ-d00247 | Fenced Code Block Preservation                                | prd-core.md             | 499a4ce4 |
 | REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | 99bb6d77 |
 | REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 9e2255c3 |
-| REQ-d00250 | Section Heading Depth                                         | dev-graph-core.md       | c0ebb777 |
+| REQ-d00250 | Section Heading Depth                                         | dev-graph-core.md       | 654f055b |
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | b49bd5ee |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 3b102d6f |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | 8360f2f4 |

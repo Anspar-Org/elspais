@@ -374,13 +374,13 @@ F. The clone SHALL handle DAG structures with multiple parents without infinite 
 
 A. The tool SHALL read each heading inside a requirement at every heading depth from one to six.
 
-B. The checks SHALL report each section heading written at the depth of its requirement's heading or shallower, as a finding that a fix run resolves.
+B. The checks SHALL report each requirement that holds a section heading written at the depth of the requirement's heading or shallower, as a finding that a fix run resolves.
 
 C. The checks SHALL report each requirement whose heading is at depth six and that holds a section, as a finding that a fix run cannot resolve.
 
 D. When the tool writes a requirement, the tool SHALL write each section heading at the greater of its written depth and one more than the depth of the requirement's heading, and at depth six at most.
 
-E. A fix run SHALL write each section heading that B reports at the depth that D gives it.
+E. A fix run SHALL write each section heading of a requirement that B reports at the depth that D gives it.
 
 F. <RETIRED> the checks reporting each condition is stated by B and C, which name the finding each condition produces.
 
@@ -400,12 +400,12 @@ A requirement at depth six has no deeper level for its sections, so the tool can
 
 ### Changelog
 
-- 2026-10-07 | c0ebb777 | - | Michael Lewis (<michael@anspar.org>) | Rewrite the assertions as obligations without implementation surface; retire F into B and C; add G and H for a requirement a fix cannot correct
+- 2026-10-07 | 654f055b | - | Michael Lewis (<michael@anspar.org>) | Rewrite the assertions as obligations without implementation surface; retire F into B and C; add G and H for a requirement a fix cannot correct
 - 2026-07-31 | 48fc2f11 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 903349d2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 903349d2 | - | Developer (<dev@example.com>) | Auto-fix: update hash, add missing changelog section
 
-*End* *Section Heading Depth* | **Hash**: c0ebb777
+*End* *Section Heading Depth* | **Hash**: 654f055b
 
 ## REQ-d00268: Report Malformed Assertion Labels
 

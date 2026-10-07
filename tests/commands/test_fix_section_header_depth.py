@@ -5,6 +5,8 @@ import contextlib
 import io
 from pathlib import Path
 
+import pytest
+
 CONFIG_TOML = """\
 version = 5
 
@@ -32,7 +34,9 @@ def _make_project(tmp_path: Path, spec_content: str) -> Path:
     return tmp_path
 
 
-def _run_fix(project: Path, dry_run: bool = False) -> tuple[int, str, str]:
+def _run_fix(
+    project: Path, dry_run: bool = False, req_id: str | None = None
+) -> tuple[int, str, str]:
     """Run elspais fix against project; return (exit_code, stdout, stderr)."""
     from elspais.commands.fix_cmd import run
 
@@ -41,7 +45,7 @@ def _run_fix(project: Path, dry_run: bool = False) -> tuple[int, str, str]:
         config=project / ".elspais.toml",
         dry_run=dry_run,
         git_root=project,
-        req_id=None,
+        req_id=req_id,
     )
     stdout = io.StringIO()
     stderr = io.StringIO()
@@ -155,3 +159,79 @@ def test_fix_skips_files_containing_unfixable_reqs(tmp_path):
     assert after == original, (
         "File containing an unfixable req must be left untouched even when it has fixable siblings."
     )
+
+
+_H6_WITH_FIXABLE_SIBLING = (
+    "###### REQ-d00001: H6 Unfixable\n\n"
+    "**Level**: dev | **Status**: Active | **Implements**: -\n\n"
+    "###### Assertions\n\n"
+    "A. X.\n\n"
+    "*End* *H6 Unfixable* | **Hash**: -\n"
+    "\n---\n\n"
+    "## REQ-d00002: Fixable Sibling\n\n"
+    "**Level**: dev | **Status**: Active | **Implements**: -\n\n"
+    "## Assertions\n\n"
+    "A. Y.\n\n"
+    "*End* *Fixable Sibling* | **Hash**: -\n"
+)
+
+_CLEAN_FIXABLE = (
+    "## REQ-d00003: Elsewhere\n\n"
+    "**Level**: dev | **Status**: Active | **Implements**: -\n\n"
+    "## Assertions\n\n"
+    "A. Z.\n\n"
+    "*End* *Elsewhere* | **Hash**: -\n"
+)
+
+
+def _make_two_file_project(tmp_path: Path) -> Path:
+    """f.md holds the H6 requirement and a fixable sibling; g.md is clean but fixable."""
+    project = _make_project(tmp_path, _H6_WITH_FIXABLE_SIBLING)
+    (project / "spec" / "g.md").write_text(_CLEAN_FIXABLE)
+    return project
+
+
+# Verifies: REQ-d00250-G, REQ-d00250-H
+def test_full_fix_leaves_h6_file_untouched_while_fixing_another_file(tmp_path):
+    project = _make_two_file_project(tmp_path)
+    h6_file = project / "spec" / "f.md"
+    original = h6_file.read_bytes()
+
+    code, _, err = _run_fix(project, dry_run=False)
+
+    assert code == 1, f"expected exit 1; got {code}; stderr={err!r}"
+    assert h6_file.read_bytes() == original, (
+        "A file holding an unfixable requirement must be byte-identical after "
+        "a fix that writes another file."
+    )
+    fixed = (project / "spec" / "g.md").read_text()
+    assert "### Assertions" in fixed, f"g.md was not fixed:\n{fixed}"
+    assert "**Hash**: -" not in fixed, f"g.md hash was not written:\n{fixed}"
+
+
+# Verifies: REQ-d00250-G, REQ-d00250-H
+@pytest.mark.parametrize("req_id", ["REQ-d00001", "REQ-d00002"])
+def test_named_fix_in_file_holding_h6_req_is_refused(tmp_path, req_id):
+    project = _make_two_file_project(tmp_path)
+    h6_file = project / "spec" / "f.md"
+    original = h6_file.read_bytes()
+
+    code, _, err = _run_fix(project, dry_run=False, req_id=req_id)
+
+    assert code == 1, f"expected exit 1; got {code}; stderr={err!r}"
+    assert "REQ-d00001" in err, f"stderr must name the H6 requirement: {err!r}"
+    assert h6_file.read_bytes() == original
+
+
+# Verifies: REQ-d00250-H
+def test_named_fix_in_clean_file_succeeds_beside_h6_file(tmp_path):
+    project = _make_two_file_project(tmp_path)
+    h6_file = project / "spec" / "f.md"
+    original = h6_file.read_bytes()
+
+    code, _, err = _run_fix(project, dry_run=False, req_id="REQ-d00003")
+
+    assert code == 0, f"expected exit 0; got {code}; stderr={err!r}"
+    fixed = (project / "spec" / "g.md").read_text()
+    assert "### Assertions" in fixed, f"g.md was not fixed:\n{fixed}"
+    assert h6_file.read_bytes() == original

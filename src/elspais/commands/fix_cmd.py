@@ -471,12 +471,14 @@ def _fix_parse_dirty(
     # fixable siblings. Exclude those files from the fixable set entirely —
     # the author must resolve the unfixable issue first.
     unfixable_file_ids: set[str] = set()
+    unfixable_files: list[Any] = []
     for node in _authored_requirements(graph):
         if not node.get_field("parse_unfixable_reasons"):
             continue
         fn = node.file_node()
-        if fn is not None:
+        if fn is not None and fn.id not in unfixable_file_ids:
             unfixable_file_ids.add(fn.id)
+            unfixable_files.append(fn)
 
     if unfixable_file_ids:
         skipped = [
@@ -606,6 +608,7 @@ def _fix_parse_dirty(
         repo_root=repo_root,
         write_associates=write_associates,
         tidy=True,
+        untidied=unfixable_files,
     )
 
     # Implements: REQ-d00330-A, REQ-d00330-D, REQ-p00015-B
@@ -743,6 +746,29 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     _fn = node.file_node()
     if _fn is None:
         print(f"Error: No source file for {req_id}", file=sys.stderr)
+        return 1
+
+    # Implements: REQ-d00250-G, REQ-d00250-H
+    # A file holding a requirement the fix cannot correct is left as it is,
+    # whichever requirement in it was named.
+    blocking = sorted(
+        (
+            r
+            for r in _authored_requirements(graph)
+            if r.get_field("parse_unfixable_reasons") and r.file_node() is _fn
+        ),
+        key=lambda r: r.id,
+    )
+    if blocking:
+        rel = _fn.get_field("relative_path") or req_id
+        for r in blocking:
+            for reason in r.get_field("parse_unfixable_reasons"):
+                print(f"Cannot fix {r.id}: {_REASON_LABELS.get(reason, reason)}", file=sys.stderr)
+        print(
+            f"Error: {rel} holds a requirement elspais fix cannot correct "
+            f"({', '.join(r.id for r in blocking)}); resolve it first, then re-run",
+            file=sys.stderr,
+        )
         return 1
 
     # Check if the node's file is already dirty (e.g. from term canonicalization)

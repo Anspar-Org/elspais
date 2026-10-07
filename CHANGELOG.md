@@ -6,6 +6,8 @@ All notable changes to elspais will be documented in this file.
 
 ### TOOL-148
 
+- **A fix leaves a file holding a requirement it cannot correct unchanged (REQ-d00250-G+H)** -- a full fix that also had another file to fix still rewrote such a file, although it reported skipping it. A fix named for that requirement, or for another requirement in the same file, wrote the file and exited 0. Both now leave the file as it is and exit 1, naming the requirement to move to a shallower heading.
+
 - **A fix brings a drifted changelog up to date beside a change of form (REQ-d00330-B+E)** -- a requirement whose latest changelog entry recorded an old hash, and whose only other fix was a change of form such as heading depth, got no changelog entry. The drift finding then remained after the fix. The fix now adds the entry that records the requirement's hash. A change of form alone still adds no entry.
 
 - **Section heading depth is stated as obligations (REQ-d00250)** -- the requirement now states what a reader can observe: which headings the checks report, the depth a write gives a heading, and what a fix does with a requirement it cannot correct. Its assertion F is retired into B and C. `elspais docs format` names `elspais checks` as the command that reports such a requirement, and says that the fix leaves the file holding it unchanged.
