@@ -211,7 +211,7 @@ tier_prepare() {
 
 # tier_start <state-dir> <key> <repo-root> <finisher-or-empty> <cmd> [args...]
 #
-# Prepares the run and starts it detached, in a session of its own.
+# Prepares the run and starts it detached, in a process group of its own.
 tier_start() {
     _dir="$1"
     tier_prepare "$@"
