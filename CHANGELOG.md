@@ -18,6 +18,8 @@ All notable changes to elspais will be documented in this file.
 
 - **`elspais fix --mode` is removed** -- nothing read the option.
 
+- **A fix marks every term in one pass (REQ-d00237-G, REQ-d00248-A)** -- a term already marked was remembered at its position in the text before earlier terms were marked. Each mark inserted before it moved the text, so the remembered position came to cover another word, and that word stayed unmarked until a second fix. The remembered positions now move with each edit.
+
 ### TOOL-143
 
 - **A file-level target whose `cwd` holds no test file is reported (REQ-d00329-K)** -- a target declaring `file_results` credits nothing when its `cwd` holds no test file the target scans. `tests.ingestion_fault` now reports it, naming the target and its `cwd`, whether or not the command has run.

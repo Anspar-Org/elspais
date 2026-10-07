@@ -440,6 +440,27 @@ def _heading_spans(text: str) -> list[tuple[int, int]]:
     return [(m.start(), m.end()) for m in _ATX_HEADING_RE.finditer(text)]
 
 
+# Implements: REQ-d00237-G, REQ-d00248-A
+def _shift_spans(
+    spans: list[tuple[int, int]], edits: list[tuple[int, int, int]]
+) -> list[tuple[int, int]]:
+    """Map *spans* through *edits*, each ``(start, end, new_length)`` in ascending order.
+
+    A span recorded before an edit pass points into the text as it was. An
+    edit before it moves it, so a span left in place covers other words.
+    """
+
+    def shift(pos: int) -> int:
+        delta = 0
+        for start, end, new_length in edits:
+            if end > pos:
+                break
+            delta += new_length - (end - start)
+        return pos + delta
+
+    return [(shift(s), shift(e)) for s, e in spans]
+
+
 # Implements: REQ-d00237-G
 def _canonicalize_text(
     text: str, td: TermDictionary, markup_style: str, styles_set: set[str]
@@ -493,6 +514,7 @@ def _canonicalize_text(
         for delim in _ALL_EMPHASIS_DELIMITERS:
             pat = _build_emphasis_pattern(delim, term)
             new_text = []
+            edits: list[tuple[int, int, int]] = []
             last_end = 0
             for m in pat.finditer(text):
                 if _in_code_span(m.start(), m.end()):
@@ -512,7 +534,8 @@ def _canonicalize_text(
                 old_form = m.group(0)
                 new_text.append(text[last_end : m.start()])
                 new_text.append(replacement)
-                claimed.append((m.start(), m.start() + len(replacement)))
+                claimed.append((m.start(), m.end()))
+                edits.append((m.start(), m.end(), len(replacement)))
                 last_end = m.end()
                 if old_form != replacement:
                     replacements.append((old_form, replacement))
@@ -520,6 +543,7 @@ def _canonicalize_text(
                 new_text.append(text[last_end:])
                 text = "".join(new_text)
                 # Recompute protected and emphasis spans after text mutation
+                claimed = _shift_spans(claimed, edits)
                 protected = [(m.start(), m.end()) for m in _CODE_SPAN_RE.finditer(text)]
                 emphasis_spans = _find_emphasis_spans(text)
                 text_cf = text.casefold()
@@ -533,6 +557,7 @@ def _canonicalize_text(
         # A heading names a part of the document; a term in it is syntax.
         headings = _heading_spans(text)
         new_text = []
+        edits = []
         last_end = 0
         for m in word_pat.finditer(text):
             if _in_code_span(m.start(), m.end()):
@@ -551,12 +576,14 @@ def _canonicalize_text(
             old_form = m.group(0)
             new_text.append(text[last_end : m.start()])
             new_text.append(canonical)
+            edits.append((m.start(), m.end(), len(canonical)))
             last_end = m.end()
             if old_form != canonical:
                 replacements.append((old_form, canonical))
         if new_text:
             new_text.append(text[last_end:])
             text = "".join(new_text)
+            claimed = _shift_spans(claimed, edits)
             protected = [(m.start(), m.end()) for m in _CODE_SPAN_RE.finditer(text)]
             emphasis_spans = _find_emphasis_spans(text)
             text_cf = text.casefold()
