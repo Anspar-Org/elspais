@@ -147,10 +147,16 @@ tier_proc_is_zombie() {
 #
 # The portable replacement for GNU `tail -f --pid=`, which BSD tail (macOS)
 # does not accept at all. Follows in the background, polls the pid, then
-# stops the follower once the writer is gone -- giving it a moment first so
-# the last lines written before exit are not lost to the poll's timing. A
-# pid still signallable but reaped into a zombie counts as gone, not alive,
-# or this loop never ends in a container whose pid 1 does not reap orphans.
+# stops the follower once the writer is gone. A pid still signallable but
+# reaped into a zombie counts as gone, not alive, or this loop never ends
+# in a container whose pid 1 does not reap orphans.
+#
+# `tail -f` polls for new data on its own schedule, documented at 1 second
+# by default on both GNU and BSD `tail`, and no flag for a shorter one is
+# common to both -- so the file being fully written the moment the pid
+# exits does not mean `tail` has caught up to it yet. The grace sleep below
+# is longer than that worst case, or the run's last lines are lost to a
+# `tail` this loop stops before its next poll.
 tier_tail_until() {
     _tu_pid="$1"
     _tu_file="$2"
@@ -159,7 +165,7 @@ tier_tail_until() {
     while kill -0 "$_tu_pid" 2>/dev/null && ! tier_proc_is_zombie "$_tu_pid"; do
         sleep 0.2
     done
-    sleep 0.3
+    sleep 1.5
     kill "$_tu_tpid" 2>/dev/null
     wait "$_tu_tpid" 2>/dev/null
 }
