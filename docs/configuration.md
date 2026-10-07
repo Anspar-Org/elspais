@@ -639,7 +639,8 @@ namespace = "PHX"
 # regardless of these flags; they only affect write and generation surfaces.
 #
 #   write_associates  (default: false) — allow `elspais fix` to modify spec
-#                     files inside associate repos.
+#                     files inside associate repos, and the INDEX.md each
+#                     such repo keeps.
 #   index_associates  (default: false) — include associate requirements in
 #                     generated artifacts (e.g. traceability matrices, glossary).
 #──────────────────────────────────────────────────────────────────────────────

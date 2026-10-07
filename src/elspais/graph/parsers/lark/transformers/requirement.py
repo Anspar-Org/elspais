@@ -233,7 +233,9 @@ class RequirementTransformer:
         sections: list[dict[str, Any]] = []
         changelog: list[dict[str, str]] = []
         definitions: list[dict[str, Any]] = []
-        body_lines: list[str] = []
+        # Preamble text as runs of (first text line, lines); a definition
+        # list in the preamble closes the run before it.
+        body_runs: list[tuple[int | None, list[str]]] = [(None, [])]
         hash_value: str | None = None
         end_line = header_line
         has_redundant_refs = False
@@ -318,9 +320,7 @@ class RequirementTransformer:
                 end_line = self._last_line(child)
 
             elif child.data == "named_block":
-                section = self._extract_named_section(child)
-                if section:
-                    sections.append(section)
+                sections.extend(self._extract_named_section(child))
                 # Extract definition_blocks nested in content_lines
                 for sub in child.children[1:]:
                     if isinstance(sub, Tree) and sub.data == "content_line":
@@ -335,11 +335,15 @@ class RequirementTransformer:
                 def_data = self._extract_definition_block(child)
                 if def_data:
                     definitions.append(def_data)
+                body_runs.append((None, []))
                 end_line = self._last_line(child)
 
             elif child.data == "body_line":
                 line_num, text = self._extract_text_from_body_line(child)
-                body_lines.append(text)
+                run_line, run_lines = body_runs[-1]
+                run_lines.append(text)
+                if run_line is None and text.strip():
+                    body_runs[-1] = (line_num, run_lines)
                 end_line = line_num
 
             elif child.data == "end_block":
@@ -352,19 +356,24 @@ class RequirementTransformer:
         # Build raw_text for hash computation
         raw_text = self._reconstruct_raw_text(node)
 
-        # Build preamble section from body_lines (text before first ## section)
-        # Preserve internal blank lines (significant for list spacing) but strip
-        # leading/trailing blank lines.
-        preamble_content = "\n".join(body_lines).strip()
-        if preamble_content:
-            sections.insert(
-                0,
+        # Implements: REQ-d00132-O
+        # Build the preamble from the text before the first ## section,
+        # one part per run so that each definition list in it renders between
+        # the text it was written between. Internal blank lines are kept
+        # (significant for list spacing); leading and trailing ones are not.
+        preamble_parts: list[dict[str, Any]] = []
+        for index, (run_line, run_lines) in enumerate(body_runs):
+            preamble_content = "\n".join(run_lines).strip()
+            if not preamble_content:
+                continue
+            preamble_parts.append(
                 {
                     "heading": "preamble",
                     "content": preamble_content,
-                    "line": header_line + 1,
-                },
+                    "line": header_line + 1 if index == 0 else run_line,
+                }
             )
+        sections[0:0] = preamble_parts
 
         parsed_data: dict[str, Any] = {
             "id": req_id,
@@ -606,9 +615,17 @@ class RequirementTransformer:
     # Named section extraction
     # ------------------------------------------------------------------
 
-    # Implements: REQ-d00250-A
-    def _extract_named_section(self, node: Tree) -> dict[str, Any] | None:
-        """Extract a named section (## Heading + content)."""
+    # Implements: REQ-d00250-A, REQ-d00132-O
+    def _extract_named_section(self, node: Tree) -> list[dict[str, Any]]:
+        """Extract a named section (## Heading + content) as its text runs.
+
+        A definition list inside the section is lifted out as its own part, so
+        the section's text is divided at each one: the first run carries the
+        heading and the runs after a definition list are continuations without
+        one. Each run keeps the line it starts on, which places the definition
+        lists between them when the requirement is rendered. A heading is kept
+        when no text follows it.
+        """
         header_token = node.children[0]  # SECTION_HDR
         header_text = str(header_token).strip()
         line_num = header_token.line  # type: ignore[attr-defined]
@@ -618,37 +635,63 @@ class RequirementTransformer:
 
         # Skip Assertions and Changelog (parsed separately)
         if heading.lower() in ("assertions", "changelog"):
-            return None
+            return []
 
-        # Collect content lines from content_line nodes
-        content_lines: list[str] = []
-        first_content_line: int | None = None
+        # Each run is (first text line, lines); a definition list closes one.
+        runs: list[tuple[int | None, list[str]]] = [(None, [])]
         for child in node.children[1:]:
             if isinstance(child, Tree) and child.data == "content_line":
-                for token in child.children:
-                    if isinstance(token, Token) and token.type == "TEXT":
-                        content_lines.append(str(token))
-                        if first_content_line is None:
-                            first_content_line = token.line  # type: ignore[attr-defined]
-                        break
-                else:
-                    content_lines.append("")  # blank line
+                if any(
+                    isinstance(sub, Tree) and sub.data == "definition_block"
+                    for sub in child.children
+                ):
+                    runs.append((None, []))
+                    continue
+                text = next(
+                    (
+                        token
+                        for token in child.children
+                        if isinstance(token, Token) and token.type == "TEXT"
+                    ),
+                    None,
+                )
             elif isinstance(child, Token) and child.type == "TEXT":
-                content_lines.append(str(child))
-                if first_content_line is None:
-                    first_content_line = child.line  # type: ignore[attr-defined]
+                text = child
+            else:
+                continue
+            first, lines = runs[-1]
+            if text is None:
+                lines.append("")  # blank line
+                continue
+            lines.append(str(text))
+            if first is None:
+                runs[-1] = (text.line, lines)  # type: ignore[attr-defined]
 
-        content = "\n".join(content_lines).strip()
-        if not content:
-            return None
-
-        return {
-            "heading": heading,
-            "content": content,
-            "line": line_num,
-            "content_line": first_content_line or line_num + 1,
-            "heading_level": _count_hashes(header_text),
-        }
+        level = _count_hashes(header_text)
+        first_line, first_lines = runs[0]
+        sections: list[dict[str, Any]] = [
+            {
+                "heading": heading,
+                "content": "\n".join(first_lines).strip(),
+                "line": line_num,
+                "content_line": first_line or line_num + 1,
+                "heading_level": level,
+            }
+        ]
+        for run_line, run_lines in runs[1:]:
+            content = "\n".join(run_lines).strip()
+            if not content or run_line is None:
+                continue
+            sections.append(
+                {
+                    "heading": heading,
+                    "content": content,
+                    "line": run_line,
+                    "content_line": run_line,
+                    "continuation": True,
+                }
+            )
+        return sections
 
     # ------------------------------------------------------------------
     # Changelog extraction

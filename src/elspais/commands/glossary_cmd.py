@@ -19,12 +19,21 @@ if TYPE_CHECKING:
     from elspais.graph.terms import TermDictionary, TermEntry
 
 
-def _write_readonly(path: Path, content: str) -> None:
-    """Write content to path and set it read-only (0o444)."""
+def _write_readonly(path: Path, content: str, dry_run: bool = False) -> bool:
+    """Write content to path read-only (0o444) where it differs from what is there.
+
+    Returns whether the file differed, and so was (or, in a dry run, would be)
+    written.
+    """
+    if path.exists() and path.read_text(encoding="utf-8") == content:
+        return False
+    if dry_run:
+        return True
     if path.exists():
         path.chmod(0o644)
     path.write_text(content, encoding="utf-8")
     path.chmod(0o444)
+    return True
 
 
 _HEADER = (
@@ -245,8 +254,12 @@ def write_term_outputs(
     output_dir: str | Path,
     format: str = "markdown",
     ref_filter: Callable[[Any], bool] | None = None,
+    dry_run: bool = False,
 ) -> list[str]:
     """Write glossary, term index, and collection manifests to output_dir.
+
+    A file whose content is already what it would be written with is left
+    untouched. ``dry_run`` writes nothing.
 
     Args:
         ref_filter: Optional predicate on a TermReference applied to the term
@@ -257,35 +270,36 @@ def write_term_outputs(
             (REQ-d00253-C).
 
     Returns:
-        List of generated file paths.
+        The paths of the files written (in a dry run, that would be written).
     """
     out = Path(output_dir)
-    out.mkdir(parents=True, exist_ok=True)
+    if not dry_run:
+        out.mkdir(parents=True, exist_ok=True)
     generated: list[str] = []
 
     ext = ".json" if format == "json" else ".md"
 
     # Glossary (definitions only — no references to filter)
     glossary_path = out / f"glossary{ext}"
-    _write_readonly(glossary_path, generate_glossary(td, format=format))
-    generated.append(str(glossary_path))
+    if _write_readonly(glossary_path, generate_glossary(td, format=format), dry_run):
+        generated.append(str(glossary_path))
 
     # Term index
     index_path = out / f"term-index{ext}"
-    _write_readonly(index_path, generate_term_index(td, format=format, ref_filter=ref_filter))
-    generated.append(str(index_path))
+    term_index = generate_term_index(td, format=format, ref_filter=ref_filter)
+    if _write_readonly(index_path, term_index, dry_run):
+        generated.append(str(index_path))
 
     # Collection manifests
     collections_dir = out / "collections"
     for entry in td.iter_collections():
-        collections_dir.mkdir(parents=True, exist_ok=True)
+        if not dry_run:
+            collections_dir.mkdir(parents=True, exist_ok=True)
         slug = entry.term.lower().replace(" ", "-")
         manifest_path = collections_dir / f"{slug}{ext}"
-        _write_readonly(
-            manifest_path,
-            generate_collection_manifest(entry, format=format, ref_filter=ref_filter),
-        )
-        generated.append(str(manifest_path))
+        manifest = generate_collection_manifest(entry, format=format, ref_filter=ref_filter)
+        if _write_readonly(manifest_path, manifest, dry_run):
+            generated.append(str(manifest_path))
 
     return generated
 

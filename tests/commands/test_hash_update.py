@@ -331,7 +331,6 @@ class TestUpdateHashesCommand:
             config=git_repo_with_stale_hash / ".elspais.toml",
             quiet=False,
             verbose=False,
-            mode="combined",
         )
 
         result = run(args)
@@ -362,7 +361,6 @@ class TestUpdateHashesCommand:
             config=git_repo_with_stale_hash / ".elspais.toml",
             quiet=False,
             verbose=False,
-            mode="combined",
         )
 
         result = run(args)
@@ -376,7 +374,7 @@ class TestUpdateHashesCommand:
         assert "deadbeef" not in content
         assert "00000000" not in content
 
-    # Verifies: REQ-p00001-C
+    # Verifies: REQ-p00001-C, REQ-d00330-C
     @patch("elspais.utilities.git.get_author_info", return_value=_MOCK_AUTHOR)
     def test_REQ_p00001_C_updates_specific_requirement(
         self, mock_author, git_repo_with_stale_hash, capsys
@@ -398,11 +396,11 @@ class TestUpdateHashesCommand:
 
         assert result == 0
 
-        # Verify hashes are correct (render_save re-renders the whole file)
+        # The named requirement is fixed and its neighbour is left as written.
         spec_file = git_repo_with_stale_hash / "spec" / "requirements.md"
         content = spec_file.read_text()
         assert "deadbeef" not in content  # REQ-p00001 stale hash replaced
-        assert "00000000" not in content  # REQ-p00002 also fixed by render
+        assert "00000000" in content  # REQ-p00002 is not the named requirement
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -464,7 +462,6 @@ class TestHashIgnoresProse:
             config=project / ".elspais.toml",
             quiet=False,
             verbose=False,
-            mode="combined",
         )
 
     # Verifies: REQ-d00131-S

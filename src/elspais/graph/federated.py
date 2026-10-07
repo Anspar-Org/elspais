@@ -3354,12 +3354,35 @@ class FederatedGraph:
         return ownership
 
 
+# Implements: REQ-d00204-L, REQ-d00253-B
+def member_outside_write_scope(graph: Any, repo_name: str, write_associates: bool) -> bool:
+    """Whether a save from this invocation cannot write the member *repo_name*.
+
+    The write scope is the primary repository, and every associate where
+    ``federation.write_associates`` is true. It applies the test that
+    ``is_associate_owned`` applies to a node's owner.
+    """
+    if write_associates:
+        return False
+    return is_associate_member(graph, repo_name)
+
+
+# Implements: REQ-d00253-B
+def is_associate_member(graph: Any, repo_name: str) -> bool:
+    """Whether the member *repo_name* is an associate rather than the primary."""
+    root_repo = getattr(graph, "root_repo_name", None)
+    return root_repo is not None and repo_name != root_repo
+
+
 # Implements: REQ-d00253-B
 def is_associate_owned(graph: Any, node: Any) -> bool:
     """Whether *node* is owned by an associate repo rather than the primary.
 
     Single home for the write-scope ownership resolution used by
-    ``render_save`` and ``elspais fix`` reporting (REQ-d00253-B, REQ-d00253-F).
+    ``render_save``, ``elspais fix`` reporting and the remedies the checks
+    print (REQ-d00253-B, REQ-d00253-F, REQ-d00204-L). Once the owner is
+    known it asks ``is_associate_member``, which ``member_outside_write_scope``
+    asks for a whole member, so a node and its member get one answer.
 
     Takes the node OBJECT, never its id. A structural id repeats across
     repositories, so asking by id can answer with a member that merely
@@ -3377,9 +3400,8 @@ def is_associate_owned(graph: Any, node: Any) -> bool:
     """
     if node is None:
         return False
-    root_repo = getattr(graph, "root_repo_name", None)
     try:
         owner = graph.repo_for_node(node).name
-        return root_repo is not None and owner != root_repo
     except (KeyError, AttributeError):
         return node.get_field("repo") is not None
+    return is_associate_member(graph, owner)

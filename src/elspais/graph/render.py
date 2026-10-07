@@ -386,7 +386,7 @@ def render_node(node: GraphNode, resolver: Any | None = None) -> str:
         raise ValueError(f"Unknown NodeKind: {kind}")
 
 
-# Implements: REQ-d00131-B
+# Implements: REQ-d00131-B, REQ-d00132-P
 def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
     """Render a REQUIREMENT node to its full text block.
 
@@ -504,7 +504,10 @@ def _render_requirement(node: GraphNode, resolver: Any | None = None) -> str:
             heading = child.get_field("heading") or "preamble"
             heading_style = child.get_field("heading_style")
             content = child.get_field("text") or ""
-            if heading == "preamble":
+            # Implements: REQ-d00132-O
+            # A preamble, and the text of a section that follows a definition
+            # list inside it, render without a heading of their own.
+            if heading == "preamble" or child.get_field("continuation"):
                 in_assertions = False
                 if content:
                     # One blank line separates the text from what precedes
@@ -1530,6 +1533,83 @@ def mark_parts_unlike_disk(graph: FederatedGraph) -> None:
                 part.mark_parse_dirty(CANONICAL_FORM_REASON)
 
 
+def _confinement_errors(
+    graph: FederatedGraph, parts: list[GraphNode], reached: dict[int, Any]
+) -> list[str]:
+    """Why a save confined to *parts* cannot be made, or nothing where it can."""
+    errors: list[str] = []
+    named = {id(p) for p in parts}
+    for part in parts:
+        holder = part.file_node()
+        edge = _containing_edge(part)
+        if holder is None or edge is None:
+            errors.append(f"{part.id}: held by no file, so it cannot be written alone.")
+            continue
+        start = edge.metadata.get("start_line")
+        end = edge.metadata.get("end_line")
+        if not isinstance(start, int) or not isinstance(end, int) or start < 1:
+            errors.append(
+                f"{part.id}: the lines it was read from are not recorded, "
+                f"so it cannot be written alone. Nothing was written."
+            )
+    for node in reached.values():
+        owner = node
+        while owner is not None and id(owner) not in named:
+            parent = next(
+                (
+                    p
+                    for p in owner.iter_parents(edge_kinds={EdgeKind.STRUCTURES})
+                    if p.kind == NodeKind.REQUIREMENT
+                ),
+                None,
+            )
+            owner = parent
+        if owner is None:
+            errors.append(
+                f"{node.id}: a pending change reaches it, and this save writes only "
+                f"{', '.join(p.id for p in parts)}. Nothing was written; the "
+                f"changes are still pending."
+            )
+    return errors
+
+
+def _containing_edge(part: GraphNode) -> Any | None:
+    """The CONTAINS edge by which a FILE holds *part*, or None."""
+    for edge in part.iter_incoming_edges():
+        if edge.kind == EdgeKind.CONTAINS and edge.source.kind == NodeKind.FILE:
+            return edge
+    return None
+
+
+# Implements: REQ-d00330-C
+def _splice_parts(
+    file_node: GraphNode, disk_text: str, parts: list[GraphNode], resolver: Any | None
+) -> str:
+    """The file's text on disk with each named part's lines replaced by its rendering.
+
+    Each part records the lines it was read from, the same slice that
+    ``_parts_unlike_disk`` compares, so every other line keeps its bytes.
+    """
+    named = {id(p) for p in parts}
+    lines = disk_text.split("\n")
+    spans: list[tuple[int, int, str]] = []
+    for edge in file_node.iter_outgoing_edges():
+        if edge.kind != EdgeKind.CONTAINS or id(edge.target) not in named:
+            continue
+        rendered = _contained_text(edge, resolver)
+        if rendered is None:
+            continue
+        spans.append((edge.metadata["start_line"], edge.metadata["end_line"], rendered))
+    for start, end, rendered in sorted(spans, reverse=True):
+        old = lines[start - 1 : end]
+        new = rendered.split("\n")
+        # A line read with its carriage return keeps it.
+        if old and old[0].endswith("\r"):
+            new = [line + "\r" for line in new]
+        lines[start - 1 : end] = new
+    return "\n".join(lines)
+
+
 # Implements: REQ-d00132-A, REQ-d00132-C, REQ-d00134-D, REQ-d00134-E
 def render_save(
     graph: FederatedGraph,
@@ -1540,6 +1620,7 @@ def render_save(
     write_associates: bool = False,
     *,
     tidy: bool = False,
+    parts: list[GraphNode] | None = None,
 ) -> dict[str, Any]:
     """Persist dirty FILE nodes to disk by rendering their CONTAINS children.
 
@@ -1565,6 +1646,11 @@ def render_save(
         tidy: Also rewrite the files that are merely parse-dirty. The fix
             command sets it. A save of pending mutations does not, so it
             writes only the files that the mutations change (REQ-d00132-I).
+        parts: Write only these parts of a file. Each file holding one is
+            written with each named part's rendering in place of the lines it
+            was read from, and every other line as it is on disk. A pending
+            mutation that reaches any other part refuses the save, writing
+            nothing. The fix of one requirement sets it (REQ-d00330-C).
 
     Returns:
         Dict with:
@@ -1601,7 +1687,10 @@ def render_save(
     _wire_new_requirements_to_files(graph)
 
     # Find dirty FILE nodes
-    dirty_files = _find_dirty_files(graph, tidy=tidy)
+    if parts is not None:
+        dirty_files = list({id(f): f for p in parts if (f := p.file_node()) is not None}.values())
+    else:
+        dirty_files = _find_dirty_files(graph, tidy=tidy)
 
     # Federation: by default, fix/save writes only primary-repo files.
     # Ownership resolution lives in ONE place: is_associate_owned() in
@@ -1731,6 +1820,22 @@ def render_save(
 
     _reached_files, reached, edited = _mutation_reach(graph)
 
+    # Implements: REQ-d00330-C
+    # A save confined to named parts writes nothing beyond them, so work
+    # queued for any other part is refused rather than dropped or written.
+    if parts is not None:
+        confined = _confinement_errors(graph, parts, reached)
+        if confined:
+            return {
+                "success": False,
+                "saved_count": 0,
+                "files_modified": [],
+                "conflicts": [],
+                "errors": confined,
+                "skipped": skipped,
+                "changed_beyond_edits": [],
+            }
+
     # Implements: REQ-d00132-M
     # A code or test file belongs to its authors; the save may change only
     # the citations its mutations respelled. Every such file is checked
@@ -1791,8 +1896,16 @@ def render_save(
             file_resolver = getattr(getattr(owning_entry, "graph", None), "_resolver", None)
             if file_resolver is None:
                 file_resolver = resolver
-            content = render_file(file_node, resolver=file_resolver)
             source_file = _file_type_of(file_node) in (FileType.CODE, FileType.TEST)
+            if parts is not None:
+                with open(abs_path, encoding="utf-8", newline="") as handle:
+                    disk_text = handle.read()
+                content = _splice_parts(file_node, disk_text, parts, file_resolver)
+                abs_path.write_text(content, encoding="utf-8", newline="")
+                files_modified.add(str(abs_path))
+                saved_count += 1
+                continue
+            content = render_file(file_node, resolver=file_resolver)
             # Ensure file ends with newline. A code or test file ends as its
             # author ended it (REQ-d00132-M).
             if content and not content.endswith("\n") and not source_file:

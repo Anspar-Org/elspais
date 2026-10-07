@@ -34,6 +34,8 @@ from elspais.utilities.findings import (
     is_registered,
     preset_checks,
     remedy_for,
+    remedy_is_command,
+    remedy_outside_write_scope,
     severity_for,
 )
 
@@ -103,10 +105,12 @@ class HealthCheck:
     severity: str = "error"  # one of REPORTED_SEVERITIES
     details: dict[str, Any] = field(default_factory=dict)
     findings: list[HealthFinding] = field(default_factory=list)
-    # The action that resolves what this check reports. Left empty by every
-    # caller: it is resolved from the one registry below, so a finding carries
-    # its remedy into every format rather than into the one whose renderer
-    # remembered to consult a table (REQ-d00285-B+C).
+    # The action that resolves what this check reports. Left empty, it is
+    # resolved from the one registry below, so a finding carries its remedy
+    # into every format rather than into the one whose renderer remembered to
+    # consult a table (REQ-d00285-B+C). A caller sets it only where the
+    # registered remedy cannot reach the findings, through
+    # `remedy_outside_write_scope` (REQ-d00204-L).
     remedy: str = ""
 
     # Implements: REQ-d00212-U, REQ-d00285-D, REQ-d00285-B
@@ -1363,6 +1367,29 @@ def _satisfactions_of_clone(clone):
 
 
 # Implements: REQ-p00004-K
+# Implements: REQ-d00204-L
+def _stale_hash_remedy(
+    graph: FederatedGraph, stale: list[GraphNode], config: dict[str, Any] | None
+) -> str:
+    """The remedy for stale hashes, naming each member the write scope does not reach."""
+    from elspais.graph.federated import is_associate_owned
+
+    write_associates = bool((config or {}).get("federation", {}).get("write_associates", False))
+    outside: dict[str, None] = {}
+    in_scope = False
+    for node in stale:
+        holder = node.file_node() or node
+        if write_associates or not is_associate_owned(graph, holder):
+            in_scope = True
+            continue
+        try:
+            name = graph.repo_for_node(holder).name
+        except (KeyError, AttributeError):
+            name = holder.get_field("repo") or "an associate repository"
+        outside.setdefault(name, None)
+    return remedy_outside_write_scope("spec.hash_integrity", list(outside), in_scope=in_scope)
+
+
 def check_spec_hash_integrity(
     graph: FederatedGraph, config: dict[str, Any] | None = None
 ) -> HealthCheck:
@@ -1385,6 +1412,7 @@ def check_spec_hash_integrity(
 
     findings: list[HealthFinding] = []
     mismatches = []
+    stale_nodes: list[GraphNode] = []
 
     for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
         reasons = node.get_field("parse_dirty_reasons") or []
@@ -1392,6 +1420,7 @@ def check_spec_hash_integrity(
             continue
         stored = node.hash
         mismatches.append({"id": node.id, "stored": stored})
+        stale_nodes.append(node)
         flagged: set[tuple[str, str]] = set()
         for edge in node.iter_incoming_edges():
             if edge.kind != EdgeKind.INSTANCE:
@@ -1428,6 +1457,7 @@ def check_spec_hash_integrity(
             severity=severity,
             details={"mismatches": mismatches},
             findings=findings,
+            remedy=_stale_hash_remedy(graph, stale_nodes, config),
         )
 
     has_satisfies = any(
@@ -2675,12 +2705,16 @@ def run_spec_checks(
     # Each member's nodes are judged by that member's configuration, and
     # read through the federation, so a reference into another member
     # resolves where its target lives and the run builds nothing.
+    from elspais.graph.federated import member_outside_write_scope
+
+    write_associates = bool(config.get("federation", {}).get("write_associates", False))
     for entry in graph.iter_repos():
         from elspais.utilities.patterns import build_resolver
 
         repo_config = entry.config
         member = entry.namespace
         repo_resolver = build_resolver(repo_config)
+        member_start = len(checks)
 
         checks.append(
             _annotate_findings(
@@ -2763,6 +2797,15 @@ def run_spec_checks(
                 entry.name,
             )
         )
+        # Implements: REQ-d00204-L
+        # A remedy that writes files cannot reach a member this run may not
+        # write, so its findings name the write scope as the obstacle.
+        if member_outside_write_scope(graph, entry.name, write_associates):
+            for check in checks[member_start:]:
+                if not check.passed:
+                    check.remedy = remedy_outside_write_scope(
+                        check.name, [entry.name], in_scope=False
+                    )
 
     if spec_dirs:
         checks.append(check_spec_index_current(graph, spec_dirs, config=config))
@@ -6733,7 +6776,7 @@ def _render_markdown(data: _ReportData) -> str:
             if check.findings:
                 # A command is code and reads as code; "no command resolves
                 # this" is a sentence and would read as one if it were not.
-                spelled = check.remedy if check.remedy == NO_KNOWN_REMEDY else f"`{check.remedy}`"
+                spelled = f"`{check.remedy}`" if remedy_is_command(check.remedy) else check.remedy
                 lines.append(f"  - remedy: {spelled}")
             for finding in check.findings:
                 location = finding.location()

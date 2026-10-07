@@ -105,10 +105,14 @@ def run(args: argparse.Namespace) -> int:
     # Single-pass fix returns an exit code (1 if unfixable issues exist).
     # Other unfixable conditions don't suppress INDEX/term generation — only
     # the duplicate-ID case does, and that's handled above.
-    exit_code = _fix_parse_dirty(args, dry_run)
+    # Implements: REQ-d00330-A
+    # A dry run leaves the hashes on disk as they were, so the index is
+    # judged against the hashes the fix would write.
+    pending_hashes: dict[str, str] = {}
+    exit_code = _fix_parse_dirty(args, dry_run, pending_hashes=pending_hashes)
 
     # Fix stale INDEX.md if present
-    _fix_index(args, dry_run)
+    _fix_index(args, dry_run, hashes=pending_hashes)
 
     # Generate glossary and term index if terms are defined
     _fix_terms(args, dry_run)
@@ -157,16 +161,28 @@ def _is_associate_owned(graph, node) -> bool:  # noqa: ANN001
     return is_associate_owned(graph, node.file_node() or node)
 
 
+def _authored_requirements(graph):  # noqa: ANN001, ANN202
+    """The requirements whose text is written in a file of their own.
+
+    A copy made by ``Satisfies:`` holds its original's text and is remade
+    from it, so fixing the original is what fixes the copy.
+    """
+    from elspais.graph import NodeKind
+    from elspais.graph.relations import Stereotype
+
+    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+        if node.get_field("stereotype") != Stereotype.INSTANCE:
+            yield node
+
+
 # Implements: REQ-d00250-E
 def _scan_and_report_unfixable(graph) -> int:  # noqa: ANN001
     """Walk `parse_unfixable_reasons` across requirements; print to stderr.
 
     Returns 1 if any unfixable reasons were found, else 0.
     """
-    from elspais.graph import NodeKind
-
     found = False
-    for n in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for n in _authored_requirements(graph):
         rs = n.get_field("parse_unfixable_reasons") or []
         for r in rs:
             print(
@@ -376,12 +392,17 @@ def _add_drift_changelog_entries(
 
 
 # Implements: REQ-d00250-E
-def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
+def _fix_parse_dirty(
+    args: argparse.Namespace, dry_run: bool, pending_hashes: dict[str, str] | None = None
+) -> int:
     """Single-pass fix: build graph, detect all fixable issues, render to disk.
 
     Uses _detect_fixable() for comprehensive detection (parse dirty, hash
     mismatch, changelog drift, missing changelog) and render_save() for
     canonical output.
+
+    In a dry run, ``pending_hashes`` receives the hash each requirement this
+    run would write is given, so the index can be judged against it.
 
     Returns 1 if there are unfixable issues (e.g. H6 requirements with section
     blocks), else 0.
@@ -413,7 +434,21 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     # that text as written. Fixing is the deliberate act that marks it.
     from elspais.graph.term_scanner import mark_terms_in_hashed_text
 
-    mark_terms_in_hashed_text(graph, list(graph.nodes_by_kind(NodeKind.REQUIREMENT)))
+    # Implements: REQ-d00253-B, REQ-d00330-B
+    # Only the requirements this run may write are acted on. An associate's
+    # requirement outside the write scope is reported [skipping] below and
+    # left exactly as the build read it: marking its terms, flagging it dirty
+    # or queuing a changelog entry for it is work the save cannot perform,
+    # and work queued for a file it holds back makes it write nothing at all
+    # (REQ-d00253-G).
+    write_associates = config.get("federation", {}).get("write_associates", False)
+
+    def writable(node) -> bool:  # noqa: ANN001
+        return write_associates or not _is_associate_owned(graph, node)
+
+    mark_terms_in_hashed_text(
+        graph, [n for n in graph.nodes_by_kind(NodeKind.REQUIREMENT) if writable(n)]
+    )
 
     typed_config = _validate_config(config)
     changelog_enforce = typed_config.changelog.hash_current
@@ -421,7 +456,7 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     # Skip nodes that have unfixable reasons — they will be reported via
     # _scan_and_report_unfixable() and must not be touched by render_save.
     fixable_nodes: list[tuple[Any, list[str]]] = []  # (node, reasons)
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in _authored_requirements(graph):
         if node.get_field("parse_unfixable_reasons"):
             continue
         reasons = _detect_fixable(node, changelog_enforce)
@@ -434,7 +469,7 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     # fixable siblings. Exclude those files from the fixable set entirely —
     # the author must resolve the unfixable issue first.
     unfixable_file_ids: set[str] = set()
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
+    for node in _authored_requirements(graph):
         if not node.get_field("parse_unfixable_reasons"):
             continue
         fn = node.file_node()
@@ -476,17 +511,13 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
         print(f"Validated {req_count} requirements")
         return _scan_and_report_unfixable(graph)
 
-    # Report what will be / was fixed. Associate-owned nodes are reported
-    # [skipping] when write_associates is false: render_save will never write
-    # their files, so a plain "Fixing" claim would be false.
+    # Each change this run reports, as (node, detail, writable). Associate-owned
+    # nodes are reported [skipping] when write_associates is false: render_save
+    # will never write their files, so a claim of a fix would be false.
     # Implements: REQ-d00253-F
-    write_associates = config.get("federation", {}).get("write_associates", False)
-    prefix = "Would fix" if dry_run else "Fixing"
+    report: list[tuple[Any, str, bool]] = []
     for node, reasons in fixable_nodes:
-        if not write_associates and _is_associate_owned(graph, node):
-            line = "[skipping] {node_id}: {detail} (associate-owned; write_associates=false)"
-        else:
-            line = "{prefix} {node_id}: {detail}"
+        can_write = writable(node)
         for r in reasons:
             if r == "non_canonical_term":
                 repls = node.get_field("term_replacements") or []
@@ -495,35 +526,36 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
                     if (old_form, new_form) not in seen:
                         seen.add((old_form, new_form))
                         detail = f"canonicalize term {old_form} -> {new_form}"
-                        print(line.format(prefix=prefix, node_id=node.id, detail=detail))
+                        report.append((node, detail, can_write))
             elif r == "hash_mismatch":
                 # Name the value, not just the condition: a dry run is the
                 # author's chance to see what will be written before it is.
                 will_write = compute_hash_for_node(node) or "N/A"
                 detail = f"hash {node.hash or '(none)'} -> {will_write}"
-                print(line.format(prefix=prefix, node_id=node.id, detail=detail))
+                report.append((node, detail, can_write))
+                if can_write and pending_hashes is not None:
+                    pending_hashes[node.id] = will_write
             else:
-                detail = _REASON_LABELS.get(r, r)
-                print(line.format(prefix=prefix, node_id=node.id, detail=detail))
+                report.append((node, _REASON_LABELS.get(r, r), can_write))
     for node in untidy_prose:
-        if not write_associates and _is_associate_owned(graph, node):
-            line = "[skipping] {node_id}: {detail} (associate-owned; write_associates=false)"
-        else:
-            line = "{prefix} {node_id}: {detail}"
+        can_write = writable(node)
         seen_prose: set[tuple[str, str]] = set()
         for old_form, new_form in node.get_field("term_replacements") or []:
             if (old_form, new_form) not in seen_prose:
                 seen_prose.add((old_form, new_form))
                 detail = f"canonicalize term {old_form} -> {new_form}"
-                print(line.format(prefix=prefix, node_id=node.id, detail=detail))
+                report.append((node, detail, can_write))
         # Implements: REQ-d00132-N
         for r in node.get_field("parse_dirty_reasons") or []:
             if r != "non_canonical_term":
-                detail = _REASON_LABELS.get(r, r)
-                print(line.format(prefix=prefix, node_id=node.id, detail=detail))
+                report.append((node, _REASON_LABELS.get(r, r), can_write))
 
     if dry_run:
+        _print_report(report, lambda _node: "Would fix")
         return _scan_and_report_unfixable(graph)
+
+    # Only what this run may write is marked, changelogged or saved.
+    fixable_nodes = [(n, reasons) for n, reasons in fixable_nodes if writable(n)]
 
     # Drift-only nodes (changelog hash mismatch with no other fixable issues)
     # go through _add_drift_changelog_entries; everything else — including
@@ -561,28 +593,81 @@ def _fix_parse_dirty(args: argparse.Namespace, dry_run: bool) -> int:
     result = render_save(
         graph,
         repo_root=repo_root,
-        write_associates=config.get("federation", {}).get("write_associates", False),
+        write_associates=write_associates,
         tidy=True,
     )
-    saved = result.get("saved_count", 0)
-    if saved:
-        files = result.get("files_modified", [])
-        for f in files:
-            print(f"Rewrote {f}")
+
+    # Implements: REQ-d00330-A, REQ-d00330-D, REQ-p00015-B
+    # The report states what the save did, not what it was asked to do. A
+    # change whose file was not written is reported with the cause, and a run
+    # that did not write every change it reported exits with a failure.
+    written = {str(Path(f)) for f in result.get("files_modified", [])}
+
+    def outcome(node) -> str:  # noqa: ANN001
+        return "Fixed" if _file_path_of(graph, node, repo_root) in written else "Not fixed"
+
+    _print_report(report, outcome)
+    for f in result.get("files_modified", []):
+        print(f"Rewrote {f}")
 
     req_count = sum(1 for _ in graph.nodes_by_kind(NodeKind.REQUIREMENT))
     print(f"Validated {req_count} requirements")
-    return _scan_and_report_unfixable(graph)
+    unfixable_rc = _scan_and_report_unfixable(graph)
+    if not result.get("success", False):
+        for err in result.get("errors", []):
+            print(f"Error: {err}", file=sys.stderr)
+        if result.get("error"):
+            print(f"Error: {result['error']}", file=sys.stderr)
+        return 1
+    not_fixed = sorted({n.id for n, _d, can in report if can and outcome(n) == "Not fixed"})
+    if not_fixed:
+        print(
+            f"Error: the changes reported for {', '.join(not_fixed)} were not written.",
+            file=sys.stderr,
+        )
+        return 1
+    return unfixable_rc
+
+
+def _print_report(report: list[tuple[Any, str, bool]], verb) -> None:  # noqa: ANN001
+    """Print each reported change, naming the outcome *verb* gives its node.
+
+    A change outside the write scope is printed [skipping], whatever the run.
+    """
+    for node, detail, can_write in report:
+        if can_write:
+            print(f"{verb(node)} {node.id}: {detail}")
+        else:
+            print(f"[skipping] {node.id}: {detail} (associate-owned; write_associates=false)")
+
+
+def _file_path_of(graph, node, repo_root: Path) -> str | None:  # noqa: ANN001
+    """The absolute path of the file holding *node*, as render_save names it."""
+    fn = node.file_node()
+    if fn is None:
+        return None
+    rel = fn.get_field("relative_path")
+    if not rel:
+        return None
+    path = Path(rel)
+    if not path.is_absolute():
+        try:
+            root = graph.repo_for_node(fn).repo_root
+        except (KeyError, AttributeError):
+            root = repo_root
+        path = Path(root) / rel
+    return str(path)
 
 
 # Implements: REQ-p00004-A, REQ-p00004-N
+# Implements: REQ-d00330-C
 def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     """Fix a single requirement via the render pipeline.
 
-    Builds the graph (which canonicalizes terms and marks dirty nodes),
-    marks the terms in the target's hashed text, then uses render_save to
-    re-render the file containing the target requirement. This ensures
-    canonical term forms, correct hashes, and deduplicated references — all through one render path.
+    Builds the graph, marks the terms in the target's hashed text, then has
+    render_save write the target's own lines and nothing else of its file.
+    The INDEX rows listing the target are then brought up to date, and no
+    other row.
     """
     from elspais.config import get_config
     from elspais.graph import NodeKind
@@ -622,6 +707,20 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
         print(f"Error: Requirement {req_id} not found", file=sys.stderr)
         return 1
 
+    # Implements: REQ-d00253-B, REQ-d00253-F
+    # Refused before anything is queued: the write scope decides what this
+    # run may change, and the target is outside it.
+    write_associates = config.get("federation", {}).get("write_associates", False)
+    if not write_associates and _is_associate_owned(graph, node):
+        print(
+            f"Error: {req_id} is owned by an associate repository, and the write "
+            f"scope does not reach it (federation.write_associates is false). "
+            f"Nothing was changed. Fix it from that repository, or set "
+            f"federation.write_associates to true.",
+            file=sys.stderr,
+        )
+        return 1
+
     # Implements: REQ-d00132-L
     from elspais.graph.term_scanner import mark_terms_in_hashed_text
 
@@ -659,7 +758,7 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
 
     if not something_to_fix and not needs_new_section and not changelog_hash_drifted:
         print(f"{req_id} is already up to date")
-        return 0
+        return _fix_index_rows(args, graph, node, effective_hash, dry_run)
 
     if dry_run:
         prefix = "Would fix"
@@ -681,7 +780,7 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
             print(f"{prefix} {req_id}: sync changelog hash")
         if needs_new_section and not something_to_fix and not changelog_hash_drifted:
             print(f"{prefix} {req_id}: add missing changelog section")
-        return 0
+        return _fix_index_rows(args, graph, node, effective_hash, dry_run)
 
     # A fix that only changes how the requirement is written changes nothing
     # it says, so it adds no changelog entry -- as in the fix of every
@@ -719,27 +818,85 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
         cl_entry = _make_changelog_entry(effective_hash, reason, author)
         graph.add_changelog_entry(req_id, cl_entry)
 
-    # Always mark the target node dirty so render_save picks up its file.
-    # "fix_single" overrides the stale_hash filter in _find_dirty_files.
-    node.mark_parse_dirty("fix_single")
-
+    # Implements: REQ-d00330-C
+    # The save writes the target's own lines; every other part of its file,
+    # and every other file, keeps its bytes.
     result = render_save(
         graph,
         repo_root=repo_root,
-        write_associates=config.get("federation", {}).get("write_associates", False),
-        tidy=True,
+        write_associates=write_associates,
+        parts=[node],
     )
-    if result.get("errors"):
-        for err in result["errors"]:
+    if not result.get("success", False) or result.get("errors"):
+        for err in result.get("errors") or []:
             print(f"Error: {err}", file=sys.stderr)
+        if result.get("error"):
+            print(f"Error: {result['error']}", file=sys.stderr)
         return 1
 
-    saved = result.get("saved_count", 0)
-    if saved > 0:
-        rel = _fn.get_field("relative_path") or req_id
+    rel = _fn.get_field("relative_path") or req_id
+    if result.get("saved_count", 0) > 0:
         print(f"Fixed {req_id} in {rel}")
     else:
         print(f"{req_id} is already up to date")
+    return _fix_index_rows(args, graph, node, effective_hash, dry_run)
+
+
+# Implements: REQ-d00330-C
+def _fix_index_rows(args: argparse.Namespace, graph, node, hash_value: str, dry_run: bool) -> int:  # noqa: ANN001
+    """Bring the INDEX.md rows listing *node* up to date, and no other row.
+
+    The rows are those of the INDEX.md of the repository owning *node*: the
+    primary's own, or an associate's where the write scope reaches it.
+    """
+    from elspais.commands.index import update_index_rows
+    from elspais.config import get_config, get_spec_directories
+
+    spec_dir = getattr(args, "spec_dir", None)
+    config_path = getattr(args, "config", None)
+    repo_root = getattr(args, "git_root", None) or Path.cwd()
+    config = get_config(config_path)
+    index_graph = graph
+    where = ""
+    if _is_associate_owned(graph, node):
+        try:
+            entry = graph.repo_for_node(node.file_node() or node)
+        except (KeyError, AttributeError):
+            entry = None
+        member = (
+            _member_graph(entry.repo_root, entry.config)
+            if entry is not None and entry.config
+            else None
+        )
+        if member is None:
+            print(
+                f"The INDEX.md of the repository owning {node.id} was not updated: "
+                f"that repository could not be read.",
+                file=sys.stderr,
+            )
+            return 1
+        index_graph, spec_dirs, include_assoc = member
+        where = f" in {spec_dirs[0] / 'INDEX.md'}"
+    else:
+        spec_dirs = list(get_spec_directories(spec_dir, config, base_path=repo_root))
+        if not spec_dirs:
+            return 0
+        include_assoc = config.get("federation", {}).get("index_associates", False)
+    outcome = update_index_rows(
+        index_graph,
+        spec_dirs,
+        {node.id: hash_value},
+        include_associates=include_assoc,
+        dry_run=dry_run,
+    )
+    if outcome.changed:
+        verb = "Would update" if dry_run else "Updated"
+        print(f"{verb} the INDEX.md row for {node.id}{where}")
+    if outcome.unlisted:
+        print(
+            f"INDEX.md{where} does not list {node.id}; a full `elspais fix` regenerates it.",
+            file=sys.stderr,
+        )
     return 0
 
 
@@ -807,9 +964,14 @@ def _ensure_changelog_section(
 
 
 # Implements: REQ-d00248-A
-def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
-    """Regenerate INDEX.md from current graph state (no-op when already current)."""
-    from elspais.commands.index import _build_index_content, _regenerate_index
+def _fix_index(
+    args: argparse.Namespace, dry_run: bool, hashes: dict[str, str] | None = None
+) -> None:
+    """Regenerate INDEX.md from current graph state (no-op when already current).
+
+    ``hashes`` names the hash a requirement will be listed with where a dry
+    run has not yet written it.
+    """
     from elspais.config import get_config, get_spec_directories
     from elspais.graph.factory import build_graph
 
@@ -820,36 +982,84 @@ def _fix_index(args: argparse.Namespace, dry_run: bool) -> None:
     config = get_config(config_path)
     spec_dirs = get_spec_directories(spec_dir, config, base_path=repo_root)
 
-    if not spec_dirs:
-        return
-
-    all_spec_dirs = list(spec_dirs)
-
-    graph = build_graph(
-        spec_dirs=[spec_dir] if spec_dir else None,
-        config_path=config_path,
-        repo_root=repo_root,
-        scan_code=False,
-        scan_tests=False,
-    )
-
-    if _abort_if_duplicates(graph):
-        return
-
-    include_assoc = config.get("federation", {}).get("index_associates", False)
-    output_path, expected, _req_count, _jny_count = _build_index_content(
-        graph, all_spec_dirs, include_associates=include_assoc
-    )
-    if output_path.exists():
-        current = output_path.read_text(encoding="utf-8")
-        if current == expected:
+    if spec_dirs:
+        graph = build_graph(
+            spec_dirs=[spec_dir] if spec_dir else None,
+            config_path=config_path,
+            repo_root=repo_root,
+            scan_code=False,
+            scan_tests=False,
+        )
+        if _abort_if_duplicates(graph):
             return
+        include_assoc = config.get("federation", {}).get("index_associates", False)
+        _refresh_index(graph, list(spec_dirs), include_assoc, args, dry_run, hashes, primary=True)
 
-    if dry_run:
-        print("Would regenerate INDEX.md")
+    # Implements: REQ-d00330-B
+    # An associate the write scope reaches has its requirements rewritten by
+    # this run, and its own INDEX.md lists their hashes.
+    if config.get("federation", {}).get("write_associates", False):
+        for member_graph, member_dirs, member_assoc in _associate_members(config, Path(repo_root)):
+            # An associate's index is kept where it keeps one, never created.
+            if (member_dirs[0] / "INDEX.md").exists():
+                _refresh_index(
+                    member_graph, member_dirs, member_assoc, args, dry_run, hashes, primary=False
+                )
+
+
+def _refresh_index(
+    graph,  # noqa: ANN001
+    spec_dirs: list[Path],
+    include_assoc: bool,
+    args: argparse.Namespace,
+    dry_run: bool,
+    hashes: dict[str, str] | None,
+    *,
+    primary: bool,
+) -> None:
+    """Rewrite one repository's INDEX.md where it differs from what it should list."""
+    from elspais.commands.index import _build_index_content, _regenerate_index
+
+    output_path, expected, _req_count, _jny_count = _build_index_content(
+        graph, spec_dirs, include_associates=include_assoc, hashes=hashes
+    )
+    if output_path.exists() and output_path.read_text(encoding="utf-8") == expected:
         return
+    if dry_run:
+        print("Would regenerate INDEX.md" if primary else f"Would regenerate {output_path}")
+        return
+    _regenerate_index(graph, spec_dirs, args, include_associates=include_assoc)
 
-    _regenerate_index(graph, all_spec_dirs, args, include_associates=include_assoc)
+
+def _member_graph(repo_root: Path, member_config: dict[str, Any]):  # noqa: ANN202
+    """One associate's graph, spec directories and index scope, as a run from its root reads them.
+
+    Returns None where the associate has no spec directory or holds
+    duplicate identifiers.
+    """
+    from elspais.config import get_spec_directories
+    from elspais.graph.factory import build_graph
+
+    spec_dirs = get_spec_directories(None, member_config, base_path=repo_root)
+    if not spec_dirs:
+        return None
+    graph = build_graph(repo_root=repo_root, scan_code=False, scan_tests=False)
+    if _abort_if_duplicates(graph):
+        return None
+    include_assoc = member_config.get("federation", {}).get("index_associates", False)
+    return graph, list(spec_dirs), include_assoc
+
+
+def _associate_members(config: dict[str, Any], repo_root: Path):  # noqa: ANN202
+    """Each readable associate of the federation, as ``_member_graph`` gives it."""
+    from elspais.graph.federation_plan import plan_federation
+
+    for planned in plan_federation(config, repo_root)[1:]:
+        if planned.config is None:
+            continue
+        member = _member_graph(planned.repo_root, planned.config)
+        if member is not None:
+            yield member
 
 
 # Implements: REQ-d00253-C, REQ-d00200-I
@@ -936,10 +1146,6 @@ def _fix_terms(args: argparse.Namespace, dry_run: bool) -> None:
     if td is None or len(td) == 0:
         return
 
-    if dry_run:
-        print(f"Would generate glossary and term index in {output_dir}")
-        return
-
     from elspais.commands.glossary_cmd import write_term_outputs
 
     # Even with a primary-only term dictionary, term *references* are collected
@@ -954,6 +1160,12 @@ def _fix_terms(args: argparse.Namespace, dry_run: bool) -> None:
             def ref_filter(ref, _assoc_ns=assoc_ns):
                 return getattr(ref, "namespace", None) not in _assoc_ns
 
-    generated = write_term_outputs(td, output_dir, ref_filter=ref_filter)
+    # A file already holding what it would be written with is left alone,
+    # so a run with nothing to change writes nothing.
+    generated = write_term_outputs(td, output_dir, ref_filter=ref_filter, dry_run=dry_run)
+    if dry_run:
+        if generated:
+            print(f"Would generate glossary and term index in {output_dir}")
+        return
     for path in generated:
         print(f"Generated: {path}")

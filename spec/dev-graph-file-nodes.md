@@ -334,6 +334,10 @@ M. If a save would change a line of a code or test file other than a line of a c
 
 N. The checks SHALL report each requirement and each file-level text section whose text on disk differs from the text that a write of its file gives it.
 
+O. Bringing a requirement or a file-level text section into canonical form SHALL keep each heading, each definition of a *Defined Term*, and all other text that the rendered document shows.
+
+P. Bringing a requirement or a file-level text section into canonical form SHALL change only spacing, markup that leaves the rendered document unchanged, the depth of a section heading, and the spelling of a requirement's metadata block.
+
 ### Rationale
 
 Render-based save replaces the brittle text surgery in persistence.py with graph-native serialization. Each FILE node renders its content from the graph, making the graph the single source of truth. The consistency check (rebuild + compare) proves round-trip fidelity.
@@ -344,10 +348,13 @@ Inside a file that a save does write, the file is rendered whole, so text that i
 
 Canonical form applies whenever elspais writes a requirement, and a change that leaves the hash where it was, such as spacing, layout or the depth of a heading, is fair game for any write. A change that moves the hash is material: it changes what the requirement is recorded as saying. Marking a *Defined Term* in an *Assertion* is such a change, because the emphasis says the word carries its defined meaning. L keeps a material change a deliberate act. A save makes it to a requirement somebody edited, and the fix operation makes it to any requirement on purpose, but a save never makes it to a requirement nobody edited. The hash L speaks of is the one the requirement's text yields. A recorded hash that no longer matches that text is a separate condition with its own check, and a save that records the hash the text already has changes no requirement's hash.
 
+O and P bound what canonical form may do. Canonical form is a change the tool makes on its own initiative to text nobody asked it to change, so it is held to changes a reader of the rendered document cannot see, apart from two visible changes that alter nothing the requirement says. A heading, a definition or a line of prose that a rewrite drops is content its author wrote, lost inside a diff its reviewer was told was tidying. A blank line is spacing that can render: it separates a paragraph from a table, list or fenced block that follows it, and without it the block folds into the paragraph. The depth of a section heading places the section inside its requirement, so canonical form sets it and keeps the heading and its words. The metadata block has one rendered form, whatever spelling it was written in, so canonical form respells its fields in that form: their order, their decoration, and an explicit marker for a field left empty. What each field declares stays as it was. Marking a *Defined Term* is not canonical form, because it moves the hash.
+
 A code or test file belongs to its authors. The tool changes one only to respell a citation of an identifier that a mutation renamed. M keeps every other byte of such a file as the author wrote it. A save produces the whole file from the graph, so where that cannot reproduce a line, or the file changed on disk after the graph read it, the save writes nothing rather than overwrite that line.
 
 ### Changelog
 
+- 2026-10-07 | 1bff7d9f | - | Michael Lewis (<michael@anspar.org>) | Add assertions O and P: canonical form keeps every heading, definition and visible text, and changes only spacing, non-rendering markup, heading depth and the spelling of the metadata block
 - 2026-10-03 | 4033b420 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-03 | 16a9564a | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-01 | b7f05ffb | - | Michael Lewis (<michael@anspar.org>) | Add assertion L: a save leaves the hash of each requirement it did not edit unchanged
@@ -359,7 +366,7 @@ A code or test file belongs to its authors. The tool changes one only to respell
 - 2026-05-11 | 7043f7af | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 7043f7af | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Render-Based Save Operation* | **Hash**: 4033b420
+*End* *Render-Based Save Operation* | **Hash**: 1bff7d9f
 ---
 
 ## REQ-d00325: Changelog Reason for a Saved Change

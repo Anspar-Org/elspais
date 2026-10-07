@@ -558,15 +558,14 @@ Auto-fix spec file issues (hashes, formatting).
 
   $ elspais fix                   # Fix all issues
   $ elspais fix --dry-run         # Preview fixes without applying
-  $ elspais fix REQ-p00001        # Fix hash for a specific requirement
+  $ elspais fix REQ-p00001        # Fix one requirement and its INDEX.md row
   $ elspais fix -m "Clarify auth" # Provide changelog reason
 
 **Options:**
 
-  `REQ_ID`        Specific requirement ID to fix (hash only)
+  `REQ_ID`        Fix only this requirement's lines and its INDEX.md row
   `--dry-run`     Show what would be fixed without making changes
   `-m, --message` Changelog reason for Active requirement hash updates
-  `--mode {core,combined,associate}`  Scope of fix (default: combined)
 
 ## trace
 

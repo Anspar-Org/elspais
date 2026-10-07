@@ -21,7 +21,18 @@ Use the `fix` command to auto-fix issues:
 
   $ elspais fix                   # Fix all issues
   $ elspais fix --dry-run         # Preview fixes without applying
-  $ elspais fix REQ-p00001        # Fix hash for a specific requirement
+  $ elspais fix REQ-p00001        # Fix one requirement and its INDEX.md row
+
+## Fixing One Requirement
+
+`elspais fix REQ-p00001` fixes the named requirement and nothing else. Only
+that requirement's own lines change: every other requirement in its file,
+and every other file, keeps its bytes even where a full `elspais fix` would
+rewrite it. Where the requirement's hash changes, its row in `INDEX.md` is
+updated and every other row is left as it is.
+
+A requirement owned by an associate repository is refused, changing nothing,
+when `federation.write_associates` is false.
 
 ## What Can Be Auto-Fixed
 
@@ -31,9 +42,19 @@ The `fix` command automatically corrects:
 
 - Missing hash → Computes and inserts from assertion text
 - Stale hash → Recomputes from current content
-- Missing Status field → Adds default "Active"
+- Metadata block → Writes its fields in one form: `Level`, `Status`, then
+  `Implements`, each in bold, with `-` for an empty `Implements` and
+  `Unknown` for a missing `Status`
 - Assertion spacing → Inserts blank lines between consecutive assertion lines
 - List spacing → Inserts blank line before list items that follow text
+- Section heading depth → Sets each section heading at least one level
+  below its requirement heading
+
+Bringing a requirement into this canonical form keeps every heading, every
+definition of a defined term and all other visible text in the order it was
+written. Apart from heading depth, the metadata block is the one place it
+changes visible text, and what each field declares stays the same. A section that holds only a definition list keeps its heading, and
+text written after a definition list stays after it.
 
 **Not fixable (report only):**
 
@@ -54,11 +75,30 @@ requirements are reported but not written. The fix report marks those lines
 explicitly instead of claiming a fix:
 
 ```text
-[skipping] CAL-p00001: update hash (associate-owned; write_associates=false)
+[skipping] CAL-p00001: hash 1a2b3c4d -> 5e6f7a8b (associate-owned; write_associates=false)
 ```
 
 Dry-run output (`--dry-run`) uses the same `[skipping]` prefix in place of
 `Would fix` for associate-owned requirements.
+
+A skipped requirement is left exactly as it was read: the fix queues no
+change and no changelog entry for it, so the primary repository's files come
+out the same whether or not the associate is linked.
+
+After the save, each change is reported by its outcome: `Fixed` where its
+file was written, `Not fixed` where it was not. When the save writes none or
+only part of the reported changes, `elspais fix` prints the cause to stderr
+and exits with a failure status.
+
+`elspais checks` reports an associate's findings beside the primary
+repository's. Where a finding's remedy is a fix the write scope does not
+reach, the remedy says so and names the setting that widens the scope:
+
+```text
+spec.needs_rewrite  the write scope of this run does not reach event_sourcing
+                    (federation.write_associates is false); set
+                    federation.write_associates to true, then run `elspais fix`
+```
 
 To opt in to wider write/generation scope, set flags in `.elspais.toml`:
 
@@ -67,6 +107,11 @@ To opt in to wider write/generation scope, set flags in `.elspais.toml`:
 write_associates = true    # allow fix to write associate repo spec files
 index_associates = true    # include associate reqs in INDEX.md / term-index.md
 ```
+
+With `write_associates = true`, a fix that rewrites an associate's
+requirements also brings that associate's own `INDEX.md` up to date, where
+the associate keeps one, as a fix run from the associate would. A fix named
+for one associate requirement updates that requirement's row there.
 
 See `elspais docs config` for the full `[federation]` reference.
 

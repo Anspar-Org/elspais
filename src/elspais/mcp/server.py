@@ -345,6 +345,10 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
                 "line": child.get_field("parse_line"),
                 "content_type": child.get_field("content_type"),
             }
+            # A section's text after a definition list carries the heading
+            # it continues but renders none of its own.
+            if child.get_field("continuation"):
+                entry["continuation"] = True
             if ro is not None:
                 entry["render_order"] = ro
             children.append(entry)

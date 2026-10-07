@@ -535,16 +535,13 @@ class FixArgs:
     """Auto-fix spec file issues (hashes, formatting)."""
 
     req_id: tyro.conf.Positional[str | None] = None
-    """Specific requirement ID to fix (hash only)."""
+    """Fix only this requirement's lines and its INDEX.md row."""
 
     dry_run: bool = False
     """Show what would be fixed without making changes."""
 
     message: Annotated[str | None, tyro.conf.arg(aliases=["-m"])] = None
     """Changelog reason for Active requirement hash updates."""
-
-    mode: Literal["core", "combined", "associate"] = "combined"
-    """Which repos to include in fix operation."""
 
 
 # ---------------------------------------------------------------------------

@@ -152,7 +152,6 @@ class TestValidateFixDryRun:
             config=git_repo_with_issues / ".elspais.toml",
             quiet=False,
             verbose=False,
-            mode="combined",
         )
 
         result = run(args)
@@ -195,7 +194,6 @@ class TestValidateFix:
             config=git_repo_with_issues / ".elspais.toml",
             quiet=False,
             verbose=False,
-            mode="combined",
         )
 
         result = run(args)

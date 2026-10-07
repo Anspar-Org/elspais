@@ -31,6 +31,7 @@
 
 **REQ:**
 
+- REQ-d00132-O
 - REQ-d00223-B
 - REQ-d00237-G
 - REQ-d00264-A

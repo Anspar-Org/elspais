@@ -117,14 +117,14 @@
 | REQ-d00129 | SourceLocation Removal and Consumer Migration                 | dev-graph-file-nodes.md | 6d11df36 |
 | REQ-d00130 | Parameterized Root Iteration and Kind-Based Index Query       | dev-graph-file-nodes.md | 5733741e |
 | REQ-d00131 | Render Protocol for Graph Nodes                               | dev-graph-file-nodes.md | 21b9a92c |
-| REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | 4033b420 |
+| REQ-d00132 | Render-Based Save Operation                                   | dev-graph-file-nodes.md | 1bff7d9f |
 | REQ-d00133 | MCP FILE Node Integration                                     | dev-mcp-tools.md        | 08e2973f |
 | REQ-d00134 | Mutation Round-Trip Fidelity                                  | dev-graph-file-nodes.md | 19cb065b |
 | REQ-d00200 | FederatedGraph Read-Only Delegation                           | dev-graph-federation.md | 67a9ca83 |
 | REQ-d00201 | FederatedGraph Mutation Delegation                            | dev-graph-federation.md | c51794b3 |
 | REQ-d00202 | Associates Config Loading                                     | dev-graph-federation.md | 52fe05b1 |
 | REQ-d00203 | Multi-Repo Build Pipeline                                     | dev-graph-federation.md | f3cbca11 |
-| REQ-d00204 | Per-Repo Health Check Delegation                              | dev-graph-federation.md | 890fa7f1 |
+| REQ-d00204 | Per-Repo Health Check Delegation                              | dev-graph-federation.md | c6193a97 |
 | REQ-d00205 | MCP Federation Support                                        | dev-mcp-tools.md        | 31c8b0c5 |
 | REQ-d00206 | Server Federation and Staleness                               | dev-traceview-review.md | a8300f60 |
 | REQ-d00207 | Declarative Config Schema Cleanup                             | dev-graph-config.md     | 6dfbf578 |
@@ -236,6 +236,7 @@
 | REQ-d00327 | Origin of a Recorded Source Path                              | dev-graph-core.md       | 0faeeab4 |
 | REQ-d00328 | Satisfying Named Assertions                                   | dev-graph-core.md       | 6e65b3ba |
 | REQ-d00329 | Test File Results From a Command's Exit Status                | dev-graph-core.md       | 113d1a8d |
+| REQ-d00330 | What a Fix Run Changes                                        | prd-core.md             | 89d14768 |
 
 ## User Journeys
 
