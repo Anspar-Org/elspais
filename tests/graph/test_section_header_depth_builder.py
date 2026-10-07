@@ -1,7 +1,5 @@
 """Builder violation marking (REQ-d00250-B, REQ-d00250-C)."""
 
-# Verifies: REQ-d00250-B
-# Verifies: REQ-d00250-C
 from pathlib import Path
 
 import pytest
@@ -58,6 +56,7 @@ def _find_req(graph, req_id):
     return None
 
 
+# Verifies: REQ-d00250-B
 @pytest.mark.parametrize(
     "req_d,sec_d,expect_fixable_flag",
     [
@@ -94,6 +93,7 @@ def test_assertions_too_shallow_marks_section_header_depth(
         )
 
 
+# Verifies: REQ-d00250-B
 @pytest.mark.parametrize(
     "req_d,sec_d,expect_fixable",
     [
@@ -125,6 +125,7 @@ def test_named_section_too_shallow_marks_section_header_depth(
         assert "section_header_depth" not in reasons
 
 
+# Verifies: REQ-d00250-C
 def test_h6_req_with_assertions_is_unfixable(tmp_path):
     spec = (
         "###### REQ-d00001: T\n\n"
@@ -145,6 +146,7 @@ def test_h6_req_with_assertions_is_unfixable(tmp_path):
     )
 
 
+# Verifies: REQ-d00250-C
 def test_h6_req_without_section_blocks_is_clean(tmp_path):
     """H6 req with no section blocks shouldn't be flagged."""
     spec = (

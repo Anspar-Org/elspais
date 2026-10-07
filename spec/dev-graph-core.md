@@ -366,51 +366,46 @@ F. The clone SHALL handle DAG structures with multiple parents without infinite 
 
 *End* *TraceGraph Deep Clone* | **Hash**: 0caf26af
 
-## REQ-d00250: Section Header Depth Canonicalization
+## REQ-d00250: Section Heading Depth
 
 **Level**: dev | **Status**: Active | **Implements**: -
 
-The parser MUST recognize section block headers (`Assertions`,
-`Changelog`, named sections) and hash-style sub-headings at any
-markdown depth from H1 through H6. The `fix` command MUST
-canonicalize too-shallow section headers to `parent.depth + 1`,
-preserving legal-but-deeper author choices. The `validate` /
-health-check command MUST flag too-shallow section headers
-as a fixable issue and flag requirements at H6 with section
-blocks as an unfixable issue.
-
 ### Assertions
 
-A. Section block headers parse correctly at depths H1 through H6.
+A. The tool SHALL read each heading inside a requirement at every heading depth from one to six.
 
-B. A section header at depth less than or equal to its parent's
-   heading_level is marked parse_dirty with reason
-   `section_header_depth`.
+B. The checks SHALL report each section heading written at the depth of its requirement's heading or shallower, as a finding that a fix run resolves.
 
-C. A requirement at H6 with any section block is marked with
-   reason `section_header_depth_unfixable` (stored on
-   `parse_unfixable_reasons`, separate from `parse_dirty_reasons`).
+C. The checks SHALL report each requirement whose heading is at depth six and that holds a section, as a finding that a fix run cannot resolve.
 
-D. Render emits each section header at
-   `max(stored_depth, parent.heading_level + 1)`, clamped to H6.
+D. When the tool writes a requirement, the tool SHALL write each section heading at the greater of its written depth and one more than the depth of the requirement's heading, and at depth six at most.
 
-E. The `fix` command auto-canonicalizes B and reports C to stderr
-   with non-zero exit code.
+E. A fix run SHALL write each section heading that B reports at the depth that D gives it.
 
-F. The `validate` / health-check command reports B and C as
-   findings with non-zero exit code.
+F. <RETIRED> the checks reporting each condition is stated by B and C, which name the finding each condition produces.
+
+G. If a fix run meets a requirement that C reports, then the fix run SHALL exit with a failure status.
+
+H. If a file holds a requirement that C reports, then a fix run SHALL leave that file unchanged.
 
 ### Rationale
 
-This requirement sets the depth of each section heading inside its requirement. That depth is part of canonical form, which REQ-d00132-O and REQ-d00132-P bound. A rewrite moves a heading to the depth that its place in the requirement gives it, and keeps the heading and its words.
+This requirement places each section of a requirement one heading level below the requirement's own heading. A section is a part of a requirement that opens with a heading: its Assertions, its Changelog, and each named section such as Rationale.
+
+Authors write headings at the depth that suits the document holding the requirement, so the tool reads every depth (A). In the rendered document, a section heading at the requirement's own depth or shallower reads as a sibling or a parent of the requirement, not as a part of it. D places such a heading one level below the requirement. D keeps a deeper heading at the depth its author wrote, because a deeper heading is still inside the requirement.
+
+The depth that D sets is part of canonical form, which REQ-d00132-O and REQ-d00132-P bound. A rewrite moves a heading to the depth that its place in the requirement gives it, and keeps the heading and its words.
+
+A requirement at depth six has no deeper level for its sections, so the tool cannot correct it alone (C). A fix run writes the whole file that holds such a requirement, so H keeps the fix away from that file, and G tells a script or a hook that the run fell short. The author moves the requirement to a shallower depth, and the next fix run places its sections.
 
 ### Changelog
 
+- 2026-10-07 | c0ebb777 | - | Michael Lewis (<michael@anspar.org>) | Rewrite the assertions as obligations without implementation surface; retire F into B and C; add G and H for a requirement a fix cannot correct
 - 2026-07-31 | 48fc2f11 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 903349d2 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-05-11 | 903349d2 | - | Developer (<dev@example.com>) | Auto-fix: update hash, add missing changelog section
 
-*End* *Section Header Depth Canonicalization* | **Hash**: 48fc2f11
+*End* *Section Heading Depth* | **Hash**: c0ebb777
 
 ## REQ-d00268: Report Malformed Assertion Labels
 

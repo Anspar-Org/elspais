@@ -175,7 +175,7 @@ def _authored_requirements(graph):  # noqa: ANN001, ANN202
             yield node
 
 
-# Implements: REQ-d00250-E
+# Implements: REQ-d00250-G
 def _scan_and_report_unfixable(graph) -> int:  # noqa: ANN001
     """Walk `parse_unfixable_reasons` across requirements; print to stderr.
 
@@ -342,6 +342,7 @@ def _add_autofix_changelog_entries(
         if not non_drift:
             continue
 
+        # Implements: REQ-d00330-E
         # If every non-drift reason is formatting-only (no semantic body
         # change), re-render the file but don't bump the changelog —
         # changelogs record what the requirement says, not how it's rendered.
@@ -463,6 +464,7 @@ def _fix_parse_dirty(
         if reasons:
             fixable_nodes.append((node, reasons))
 
+    # Implements: REQ-d00250-H
     # Identify FILE nodes containing unfixable REQs. `render_save` rewrites
     # entire dirty FILE nodes; touching a file that contains an unfixable
     # requirement would silently re-render the unfixable req alongside any
@@ -557,12 +559,21 @@ def _fix_parse_dirty(
     # Only what this run may write is marked, changelogged or saved.
     fixable_nodes = [(n, reasons) for n, reasons in fixable_nodes if writable(n)]
 
-    # Drift-only nodes (changelog hash mismatch with no other fixable issues)
-    # go through _add_drift_changelog_entries; everything else — including
-    # missing_changelog and mixed-reason nodes — goes through the unified
-    # autofix path.
-    drift_only_nodes = [n for n, reasons in fixable_nodes if reasons == ["changelog_drift"]]
-    autofix_items = [(n, reasons) for n, reasons in fixable_nodes if reasons != ["changelog_drift"]]
+    # Implements: REQ-d00330-B, REQ-d00330-E
+    # A drifted changelog beside changes of form alone goes through the drift
+    # path: those changes leave the hash where it was and add no entry, so
+    # the drift entry is the only one that brings the changelog up to date.
+    # Every other node goes through the autofix path, whose entry records
+    # the new hash and so resolves any drift too.
+    def _drift_beside_form_only(reasons: list[str]) -> bool:
+        return "changelog_drift" in reasons and all(
+            r in _FORMATTING_ONLY_REASONS for r in reasons if r != "changelog_drift"
+        )
+
+    drift_only_nodes = [n for n, reasons in fixable_nodes if _drift_beside_form_only(reasons)]
+    autofix_items = [
+        (n, reasons) for n, reasons in fixable_nodes if not _drift_beside_form_only(reasons)
+    ]
 
     # Resolve the changelog author up-front when changelog enforcement is on
     # AND at least one Active req would receive a new entry. Failure here

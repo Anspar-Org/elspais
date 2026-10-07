@@ -1,15 +1,16 @@
 """Auto-fix changelog entries are emitted only for content changes, not
-formatting-only canonicalizations (REQ-d00250-E).
+formatting-only canonicalizations (REQ-d00330-E).
 
 A `## Assertions` → `### Assertions` rewrite under an H2 requirement does
 not change the requirement's semantic body — the hash is unchanged, the
 assertion text is unchanged, only the rendered depth differs. Emitting an
 "Auto-fix: canonicalize section header depth" changelog entry on every
 such run is noise and produces consecutive-identical duplicate entries
-when `fix` runs more than once on partially-canonical content.
+when `fix` runs more than once on partially-canonical content. A changelog
+whose latest entry records another hash is brought into agreement even when
+the only other change is one of form (REQ-d00330-B).
 """
 
-# Verifies: REQ-d00250-E
 import argparse
 import contextlib
 import io
@@ -88,7 +89,7 @@ def _force_section_depth_violation(project: Path) -> None:
     f.write_text(text)
 
 
-# Verifies: REQ-d00250-E
+# Verifies: REQ-d00330-E
 def test_second_run_does_not_emit_duplicate_changelog(tmp_path):
     """Running fix on a section-depth-only violation a second time must not
     re-add a `canonicalize section header depth` changelog entry.
@@ -134,7 +135,7 @@ def test_second_run_does_not_emit_duplicate_changelog(tmp_path):
     )
 
 
-# Verifies: REQ-d00250-E
+# Verifies: REQ-d00330-E
 def test_second_run_is_full_noop(tmp_path):
     """After a clean fix, re-running fix must produce no further changes —
     the file content (including changelog) must be byte-identical."""
@@ -164,7 +165,7 @@ def test_second_run_is_full_noop(tmp_path):
     )
 
 
-# Verifies: REQ-d00250-E
+# Verifies: REQ-d00330-B
 def test_content_change_still_adds_changelog_entry(tmp_path):
     """A real content change (hash mismatch) still adds a changelog entry —
     the partition only suppresses formatting-only fixes, not legitimate
@@ -193,4 +194,69 @@ def test_content_change_still_adds_changelog_entry(tmp_path):
     assert "Auto-fix:" in after, (
         f"A real content change (hash mismatch) must produce an auto-fix "
         f"changelog entry.\nAfter:\n{after}"
+    )
+
+
+def _changelog_lines(content: str) -> list[str]:
+    """The changelog entry lines of the one requirement in *content*, newest first."""
+    lines = content.splitlines()
+    start = next(i for i, ln in enumerate(lines) if ln.endswith(" Changelog"))
+    entries = []
+    for ln in lines[start + 1 :]:
+        if ln.startswith("*End*"):
+            break
+        if ln.startswith("- "):
+            entries.append(ln)
+    return entries
+
+
+def _entry_hash(entry: str) -> str:
+    return entry.split(" | ")[1]
+
+
+def _end_marker_hash(content: str) -> str:
+    end_line = next(ln for ln in content.splitlines() if ln.startswith("*End*"))
+    return end_line.rsplit("**Hash**: ", 1)[1].strip()
+
+
+# Verifies: REQ-d00330-B
+def test_drifted_changelog_beside_form_only_change_is_synced(tmp_path):
+    """A changelog whose latest entry records another hash gains one entry
+    recording the requirement's hash, even when the only other change the fix
+    makes is to a section heading's depth."""
+    spec = (
+        "## REQ-d00001: Test\n\n"
+        "**Level**: dev | **Status**: Active | **Implements**: -\n\n"
+        "## Assertions\n\n"
+        "A. The system shall do X.\n\n"
+        "## Changelog\n\n"
+        "- 2026-04-01 | abcdef01 | - | Seed (s@e.com) | initial\n\n"
+        "*End* *Test* | **Hash**: -\n"
+    )
+    project = _make_project(tmp_path, spec)
+    code, _, _ = _run_fix(project, dry_run=False)
+    assert code == 0
+    canonical = (project / "spec" / "f.md").read_text()
+    req_hash = _end_marker_hash(canonical)
+    entries_before = _changelog_lines(canonical)
+    assert _entry_hash(entries_before[0]) == req_hash
+
+    # The latest entry now records a hash other than the requirement's, and
+    # the Assertions heading sits at the requirement heading's own depth.
+    f = project / "spec" / "f.md"
+    drifted = canonical.replace(entries_before[0], entries_before[0].replace(req_hash, "0badc0de"))
+    drifted = drifted.replace("\n### Assertions\n", "\n## Assertions\n", 1)
+    f.write_text(drifted)
+
+    code2, _, err2 = _run_fix(project, dry_run=False)
+    assert code2 == 0, f"fix failed: {err2}"
+    after = f.read_text()
+    assert "\n### Assertions\n" in after, f"heading not moved to depth 3:\n{after}"
+    assert _end_marker_hash(after) == req_hash
+    entries_after = _changelog_lines(after)
+    assert len(entries_after) == len(entries_before) + 1, (
+        f"expected exactly one new changelog entry.\nAfter:\n{after}"
+    )
+    assert _entry_hash(entries_after[0]) == req_hash, (
+        f"latest changelog entry must record the requirement's hash {req_hash}.\nAfter:\n{after}"
     )

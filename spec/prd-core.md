@@ -1058,6 +1058,8 @@ C. A fix run named for one requirement SHALL change only the text of that requir
 
 D. If a fix run writes none or only part of the changes it reports, then the fix run SHALL exit with a failure status.
 
+E. If a fix run changes only the form of a requirement, and the latest entry in that requirement's changelog records the hash that the requirement has, then the fix run SHALL leave that changelog unchanged.
+
 ### Rationale
 
 The fix operation is the one place an author asks the tool to change text on its own judgement, and the author decides whether to run it from what the checks and the dry run say. A and B make those two previews true: what the dry run lists is what the run writes, and a finding that names the fix as its remedy is gone once the fix has run. A stale recorded hash is such a finding, and so is a part of a file whose text is not in canonical form.
@@ -1066,11 +1068,14 @@ C keeps a named fix to the change its author asked for. An author who names one 
 
 D gives a caller something to act on when the run falls short. REQ-p00015-B obliges the run to name each change it did not write and why; D makes the shortfall visible to a script or a hook, which reads the exit status and not the text. A change the run reports as skipped because the write scope does not reach it is not a change it reports making, so it does not count against D.
 
+A changelog records what a requirement says, and its hash stands for that. E keeps a change of form, such as spacing or the depth of a heading, out of the changelog, because the requirement says what it said before. A changelog whose latest entry records another hash no longer matches the requirement, and a fix run brings it into agreement.
+
 ### Changelog
 
+- 2026-10-07 | 9365d280 | - | Michael Lewis (<michael@anspar.org>) | Add assertion E: a fix that changes only form leaves a current changelog unchanged
 - 2026-10-07 | 89d14768 | - | Michael Lewis (<michael@anspar.org>) | New requirement: what a fix run changes, and its exit status when it falls short
 
-*End* *What a Fix Run Changes* | **Hash**: 89d14768
+*End* *What a Fix Run Changes* | **Hash**: 9365d280
 
 # REQ-p00083: Durability of Uncommitted Work
 

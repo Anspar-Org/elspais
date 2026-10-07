@@ -1,6 +1,5 @@
-"""Health-check surfacing of section header depth issues (REQ-d00250-F)."""
+"""Health-check surfacing of section header depth issues (REQ-d00250-B, REQ-d00250-C)."""
 
-# Verifies: REQ-d00250-F
 from pathlib import Path
 
 _CONFIG_TOML = """\
@@ -32,6 +31,7 @@ def _build_graph(tmp_path: Path, spec: str):
     )
 
 
+# Verifies: REQ-d00250-B
 def test_health_flags_too_shallow_section(tmp_path):
     """check_spec_needs_rewrite picks up section_header_depth as a dirty reason."""
     spec = (
@@ -52,6 +52,7 @@ def test_health_flags_too_shallow_section(tmp_path):
     )
 
 
+# Verifies: REQ-d00250-C
 def test_health_flags_h6_unfixable(tmp_path):
     """check_unfixable_issues reports H6 reqs with section blocks."""
     spec = (
@@ -73,6 +74,7 @@ def test_health_flags_h6_unfixable(tmp_path):
     )
 
 
+# Verifies: REQ-d00250-C
 def test_health_unfixable_clean_when_no_issues(tmp_path):
     """check_unfixable_issues passes when no unfixable issues exist."""
     spec = (

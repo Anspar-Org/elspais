@@ -1,6 +1,5 @@
 """Render canonicalization tests (REQ-d00250-D)."""
 
-# Verifies: REQ-d00250-D
 import pytest
 
 _MINIMAL_TOML = """\
@@ -62,6 +61,7 @@ def _render(node):
     return _render_requirement(node)
 
 
+# Verifies: REQ-d00250-D
 @pytest.mark.parametrize(
     "req_d,stored_d,expected_d",
     [
@@ -93,6 +93,7 @@ def test_assertions_render_depth(tmp_path, req_d, stored_d, expected_d):
     )
 
 
+# Verifies: REQ-d00250-D
 @pytest.mark.parametrize(
     "req_d,stored_d,expected_d",
     [
@@ -120,6 +121,7 @@ def test_named_section_render_depth(tmp_path, req_d, stored_d, expected_d):
     assert expected_header in rendered, f"Expected `{expected_header}` not in:\n{rendered}"
 
 
+# Verifies: REQ-d00250-D
 def test_hash_heading_inside_assertions_becomes_named_section(tmp_path):
     """With SECTION_HDR=#{1,6}, a ### heading inside ## Assertions terminates the
     assertion_block and is treated as a named section (SECTION_HDR wins over
@@ -149,6 +151,7 @@ def test_hash_heading_inside_assertions_becomes_named_section(tmp_path):
     )
 
 
+# Verifies: REQ-d00250-D
 def test_h1_req_h2_assertions_unchanged(tmp_path):
     """Regression: existing H1-req / H2-Assertions files render identically."""
     spec = (

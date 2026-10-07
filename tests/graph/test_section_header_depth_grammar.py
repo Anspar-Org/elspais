@@ -1,6 +1,5 @@
 """Grammar acceptance tests for section header depth (REQ-d00250-A)."""
 
-# Verifies: REQ-d00250-A
 import pytest
 
 _MINIMAL_TOML = """\
@@ -69,6 +68,7 @@ SECTION_HEADER_CASES = [
 ]
 
 
+# Verifies: REQ-d00250-A
 @pytest.mark.parametrize("req_d,sec_d", SECTION_HEADER_CASES)
 def test_assertions_header_recognized_at_any_depth(req_d, sec_d, tmp_path):
     """ASSERTIONS_HDR lexes correctly at any 1<=d<=6 depth."""
@@ -96,6 +96,7 @@ def test_assertions_header_recognized_at_any_depth(req_d, sec_d, tmp_path):
     )
 
 
+# Verifies: REQ-d00250-A
 @pytest.mark.parametrize("req_d,sec_d", SECTION_HEADER_CASES)
 def test_changelog_header_recognized_at_any_depth(req_d, sec_d, tmp_path):
     """CHANGELOG_HDR lexes correctly at any 1<=d<=6 depth."""
@@ -119,6 +120,7 @@ def test_changelog_header_recognized_at_any_depth(req_d, sec_d, tmp_path):
     )
 
 
+# Verifies: REQ-d00250-A
 @pytest.mark.parametrize("req_d,sec_d", SECTION_HEADER_CASES)
 def test_named_section_header_recognized_at_any_depth(req_d, sec_d, tmp_path):
     """SECTION_HDR lexes correctly at any 1<=d<=6 depth."""
@@ -263,6 +265,7 @@ SUB_HEADING_CASES = [
 ]
 
 
+# Verifies: REQ-d00250-A
 @pytest.mark.parametrize("ass_d,sub_d", SUB_HEADING_CASES)
 def test_hash_heading_inside_assertions_becomes_named_section(ass_d, sub_d, tmp_path):
     """A `#... Core` line after `#... Assertions` is recognized as a structural

@@ -1,6 +1,5 @@
-"""Fix command behavior for section header depth (REQ-d00250-E)."""
+"""Fix command behavior for section header depth (REQ-d00250-E, REQ-d00250-G, REQ-d00250-H)."""
 
-# Verifies: REQ-d00250-E
 import argparse
 import contextlib
 import io
@@ -51,6 +50,7 @@ def _run_fix(project: Path, dry_run: bool = False) -> tuple[int, str, str]:
     return code, stdout.getvalue(), stderr.getvalue()
 
 
+# Verifies: REQ-d00250-E
 def test_fix_dry_run_lists_section_depth_violation(tmp_path):
     spec = (
         "## REQ-d00001: T\n\n"
@@ -66,6 +66,7 @@ def test_fix_dry_run_lists_section_depth_violation(tmp_path):
     assert "canonicalize section header depth" in out
 
 
+# Verifies: REQ-d00250-E
 def test_fix_canonicalizes_section_depth(tmp_path):
     spec = (
         "## REQ-d00001: T\n\n"
@@ -85,6 +86,7 @@ def test_fix_canonicalizes_section_depth(tmp_path):
     assert "section header depth" not in out2
 
 
+# Verifies: REQ-d00250-G, REQ-d00250-H
 def test_fix_cannot_resolve_h6_req(tmp_path):
     spec = (
         "###### REQ-d00001: T\n\n"
@@ -103,6 +105,7 @@ def test_fix_cannot_resolve_h6_req(tmp_path):
     assert after == original, "H6 file must be untouched on fix"
 
 
+# Verifies: REQ-d00250-G
 def test_fix_h6_dry_run_also_reports_unfixable(tmp_path):
     spec = (
         "###### REQ-d00001: T\n\n"
@@ -118,6 +121,7 @@ def test_fix_h6_dry_run_also_reports_unfixable(tmp_path):
     assert "section header depth" in err
 
 
+# Verifies: REQ-d00250-G, REQ-d00250-H
 def test_fix_skips_files_containing_unfixable_reqs(tmp_path):
     """A fixable REQ in the same FILE as an unfixable REQ must not be silently
     rewritten — render_save rewrites whole files, so touching such a file
@@ -144,7 +148,7 @@ def test_fix_skips_files_containing_unfixable_reqs(tmp_path):
     code, _, err = _run_fix(project, dry_run=False)
     assert code == 1, f"expected exit 1; got {code}; stderr={err!r}"
     assert "REQ-d00001" in err  # unfixable cannot-fix line
-    # REQ-d00002 is fixable but should be reported as skipped, not applied
+    # The fixable sibling REQ-d00002 is reported as skipped, not applied
     assert "REQ-d00002" in err and "unfixable requirement" in err
 
     after = (project / "spec" / "f.md").read_text()
