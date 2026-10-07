@@ -173,9 +173,10 @@ The hooks and the Makefile run a tier through `lib-tier-run.sh`, which keeps
 a state directory per target: `.results/run-unit`, `.results/run-e2e`, and
 `.results/run-<target>` for the others. It holds the run's `pid`, `key`,
 `log`, `rc` and the scripts that make up the run. A hook runs the tier
-detached, so a hook killed by its caller's timeout leaves the run going, and
-the next invocation attaches to it. `run-target`, which the Makefile calls,
-runs it in the foreground under the same guards.
+detached, in a process group of its own, so a signal to the hook's own
+process group -- its caller's timeout firing -- leaves the run going, and the
+next invocation attaches to it. `run-target`, which the Makefile calls, runs
+it in the foreground under the same guards.
 
 ### Which check reads which artifact
 
@@ -222,6 +223,7 @@ the same key and runs the tier otherwise. Nothing in elspais reads them, and
 | Git's hook environment (`GIT_DIR` and the rest) | all | Removed: `tests/conftest.py` and `unit-verdict` clear it | Never |
 | The developer's daemon, home and Claude configuration | e2e | Removed: each e2e test that runs elspais works in its own copy with its own daemon, on a port its viewer bound, with a private home for the claude CLI | Never |
 | `pandoc`, `xelatex`, the `claude` CLI | e2e | Kept, as optional tools | The tests needing them skip, and the skip reason names the missing tool; the claude CLI test also skips inside a Claude Code session |
+| `tail`, to relay a detached run's log | all | Kept -- `lib-tier-run.sh` has no other way to show a growing file as it is written | `tier_require` stops the tier before it starts, naming `tail`, on a machine that has none. `bash`, `ps` and `/proc` are the rest of the runner's platform surface: `bash` is assumed throughout, and `ps -ww -o args= -p` (BSD and GNU alike) is the fallback `tier_pid_args` uses where `/proc` is absent |
 
 ## Required Tools
 
