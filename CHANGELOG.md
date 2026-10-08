@@ -4,6 +4,10 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-147 follow-up
+
+- **A named fix reports an INDEX.md row it could not update (REQ-d00330-C)** -- where the row listing the requirement had another column count than the table elspais writes, `elspais fix REQ-ID` left the row's stale hash in place without a word. It now says so and names the full fix that regenerates the index.
+
 ### TOOL-148
 
 - **A fix leaves a file holding a requirement it cannot correct unchanged (REQ-d00250-G+H)** -- a full fix that also had another file to fix still rewrote such a file, although it reported skipping it. A fix named for that requirement, or for another requirement in the same file, wrote the file and exited 0. Both now leave the file as it is and exit 1, naming the requirement to move to a shallower heading.
