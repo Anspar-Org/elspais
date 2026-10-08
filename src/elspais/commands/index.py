@@ -507,6 +507,7 @@ class IndexRowUpdate:
 
     changed: bool  # a listed row differed and was (or would be) rewritten
     unlisted: bool  # INDEX.md exists and lists none of a requirement's rows
+    misshapen: bool  # a listed row has another column count than the table written
 
 
 def _row_cells(line: str) -> list[str] | None:
@@ -534,7 +535,7 @@ def update_index_rows(
         graph, spec_dirs, include_associates=include_associates, hashes=hashes
     )
     if not output_path.exists():
-        return IndexRowUpdate(changed=False, unlisted=False)
+        return IndexRowUpdate(changed=False, unlisted=False, misshapen=False)
 
     wanted: dict[str, list[str]] = {}
     for line in expected.split("\n"):
@@ -545,6 +546,7 @@ def update_index_rows(
     current = output_path.read_text(encoding="utf-8")
     lines = current.split("\n")
     listed: set[str] = set()
+    misshapen = False
     for number, line in enumerate(lines):
         cells = _row_cells(line)
         if cells is None:
@@ -555,6 +557,7 @@ def update_index_rows(
         listed.add(row_id)
         want = wanted[row_id]
         if len(want) != len(cells):
+            misshapen = True
             continue
         padded = (cell.ljust(len(old)) for cell, old in zip(want, cells, strict=True))
         lines[number] = "| " + " | ".join(padded) + " |"
@@ -565,7 +568,11 @@ def update_index_rows(
         output_path.chmod(0o644)
         output_path.write_text(updated, encoding="utf-8")
         output_path.chmod(0o444)
-    return IndexRowUpdate(changed=changed, unlisted=any(i not in listed for i in wanted))
+    return IndexRowUpdate(
+        changed=changed,
+        unlisted=any(i not in listed for i in wanted),
+        misshapen=misshapen,
+    )
 
 
 def _regenerate_index(
