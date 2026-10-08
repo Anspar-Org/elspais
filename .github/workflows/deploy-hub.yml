@@ -1,0 +1,185 @@
+name: Deploy to the elspais Hub
+
+# A merged pull request carrying the `deploy` label proposes the release its
+# merge names for the hosted elspais hub, which Cure-HHT/hht_admin operates.
+# This does not change the hub: it starts hht_admin's elspais-hub-deploy.yml,
+# which pushes a branch bumping the hub's pinned elspais release for review.
+# Merging that and approving its Terraform apply moves the running hub, and
+# every workspace on it, to the release.
+#
+# Usually used together with `publish`: the release is cut and uploaded by
+# Auto Release, and this follows once Auto Release has finished. Alone,
+# `deploy` proposes whatever release main's pyproject.toml names, which must
+# already be on PyPI.
+#
+# WHY A SEPARATE WORKFLOW: Auto Release runs on `pull_request`, where the
+# workflow file comes from the pull request's own branch and the OIDC subject
+# is `pull_request`. The credential that starts a workflow in hht_admin is
+# bound to this file on main, and workflow_run always runs on the default
+# branch, so only merged code can mint it. Everything the run acts on -- the
+# pull request, its labels, the release -- is read back from GitHub and PyPI
+# rather than taken from the triggering run.
+#
+# The credential is the `elspais-hub-deploy` App of the Cure-HHT organization
+# (Actions:write on hht_admin only). Its private key lives in Cure-HHT's
+# Doppler, read through GitHub OIDC; nothing in this repository holds it.
+# Repository variables the setup leaves here: HUB_DEPLOY_DOPPLER_IDENTITY_ID
+# and HUB_DEPLOY_APP_CLIENT_ID (hht_admin spec/ops-secrets-bootstrap.md,
+# Step 2d).
+
+on:
+  workflow_run:
+    workflows: ["Auto Release"]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write   # report the outcome on the pull request
+  id-token: write        # GitHub OIDC -> Doppler, for the App key
+
+concurrency:
+  group: deploy-hub
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Propose the release for the hub
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      # The head commit and the repository are all that is taken from the
+      # triggering run; the pull request is looked up from the commit and
+      # accepted only if it merged into main.
+      - name: Find the merged pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          PR="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/pulls" \
+            --jq "[.[] | select(.merged_at != null and .base.ref == \"main\" and .head.sha == \"${HEAD_SHA}\")][0]")"
+          if [ -z "$PR" ] || [ "$PR" = "null" ]; then
+            echo "No pull request merged into main at ${HEAD_SHA}; nothing to deploy."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! jq -e '[.labels[].name] | index("deploy")' <<<"$PR" >/dev/null; then
+            echo "Pull request #$(jq -r .number <<<"$PR") does not carry the deploy label."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "deploy=true"
+            echo "number=$(jq -r .number <<<"$PR")"
+            echo "url=$(jq -r .html_url <<<"$PR")"
+            echo "merge_sha=$(jq -r .merge_commit_sha <<<"$PR")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Read the release the merge names
+        id: version
+        if: steps.pr.outputs.deploy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MERGE_SHA: ${{ steps.pr.outputs.merge_sha }}
+        run: |
+          set -euo pipefail
+          VERSION="$(gh api "repos/${GITHUB_REPOSITORY}/contents/pyproject.toml?ref=${MERGE_SHA}" \
+            -H "Accept: application/vnd.github.raw" \
+            | python3 -c 'import sys, tomllib; print(tomllib.load(sys.stdin.buffer)["project"]["version"])')"
+          if ! [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::pyproject.toml at ${MERGE_SHA} names '${VERSION}', which is not an exact release"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Release to propose: ${VERSION}"
+
+      # The hub installs from PyPI, so a release PyPI does not carry is not
+      # proposed. The index can lag an upload by a minute or two.
+      - name: Wait for PyPI to carry the release
+        if: steps.pr.outputs.deploy == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 10); do
+            if curl -fsS -o /dev/null "https://pypi.org/pypi/elspais/${VERSION}/json"; then
+              echo "PyPI carries elspais ${VERSION}"
+              exit 0
+            fi
+            echo "PyPI does not carry elspais ${VERSION} yet (attempt ${attempt}); waiting"
+            sleep 30
+          done
+          echo "::error::PyPI does not carry elspais ${VERSION}. Was the release published (the publish label)?"
+          exit 1
+
+      - name: Authenticate to Doppler
+        if: steps.pr.outputs.deploy == 'true'
+        uses: Cure-HHT/hht_workflows/.github/actions/doppler-cli-oidc-auth@d11a0fc103ad2e19d2e78638baa8482d07a019ae  # v1.14.0
+        with:
+          doppler_identity_id: ${{ vars.HUB_DEPLOY_DOPPLER_IDENTITY_ID }}
+
+      - name: Fetch the App key
+        if: steps.pr.outputs.deploy == 'true'
+        run: |
+          set -euo pipefail
+          KEY="$(curl -fsS -H "Authorization: Bearer ${DOPPLER_TOKEN}" \
+            "https://api.doppler.com/v3/configs/config/secret?project=gh-elspais-hub-deploy&config=prod&name=ELSPAIS_HUB_DEPLOY_APP_PRIVATE_KEY" \
+            | jq -r '.value.raw // empty')"
+          if [ -z "$KEY" ]; then
+            echo "::error::ELSPAIS_HUB_DEPLOY_APP_PRIVATE_KEY is empty or missing in Doppler gh-elspais-hub-deploy/prod"
+            exit 1
+          fi
+          while IFS= read -r line; do
+            [ -n "$line" ] && printf '::add-mask::%s\n' "$line"
+          done <<<"$KEY"
+          DELIM="HUB_DEPLOY_APP_PRIVATE_KEY_EOF_${GITHUB_RUN_ID}"
+          {
+            printf 'HUB_DEPLOY_APP_PRIVATE_KEY<<%s\n' "$DELIM"
+            printf '%s\n' "$KEY"
+            printf '%s\n' "$DELIM"
+            echo 'DOPPLER_TOKEN='
+          } >> "$GITHUB_ENV"
+
+      - name: Mint a token for hht_admin
+        id: app-token
+        if: steps.pr.outputs.deploy == 'true'
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349  # v2.2.2
+        with:
+          app-id: ${{ vars.HUB_DEPLOY_APP_CLIENT_ID }}
+          private-key: ${{ env.HUB_DEPLOY_APP_PRIVATE_KEY }}
+          owner: Cure-HHT
+          repositories: hht_admin
+          permission-actions: write
+
+      - name: Start the hub deploy in hht_admin
+        if: steps.pr.outputs.deploy == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SOURCE: ${{ steps.pr.outputs.url }}
+        run: |
+          set -euo pipefail
+          echo 'HUB_DEPLOY_APP_PRIVATE_KEY=' >> "$GITHUB_ENV"
+          gh workflow run elspais-hub-deploy.yml --repo Cure-HHT/hht_admin --ref main \
+            -f version="$VERSION" -f source="$SOURCE"
+          echo "Proposed elspais ${VERSION} for the hub." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report on the pull request
+        if: always() && steps.pr.outputs.deploy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ steps.pr.outputs.number }}
+          VERSION: ${{ steps.version.outputs.version }}
+          OUTCOME: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [ "$OUTCOME" = "success" ]; then
+            BODY="elspais ${VERSION} is proposed for the hosted hub: Cure-HHT/hht_admin's *elspais hub: deploy release* run has a link to open the pull request. Merging it and approving its apply deploys it. ([run](${RUN_URL}))"
+          else
+            BODY="The hub deploy did not start, so the hub stays on its current release. The failing step is named in the [run](${RUN_URL}); re-run it once the cause is fixed."
+          fi
+          gh pr comment "$NUMBER" --repo "$GITHUB_REPOSITORY" --body "$BODY"
