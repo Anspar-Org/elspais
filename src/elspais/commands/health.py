@@ -329,7 +329,7 @@ def check_spec_no_duplicates(
     )
 
 
-# Implements: REQ-d00132-K
+# Implements: REQ-d00132-K, REQ-d00250-B
 def check_spec_needs_rewrite(
     graph: FederatedGraph, config: dict[str, Any] | None = None, namespace: str | None = None
 ) -> HealthCheck:
@@ -402,7 +402,7 @@ def check_spec_needs_rewrite(
     )
 
 
-# Implements: REQ-d00250-F
+# Implements: REQ-d00250-C
 def check_unfixable_issues(
     graph: FederatedGraph, config: dict[str, Any] | None = None, namespace: str | None = None
 ) -> HealthCheck:

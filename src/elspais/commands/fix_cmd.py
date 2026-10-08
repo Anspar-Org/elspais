@@ -175,7 +175,7 @@ def _authored_requirements(graph):  # noqa: ANN001, ANN202
             yield node
 
 
-# Implements: REQ-d00250-E
+# Implements: REQ-d00250-G
 def _scan_and_report_unfixable(graph) -> int:  # noqa: ANN001
     """Walk `parse_unfixable_reasons` across requirements; print to stderr.
 
@@ -342,6 +342,7 @@ def _add_autofix_changelog_entries(
         if not non_drift:
             continue
 
+        # Implements: REQ-d00330-E
         # If every non-drift reason is formatting-only (no semantic body
         # change), re-render the file but don't bump the changelog —
         # changelogs record what the requirement says, not how it's rendered.
@@ -463,18 +464,21 @@ def _fix_parse_dirty(
         if reasons:
             fixable_nodes.append((node, reasons))
 
+    # Implements: REQ-d00250-H
     # Identify FILE nodes containing unfixable REQs. `render_save` rewrites
     # entire dirty FILE nodes; touching a file that contains an unfixable
     # requirement would silently re-render the unfixable req alongside any
     # fixable siblings. Exclude those files from the fixable set entirely —
     # the author must resolve the unfixable issue first.
     unfixable_file_ids: set[str] = set()
+    unfixable_files: list[Any] = []
     for node in _authored_requirements(graph):
         if not node.get_field("parse_unfixable_reasons"):
             continue
         fn = node.file_node()
-        if fn is not None:
+        if fn is not None and fn.id not in unfixable_file_ids:
             unfixable_file_ids.add(fn.id)
+            unfixable_files.append(fn)
 
     if unfixable_file_ids:
         skipped = [
@@ -557,12 +561,21 @@ def _fix_parse_dirty(
     # Only what this run may write is marked, changelogged or saved.
     fixable_nodes = [(n, reasons) for n, reasons in fixable_nodes if writable(n)]
 
-    # Drift-only nodes (changelog hash mismatch with no other fixable issues)
-    # go through _add_drift_changelog_entries; everything else — including
-    # missing_changelog and mixed-reason nodes — goes through the unified
-    # autofix path.
-    drift_only_nodes = [n for n, reasons in fixable_nodes if reasons == ["changelog_drift"]]
-    autofix_items = [(n, reasons) for n, reasons in fixable_nodes if reasons != ["changelog_drift"]]
+    # Implements: REQ-d00330-B, REQ-d00330-E
+    # A drifted changelog beside changes of form alone goes through the drift
+    # path: those changes leave the hash where it was and add no entry, so
+    # the drift entry is the only one that brings the changelog up to date.
+    # Every other node goes through the autofix path, whose entry records
+    # the new hash and so resolves any drift too.
+    def _drift_beside_form_only(reasons: list[str]) -> bool:
+        return "changelog_drift" in reasons and all(
+            r in _FORMATTING_ONLY_REASONS for r in reasons if r != "changelog_drift"
+        )
+
+    drift_only_nodes = [n for n, reasons in fixable_nodes if _drift_beside_form_only(reasons)]
+    autofix_items = [
+        (n, reasons) for n, reasons in fixable_nodes if not _drift_beside_form_only(reasons)
+    ]
 
     # Resolve the changelog author up-front when changelog enforcement is on
     # AND at least one Active req would receive a new entry. Failure here
@@ -595,6 +608,7 @@ def _fix_parse_dirty(
         repo_root=repo_root,
         write_associates=write_associates,
         tidy=True,
+        untidied=unfixable_files,
     )
 
     # Implements: REQ-d00330-A, REQ-d00330-D, REQ-p00015-B
@@ -732,6 +746,29 @@ def _fix_single(args: argparse.Namespace, req_id: str) -> int:
     _fn = node.file_node()
     if _fn is None:
         print(f"Error: No source file for {req_id}", file=sys.stderr)
+        return 1
+
+    # Implements: REQ-d00250-G, REQ-d00250-H
+    # A file holding a requirement the fix cannot correct is left as it is,
+    # whichever requirement in it was named.
+    blocking = sorted(
+        (
+            r
+            for r in _authored_requirements(graph)
+            if r.get_field("parse_unfixable_reasons") and r.file_node() is _fn
+        ),
+        key=lambda r: r.id,
+    )
+    if blocking:
+        rel = _fn.get_field("relative_path") or req_id
+        for r in blocking:
+            for reason in r.get_field("parse_unfixable_reasons"):
+                print(f"Cannot fix {r.id}: {_REASON_LABELS.get(reason, reason)}", file=sys.stderr)
+        print(
+            f"Error: {rel} holds a requirement elspais fix cannot correct "
+            f"({', '.join(r.id for r in blocking)}); resolve it first, then re-run",
+            file=sys.stderr,
+        )
         return 1
 
     # Check if the node's file is already dirty (e.g. from term canonicalization)

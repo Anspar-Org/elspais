@@ -1,5 +1,5 @@
 # Verifies: REQ-p00002, REQ-p00003, REQ-p00004, REQ-p00060
-#            REQ-d00074-A+B+C+D, REQ-d00080, REQ-d00085-A, REQ-d00250-E,
+#            REQ-d00074-A+B+C+D, REQ-d00080, REQ-d00085-A,
 #            REQ-o00062-I+J+K, REQ-d00131-L
 """Standard workhorse e2e tests — module-scoped fixture with daemon acceleration.
 
@@ -1157,6 +1157,7 @@ class TestStandardCLIMutations:
         # Dry-run must not modify the file
         assert spec.read_text() == content, "Dry-run unexpectedly modified prd-deprecated.md"
 
+    # Verifies: REQ-d00250-E
     def test_01_fix_corrects_wrong_hash(self, project):
         """Fix wrong hashes AND too-shallow section depth in prd-deprecated.md."""
         spec = project / "spec" / "prd-deprecated.md"

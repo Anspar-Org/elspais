@@ -365,12 +365,10 @@ class TestFixThenHealthPasses:
 
 
 # ---------------------------------------------------------------------------
-# H6 requirement with section blocks cannot be auto-fixed (REQ-d00250-C/E)
+# H6 requirement with section blocks cannot be auto-fixed (REQ-d00250-C/G/H)
 # ---------------------------------------------------------------------------
 
 
-# Verifies: REQ-d00250-C
-# Verifies: REQ-d00250-E
 class TestH6SectionDepthUnfixable:
     """H6 requirement with section blocks cannot be auto-fixed."""
 
@@ -392,6 +390,7 @@ class TestH6SectionDepthUnfixable:
         )
         return tmp_path
 
+    # Verifies: REQ-d00250-G, REQ-d00250-H
     def test_fix_cannot_resolve_h6_req(self, h6_project):
         """elspais fix exits 1, prints to stderr, leaves file untouched."""
         result = run_elspais("fix", cwd=h6_project)
@@ -405,6 +404,7 @@ class TestH6SectionDepthUnfixable:
         assert "###### REQ-d00001" in content
         assert "###### Assertions" in content
 
+    # Verifies: REQ-d00250-C
     def test_health_flags_h6_unfixable(self, h6_project):
         """elspais checks reports unfixable issue and exits non-zero."""
         result = run_elspais("checks", cwd=h6_project)

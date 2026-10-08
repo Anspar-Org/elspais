@@ -1621,6 +1621,7 @@ def render_save(
     *,
     tidy: bool = False,
     parts: list[GraphNode] | None = None,
+    untidied: list[GraphNode] | None = None,
 ) -> dict[str, Any]:
     """Persist dirty FILE nodes to disk by rendering their CONTAINS children.
 
@@ -1651,6 +1652,10 @@ def render_save(
             was read from, and every other line as it is on disk. A pending
             mutation that reaches any other part refuses the save, writing
             nothing. The fix of one requirement sets it (REQ-d00330-C).
+        untidied: FILE nodes that ``tidy`` leaves as they are. A file that
+            pending mutations reach is written all the same, so no queued
+            work is lost. The fix command names each file holding a
+            requirement it cannot correct (REQ-d00250-H).
 
     Returns:
         Dict with:
@@ -1691,6 +1696,11 @@ def render_save(
         dirty_files = list({id(f): f for p in parts if (f := p.file_node()) is not None}.values())
     else:
         dirty_files = _find_dirty_files(graph, tidy=tidy)
+        if untidied:
+            # Implements: REQ-d00250-H
+            queued = {id(f) for f in _files_with_pending_mutations(graph)}
+            left = {id(f) for f in untidied} - queued
+            dirty_files = [f for f in dirty_files if id(f) not in left]
 
     # Federation: by default, fix/save writes only primary-repo files.
     # Ownership resolution lives in ONE place: is_associate_owned() in
