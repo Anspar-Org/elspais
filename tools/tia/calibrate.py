@@ -37,7 +37,23 @@ def _failing(cases: dict) -> set[str]:
     return {k for k, c in cases.items() if c["outcome"] in ("failed", "error")}
 
 
+def _baseline_failing(m: dict) -> set[str]:
+    """JUnit keys of the tests that did not pass in the manifest's baseline."""
+    path = os.path.join(m.get("baseline", {}).get("path") or "", "baseline.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            tests = json.load(fh)["tests"]
+    except (OSError, ValueError, KeyError):
+        return set()
+    return {
+        nodeid_to_junit_key(n) for n, t in tests.items() if t.get("outcome") in ("failed", "error")
+    }
+
+
 def compare_runs(tia_manifest: str | dict, full_junit: str) -> dict:
+    """A failing full-run test TIA did not select is a missed failure --
+    unless it already failed in the baseline: a failure no change caused is
+    not one the selection could have caught, and is listed apart."""
     m = tia_manifest
     if not isinstance(m, dict):
         with open(m, encoding="utf-8") as fh:
@@ -54,7 +70,9 @@ def compare_runs(tia_manifest: str | dict, full_junit: str) -> dict:
         selected_keys = {nodeid_to_junit_key(t["test"]) for t in m["tests"]}
         selected_keys |= set(tia_cases)  # new tests the baseline did not know
     full_fail = _failing(full["cases"])
-    missed = sorted(full_fail - selected_keys)
+    known = _baseline_failing(m)
+    unselected = full_fail - selected_keys
+    missed = sorted(unselected - known)
     disagree = sorted(
         k
         for k in set(tia_cases) & set(full["cases"])
@@ -69,6 +87,7 @@ def compare_runs(tia_manifest: str | dict, full_junit: str) -> dict:
         "selected_tests": len(selected_keys & set(full["cases"])),
         "tia_failures": sorted(_failing(tia_cases)),
         "missed_failures": missed,
+        "unselected_known_failures": sorted(unselected & known),
         "outcome_disagreements": disagree,
         "full_test_seconds": round(full_time, 1),
         "tia_test_seconds": round(tia_time, 1),
