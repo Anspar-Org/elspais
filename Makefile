@@ -1,4 +1,4 @@
-.PHONY: setup test test-e2e test-browser test-stress test-all help
+.PHONY: setup test test-e2e test-browser test-stress test-all test-impacted test-impacted-list tia-baseline tia-calibrate help
 
 # The hooks and .githooks/run-target put this directory first on PATH, so the
 # test targets run its pytest and its elspais. Naming it once here is what
@@ -55,6 +55,27 @@ test-all: ## Run all tests (unit, e2e, browser, stress), one tier at a time
 	$(MAKE) -j1 test-e2e
 	$(MAKE) -j1 test-browser
 	$(MAKE) -j1 test-stress
+
+# Test Impact Analysis (docs/test-impact-analysis.md). Fast development
+# feedback, never a verdict: the full tiers above stay authoritative.
+#
+# tia-baseline runs the full unit tier exactly as `make test` does, and also
+# records the baseline that test-impacted selects from.
+tia-baseline: ## Run the unit tier and record a TIA baseline (.results/tia/baseline)
+	ELSPAIS_TIA_RECORD=1 .githooks/run-target elspais-unit .githooks/run-unit-tier
+
+# Only the unit tests the change since the baseline can affect. TIA_FULL=1
+# (or ARGS=--full) bypasses selection and runs the whole tier.
+test-impacted: ## Run only the unit tests affected by changes since the TIA baseline
+	$(VENV_PATH) $(PY) -m tools.tia run $(ARGS)
+
+test-impacted-list: ## Show what test-impacted would run, and why, without running it
+	$(VENV_PATH) $(PY) -m tools.tia select --list $(ARGS)
+
+# TIA-selected run and full run of the same revision, compared; with
+# MUTANTS=N also N seeded single-function fault probes. Slow: nightly.
+tia-calibrate: ## Compare the TIA selection with a full run of this revision
+	$(VENV_PATH) $(PY) -m tools.tia calibrate --mutants $(or $(MUTANTS),0) $(ARGS)
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'

@@ -225,6 +225,21 @@ the same key and runs the tier otherwise. Nothing in elspais reads them, and
 | `pandoc`, `xelatex`, the `claude` CLI | e2e | Kept, as optional tools | The tests needing them skip, and the skip reason names the missing tool; the claude CLI test also skips inside a Claude Code session |
 | `tail`, to relay a detached run's log | all | Kept -- `lib-tier-run.sh` has no other way to show a growing file as it is written | `tier_require` stops the tier before it starts, naming `tail`, on a machine that has none. `bash`, `ps` and `/proc` are the rest of the runner's platform surface: `bash` is assumed throughout, and `ps -ww -o args= -p` (BSD and GNU alike) is the fallback `tier_pid_args` uses where `/proc` is absent |
 
+## Test Impact Analysis (optional)
+
+`docs/test-impact-analysis.md` describes the whole mechanism. It touches the
+hooks in two opt-in places, and neither one changes a default:
+
+- `ELSPAIS_TIA_RECORD=1` makes `run-unit-tier` also record a TIA baseline
+  (`.results/tia/baseline`, or `$ELSPAIS_TIA_BASELINE`). It runs the same
+  tests and gives the same verdict. `make tia-baseline` sets this variable
+  for one run.
+- `ELSPAIS_UNIT_MODE=impacted` makes `pre-commit` run only the impacted unit
+  tests (`python -m tools.tia run`). Like a checkpoint, it records no unit
+  verdict for the tree, so `pre-push` still runs the full tier. When TIA
+  cannot determine impact, `pre-commit` runs the full tier through
+  `unit-verdict` as usual.
+
 ## Required Tools
 
 Install these tools for full hook functionality:
