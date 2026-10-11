@@ -172,6 +172,12 @@ class Selector:
         self._referenced: set[str] | None = None
         self._fixture_users: dict[str, set[str]] | None = None
         self._by_file: dict[str, list[str]] | None = None
+        # Fixtures defined by pytest or a plugin (decided by where the fixture
+        # function lives). Their setup runs no repository code, so a hit in
+        # the setup phase that executed one says nothing about its other
+        # users: widening through `tmp_path_factory`, set up by the first
+        # `tmp_path` user in each worker, would select nearly every test.
+        self.external_fixtures = set(baseline.manifest.get("external_fixtures") or ())
 
     # -- indexes -----------------------------------------------------------
     @property
@@ -254,6 +260,8 @@ class Selector:
             if "teardown" in phases:
                 shared |= set(t.get("teardown_finalized") or ())
             for key in sorted(shared):
+                if key in self.external_fixtures:
+                    continue
                 fx = key.split("::")[-1]
                 for user in sorted(self.fixture_users.get(key, ())):
                     n += self.out.add(
@@ -262,6 +270,29 @@ class Selector:
                         f"affected by the change ({reason})",
                     )
         return n
+
+    def _select_reads(self, buckets, reason: str) -> int:
+        """Select by recorded reads/listings.
+
+        A bucket is `<nodeid>|<phase>` (the test's own read) or
+        `fixture:<key>` (read while that shared fixture was being set up: its
+        users are selected). A setup-phase read outside any shared fixture was
+        made by a function-scoped fixture and concerns that test alone; a
+        teardown-phase read may come from a shared fixture's finalizer, which
+        no hook brackets, so it is widened like a teardown coverage hit.
+        """
+        n = 0
+        hits: dict[str, set[str]] = {}
+        for b in sorted(set(buckets)):
+            if b.startswith("fixture:"):
+                key = b[len("fixture:") :]
+                fx = key.split("::")[-1]
+                for user in sorted(self.fixture_users.get(key, ())):
+                    n += self.out.add(user, f"uses shared fixture '{fx}', whose setup {reason}")
+                continue
+            nodeid, phase = b.rsplit("|", 1)
+            hits.setdefault(nodeid, set()).add("teardown" if phase == "teardown" else "run")
+        return n + self._select_hits(hits, reason)
 
     def _select_test_file(self, path: str, reason: str) -> int:
         self.whole_test_files.add(path)
@@ -286,25 +317,18 @@ class Selector:
                 "session-read", "read by pytest before any test ran (configuration)", ch.path
             )
             return
-        hits: dict[str, set[str]] = {}
-
-        def note(buckets):
-            for b in buckets:
-                nodeid, phase = b.rsplit("|", 1)
-                hits.setdefault(nodeid, set()).add(phase)
-
-        note(reads.get(ch.path, ()))
+        buckets = list(reads.get(ch.path, ()))
         # A new file (or a deleted one) changes the listing of its directory;
         # a new directory, the listing of its nearest listed ancestor.
         d = os.path.dirname(ch.path) or "."
         while True:
             if d in lists:
-                note(lists[d])
+                buckets += lists[d]
                 break
             if ch.status != "added" or d == ".":
                 break
             d = os.path.dirname(d) or "."
-        n = self._select_hits(hits, f"read {ch.path} (or listed its directory) in the baseline")
+        n = self._select_reads(buckets, f"read {ch.path} (or listed its directory) in the baseline")
         for collector in coll.get(ch.path, ()):
             for nodeid in self._tests_under_nodeid(collector):
                 n += self.out.add(
@@ -398,11 +422,9 @@ class Selector:
 
     def handle_test_support(self, ch: FileChange, rep: ChangedFileReport) -> None:
         n = self._importers_of_test_support(ch, rep)
-        hits: dict[str, set[str]] = {}
-        for b in self.base.manifest["data_reads"].get(ch.path, ()):
-            nodeid, phase = b.rsplit("|", 1)
-            hits.setdefault(nodeid, set()).add(phase)
-        n += self._select_hits(hits, f"read {ch.path}")
+        n += self._select_reads(
+            self.base.manifest["data_reads"].get(ch.path, ()), f"read {ch.path}"
+        )
         rep.tests_selected += n
         if n == 0 and ch.status != "added":
             self._full(
@@ -464,11 +486,9 @@ class Selector:
         if escalate_module:
             n += self._module_global(ch, rep)
         # tests that read the source as text
-        hits: dict[str, set[str]] = {}
-        for b in self.base.manifest["data_reads"].get(ch.path, ()):
-            nodeid, phase = b.rsplit("|", 1)
-            hits.setdefault(nodeid, set()).add(phase)
-        n += self._select_hits(hits, f"read {ch.path} as data")
+        n += self._select_reads(
+            self.base.manifest["data_reads"].get(ch.path, ()), f"read {ch.path} as data"
+        )
         rep.tests_selected += n
 
     def _new_module(self, ch: FileChange, rep: ChangedFileReport) -> int:
@@ -479,11 +499,9 @@ class Selector:
         d = os.path.dirname(ch.path) or "."
         while d not in lists and d != ".":
             d = os.path.dirname(d) or "."  # a new directory: its parent's listing changes
-        hits: dict[str, set[str]] = {}
-        for b in lists.get(d, ()):
-            nodeid, phase = b.rsplit("|", 1)
-            hits.setdefault(nodeid, set()).add(phase)
-        n = self._select_hits(hits, f"listed {d}/ (may discover the new module {ch.path})")
+        n = self._select_reads(
+            lists.get(d, ()), f"listed {d}/ (may discover the new module {ch.path})"
+        )
         g = self.import_graph()
         mod = module_name(ch.path, self.cfg.import_roots)
         importers = sorted(g.importers.get(mod, ())) if mod else []
@@ -637,11 +655,7 @@ class Selector:
         rep.category = "manifest (ignored keys only)"
         # pytest reads this file at start-up; that read is configuration, not data
         reads = self.base.manifest["data_reads"].get(ch.path, ())
-        hits: dict[str, set[str]] = {}
-        for b_ in reads:
-            nodeid, phase = b_.rsplit("|", 1)
-            hits.setdefault(nodeid, set()).add(phase)
-        rep.tests_selected += self._select_hits(hits, f"read {ch.path} in the baseline")
+        rep.tests_selected += self._select_reads(reads, f"read {ch.path} in the baseline")
 
 
 def baseline_summary(b: Baseline | None, path: str) -> dict:

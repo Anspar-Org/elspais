@@ -91,8 +91,11 @@ def build_baseline(run_dir: str, dest: str, coverage_file: str | None = None) ->
     collection_reads: dict[str, set] = {}
     session_reads: set = set()
     spawns: dict[str, set] = {}
+    fixture_spawns: dict[str, set] = {}
     errors: list[str] = []
+    external_fixtures: set[str] = set()
     for s in shards:
+        external_fixtures.update(s.get("external_fixtures", []))
         errors += [f"[{s['worker']}] {e}" for e in s.get("errors", [])]
         for nodeid, t in s["tests"].items():
             if t.get("outcome") in (None, "not-run") and nodeid in tests:
@@ -123,17 +126,27 @@ def build_baseline(run_dir: str, dest: str, coverage_file: str | None = None) ->
                 for r in reads:
                     collection_reads.setdefault(r, set()).add(who)
             else:
+                # "<nodeid>|<phase>" or "fixture:<key>" (a shared fixture's own)
                 for r in reads:
                     data_reads.setdefault(r, set()).add(bucket)
                 for d in lists:
                     dir_lists.setdefault(d, set()).add(bucket)
-                nodeid = bucket.rsplit("|", 1)[0]
-                for prog in attrib.get("spawns", []):
-                    spawns.setdefault(nodeid, set()).add(prog)
+                if bucket.startswith("fixture:"):
+                    who = bucket[len("fixture:") :]
+                    for prog in attrib.get("spawns", []):
+                        fixture_spawns.setdefault(who, set()).add(prog)
+                else:
+                    nodeid = bucket.rsplit("|", 1)[0]
+                    for prog in attrib.get("spawns", []):
+                        spawns.setdefault(nodeid, set()).add(prog)
 
     for nodeid, t in tests.items():
         t["outcome"] = t["outcome"] or "not-run"
-        t["spawns"] = sorted(spawns.get(nodeid, ()))
+        own = set(spawns.get(nodeid, ()))
+        # a test using a fixture that spawned a process depends on that process
+        for key in t.get("shared_fixtures") or ():
+            own |= fixture_spawns.get(key, set())
+        t["spawns"] = sorted(own)
 
     ident_start, ident_end = ctl.get("identity_start") or {}, ctl.get("identity_end") or {}
     consistent = (
@@ -176,6 +189,7 @@ def build_baseline(run_dir: str, dest: str, coverage_file: str | None = None) ->
         "dir_lists": {k: sorted(v) for k, v in sorted(dir_lists.items())},
         "collection_reads": {k: sorted(v) for k, v in sorted(collection_reads.items())},
         "session_reads": sorted(session_reads),
+        "external_fixtures": sorted(external_fixtures),
         "errors": errors,
     }
     tmp = os.path.join(dest, BASELINE_JSON + ".tmp")

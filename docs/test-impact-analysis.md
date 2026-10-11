@@ -90,7 +90,7 @@ selection can be conservative about it:
 
 | Blind spot | What is recorded | How selection uses it |
 | --- | --- | --- |
-| Shared fixtures (session, module or class scope) run once, inside the *setup* of the first test that needs them. Their lines are credited to that one test. | For each test: the shared fixtures it depends on, and the shared fixtures that were executed in its setup (or finalized in its teardown). | A coverage hit in a test's setup or teardown phase is widened to every test that uses the shared fixtures that phase executed. |
+| Shared fixtures (session, module or class scope) run once, inside the *setup* of the first test that needs them. Their lines are credited to that one test. | For each test: the shared fixtures it depends on, and the shared fixtures that were executed in its setup (or finalized in its teardown). While a repository-defined shared fixture is being set up, its file reads, listings and spawns are attributed to the fixture itself (`fixture:<key>`). | A coverage hit in a test's setup or teardown phase is widened to every test that uses the shared fixtures that phase executed. A read attributed to a fixture selects exactly that fixture's users. Fixtures whose function is defined outside the repository (pytest built-ins and plugins, for example `tmp_path_factory`) run no repository code and never widen. This is decided by where the function lives, not by the fixture's `baseid`, whose spelling for the root directory has varied between pytest versions. |
 | Files read as data, such as fixture projects, docs, templates, `.github/workflows` and the repository's own sources. | Through an audit hook, the repository files each test phase opened and the directories it listed. Import-machinery reads are excluded. | A changed non-Python file selects the tests that read it. For an added file, it selects the tests that listed its directory, or the nearest listed ancestor directory. |
 | Subprocesses: code that runs in a child process is invisible to coverage. | The programs each test spawned. | A test that spawns `python*` or `elspais*` is *opaque*. It is selected whenever any non-test file changes. |
 | Tests that did not pass have partial coverage. | The outcome of each test. | A test that did not pass in the baseline (failed, error, skipped, xfail) is always selected. |
@@ -160,10 +160,20 @@ Escalation never narrows the selection:
 
 ### Granularity
 
-`granularity = "file"` (the default) runs every test in any test file that
-holds a selected test. Incremental test classes, module-scoped fixtures and
-order-dependent state inside one file stay intact. With `"test"`, only the
-selected node IDs run, widened to whole classes.
+`granularity = "test"` is the default. It runs the selected node IDs,
+widened to whole test classes. The suite declares ordering dependencies per
+class: `@pytest.mark.incremental` chains a class's steps, and the conftest
+tracks a failure per class. Widening to the class keeps each chain intact.
+The tests are handed to pytest as their files, and a small plugin
+(`tools/tia/pytest_select.py`) deselects the rest. Every test in a new or
+modified test file runs.
+
+`granularity = "file"` (or `--granularity file`) runs every test in any test
+file that holds a selected test. It also protects *undeclared* dependencies
+between tests of one module. Such a dependency is a test-isolation bug: it
+already breaks `pytest -k`, and it would show up here as a spurious failure
+or as a disagreement in calibration. For the measured changes, file
+granularity ran 2.5 to 4 times as many tests (see [Measurements](#measurements)).
 
 If the selection reaches `full_suite_threshold` (85%) of the suite, the full
 suite runs instead. This is recorded as the `selection-near-full` fallback.

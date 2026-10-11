@@ -187,6 +187,11 @@ OTHER = "src/pkg/other.py"
 #: Shared-fixture keys, as `recorder._fixture_key` spells them.
 K_PROJECT = "session:tests::shared_project"
 K_SCALED = "session:tests::scaled"
+#: A pytest built-in: defined outside the repository, so its baseid is empty.
+K_EXTERNAL = "session:::tmp_path_factory"
+#: An empty baseid that IS the repository's (how a key looks when only its
+#: baseid, not where its function lives, could tell it from a plugin's).
+K_EMPTY_BASEID = "session:::root_fixture"
 
 # Node ids of the synthetic inventory.
 ADD = "tests/test_core.py::test_add"
@@ -232,11 +237,7 @@ def default_tests() -> dict[str, dict]:
         DOUBLE: t(cover={"run": [(UTIL, "double"), (CORE, "mul")]}),
         CAPPED: t(cover={"run": [(UTIL, "capped")]}),
         SAMPLE: t(reads={"run": ["tests/data/sample.txt"]}),
-        USER_A: t(
-            shared_fixtures=[K_PROJECT],
-            setup_executed=[K_PROJECT],
-            reads={"setup": ["tests/data/shared.txt"]},
-        ),
+        USER_A: t(shared_fixtures=[K_PROJECT], setup_executed=[K_PROJECT]),
         USER_B: t(shared_fixtures=[K_PROJECT]),
         FIRST: t(
             shared_fixtures=[K_SCALED],
@@ -247,6 +248,12 @@ def default_tests() -> dict[str, dict]:
         OTHER_A: t(cover={"run": [(OTHER, "greet")]}),
         OTHER_B: t(lists={"run": ["src/pkg"]}),
     }
+
+
+def default_fixture_attribution() -> dict[str, dict]:
+    """What each shared fixture's own setup read/listed/spawned, keyed by
+    fixture key (the recorder's ``fixture:<key>`` buckets)."""
+    return {K_PROJECT: {"reads": ["tests/data/shared.txt"]}}
 
 
 def synth_config(**overrides) -> Config:
@@ -371,13 +378,19 @@ def make_baseline(
     *,
     shard_overrides: dict | None = None,
     extra_attribution: dict | None = None,
+    fixture_attribution: dict | None = None,
+    external_fixtures: list[str] | None = None,
     context_rename=None,
 ) -> dict:
     """Write shards + coverage for `tests` and build a baseline into `dest`.
 
     `shard_overrides` is merged into the controller shard (after identity
     and environment are filled in); `extra_attribution` adds attribution
-    buckets such as ``session`` or ``collect:<nodeid>``. `context_rename` maps a node id to the
+    buckets such as ``session`` or ``collect:<nodeid>``. `fixture_attribution`
+    maps a shared-fixture key to what its setup read/listed/spawned (default:
+    `default_fixture_attribution()`). `external_fixtures` lists the shared
+    fixtures the recorder found defined outside the repository (default:
+    ``[K_EXTERNAL]``). `context_rename` maps a node id to the
     name its coverage contexts carry (to make contexts name unknown tests).
     """
     tests = copy.deepcopy(default_tests() if tests is None else tests)
@@ -424,6 +437,10 @@ def make_baseline(
                 bucket = attribution.setdefault(f"{nodeid}|{phase}", {})
                 bucket.setdefault(key, []).extend(items)
     data.write()
+    if fixture_attribution is None:
+        fixture_attribution = default_fixture_attribution()
+    for key, attrib in fixture_attribution.items():
+        attribution[f"fixture:{key}"] = copy.deepcopy(attrib)
     for bucket, attrib in (extra_attribution or {}).items():
         attribution.setdefault(bucket, {}).update(attrib)
 
@@ -441,6 +458,7 @@ def make_baseline(
         "tests": shard_tests,
         "attribution": attribution,
         "errors": [],
+        "external_fixtures": [K_EXTERNAL] if external_fixtures is None else external_fixtures,
         "identity_start": git_identity(root),
         "environment": current_env(),
     }

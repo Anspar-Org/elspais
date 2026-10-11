@@ -19,11 +19,13 @@ production_roots = ["src/elspais"]
 import_roots = ["src", "."]
 
 [selection]
-# "file": run every test in any test file holding a selected test. Incremental
-# classes, module-scoped fixtures and order-dependent state inside one file
-# stay intact. "test": run selected node ids only (whole class when the class
-# is marked incremental). "file" is the conservative default.
-granularity = "file"
+# "test": run the selected node ids, widened to whole test classes, because
+# the suite declares ordering dependencies per class (`@pytest.mark.incremental`
+# chains a class's steps). "file": run every test in any test file holding a
+# selected test, which also protects undeclared dependencies between tests of
+# one module, at roughly 2.5x the tests for a typical change (measured; see
+# docs/test-impact-analysis.md).
+granularity = "test"
 # When the selection already holds at least this fraction of the suite, run
 # the full suite instead: nothing is gained by trimming the rest, and the
 # full suite is the authoritative answer. Recorded as a fallback.

@@ -17,6 +17,10 @@ from tests.tia._synth import (
     DOUBLE,
     FIRST,
     GET,
+    K_EMPTY_BASEID,
+    K_EXTERNAL,
+    K_PROJECT,
+    K_SCALED,
     MUL,
     OTHER_A,
     OTHER_B,
@@ -309,8 +313,77 @@ def test_data_file_read_by_a_test_selects_it(repo, baseline):
 
 
 def test_data_read_in_shared_fixture_setup_selects_every_fixture_user(repo, baseline):
+    # the default baseline attributes the read to the `fixture:<key>` bucket
     s.write(repo, "tests/data/shared.txt", "changed\n")
-    assert_impact(s.select_now(repo, baseline), {USER_A, USER_B})
+    sel = s.select_now(repo, baseline)
+    assert_impact(sel, {USER_A, USER_B})
+    for user in (USER_A, USER_B):
+        assert any("uses shared fixture 'shared_project'" in r for r in sel.tests[user])
+
+
+def _shared_read_variant(work, phase: str, *, finalized: bool = False):
+    """USER_A reads shared.txt in its own `phase` bucket; no fixture bucket."""
+
+    def edit(tests):
+        tests[USER_A]["reads"] = {phase: ["tests/data/shared.txt"]}
+        if finalized:
+            tests[USER_A]["teardown_finalized"] = [K_PROJECT]
+
+    tests = s.default_tests()
+    edit(tests)
+    dest = work / "variant"
+    s.make_baseline(work / "repo", dest, tests, fixture_attribution={})
+    s.write(work / "repo", "tests/data/shared.txt", "changed\n")
+    return s.select_now(work / "repo", dest)
+
+
+def test_function_fixture_setup_read_selects_only_that_test(work):
+    # USER_A executed the shared fixture in its setup, but a `<nodeid>|setup`
+    # read was made outside it (by a function-scoped fixture): no widening
+    assert_impact(_shared_read_variant(work, "setup"), {USER_A})
+
+
+def test_teardown_read_widens_through_finalized_fixtures(work):
+    assert_impact(_shared_read_variant(work, "teardown", finalized=True), {USER_A, USER_B})
+
+
+@pytest.mark.parametrize(
+    "key, expected",
+    [(K_EXTERNAL, {FIRST}), (K_SCALED, {FIRST, SECOND}), (K_EMPTY_BASEID, {FIRST, SECOND})],
+    ids=[
+        "external-fixture-not-widened",
+        "repo-fixture-widened",
+        "empty-baseid-repo-fixture-widened",
+    ],
+)
+def test_setup_coverage_widens_only_through_repo_defined_fixtures(work, key, expected):
+    tests = s.default_tests()
+    for nodeid in (FIRST, SECOND):
+        tests[nodeid]["shared_fixtures"] = [key]
+    tests[FIRST]["setup_executed"] = [key]
+    dest = work / "variant"
+    s.make_baseline(work / "repo", dest, tests)
+    s.replace(
+        work / "repo",
+        CORE,
+        "out = [v * factor for v in values]",
+        "out = [factor * v for v in values]",
+    )
+    assert_impact(s.select_now(work / "repo", dest), expected)
+
+
+def test_fixture_spawn_makes_every_fixture_user_opaque(work):
+    dest = work / "variant"
+    attribution = s.default_fixture_attribution()
+    attribution[K_PROJECT]["spawns"] = ["python -m elspais"]
+    manifest = s.make_baseline(work / "repo", dest, fixture_attribution=attribution)
+    # the fixture's spawn is folded into each user's, and nobody else's
+    assert {n for n, t in manifest["tests"].items() if t["spawns"]} == {USER_A, USER_B}
+    mul_change(work / "repo")
+    sel = s.select_now(work / "repo", dest)
+    assert_impact(sel, {MUL, DOUBLE, USER_A, USER_B})
+    for user in (USER_A, USER_B):
+        assert any(r.startswith("spawns python -m elspais") for r in sel.tests[user])
 
 
 def test_package_data_selects_tests_of_modules_naming_it(repo, baseline):

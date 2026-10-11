@@ -31,6 +31,7 @@ baseline invalid rather than silently incomplete.
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import subprocess
@@ -95,7 +96,11 @@ def git_identity(root: str) -> dict:
         # part of this tree, so it is not part of what the run tested.
         for rel in sorted({p for p in changed + untracked if p and not p.endswith("/")}):
             full = os.path.join(root, rel)
-            if os.path.isfile(full):
+            if os.path.islink(full):
+                from .gitio import hash_symlink
+
+                ident["dirty"][rel] = hash_symlink(root, rel, write=True)
+            elif os.path.isfile(full):
                 ident["dirty"][rel] = _git(
                     root, "hash-object", "-w", "--no-filters", "--", rel
                 ).strip()
@@ -143,12 +148,17 @@ class Recorder:
         self.identity_start = git_identity(self.root) if self.is_controller else None
         self._in_hook = False
         self.loop_started = False
+        self.fixture_stack: list[str] = []
+        self.repo_fixtures: set[str] = set()
+        self.external_fixtures: set[str] = set()
         sys.addaudithook(self._audit)
 
     # -- attribution ---------------------------------------------------
     def _bucket(self) -> dict[str, set] | None:
         key = self.current
-        if key is None:
+        if self.fixture_stack:
+            key = "fixture:" + self.fixture_stack[-1]
+        elif key is None:
             # Before the test loop: configuration and plugin start-up, which
             # the selector treats as global. After it starts, a read outside
             # any test or collection is reporting (coverage reads every source
@@ -331,12 +341,41 @@ class Recorder:
                 and self.current.endswith("|setup")
             ):
                 lst = self.tests[self.phase_test]["setup_executed"]
+                self._repo_fixture(fixturedef)
                 key = _fixture_key(fixturedef)
                 if key not in lst:
                     lst.append(key)
         except Exception:  # noqa: BLE001
             self.errors.append("fixture_setup: " + traceback.format_exc(limit=3))
-        return (yield)
+        # While a shared fixture defined in this repository runs, what it reads,
+        # lists and spawns is its own, not the test's that happened to set it up
+        # first: the selector then selects exactly that fixture's users.
+        pushed = fixturedef.scope != "function" and self._repo_fixture(fixturedef)
+        if pushed:
+            self.fixture_stack.append(_fixture_key(fixturedef))
+        try:
+            return (yield)
+        finally:
+            if pushed:
+                self.fixture_stack.pop()
+
+    def _repo_fixture(self, fixturedef) -> bool:
+        """Is this fixture defined in the repository (not pytest or a plugin)?
+
+        Decided by where its function is defined: a `baseid` cannot tell, as
+        a root-level conftest.py and a plugin both have an empty one.
+        """
+        key = _fixture_key(fixturedef)
+        if key in self.repo_fixtures:
+            return True
+        if key in self.external_fixtures:
+            return False
+        func = inspect.unwrap(getattr(fixturedef, "func", None) or (lambda: None))
+        code = getattr(func, "__code__", None)
+        rel = self._rel(code.co_filename) if code is not None else None
+        repo = rel is not None and rel != "."
+        (self.repo_fixtures if repo else self.external_fixtures).add(key)
+        return repo
 
     def pytest_fixture_post_finalizer(self, fixturedef, request):
         try:
@@ -395,6 +434,7 @@ class Recorder:
                 k: {kk: sorted(vv) for kk, vv in v.items() if vv} for k, v in self.attrib.items()
             },
             "errors": self.errors,
+            "external_fixtures": sorted(self.external_fixtures),
         }
         if self.is_controller:
             shard["identity_start"] = self.identity_start

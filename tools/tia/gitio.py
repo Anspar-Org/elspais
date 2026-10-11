@@ -87,10 +87,21 @@ class BaselineTree:
         return git(self.root, "cat-file", "blob", oid, binary=True)
 
 
+def hash_symlink(root: str, path: str, write: bool = False) -> str:
+    """The blob git stores for a symbolic link: the bytes of its target."""
+    target = os.fsencode(os.readlink(os.path.join(root, path)))
+    args = ["git", "hash-object", "--no-filters", "--stdin"] + (["-w"] if write else [])
+    out = subprocess.run(args, cwd=root, input=target, capture_output=True, check=True).stdout
+    return out.decode().strip()
+
+
 def hash_worktree_files(root: str, paths: list[str]) -> dict[str, str | None]:
     """Blob ids of worktree files (None for absent ones), as git would hash them."""
-    present = [p for p in paths if os.path.isfile(os.path.join(root, p))]
+    links = [p for p in paths if os.path.islink(os.path.join(root, p))]
+    present = [p for p in paths if p not in links and os.path.isfile(os.path.join(root, p))]
     result: dict[str, str | None] = dict.fromkeys(paths)
+    for p in links:
+        result[p] = hash_symlink(root, p)
     # --no-filters keeps this a pure function of the bytes on disk; the
     # baseline's dirty blobs were hashed the same way.
     for i in range(0, len(present), 500):
