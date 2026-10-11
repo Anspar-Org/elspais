@@ -305,9 +305,17 @@ def analyze_python_change(
     # small and some tests read sources as text. Module-level text edits are
     # left to the data-read records.
     flagged = {i.unit for i in res.impacts if i.scope == FUNCTION}
-    for o1, o2, _n1, _n2 in res.hunks:
+    new_lines = new_s.splitlines()
+    for o1, o2, n1, n2 in res.hunks:
         lo, hi = (o1, o2) if o2 >= o1 else (o1 - 1, o1)  # insertion: both neighbours
         u = outermost_def(old_units, max(lo, 1), max(hi, 1))
+        if u is None and o2 < o1:
+            # appended after a function's last line but indented inside it
+            u = outermost_def(old_units, max(o1 - 1, 1), max(o1 - 1, 1))
+            added = [ln for ln in new_lines[n1 - 1 : n2] if ln.strip()]
+            col = getattr(u.node, "col_offset", 0) if u else 0
+            if u is None or not added or any(len(ln) - len(ln.lstrip()) <= col for ln in added):
+                u = None
         if u is not None and u.key not in flagged:
             flagged.add(u.key)
             res.impacts.append(

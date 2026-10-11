@@ -100,6 +100,7 @@ class Selection:
     warnings: list[str]
     granularity: str
     elapsed_selection: float = 0.0
+    whole_test_files: list[str] = field(default_factory=list)
 
     @property
     def selected_count(self) -> int:
@@ -166,6 +167,7 @@ class Selector:
         self.fallbacks: list[Fallback] = []
         self.reports: list[ChangedFileReport] = []
         self.new_test_files: set[str] = set()
+        self.whole_test_files: set[str] = set()  # new or modified: every test runs
         self._import_graph = None
         self._referenced: set[str] | None = None
         self._fixture_users: dict[str, set[str]] | None = None
@@ -262,6 +264,7 @@ class Selector:
         return n
 
     def _select_test_file(self, path: str, reason: str) -> int:
+        self.whole_test_files.add(path)
         n = 0
         for nodeid in self.by_file.get(path, ()):
             n += self.out.add(nodeid, reason)
@@ -472,9 +475,12 @@ class Selector:
         """A module the baseline never saw. Existing tests can reach it only
         through changed code that imports it (selected on its own account) or
         by discovering it in its directory (recorded listings)."""
-        d = os.path.dirname(ch.path)
+        lists = self.base.manifest["dir_lists"]
+        d = os.path.dirname(ch.path) or "."
+        while d not in lists and d != ".":
+            d = os.path.dirname(d) or "."  # a new directory: its parent's listing changes
         hits: dict[str, set[str]] = {}
-        for b in self.base.manifest["dir_lists"].get(d, ()):
+        for b in lists.get(d, ()):
             nodeid, phase = b.rsplit("|", 1)
             hits.setdefault(nodeid, set()).add(phase)
         n = self._select_hits(hits, f"listed {d}/ (may discover the new module {ch.path})")
@@ -712,6 +718,16 @@ def select(
     fallbacks += sel.fallbacks
 
     tests = sel.out.tests
+    # A test whose file no longer exists cannot be run (its deletion is the
+    # change); handing its path to pytest would stop the run.
+    selected_files = {base.tests[n]["file"] for n in tests}
+    gone = sorted(f for f in selected_files if not os.path.isfile(os.path.join(root, f)))
+    for n in [n for n in tests if base.tests[n]["file"] in gone]:
+        del tests[n]
+    if gone:
+        warnings.append(
+            f"{len(gone)} selected test file(s) no longer exist: " + ", ".join(gone[:5])
+        )
     # granularity expansion
     if config.granularity == "file":
         files = sorted({base.tests[n]["file"] for n in tests} | sel.new_test_files)
@@ -746,6 +762,7 @@ def select(
         mode = "full"
     for rep in sel.reports:
         rep.regions = sorted(set(rep.regions), key=rep.regions.index)
+    whole = sorted(f for f in sel.whole_test_files if os.path.isfile(os.path.join(root, f)))
     return Selection(
         mode,
         baseline_summary(base, baseline_path),
@@ -759,4 +776,5 @@ def select(
         warnings,
         config.granularity,
         time.time() - t0,
+        whole,
     )

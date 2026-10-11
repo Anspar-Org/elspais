@@ -84,7 +84,7 @@ def pytest_command(sel: Selection, root: str, out_dir: str, extra: list[str]) ->
     if sel.granularity == "test":
         spec = os.path.join(out_dir, "selection.json")
         with open(spec, "w", encoding="utf-8") as fh:
-            json.dump({"nodeids": sorted(sel.tests), "new_files": sel.new_test_files}, fh)
+            json.dump({"nodeids": sorted(sel.tests), "new_files": sel.whole_test_files}, fh)
         base += ["-p", "tools.tia.pytest_select"]
     # xdist only pays off once there is enough work to spread; with loadfile a
     # file is the unit of distribution.

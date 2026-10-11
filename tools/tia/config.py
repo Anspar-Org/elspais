@@ -48,6 +48,13 @@ def glob_to_regex(pattern: str) -> re.Pattern:
         elif c == "?":
             out.append("[^/]")
             i += 1
+        elif c == "[" and pattern.find("]", i + 2) != -1:
+            j = pattern.find("]", i + 2)
+            body = pattern[i + 1 : j]
+            if body.startswith("!"):
+                body = "^" + body[1:]
+            out.append("[" + body.replace("\\", "\\\\") + "]")
+            i = j + 1
         else:
             out.append(re.escape(c))
             i += 1
