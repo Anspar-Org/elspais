@@ -90,7 +90,10 @@ def git_identity(root: str) -> dict:
         ident["tree"] = _git(root, "write-tree").strip()
         changed = _git(root, "diff", "--name-only", "--no-renames", "-z").split("\0")
         untracked = _git(root, "ls-files", "--others", "--exclude-standard", "-z").split("\0")
-        for rel in sorted({p for p in changed + untracked if p}):
+        # An embedded repository (a nested clone, an agent's git worktree) is
+        # listed as one "dir/" entry that git never descends into: it is not
+        # part of this tree, so it is not part of what the run tested.
+        for rel in sorted({p for p in changed + untracked if p and not p.endswith("/")}):
             full = os.path.join(root, rel)
             if os.path.isfile(full):
                 ident["dirty"][rel] = _git(

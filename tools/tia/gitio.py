@@ -106,7 +106,10 @@ def changed_files(base: BaselineTree) -> list[FileChange]:
     root = base.root
     tracked = git(root, "diff", "--name-only", "--no-renames", "-z", base.tree, "--").split("\0")
     untracked = git(root, "ls-files", "--others", "--exclude-standard", "-z").split("\0")
-    candidates = sorted({p for p in tracked + untracked + list(base.dirty) if p})
+    # "dir/" entries are embedded repositories, not files of this tree.
+    candidates = sorted(
+        {p for p in tracked + untracked + list(base.dirty) if p and not p.endswith("/")}
+    )
     current = hash_worktree_files(root, candidates)
     changes = []
     for path in candidates:
