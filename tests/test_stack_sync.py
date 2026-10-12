@@ -24,6 +24,7 @@ from tools.stack.sync import (
     PullRequest,
     Retarget,
     Update,
+    main,
     plan_merged,
     plan_pushed,
 )
@@ -410,6 +411,102 @@ class TestMergedUnchangedStack:
         assert forge.is_ancestor("refs/heads/main", new_head)
         assert not any("left as is" in ln for ln in ex.log)
         assert any(ln.startswith("update #2 ") for ln in ex.log)
+
+
+def _main_merged(forge: Forge, monkeypatch, a_head: str) -> int:
+    """Run the tool end to end for the squash merge of #1 (a -> main)."""
+    monkeypatch.chdir(forge.checkout_for_sync())
+    return main(
+        [
+            "--repo",
+            "owner/repo",
+            "merged",
+            "--pr",
+            "1",
+            "--base",
+            "main",
+            "--head",
+            "a",
+            "--head-sha",
+            a_head,
+        ]
+    )
+
+
+class TestRetargetedByGitHub:
+    """A repository that deletes merged branches has GitHub retarget the pull
+    requests stacked on a merged one to its base before stack sync lists them;
+    they are still planned as stacked on the merged branch."""
+
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_retargeted_conflicting_pr_is_still_updated(
+        self, forge, squashed_stack, monkeypatch, capsys
+    ):
+        forge.open_prs(PullRequest(2, "main", "b", "[TOOL-2] B"))
+
+        status = _main_merged(forge, monkeypatch, squashed_stack["a_head"])
+
+        assert status == 0
+        out = capsys.readouterr().out
+        assert "no pull request is stacked" not in out
+        new_head = forge.origin_sha("b")
+        assert new_head != squashed_stack["b_head"]
+        assert forge.is_ancestor(squashed_stack["b_head"], new_head)
+        assert forge.is_ancestor(squashed_stack["other"], new_head)
+        assert forge.origin_show("b", "f.txt") == "line1\na-line edited"
+        diff = _git("diff", "--name-only", "refs/heads/main", "refs/heads/b", cwd=forge.origin)
+        assert diff == "f.txt"
+        patch = _git("diff", "refs/heads/main", "refs/heads/b", cwd=forge.origin)
+        changed = [
+            ln for ln in patch.splitlines() if ln[:1] in "+-" and not ln.startswith(("+++", "---"))
+        ]
+        assert changed == ["-a-line", "+a-line edited"]
+        assert forge.comments(2) == []
+
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_retargeted_clean_pr_is_left_as_is(self, forge, monkeypatch, capsys):
+        forge.checkout("a", "main")
+        forge.commit("f.txt", "line1\na-line\n", "[TOOL-1] add a-line")
+        a_head = forge.commit("a.txt", "a\n", "[TOOL-1] add a.txt")
+        forge.checkout("b", "a")
+        b_head = forge.commit("b.txt", "b\n", "[TOOL-2] add b.txt")
+        _squash_merge_a(forge, a_head, "b")
+        forge.open_prs(PullRequest(2, "main", "b", "[TOOL-2] B"))
+
+        status = _main_merged(forge, monkeypatch, a_head)
+
+        assert status == 0
+        assert forge.origin_sha("b") == b_head
+        out = capsys.readouterr().out
+        assert "no pull request is stacked" not in out
+        (kept,) = [ln for ln in out.splitlines() if ln.startswith("#2 ")]
+        assert "left as is, so its CI result still applies" in kept
+        assert not any(ln.startswith("update #") for ln in out.splitlines())
+
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_unrelated_pr_on_the_base_is_not_planned(
+        self, forge, squashed_stack, monkeypatch, capsys
+    ):
+        forge.checkout("z", "main")
+        forge.commit("z.txt", "z\n", "[TOOL-5] add z.txt")
+        forge.push("z")
+        z_before = forge.origin_sha("z")
+        forge.open_prs(
+            PullRequest(2, "main", "b", "[TOOL-2] B"),
+            PullRequest(5, "main", "z", "[TOOL-5] Z"),
+        )
+        assert not forge.is_ancestor(squashed_stack["a_head"], "refs/heads/z")
+
+        status = _main_merged(forge, monkeypatch, squashed_stack["a_head"])
+
+        assert status == 0
+        assert forge.origin_sha("z") == z_before
+        calls = forge.gh_calls()
+        assert not any(c[:3] == ["pr", "edit", "5"] for c in calls)
+        assert ["pr", "edit", "2", "--repo", "owner/repo", "--base", "main"] in calls
+        out = capsys.readouterr().out
+        assert "#5" not in out
+        assert any(ln.startswith("update #2 ") for ln in out.splitlines())
 
 
 class TestPushCascade:

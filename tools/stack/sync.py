@@ -179,6 +179,40 @@ class Executor:
             for p in json.loads(out)
         ]
 
+    def retargeted_by_github(
+        self, merged: PullRequest, merged_head_sha: str, open_prs: list[PullRequest]
+    ) -> list[PullRequest]:
+        """The open pull requests GitHub itself already moved off the merged
+        branch. When a repository deletes merged branches, GitHub retargets the
+        pull requests based on one to its base before this run lists them, so
+        they no longer name the merged branch. One that targets the merged pull
+        request's base and holds its last commit was stacked on it; each is
+        returned based on the merged branch again, so it is planned as a pull
+        request stacked there."""
+        self._run(
+            "git", "fetch", "--quiet", "origin", f"refs/pull/{merged.number}/head", check=False
+        )
+        known = subprocess.run(
+            ["git", "cat-file", "-e", f"{merged_head_sha}^{{commit}}"], capture_output=True
+        )
+        if known.returncode != 0:
+            self.say(
+                f"cannot read #{merged.number}'s last commit {merged_head_sha[:12]}; pull requests"
+                f" GitHub already retargeted to {merged.base} are not checked"
+            )
+            return []
+        found = []
+        for p in open_prs:
+            if p.base != merged.base or p.cross_repository or p.head == merged.head:
+                continue
+            holds = subprocess.run(
+                ["git", "merge-base", "--is-ancestor", merged_head_sha, f"origin/{p.head}"],
+                capture_output=True,
+            )
+            if holds.returncode == 0:
+                found.append(PullRequest(p.number, merged.head, p.head, p.title))
+        return found
+
     def run(self, plan: Plan) -> int:
         for line in plan.skipped:
             self.say(f"skip {line}")
@@ -386,7 +420,10 @@ def main(argv: list[str] | None = None) -> int:
     ex = Executor(args.repo, dry_run=args.dry_run)
     prs = ex.open_prs()
     if args.event == "merged":
-        plan = plan_merged(PullRequest(args.pr, args.base, args.head), args.head_sha, prs)
+        merged = PullRequest(args.pr, args.base, args.head)
+        moved = {p.number: p for p in ex.retargeted_by_github(merged, args.head_sha, prs)}
+        prs = [moved.get(p.number, p) for p in prs]
+        plan = plan_merged(merged, args.head_sha, prs)
     else:
         plan = plan_pushed(args.branch, prs)
     if not plan.retargets and not plan.updates and not plan.skipped:
