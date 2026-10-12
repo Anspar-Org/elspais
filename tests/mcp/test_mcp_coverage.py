@@ -760,7 +760,10 @@ class TestStrictFootingMcpGaps:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# A project summary reads the committed tree's requirement locations, a whole
+# build of this repository; every test here reads the same tree.
 # Verifies: REQ-d00258-A, REQ-d00258-C, REQ-d00069-L, REQ-d00069-N
+@pytest.mark.usefixtures("shared_committed_req_locations")
 class TestProjectSummaryPublishesTheMeasures:
     """The MCP project summary answers the coverage question the CLI answers."""
 

@@ -527,3 +527,131 @@ def mutable_graph(canonical_federated_graph, canonical_graph):
     if drained_direct:
         # Direct undos bypass the federation; resync the ownership map.
         fg._rebuild_ownership()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sharing a build between tests that only read it
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _graph_state(graph) -> dict:
+    """A snapshot of everything a test could change about a built graph.
+
+    Pending work on the graph (and, for a federation, on every member), the
+    node count, and every node's id and version -- ``node_version`` moves
+    whenever a node's rendered text would.
+    """
+    from elspais.graph.render import node_version
+
+    pending = [len(graph.mutation_log)]
+    if hasattr(graph, "iter_repos"):
+        pending += [len(entry.graph.mutation_log) for entry in graph.iter_repos()]
+    return {
+        "pending": tuple(pending),
+        "nodes": graph.node_count(),
+        "versions": {node.id: node_version(node) for node in graph.all_nodes()},
+    }
+
+
+def _assert_graph_unchanged(graph, before: dict, label: str) -> None:
+    """Fail when a shared graph no longer matches the snapshot taken of it."""
+    after = _graph_state(graph)
+    if after == before:
+        return
+    moved = sorted(
+        node_id
+        for node_id in set(before["versions"]) | set(after["versions"])
+        if before["versions"].get(node_id) != after["versions"].get(node_id)
+    )
+    raise AssertionError(
+        f"the shared graph {label!r} was changed by a test that was handed it to read: "
+        f"pending {before['pending']} -> {after['pending']}, "
+        f"nodes {before['nodes']} -> {after['nodes']}, "
+        f"{len(moved)} node(s) changed, appeared or vanished, e.g. {moved[:5]}"
+    )
+
+
+@pytest.fixture(scope="session")
+def read_only_graph():
+    """Guard a graph that several tests share on the understanding they only read it.
+
+    Returns a context manager: a module- or class-scoped fixture builds its
+    graph once and yields it inside ``with read_only_graph(graph, "name"):``.
+    The snapshot is taken on entry and compared on exit, so a test that
+    mutates the shared graph fails the fixture's teardown rather than leaking
+    its change into every test after it.
+    """
+    from contextlib import contextmanager
+
+    @contextmanager
+    def guard(graph, label: str):
+        before = _graph_state(graph)
+        yield graph
+        _assert_graph_unchanged(graph, before, label)
+
+    return guard
+
+
+_COMMITTED_REQ_LOCATIONS: dict[tuple[str, str], dict[str, str]] = {}
+
+
+def _clean_checkout_key(path: Path) -> tuple[str, str] | None:
+    """Identify a checkout by its committed content, or None when it holds other content.
+
+    A checkout whose status is empty -- nothing modified, nothing untracked,
+    nothing ignored -- holds exactly the tree its HEAD names, so that tree's
+    id plus the directory's place inside it determines every file a build
+    there reads. Anything else (a working checkout, a scratch repository) is
+    not identified, and so never shared.
+    """
+    import subprocess
+
+    # A hook's GIT_DIR / GIT_INDEX_FILE would point git at another repository.
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+    def git(*args: str) -> str | None:
+        result = subprocess.run(
+            ["git", "-C", str(path), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=env,
+        )
+        return result.stdout if result.returncode == 0 else None
+
+    status = git("status", "--porcelain", "--ignored", "--untracked-files=all")
+    if status is None or status.strip():
+        return None
+    tree = git("rev-parse", "HEAD^{tree}")
+    prefix = git("rev-parse", "--show-prefix")
+    if not tree or prefix is None:
+        return None
+    return tree.strip(), prefix.strip()
+
+
+@pytest.fixture
+def shared_committed_req_locations(monkeypatch):
+    """Read a committed tree's requirement locations once per session.
+
+    ``get_git_changes()`` builds a graph of the committed tree in a fresh
+    worktree to detect moved requirements, so every test that generates a
+    page or a project summary from a graph rooted inside this repository
+    builds this whole repository's HEAD again. That answer is a function of
+    the committed tree alone, so it is read once per tree, and every caller
+    is handed its own copy of it, so no test can change what the next one
+    reads. Only a clean checkout is identified; any other directory is read
+    exactly as before.
+    """
+    from elspais.utilities import git as git_utils
+
+    real = git_utils.get_req_locations_from_graph
+
+    def shared(repo_root, *args, **kwargs):
+        key = None if (args or kwargs) else _clean_checkout_key(Path(repo_root))
+        if key is None:
+            return real(repo_root, *args, **kwargs)
+        if key not in _COMMITTED_REQ_LOCATIONS:
+            _COMMITTED_REQ_LOCATIONS[key] = real(repo_root)
+        return dict(_COMMITTED_REQ_LOCATIONS[key])
+
+    monkeypatch.setattr(git_utils, "get_req_locations_from_graph", shared)

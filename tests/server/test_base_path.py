@@ -20,6 +20,10 @@ from elspais.server.state import AppState
 
 PREFIX = "/w/abc"
 
+# Serving the page reads the committed tree's requirement locations, a whole
+# build of this repository; every test here reads the same tree.
+pytestmark = pytest.mark.usefixtures("shared_committed_req_locations")
+
 # Every place a browser is told to request a URL from: a raw fetch, a
 # script or stylesheet source, a link, or an event stream. The route
 # literals handed to apiFetch stay root-relative by design — the adapter
