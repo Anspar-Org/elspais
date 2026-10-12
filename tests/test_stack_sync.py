@@ -140,6 +140,14 @@ state = os.environ["FAKE_GH_STATE"]
 args = sys.argv[1:]
 with open(os.path.join(state, "calls.jsonl"), "a") as f:
     f.write(json.dumps(args) + "\\n")
+failures_path = os.path.join(state, "failures.json")
+failures = json.load(open(failures_path)) if os.path.exists(failures_path) else {{}}
+pending = failures.get(" ".join(args[:2]))
+if pending and pending["count"] > 0:
+    pending["count"] -= 1
+    json.dump(failures, open(failures_path, "w"))
+    sys.stderr.write(pending["stderr"] + "\\n")
+    sys.exit(1)
 comments_path = os.path.join(state, "comments.json")
 comments = json.load(open(comments_path)) if os.path.exists(comments_path) else {{}}
 if args[:2] == ["pr", "list"]:
@@ -223,6 +231,17 @@ class Forge:
         ]
         (self.state / "prs.json").write_text(json.dumps(data))
         return list(prs)
+
+    def fail_next(self, subcommand: str, count: int, stderr: str) -> None:
+        """Have the next ``count`` calls of ``gh <subcommand>`` (e.g. ``pr list``)
+        fail, writing ``stderr`` and exiting 1."""
+        path = self.state / "failures.json"
+        failures = json.loads(path.read_text()) if path.exists() else {}
+        failures[subcommand] = {"count": count, "stderr": stderr}
+        path.write_text(json.dumps(failures))
+
+    def calls_of(self, subcommand: str) -> list[list[str]]:
+        return [c for c in self.gh_calls() if " ".join(c[:2]) == subcommand]
 
     def comments(self, number: int) -> list[str]:
         path = self.state / "comments.json"
@@ -590,6 +609,81 @@ class TestConflict:
         assert status == 1
         assert len(forge.comments(2)) == 1
         assert {br: forge.origin_sha(br) for br in "abc"} == before
+
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_conflict_comment_is_not_retried_on_server_error(
+        self, forge, conflicting, monkeypatch
+    ):
+        slept: list[float] = []
+        monkeypatch.setattr("tools.stack.sync.time.sleep", slept.append)
+        forge.fail_next("pr comment", 1, BAD_GATEWAY)
+
+        with pytest.raises(RuntimeError, match="HTTP 502"):
+            _sync(forge, monkeypatch, conflicting)
+
+        assert len(forge.calls_of("pr comment")) == 1
+        assert slept == []
+        assert forge.comments(2) == []
+
+
+BAD_GATEWAY = "HTTP 502: 502 Bad Gateway (https://api.github.com/graphql)"
+
+
+class TestGitHubServerErrorRetry:
+    """A call that is safe to repeat is retried when GitHub answers with a
+    server error (HTTP 5xx); anything else fails at once."""
+
+    @pytest.fixture
+    def executor(self, forge, monkeypatch):
+        forge.open_prs(PullRequest(2, "a", "b", "[TOOL-2] B"), PullRequest(3, "b", "c"))
+        slept: list[float] = []
+        monkeypatch.setattr("tools.stack.sync.time.sleep", slept.append)
+        ex = Executor("owner/repo")
+        ex.slept = slept
+        return ex
+
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_pr_list_succeeds_after_transient_server_errors(self, forge, executor):
+        forge.fail_next("pr list", 2, BAD_GATEWAY)
+
+        prs = executor.open_prs()
+
+        assert [(p.number, p.base, p.head) for p in prs] == [(2, "a", "b"), (3, "b", "c")]
+        assert len(forge.calls_of("pr list")) == 3
+        assert executor.slept == [2.0, 8.0]
+        retries = [ln for ln in executor.log if "GitHub server error; retrying in" in ln]
+        assert len(retries) == 2 and all("502 Bad Gateway" in ln for ln in retries)
+
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_pr_list_fails_once_retries_are_exhausted(self, forge, executor):
+        forge.fail_next(
+            "pr list", 10, "HTTP 504: 504 Gateway Timeout (https://api.github.com/graphql)"
+        )
+
+        with pytest.raises(RuntimeError, match="HTTP 504"):
+            executor.open_prs()
+
+        assert len(forge.calls_of("pr list")) == 4
+        assert executor.slept == [2.0, 8.0, 30.0]
+
+    # Verifies: REQ-o00066-L
+    @pytest.mark.parametrize(
+        "stderr",
+        [
+            "HTTP 404: Not Found (https://api.github.com/graphql)",
+            "could not resolve to a Repository with the name 'owner/repo'",
+        ],
+    )
+    def test_REQ_o00066_L_failure_other_than_server_error_is_not_retried(
+        self, forge, executor, stderr
+    ):
+        forge.fail_next("pr list", 1, stderr)
+
+        with pytest.raises(RuntimeError, match="failed"):
+            executor.open_prs()
+
+        assert len(forge.calls_of("pr list")) == 1
+        assert executor.slept == []
 
 
 class TestRefusedPush:

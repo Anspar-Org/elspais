@@ -42,10 +42,12 @@ import json
 import re
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 
 TICKET = re.compile(r"\[[A-Z]{2,10}-[0-9]+\]")
 CONFLICT_MARKER = "<!-- stack-sync:conflict:{base}:{head} -->"
+GITHUB_SERVER_ERROR = re.compile(r"\bHTTP 5[0-9][0-9]\b")
 
 
 @dataclass(frozen=True)
@@ -147,9 +149,24 @@ class Executor:
         self.dry_run = dry_run
         self.log: list[str] = []
         self.updated: set[str] = set()  # branches this run moved locally
+        # Waits between attempts of a call that may be repeated, when GitHub
+        # answers with a server error (it does, now and then, for a moment).
+        self.retry_delays: tuple[float, ...] = (2.0, 8.0, 30.0)
 
-    def _run(self, *cmd: str, check: bool = True, input: str | None = None) -> str:
-        proc = subprocess.run(cmd, capture_output=True, text=True, input=input)
+    def _run(
+        self, *cmd: str, check: bool = True, input: str | None = None, retry: bool = False
+    ) -> str:
+        """Run a command. With ``retry``, a call GitHub fails with a server
+        error is repeated after each of ``retry_delays``; only calls that are
+        safe to repeat (reads, and setting a pull request's base) pass it."""
+        delays = list(self.retry_delays) if retry else []
+        while True:
+            proc = subprocess.run(cmd, capture_output=True, text=True, input=input)
+            if proc.returncode == 0 or not delays or not GITHUB_SERVER_ERROR.search(proc.stderr):
+                break
+            wait = delays.pop(0)
+            self.say(f"  GitHub server error; retrying in {wait:g}s: {proc.stderr.strip()}")
+            time.sleep(wait)
         if check and proc.returncode != 0:
             raise RuntimeError(f"{' '.join(cmd)} failed: {proc.stderr.strip()}")
         return proc.stdout
@@ -171,6 +188,7 @@ class Executor:
             "500",
             "--json",
             "number,baseRefName,headRefName,title,isCrossRepository",
+            retry=True,
         )
         return [
             PullRequest(
@@ -220,7 +238,15 @@ class Executor:
             self.say(f"retarget #{r.pr.number}: {r.pr.base} -> {r.new_base}")
             if not self.dry_run:
                 self._run(
-                    "gh", "pr", "edit", str(r.pr.number), "--repo", self.repo, "--base", r.new_base
+                    "gh",
+                    "pr",
+                    "edit",
+                    str(r.pr.number),
+                    "--repo",
+                    self.repo,
+                    "--base",
+                    r.new_base,
+                    retry=True,
                 )
         if not self.dry_run:
             self._run("git", "fetch", "--quiet", "origin")
@@ -367,6 +393,7 @@ class Executor:
             "comments",
             "--jq",
             ".comments[].body",
+            retry=True,
         )
         if marker in existing:
             return  # reported once
