@@ -33,6 +33,7 @@ from elspais.graph.parsers.patterns import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from elspais.graph.parsers.prescan import PythonSyntax
     from elspais.utilities.patterns import IdResolver
 
 # Directory containing .lark grammar files
@@ -297,7 +298,9 @@ class FileDispatcher:
 
     # Implements: REQ-d00269-E
     @staticmethod
-    def _quoted_line_numbers(content: str, file_path: str) -> set[int]:
+    def _quoted_line_numbers(
+        content: str, file_path: str, syntax: PythonSyntax | None = None
+    ) -> set[int]:
         """Line numbers a *Traceability* keyword must not bind on (REQ-d00269-E).
 
         Markdown fences are recognised in every source; a Python string
@@ -305,12 +308,14 @@ class FileDispatcher:
         has a parser here to ask. Other languages keep fence-only
         behaviour -- guessing at string literals with a regex would be
         exactly the shape-based reasoning this design refuses elsewhere.
+        *syntax* is *content* already read by ``read_python``, where the
+        dispatch holds it.
         """
         quoted = FileDispatcher._fenced_line_numbers(content)
         if file_path.endswith(".py"):
             from elspais.graph.parsers.prescan import ast_string_literal_lines
 
-            quoted |= ast_string_literal_lines(content)
+            quoted |= ast_string_literal_lines(content, syntax)
         return quoted
 
     # Implements: REQ-d00247-A
@@ -342,17 +347,22 @@ class FileDispatcher:
     ) -> list:
         """Parse a code file and return ParsedContent list."""
         from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
+        from elspais.graph.parsers.prescan import build_line_context, detect_language, read_python
 
         if not content.endswith("\n"):
             content += "\n"
 
+        # Implements: REQ-d00254-D, REQ-d00269-E
+        # The content is parsed ONCE: the line context and the quoted lines are
+        # both read from this one reading, wherever either asks the parser.
+        language = detect_language(file_path)
+        reads_context = line_context is None and language == "python"
+        syntax = read_python(content) if reads_context or file_path.endswith(".py") else None
+
         # Build line context if not provided
         if line_context is None:
-            from elspais.graph.parsers.prescan import build_line_context, detect_language
-
-            language = detect_language(file_path)
             lines = [(i + 1, line) for i, line in enumerate(content.split("\n"))]
-            line_context = build_line_context(lines, language)
+            line_context = build_line_context(lines, language, syntax)
 
         parser = self._get_ref_parser(file_path)
         tree = parser.parse(content)
@@ -362,7 +372,7 @@ class FileDispatcher:
             line_context,
             source_id=file_path,
             reader=self._reader,
-            quoted_lines=self._quoted_line_numbers(content, file_path),
+            quoted_lines=self._quoted_line_numbers(content, file_path, syntax),
             comment_markers=comment_markers_for_path(file_path),
             line_count=content.count("\n"),
         )
@@ -384,6 +394,7 @@ class FileDispatcher:
             dart_prescan,
             dart_test_names,
             external_prescan,
+            read_python,
             reads_test_names,
             text_prescan,
         )
@@ -396,6 +407,10 @@ class FileDispatcher:
         # Pre-scan for function/class context
         is_python = file_path.endswith(".py")
         is_dart = file_path.endswith(".dart")
+        # Implements: REQ-d00254-K, REQ-d00269-E
+        # The content is parsed ONCE: the tests it holds and the quoted lines
+        # are both read from this one reading.
+        syntax = read_python(content) if is_python else None
 
         # Implements: REQ-d00284-E+G+H
         # The name each test is known by, where the scan can read one. Only a
@@ -408,7 +423,7 @@ class FileDispatcher:
         elif is_python:
             source = "\n".join(text for _, text in lines)
             try:
-                line_context, all_test_funcs = ast_prescan(source, lines)
+                line_context, all_test_funcs = ast_prescan(source, lines, syntax)
             except SyntaxError:
                 line_context, all_test_funcs = text_prescan(lines)
         elif is_dart:
@@ -427,7 +442,7 @@ class FileDispatcher:
             test_names=test_names,
             source_id=file_path,
             reader=self._reader,
-            quoted_lines=self._quoted_line_numbers(content, file_path),
+            quoted_lines=self._quoted_line_numbers(content, file_path, syntax),
             comment_markers=comment_markers_for_path(file_path),
             line_count=content.count("\n"),
         )
