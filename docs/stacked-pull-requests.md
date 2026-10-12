@@ -27,65 +27,59 @@ pull requests are supported) and M (the merge queue).
   nothing to read in the queue, so they pass there as not applicable. They
   already ran on the pull request.
 
-## What stack sync does
+## When the pull request below merges
 
-`.github/workflows/stack-sync.yml` runs `tools/stack/sync.py`:
+The repository deletes a branch when its pull request merges, and GitHub then
+retargets each pull request based on that branch to the branch it merged into.
+Nothing more is usually needed.
 
-| Event | Repair |
-| --- | --- |
-| A pull request merges | Each open pull request based on its branch is **retargeted** to the branch it merged into. If it already holds the merged pull request's last commit and merges cleanly, that is all: its CI result still applies, and it can be merged straight away. Otherwise it is **brought up to date** with that branch, and everything stacked above it after it. |
-| A branch gains commits (a review fix on #A) | Each open pull request based on that branch, and each one stacked above those, **merges the branch below it**, from the bottom up. |
+**Usually: merge it as it is.** CI on a stacked pull request tests it combined
+with the one below. When the one below is squash-merged, `main` ends up with
+that pull request's final content, so merging the upper pull request gives
+exactly the content its CI already tested. Retargeting re-runs only the title
+check, not the tests. The pull request's diff on GitHub then also shows the
+merged pull request's changes, because git no longer sees them as merged; that
+is only how the diff is drawn.
 
-Repairs only ever **add merge commits**. History anyone has reviewed is never
-rewritten, and a contributor's checkout of their branch stays valid.
+That holds when the upper branch already contains the lower pull request's
+last commit. If the lower branch gained a commit the upper one never merged,
+bring it up to date as below so CI tests the combination.
 
-**Why a merged pull request usually needs nothing more.** CI on a stacked pull
-request tests it combined with the one below. When the one below is
-squash-merged, the base ends up with that pull request's final content, so
-merging the upper pull request gives exactly the content its CI already tested.
-Retargeting re-runs only the title check, not the tests. The pull request's diff
-on GitHub then also shows the merged pull request's changes, because git no
-longer sees them as merged; that is only how the diff is drawn.
-
-**Squash merges.** This repository squash-merges. A squash commit is unrelated
-to the commits it replaced, so a plain `git merge main` into the pull request
-above meets the merged work twice. It conflicts with itself wherever the upper
-pull request edited lines the lower one introduced. So when the upper pull
-request does need bringing up to date, before bringing `main` in,
-stack sync records the merged pull request's last commit as already merged:
-`git merge -s ours` on a temporary branch from `main`. The real merge then sees
-only what `main` gained beyond it, and the upper pull request's diff shows only
-its own changes again.
-
-**Conflicts.** If a merge genuinely conflicts, stack sync aborts it. It leaves
-that branch and every branch stacked above it untouched, and comments once on
-the pull request with the conflicting files and the commands to resolve it.
-After you push the resolution, stack sync carries it up the rest of the stack.
-
-Pull requests from forks are never changed.
-
-To see what stack sync would do without changing anything:
+**Sometimes: a conflict after a squash merge.** A squash commit is unrelated to
+the commits it replaced, so git meets the merged work twice. It reports a
+conflict wherever the upper pull request edited lines the lower one introduced,
+even though nothing really conflicts. Record the merged pull request's last
+commit as already merged, then bring `main` in:
 
 ```bash
-GH_TOKEN=... python -m tools.stack.sync --repo Anspar-Org/elspais --dry-run pushed --branch my-branch
+git fetch origin main refs/pull/<lower-PR-number>/head
+git checkout -B stack-repair origin/main
+git merge -s ours --no-edit FETCH_HEAD      # the lower PR's last commit, as merged
+git checkout <upper-branch>
+git merge --no-ff stack-repair               # sees only what main gained beyond it
+git push
 ```
+
+The merge leaves the upper pull request's files as they were. It is a new
+commit, so CI runs again. Do the same, one level at a time, for any pull
+request stacked above it that then conflicts.
 
 ## Working with a stack
 
 1. **Open each pull request against the branch below it.** For example,
    `gh pr create --base <lower-branch>`. Give each one its own `[TEAM-NNN]`
    title; every title becomes a squash commit on `main`.
-2. **Fix review comments on the branch that owns the code**, and push. Stack sync
-   merges the fix into everything above it.
-3. **Merge from the bottom up**, through the merge queue if it is enabled. When
-   the bottom pull request merges, the next one is retargeted to `main`
-   automatically, and so on.
+2. **Fix review comments on the branch that owns the code**, and push. Then
+   merge that branch into each branch above it, bottom-up, and push each one,
+   so every pull request above is tested with the fix.
+3. **Merge from the bottom up**, through the merge queue if it is enabled.
 4. **To bring a whole stack up to date with `main`**, merge `main` into the
-   bottom branch and push. Stack sync carries it upward.
+   bottom branch, then each branch into the one above it, and push each.
 
-The pre-push hook refuses a branch that is behind `origin/main`. In a stack,
-update the bottom branch first (step 4). Then pull each upper branch after stack
-sync has updated it, before pushing to it.
+Only ever add merge commits to a branch in a stack. Never rebase or
+force-push one: a reviewer's or contributor's checkout of it would no longer
+be valid. The pre-push hook refuses a branch that is behind `origin/main`, so
+update the bottom branch first (step 4).
 
 ## Repository settings
 
@@ -95,19 +89,6 @@ These are set by a repository administrator, not by a pull request:
   protection), *Require merge queue*. Use the same required status checks as
   for pull requests. Every check in `ci.yml` and `pr-validation.yml` reports in
   the queue, so any of them can be required.
-- **`STACK_SYNC_TOKEN` secret (recommended)**: a fine-grained personal access
-  token or a GitHub App token with *Contents*, *Pull requests* and *Workflows*
-  read and write access on this repository.
-  - GitHub can also refuse a push made with the built-in `GITHUB_TOKEN` when
-    it changes files under `.github/workflows/`. In practice a merge whose
-    workflow changes already exist elsewhere in the repository has been
-    accepted. If a push is refused, the run fails, naming the branch and this
-    setting, and leaves that branch and the pull requests above it unchanged.
-  - A push made with the workflow's built-in `GITHUB_TOKEN` starts no other
-    workflow, so without this secret the pull requests stack sync updates are
-    not re-tested until their author's next push.
-  - With the secret, stack sync's merges trigger CI like anyone else's.
-- **Automatically delete head branches (optional)**: GitHub then retargets
-  dependent pull requests itself, before stack sync runs. Stack sync still
-  recognises them, by the merged pull request's last commit on their branches,
-  and repairs the ones that need it, so it does not depend on the setting.
+- **Automatically delete head branches**: on today. GitHub then retargets the
+  pull requests stacked on a merged one itself. With it off, retarget each by
+  hand (`gh pr edit <number> --base main`).
