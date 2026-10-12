@@ -122,6 +122,21 @@ def _try_daemon(
     """
     from elspais.commands._daemon_client import _get_daemon_record, _try_server
     from elspais.config import find_git_root
+    from elspais.graph.parsers import parse_cache
+
+    # Implements: REQ-d00331-E+F
+    # A serving process reads ELSPAIS_PARSE_CACHE from its own environment,
+    # so a client asking for another mode -- to verify a suspect graph, or
+    # to read every file afresh -- would get the server's cached graph
+    # instead, silently. Such a request is answered by a local build, which
+    # reads the mode this client set (and refuses one that names no mode).
+    # It never auto-starts a daemon, which would keep that mode for life.
+    try:
+        requested = parse_cache.mode()
+    except ValueError:
+        return None
+    if requested != parse_cache.MODE_ON:
+        return None
 
     repo_root = find_git_root()
     if repo_root is None:

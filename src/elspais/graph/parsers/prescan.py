@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import ast
 import re
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -1122,11 +1121,12 @@ def dart_prescan(
         spans.append((ln, end))
 
     if inaccurate:
-        print(
+        from elspais.graph.parsers.parse_cache import reading_warning
+
+        reading_warning(
             "Warning: dart_prescan could not balance a test() body before the "
             "next test or end-of-file; comment-inside-test span boundaries may "
-            "be inaccurate.",
-            file=sys.stderr,
+            "be inaccurate."
         )
 
     # 2) line_context: each line inside a span -> that test (innermost wins)

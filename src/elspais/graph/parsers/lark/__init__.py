@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 
 from lark import Lark
 
+from elspais.graph.parsers import parse_cache
 from elspais.graph.parsers.patterns import (
     METADATA_COMMENT_MARKERS,
     comment_markers_for_path,
@@ -241,6 +242,14 @@ class FileDispatcher:
         # dispatcher reads, so a single cached parser would serve one
         # language's grammar to every other language's files.
         self._ref_parsers: dict[tuple[str, ...], Lark] = {}
+        # Implements: REQ-d00331-B
+        # What every reading of this dispatcher depends on beyond its own
+        # arguments; None where that cannot be stated exactly, and then
+        # nothing this dispatcher reads is cached. A subclass may read
+        # something else, so only this class's readings are cached.
+        self._fingerprint = (
+            parse_cache.grammar_fingerprint(self._reader) if type(self) is FileDispatcher else None
+        )
 
     def _get_req_parser(self) -> Lark:
         if self._req_parser is None:
@@ -318,13 +327,28 @@ class FileDispatcher:
             quoted |= ast_string_literal_lines(content, syntax)
         return quoted
 
-    # Implements: REQ-d00247-A
+    # Implements: REQ-d00247-A, REQ-d00331-A
     def dispatch_spec(
         self,
         content: str,
         file_path: str = "",
     ) -> list:
-        """Parse a spec file (SPEC or JOURNEY type) and return ParsedContent list."""
+        """Parse a spec file (SPEC or JOURNEY type) and return ParsedContent list.
+
+        A spec reading never consults its path, so it is cached without one
+        and a copy of a file read at another path is answered from the cache.
+        """
+        return parse_cache.cached_reading(
+            "spec",
+            self._fingerprint,
+            content,
+            None,
+            None,
+            lambda: self._read_spec(content),
+            reported_path=file_path,
+        )
+
+    def _read_spec(self, content: str) -> list:
         from elspais.graph.parsers.lark.transformers.requirement import RequirementTransformer
 
         if not content.endswith("\n"):
@@ -339,6 +363,7 @@ class FileDispatcher:
         transformer = RequirementTransformer(self._resolver, self._reader)
         return transformer.transform(tree, source=original_content)
 
+    # Implements: REQ-d00331-A
     def dispatch_code(
         self,
         content: str,
@@ -346,6 +371,21 @@ class FileDispatcher:
         line_context: dict[int, tuple[str | None, str | None, int, int]] | None = None,
     ) -> list:
         """Parse a code file and return ParsedContent list."""
+        return parse_cache.cached_reading(
+            "code",
+            self._fingerprint,
+            content,
+            file_path,
+            line_context,
+            lambda: self._read_code(content, file_path, line_context),
+        )
+
+    def _read_code(
+        self,
+        content: str,
+        file_path: str,
+        line_context: dict[int, tuple[str | None, str | None, int, int]] | None,
+    ) -> list:
         from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
         from elspais.graph.parsers.prescan import build_line_context, detect_language, read_python
 
@@ -380,7 +420,7 @@ class FileDispatcher:
         results.extend(_fault_and_style_content(transformer))
         return results
 
-    # Implements: REQ-d00254-K
+    # Implements: REQ-d00254-K, REQ-d00331-A
     def dispatch_test(
         self,
         content: str,
@@ -388,6 +428,23 @@ class FileDispatcher:
         prescan_data: dict[str, list[dict]] | None = None,
     ) -> list:
         """Parse a test file and return ParsedContent list."""
+        # Only this file's own pre-scan entry is read, so only it is keyed.
+        entry = prescan_data[file_path] if prescan_data and file_path in prescan_data else None
+        return parse_cache.cached_reading(
+            "test",
+            self._fingerprint,
+            content,
+            file_path,
+            entry,
+            lambda: self._read_test(content, file_path, prescan_data),
+        )
+
+    def _read_test(
+        self,
+        content: str,
+        file_path: str,
+        prescan_data: dict[str, list[dict]] | None,
+    ) -> list:
         from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
         from elspais.graph.parsers.prescan import (
             ast_prescan,

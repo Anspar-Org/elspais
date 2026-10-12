@@ -20,7 +20,10 @@
 # captures per-test facts coverage cannot see, and once pytest finishes the
 # baseline is built into ELSPAIS_TIA_BASELINE (default .results/tia/baseline).
 # Recording never changes the tier's verdict: the exit code is pytest's, and a
-# baseline that cannot be built is reported and left absent.
+# baseline that cannot be built is reported and left absent. A recording run
+# turns the parse cache off (ELSPAIS_PARSE_CACHE=0, REQ-d00331-G): a reading
+# the cache answers runs none of the parser's code, so per-test coverage
+# would credit the parser only to the first test that read each file.
 
 _out="${1:-$ELSPAIS_TARGET_OUTPUT}"
 if [ -z "$_out" ]; then
@@ -41,6 +44,8 @@ if [ "${ELSPAIS_TIA_RECORD:-}" = "1" ]; then
     rm -rf "$_out/tia-shards"
     export TIA_RECORD_DIR="$_out/tia-shards"
     export PYTHONPATH="$_repo${PYTHONPATH:+:$PYTHONPATH}"
+    # Implements: REQ-d00331-G
+    export ELSPAIS_PARSE_CACHE=0
     _tia_args=(-p tools.tia.recorder)
 fi
 
