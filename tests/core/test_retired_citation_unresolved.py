@@ -102,8 +102,83 @@ def _associated_project(tmp_path: Path, name: str = "fed", *, retired: bool = Fa
     return base
 
 
+def _standard_pair(directory: Path) -> tuple[Path, Path]:
+    root = _standard_project(directory)
+    return root, root
+
+
+def _fed_pair(directory: Path) -> tuple[Path, Path]:
+    base = _associated_project(directory)
+    return base, base / "core"
+
+
+def _retired_fed_pair(directory: Path) -> tuple[Path, Path]:
+    base = _associated_project(directory, retired=True)
+    return base, base / "core"
+
+
 def _build(root: Path):
     return build_graph(repo_root=root, config_path=root / ".elspais.toml")
+
+
+def _graph_fingerprint(graph) -> tuple:
+    """What a mutation of *graph* would change: its log, every node's version, every edge."""
+    from elspais.graph.render import node_version
+
+    nodes = list(graph.all_nodes())
+    return (
+        len(graph.mutation_log),
+        sorted((node.id, node_version(node)) for node in nodes),
+        sorted(
+            (edge.source.id, edge.target.id, edge.kind.value, tuple(edge.assertion_targets))
+            for node in nodes
+            for edge in node.iter_outgoing_edges()
+        ),
+    )
+
+
+def _tree_snapshot(root: Path) -> dict[str, bytes]:
+    """Every file under *root*, outside ``.git``, keyed by relative path."""
+    return {
+        str(p.relative_to(root)): p.read_bytes()
+        for p in sorted(root.rglob("*"))
+        if p.is_file() and ".git" not in p.relative_to(root).parts
+    }
+
+
+class SharedBuilds:
+    """Graphs built once per module from identical inputs, for tests that only read.
+
+    ``get(key, make)`` calls ``make(directory)`` -> ``(base, root)`` the first
+    time *key* is asked for and builds *root*; later calls return the same
+    ``(base, root, graph)``. ``verify()`` fails if any shared graph, or the
+    tree it was built from, changed after it was built.
+    """
+
+    def __init__(self, directory: Path) -> None:
+        self._directory = directory
+        self._built: dict = {}
+
+    def get(self, key, make):
+        if key not in self._built:
+            base, root = make(self._directory / f"build{len(self._built)}")
+            graph = _build(root)
+            self._built[key] = (base, root, graph, _graph_fingerprint(graph), _tree_snapshot(base))
+        base, root, graph, _fingerprint, _tree = self._built[key]
+        return base, root, graph
+
+    def verify(self) -> None:
+        for key, (base, _root, graph, fingerprint, tree) in self._built.items():
+            assert _graph_fingerprint(graph) == fingerprint, f"shared graph {key!r} was mutated"
+            assert _tree_snapshot(base) == tree, f"tree of shared graph {key!r} was written"
+
+
+@pytest.fixture(scope="module")
+def shared_builds(tmp_path_factory):
+    """Read-only graphs shared by the tests of this module; mutating one fails teardown."""
+    builds = SharedBuilds(tmp_path_factory.mktemp("shared-builds"))
+    yield builds
+    builds.verify()
 
 
 def _retire(graph, assertion_id: str, how: str):
@@ -264,9 +339,11 @@ class TestBringingARetiredAssertionBack:
 
     @pytest.mark.parametrize("origin", ["text", "mutation"], ids=["built-retired", "retired-here"])
     # Verifies: REQ-p00017-H
-    def test_REQ_p00017_H_restored_text_binds_the_citations_as_a_build_does(self, tmp_path, origin):
-        pristine_root = _standard_project(tmp_path, "pristine")
-        pristine = _state(_build(pristine_root), pristine_root, CITED_REQ, CITING_REQ)
+    def test_REQ_p00017_H_restored_text_binds_the_citations_as_a_build_does(
+        self, tmp_path, origin, shared_builds
+    ):
+        _base, pristine_root, pristine_graph = shared_builds.get("standard", _standard_pair)
+        pristine = _state(pristine_graph, pristine_root, CITED_REQ, CITING_REQ)
         if origin == "text":
             root = _standard_project(tmp_path, "repo", retired=True)
             graph = _build(root)
@@ -313,7 +390,7 @@ class TestRetirementAcrossAFederation:
     @RETIREMENTS
     # Verifies: REQ-p00017-H
     def test_REQ_p00017_H_a_citation_in_another_member_is_reported_in_that_member(
-        self, tmp_path, how
+        self, tmp_path, how, shared_builds
     ):
         base = _associated_project(tmp_path)
         graph = _build(base / "core")
@@ -332,8 +409,8 @@ class TestRetirementAcrossAFederation:
             ("A",),
         ) not in _cited_by(graph, base, FED_CITED_REQ)
 
-        built_base = _associated_project(tmp_path, "built", retired=True)
-        built = _fed_state(_build(built_base / "core"), built_base)
+        built_base, _root, built_graph = shared_builds.get("associated-retired", _retired_fed_pair)
+        built = _fed_state(built_graph, built_base)
         assert _fed_state(graph, base) == built
 
     @RETIREMENTS
@@ -351,9 +428,11 @@ class TestRetirementAcrossAFederation:
         assert _member_faults(graph, ALPHA) == []
 
     # Verifies: REQ-p00017-H, REQ-o00062-G
-    def test_REQ_p00017_H_bringing_back_binds_the_other_members_citation(self, tmp_path):
-        pristine_base = _associated_project(tmp_path, "pristine")
-        pristine = _fed_state(_build(pristine_base / "core"), pristine_base)
+    def test_REQ_p00017_H_bringing_back_binds_the_other_members_citation(
+        self, tmp_path, shared_builds
+    ):
+        pristine_base, _root, pristine_graph = shared_builds.get("associated", _fed_pair)
+        pristine = _fed_state(pristine_graph, pristine_base)
         base = _associated_project(tmp_path, retired=True)
         graph = _build(base / "core")
         retired = _fed_state(graph, base)

@@ -1649,7 +1649,10 @@ class TestGetProjectSummary:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# A project summary reads the committed tree's requirement locations, a whole
+# build of this repository; every test here reads the same tree.
 # Verifies: REQ-d00258-C
+@pytest.mark.usefixtures("shared_committed_req_locations")
 class TestSummaryConsistency:
     """MCP project summary and CLI summary derive identical statistics."""
 

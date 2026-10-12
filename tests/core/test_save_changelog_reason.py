@@ -18,6 +18,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from elspais.graph import render
+from tests.core.test_retired_citation_unresolved import _graph_fingerprint, _tree_snapshot
 from tests.core.test_server_version_guard import (
     _DRAFT_REQ_METADATA,
     ASSERTION,
@@ -145,6 +146,73 @@ def mcp_tools(app_state, project: Path):
     return {name: tool.fn for name, tool in server._tool_manager._tools.items()}
 
 
+@pytest.fixture(scope="module")
+def _served_once(tmp_path_factory):
+    """One served copy of the project for the tests whose save is refused.
+
+    A refused save writes nothing, so those tests leave only pending changes
+    in the served graph; ``_served`` undoes them after each test. Teardown
+    fails if the graph, or the files it was built from, differ from how they
+    were built.
+    """
+    from elspais.server.app import create_app
+    from elspais.server.state import AppState
+
+    project = _copy_project(tmp_path_factory.mktemp("served-once"))
+    app_state = AppState.from_config(repo_root=project)
+    client = TestClient(create_app(state=app_state, mount_mcp=False))
+    try:
+        from elspais.mcp.server import create_server
+    except ImportError:  # the tools are asked for through ``mcp_tools``, which skips
+        tools = None
+    else:
+        server = create_server(app_state.graph, working_dir=project)
+        tools = {name: tool.fn for name, tool in server._tool_manager._tools.items()}
+    graph = app_state.graph
+    built = (_graph_fingerprint(graph), _tree_snapshot(project))
+
+    def assert_as_built() -> None:
+        assert app_state.graph is graph, "the served graph was replaced"
+        assert (_graph_fingerprint(graph), _tree_snapshot(project)) == built, (
+            "the shared served project differs from how it was built"
+        )
+
+    yield project, app_state, client, tools, assert_as_built
+    assert_as_built()
+
+
+@pytest.fixture
+def _served(_served_once):
+    """The shared served project; every change a test left pending is undone after it."""
+    project, app_state, client, tools, assert_as_built = _served_once
+    yield project, app_state, client, tools
+    graph = app_state.graph
+    while len(graph.mutation_log) > 0:
+        graph.undo_last()
+    assert_as_built()
+
+
+class _SharesOneServedProject:
+    """Tests that never write a file share one served project (see ``_served``)."""
+
+    @pytest.fixture
+    def project(self, _served) -> Path:
+        return _served[0]
+
+    @pytest.fixture
+    def app_state(self, _served):
+        return _served[1]
+
+    @pytest.fixture
+    def client(self, _served) -> TestClient:
+        return _served[2]
+
+    @pytest.fixture
+    def mcp_tools(self, _served):
+        pytest.importorskip("mcp")
+        return _served[3]
+
+
 def _version(app_state, node_id: str) -> str:
     node = app_state.graph.find_by_id(node_id)
     assert node is not None, f"fixture node {node_id!r} missing"
@@ -182,7 +250,7 @@ def _save(client, app_state, message=None):
 
 @pytest.mark.parametrize("message", [None, "", "   "], ids=["absent", "empty", "blank"])
 @pytest.mark.parametrize("change", [c for _, c in CHANGES], ids=CHANGE_IDS)
-class TestSaveWithoutAReasonIsRefused:
+class TestSaveWithoutAReasonIsRefused(_SharesOneServedProject):
     """Validates REQ-d00325-B, REQ-d00325-C:
 
     Every kind of change that reaches an Active requirement, including those
@@ -221,7 +289,7 @@ class TestSaveWithoutAReasonIsRefused:
         assert "message" in payload["error"], payload
 
 
-class TestRefusalNamesEveryRequirement:
+class TestRefusalNamesEveryRequirement(_SharesOneServedProject):
     """Validates REQ-d00325-C: with two Active requirements changed, both are named."""
 
     # Verifies: REQ-d00325-C
@@ -245,7 +313,7 @@ class TestRefusalNamesEveryRequirement:
 
 @pytest.mark.parametrize("message", [None, "   "], ids=["absent", "blank"])
 @pytest.mark.parametrize("change", [c for _, c in CHANGES], ids=CHANGE_IDS)
-class TestBothSurfacesRefuseAlike:
+class TestBothSurfacesRefuseAlike(_SharesOneServedProject):
     """Validates REQ-d00325-F: the viewer's save and the agent's save need a
     reason under the same conditions and report the same refusal."""
 

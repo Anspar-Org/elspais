@@ -280,7 +280,10 @@ def viewer_project(tmp_path: Path) -> Path:
     two of these routes write to disk, so a shared project would carry one
     test's leaked write into the next and blur why a test failed.
     """
-    project = tmp_path / "project"
+    return _copy_viewer_project(tmp_path / "project")
+
+
+def _copy_viewer_project(project: Path) -> Path:
     shutil.copytree(HHT_LIKE, project)
     spec = project / "spec" / "dev-impl.md"
     text = spec.read_text(encoding="utf-8")
@@ -295,6 +298,54 @@ def app_state(viewer_project: Path):
     from elspais.server.state import AppState
 
     return AppState.from_config(repo_root=viewer_project)
+
+
+# A project and a server built once for the tests that only send requests a
+# route must refuse. A refusal changes nothing, so they can share one; each
+# test still runs against a server no other test moved, because the guard
+# below fails the test after which anything -- the mutation log, a node, a
+# node's version, a byte on disk -- differs from what was built.
+
+
+@pytest.fixture(scope="module")
+def refusing_project(tmp_path_factory) -> Path:
+    return _copy_viewer_project(tmp_path_factory.mktemp("refusing") / "project")
+
+
+@pytest.fixture(scope="module")
+def refusing_state(refusing_project: Path):
+    from elspais.server.state import AppState
+
+    return AppState.from_config(repo_root=refusing_project)
+
+
+def _untouched_witness(state, project: Path) -> tuple:
+    """Everything a request that changed nothing must leave as it was."""
+    graph = state.graph
+    return (
+        len(graph.mutation_log),
+        tuple(sorted((node.id, render.node_version(node)) for node in graph.all_nodes())),
+        tuple(
+            (str(p.relative_to(project)), p.read_bytes())
+            for p in sorted(project.rglob("*"))
+            if p.is_file()
+        ),
+    )
+
+
+@pytest.fixture(scope="module")
+def refusing_witness(refusing_state, refusing_project: Path) -> tuple:
+    return _untouched_witness(refusing_state, refusing_project)
+
+
+@pytest.fixture
+def shared_refusing_state(refusing_state, refusing_project: Path, refusing_witness):
+    """The shared server, failing the test after which it is not as built."""
+    assert _untouched_witness(refusing_state, refusing_project) == refusing_witness
+    yield refusing_state
+    assert _untouched_witness(refusing_state, refusing_project) == refusing_witness, (
+        "a test sharing the refusing server changed it; it must build its own"
+    )
 
 
 @pytest.fixture
@@ -396,6 +447,14 @@ class TestHttpMutationRoutesRequireAVersion:
     token at all is refused on the same terms: an omitted precondition is a
     blind write, which is the failure being prevented.
     """
+
+    @pytest.fixture
+    def viewer_project(self, refusing_project: Path) -> Path:
+        return refusing_project
+
+    @pytest.fixture
+    def app_state(self, shared_refusing_state):
+        return shared_refusing_state
 
     # Verifies: REQ-o00062-I
     def test_REQ_o00062_I_stale_token_is_rejected_with_409(self, client, case: RouteCase):
@@ -525,6 +584,14 @@ class TestHttpConflictIsTheMcpConflict:
     same stale token is what makes a per-route reimplementation of the check
     detectable -- a hand-rolled body will not match ``_guard_version`` output.
     """
+
+    @pytest.fixture
+    def viewer_project(self, refusing_project: Path) -> Path:
+        return refusing_project
+
+    @pytest.fixture
+    def app_state(self, shared_refusing_state):
+        return shared_refusing_state
 
     # Verifies: REQ-o00062-O
     def test_REQ_o00062_O_conflict_body_is_identical_to_the_mcp_tool(

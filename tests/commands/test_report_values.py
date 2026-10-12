@@ -425,6 +425,36 @@ class TestAbsenceIsNotZero:
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(scope="class")
+def one_report_build(read_only_graph):
+    """Build the repository once for every composed report this class runs.
+
+    A composed report builds this repository whole; the reports here only
+    read that graph, so a build is made once per distinct set of arguments
+    and directory and handed to every report asking for it. Each graph is
+    guarded: a report that changed it fails this fixture's teardown.
+    """
+    import os
+    from contextlib import ExitStack
+
+    from elspais.graph import factory
+
+    real = factory.build_graph
+    built: dict[str, object] = {}
+
+    with ExitStack() as guards, pytest.MonkeyPatch.context() as patch:
+
+        def shared(*args, **kwargs):
+            key = repr((os.getcwd(), args, sorted(kwargs.items())))
+            if key not in built:
+                built[key] = guards.enter_context(read_only_graph(real(*args, **kwargs), key))
+            return built[key]
+
+        patch.setattr(factory, "build_graph", shared)
+        yield
+
+
+@pytest.mark.usefixtures("one_report_build")
 class TestARefusedReportProducesNothing:
     # Verifies: REQ-d00282-F
     def test_a_composed_report_writes_no_file_when_it_refuses(self, tmp_path, capsys):

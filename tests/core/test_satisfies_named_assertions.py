@@ -269,22 +269,33 @@ def _record_hashes(root: Path) -> None:
 STARTS = ("live", "retired-root-a", "draft-root", "draft-concrete")
 
 
+# (layout, start) -> directory -> its spec text once the hashes are recorded.
+# Recording them takes a build, and the text it leaves is a function of the
+# layout and the start alone, so each project is built for it only once.
+_HASHED_SPEC_TEXT: dict[tuple[str, str], dict[str, str]] = {}
+
+
 def _make(layout_name: str, start: str = "live"):
     assert start in STARTS
     layout = LAYOUTS[layout_name]
 
     def make(tmp_path: Path) -> tuple[Path, Path]:
         base = tmp_path / "work"
+        hashed = _HASHED_SPEC_TEXT.get((layout_name, start))
         for directory, namespace in layout.repos.items():
             repo = base / directory
             (repo / "spec").mkdir(parents=True)
             associates = {"library": "LIB"} if directory == "app" else {}
             (repo / ".elspais.toml").write_text(_config(namespace, associates), encoding="utf-8")
-            (repo / "spec" / "prd-spec.md").write_text(
-                _spec_text(layout, directory, start), encoding="utf-8"
-            )
+            spec_text = hashed[directory] if hashed else _spec_text(layout, directory, start)
+            (repo / "spec" / "prd-spec.md").write_text(spec_text, encoding="utf-8")
             subprocess.run(["git", "init", "-q", str(repo)], check=True)
-        _record_hashes(base / layout.root)
+        if hashed is None:
+            _record_hashes(base / layout.root)
+            _HASHED_SPEC_TEXT[(layout_name, start)] = {
+                directory: (base / directory / "spec" / "prd-spec.md").read_text(encoding="utf-8")
+                for directory in layout.repos
+            }
         return base, base / layout.root
 
     return make

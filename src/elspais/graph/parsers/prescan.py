@@ -13,6 +13,7 @@ from __future__ import annotations
 import ast
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 # A comment carrying a citation sits above the declaration it describes, and the
@@ -130,9 +131,123 @@ def the_walk_decides(_line_number: int) -> bool:
     return False
 
 
+@dataclass(frozen=True)
+class PythonSyntax:
+    """Everything the Python pre-scans read from a source's syntax tree.
+
+    A file dispatch asks the parser several questions about one source --
+    which declaration encloses each line, where each declaration begins, which
+    tests it holds, which lines are interior to a string literal -- and each
+    answer is read off the same tree.  ``read_python`` is the ONE place that
+    tree is made: it parses the source once and walks it once, collecting all
+    of them, and every pre-scan below takes its answer from the result instead
+    of parsing again.
+
+    ``error`` is the exception the parser raised, ``None`` where the source
+    parsed; every collection is empty where it did not.
+    """
+
+    error: SyntaxError | ValueError | None
+    # (lineno, end_lineno, name) for every class, in pre-order.
+    class_ranges: tuple[tuple[int, int, str], ...] = ()
+    # (lineno, end_lineno, name, enclosing class) for every function, in pre-order.
+    func_ranges: tuple[tuple[int, int, str, str | None], ...] = ()
+    # The first line of every function declaration, its first decorator's
+    # where it has decorators; ascending, without repeats.
+    declaration_starts: tuple[int, ...] = ()
+    # (start, end_lineno, name, Test* class) for every ``test_*`` function
+    # inside a ``Test*`` class -- once per such class enclosing it, outermost
+    # first -- and for every ``test_*`` function declared at module level
+    # (class None).  Unsorted.
+    test_funcs: tuple[tuple[int, int, str, str | None], ...] = ()
+    # Every line interior to a string literal (see ``ast_string_literal_lines``).
+    string_literal_lines: frozenset[int] = frozenset()
+
+    @property
+    def parsed(self) -> bool:
+        return self.error is None
+
+
+# Implements: REQ-d00254-D, REQ-d00254-K, REQ-d00269-E
+def read_python(source: str) -> PythonSyntax:
+    """Parse *source* once and walk its tree once, for every Python pre-scan.
+
+    The walk is a pre-order traversal in the order ``ast.iter_child_nodes``
+    yields children, which is the order the per-line context resolves
+    overlapping extents by (the innermost declaration is met last).  It is
+    iterative, so a deeply nested expression costs no recursion depth.
+    """
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError) as exc:
+        return PythonSyntax(error=exc)
+
+    class_ranges: list[tuple[int, int, str]] = []
+    func_ranges: list[tuple[int, int, str, str | None]] = []
+    starts: set[int] = set()
+    test_funcs: list[tuple[int, int, str, str | None]] = []
+    literal_lines: set[int] = set()
+
+    # (node, enclosing class name, enclosing Test* class names outermost first,
+    #  whether the node is a direct child of the module)
+    stack: list[tuple[ast.AST, str | None, tuple[str, ...], bool]] = [
+        (child, None, (), True) for child in reversed(list(ast.iter_child_nodes(tree)))
+    ]
+    while stack:
+        node, class_name, test_classes, top_level = stack.pop()
+        if isinstance(node, ast.ClassDef):
+            class_ranges.append((node.lineno, node.end_lineno or node.lineno, node.name))
+            class_name = node.name
+            if node.name.startswith("Test"):
+                test_classes = (*test_classes, node.name)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            end = node.end_lineno or node.lineno
+            func_ranges.append((node.lineno, end, node.name, class_name))
+            starts.add(min([d.lineno for d in node.decorator_list] + [node.lineno]))
+            if node.name.startswith("test_"):
+                # Implements: REQ-d00254-O
+                # pytest reports a decorated test at its first decorator.
+                start = node.decorator_list[0].lineno if node.decorator_list else node.lineno
+                for test_class in test_classes:
+                    test_funcs.append((start, end, node.name, test_class))
+                if top_level:
+                    test_funcs.append((start, end, node.name, None))
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            literal_lines.update(range(node.lineno + 1, (node.end_lineno or node.lineno) + 1))
+        # Every node is descended into, a declaration's body and a compound
+        # statement alike: a declaration written under an ``if``, a ``try``,
+        # a ``with`` or a loop is a declaration like any other, and a walk
+        # that stopped at anything not itself a class or a function would
+        # leave it with no extent, so a citation written above it would bind
+        # to whatever merely encloses both -- ``_run_server``'s two hundred
+        # lines for a six-line signal handler.  The class name threads through
+        # unchanged, so a function declared under an ``if`` inside a class
+        # still reports that class, and a nested declaration -- met after the
+        # one enclosing it -- is the narrower answer for its own lines.
+        stack.extend(
+            (child, class_name, test_classes, False)
+            for child in reversed(list(ast.iter_child_nodes(node)))
+        )
+
+    return PythonSyntax(
+        error=None,
+        class_ranges=tuple(class_ranges),
+        func_ranges=tuple(func_ranges),
+        declaration_starts=tuple(sorted(starts)),
+        test_funcs=tuple(test_funcs),
+        string_literal_lines=frozenset(literal_lines),
+    )
+
+
+def _python_syntax(syntax: PythonSyntax | None, lines: list[tuple[int, str]]) -> PythonSyntax:
+    """The caller's reading of the source, or one made from *lines*."""
+    return syntax if syntax is not None else read_python("\n".join(text for _, text in lines))
+
+
 # Implements: REQ-d00254-D
 def python_line_context(
     lines: list[tuple[int, str]],
+    syntax: PythonSyntax | None = None,
 ) -> dict[int, tuple[str | None, str | None, int, int]] | None:
     """Per-line function/class context for a Python file, read from the AST.
 
@@ -154,41 +269,11 @@ def python_line_context(
     Returns None when the source does not parse, so the caller keeps the
     indentation reading rather than losing context altogether.
     """
-    try:
-        tree = ast.parse("\n".join(text for _, text in lines))
-    except (SyntaxError, ValueError):
+    syntax = _python_syntax(syntax, lines)
+    if not syntax.parsed:
         return None
-
-    class_ranges: list[tuple[int, int, str]] = []
-    func_ranges: list[tuple[int, int, str, str | None]] = []
-
-    def _collect(node, class_name: str | None) -> None:
-        for child in ast.iter_child_nodes(node):
-            if isinstance(child, ast.ClassDef):
-                class_ranges.append((child.lineno, child.end_lineno or child.lineno, child.name))
-                _collect(child, child.name)
-            elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                func_ranges.append(
-                    (child.lineno, child.end_lineno or child.lineno, child.name, class_name)
-                )
-                # A nested declaration is the narrower answer for its own lines.
-                _collect(child, class_name)
-            else:
-                # A declaration written under an ``if``, a ``try``, a ``with``
-                # or a loop is a declaration like any other, and the walk
-                # descends through the compound statement to reach it.
-                # Stopping at anything that is not itself a class or a
-                # function would leave such a declaration with no extent, so
-                # a citation written above it would bind to whatever merely
-                # encloses both -- ``_run_server``'s two hundred lines for a
-                # six-line signal handler.  ``declaration_starts`` already
-                # reads these declarations (it walks the whole tree), and the
-                # two must agree about what a declaration is.  The class name
-                # threads through unchanged, so a function declared under an
-                # ``if`` inside a class still reports that class.
-                _collect(child, class_name)
-
-    _collect(tree, None)
+    class_ranges = syntax.class_ranges
+    func_ranges = syntax.func_ranges
 
     context: dict[int, tuple[str | None, str | None, int, int]] = {}
     for ln, _text in lines:
@@ -475,7 +560,11 @@ def _patterns_for(language: str) -> tuple[list, list, str]:
 
 
 # Implements: REQ-d00254-D
-def declaration_starts(lines: list[tuple[int, str]], language: str) -> list[int]:
+def declaration_starts(
+    lines: list[tuple[int, str]],
+    language: str,
+    syntax: PythonSyntax | None = None,
+) -> list[int]:
     """The line each function declaration in a file BEGINS at, ascending.
 
     REQ-d00254-D bounds a citation that no function encloses at "the start of
@@ -500,16 +589,9 @@ def declaration_starts(lines: list[tuple[int, str]], language: str) -> list[int]
     bound rather than a wrong one.
     """
     if language == "python":
-        try:
-            tree = ast.parse("\n".join(text for _, text in lines))
-        except (SyntaxError, ValueError):
-            tree = None
-        if tree is not None:
-            starts: set[int] = set()
-            for node in ast.walk(tree):
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    starts.add(min([d.lineno for d in node.decorator_list] + [node.lineno]))
-            return sorted(starts)
+        syntax = _python_syntax(syntax, lines)
+        if syntax.parsed:
+            return list(syntax.declaration_starts)
 
     func_patterns, _class_patterns, _scope_mode = _patterns_for(language)
     found: set[int] = set()
@@ -533,6 +615,7 @@ def declaration_starts(lines: list[tuple[int, str]], language: str) -> list[int]
 def build_line_context(
     lines: list[tuple[int, str]],
     language: str,
+    syntax: PythonSyntax | None = None,
 ) -> dict[int, tuple[str | None, str | None, int, int]]:
     """Build function/class context map for each line.
 
@@ -553,6 +636,8 @@ def build_line_context(
     Args:
         lines: List of (line_number, content) tuples.
         language: Detected language key.
+        syntax: The source already read by ``read_python``, where the caller
+            holds it; read from *lines* otherwise.
 
     Returns:
         Dict mapping line_number to (function_name, class_name, function_line, function_end_line).
@@ -564,7 +649,7 @@ def build_line_context(
     # A citation's enclosing function bounds the lines it attributes, so the
     # precise reading is preferred wherever it is available.
     if language == "python":
-        ast_context = python_line_context(lines)
+        ast_context = python_line_context(lines, syntax)
         if ast_context is not None:
             return _bind_comments_to_declarations(lines, ast_context, func_patterns, class_patterns)
 
@@ -702,7 +787,7 @@ def build_line_context(
 
 
 # Implements: REQ-d00269-E
-def ast_string_literal_lines(source: str) -> set[int]:
+def ast_string_literal_lines(source: str, syntax: PythonSyntax | None = None) -> set[int]:
     """Every line genuinely interior to a Python string literal.
 
     A keyword written inside a literal names a keyword rather than invoking
@@ -719,23 +804,20 @@ def ast_string_literal_lines(source: str) -> set[int]:
 
     Returns an empty set when the source does not parse: a file the tool
     cannot read is not a file it may make claims about.
+
+    *syntax* is the source already read by ``read_python``, where the caller
+    holds it.
     """
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return set()
-    lines: set[int] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            end = node.end_lineno or node.lineno
-            lines.update(range(node.lineno + 1, end + 1))
-    return lines
+    if syntax is None:
+        syntax = read_python(source)
+    return set(syntax.string_literal_lines)
 
 
 # Implements: REQ-d00254-K
 def ast_prescan(
     source: str,
     lines: list[tuple[int, str]],
+    syntax: PythonSyntax | None = None,
 ) -> tuple[
     dict[int, tuple[str | None, str | None, int, int]],
     list[tuple[int, str, str | None]],
@@ -748,13 +830,18 @@ def ast_prescan(
     Args:
         source: Full source text of the file.
         lines: List of (line_number, content) tuples.
+        syntax: *source* already read by ``read_python``, where the caller
+            holds it.
 
     Returns:
         Tuple of (line_context, all_test_funcs):
         - line_context: Maps line_number -> (func_name, class_name, func_line, func_end_line)
         - all_test_funcs: List of (func_line, func_name, class_name)
     """
-    tree = ast.parse(source)
+    if syntax is None:
+        syntax = read_python(source)
+    if syntax.error is not None:
+        raise syntax.error
 
     # Implements: REQ-d00254-O
     # Where a test starts, in the same terms the runner uses. pytest reports a
@@ -762,34 +849,13 @@ def ast_prescan(
     # is reported at its first decorator, not at `def`. Reading `def` here
     # would disagree with every result pytest writes for a decorated test --
     # which is every parametrized one -- and the result would bind to the file
-    # instead of to the test that produced it.
-    def _start_line(item) -> int:
-        return item.decorator_list[0].lineno if item.decorator_list else item.lineno
-
-    # Collect all test functions with their enclosing class
-    # (lineno, end_lineno, func_name, class_name)
-    func_ranges: list[tuple[int, int, str, str | None]] = []
-    all_test_funcs: list[tuple[int, str, str | None]] = []
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef):
-            # Only process Test* classes
-            if node.name.startswith("Test"):
-                for item in ast.walk(node):
-                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        if item.name.startswith("test_"):
-                            end = item.end_lineno or item.lineno
-                            start = _start_line(item)
-                            func_ranges.append((start, end, item.name, node.name))
-                            all_test_funcs.append((start, item.name, node.name))
-
-    # Second pass: collect module-level test functions
-    for node in ast.iter_child_nodes(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name.startswith("test_"):
-                end = node.end_lineno or node.lineno
-                func_ranges.append((_start_line(node), end, node.name, None))
-                all_test_funcs.append((_start_line(node), node.name, None))
+    # instead of to the test that produced it.  ``read_python`` records each
+    # test that way.
+    #
+    # (start, end_lineno, func_name, class_name): every test_* function inside
+    # a Test* class, and every module-level test_* function.
+    func_ranges = list(syntax.test_funcs)
+    all_test_funcs = [(start, name, cname) for start, _end, name, cname in func_ranges]
 
     # Sort by line number for consistent ordering
     func_ranges.sort(key=lambda x: x[0])

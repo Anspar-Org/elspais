@@ -351,17 +351,22 @@ class TestTemporaryWorktree:
                 pass
 
 
+@pytest.fixture(scope="module")
+def repo_locations():
+    """This repository's requirement locations, read once: their tests only read them."""
+    repo_root = get_repo_root()
+    if repo_root is None:
+        pytest.skip("Not in a git repository")
+    return get_req_locations_from_graph(repo_root)
+
+
 class TestGetReqLocationsFromGraph:
     """Tests for get_req_locations_from_graph function."""
 
     # Verifies: REQ-p00004-B
-    def test_returns_dict(self):
+    def test_returns_dict(self, repo_locations):
         """Returns dict mapping REQ IDs to paths."""
-        repo_root = get_repo_root()
-        if repo_root is None:
-            pytest.skip("Not in a git repository")
-
-        result = get_req_locations_from_graph(repo_root)
+        result = repo_locations
 
         assert isinstance(result, dict)
         # If there are any requirements, they should have string keys and values
@@ -370,13 +375,9 @@ class TestGetReqLocationsFromGraph:
             assert isinstance(path, str)
 
     # Verifies: REQ-p00004-B
-    def test_uses_full_canonical_id(self):
+    def test_uses_full_canonical_id(self, repo_locations):
         """Uses the full canonical ID (e.g., 'REQ-d00001') as keys."""
-        repo_root = get_repo_root()
-        if repo_root is None:
-            pytest.skip("Not in a git repository")
-
-        result = get_req_locations_from_graph(repo_root)
+        result = repo_locations
 
         # If we have results, keys should be full canonical IDs
         for req_id in result.keys():
