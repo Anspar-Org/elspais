@@ -237,6 +237,7 @@
 | REQ-d00328 | Satisfying Named Assertions                                   | dev-graph-core.md       | 6e65b3ba |
 | REQ-d00329 | Test File Results From a Command's Exit Status                | dev-graph-core.md       | 113d1a8d |
 | REQ-d00330 | What a Fix Run Changes                                        | prd-core.md             | 9365d280 |
+| REQ-d00331 | Reuse of File Readings Between Builds                         | dev-graph-core.md       | 53734f81 |
 
 ## User Journeys
 

@@ -1891,3 +1891,42 @@ K covers a declaration that can credit nothing, whether or not its command has r
 - 2026-10-06 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-143: a test file that reports only through its command's exit status is credited at file granularity (A-J)
 
 *End* *Test File Results From a Command's Exit Status* | **Hash**: 113d1a8d
+
+## REQ-d00331: Reuse of File Readings Between Builds
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-o00075
+
+A build reads every scanned file, and most of what a build costs is that reading. A process that builds again -- a serving process after each edit, a command run twice, a test suite over copies of one project -- reads the same text under the same grammar again. This requirement lets a reading be reused, and bounds what reuse may change: nothing.
+
+### Assertions
+
+A. The system SHALL build the same graph from a set of files whether or not a reading of any file was reused.
+
+B. The system SHALL reuse a reading only when the text read, the reading asked for, every argument that reading consults, including the path where it consults one, and the identifier configuration of every federation member the reading's grammar reads are each the same as when the reading was made.
+
+C. Each reuse SHALL hand its caller a reading that no change made by any other caller reaches.
+
+D. The readings held for reuse SHALL be bounded in number and in size.
+
+E. The tool SHALL offer a mode in which every file is read afresh and a held reading that differs from the fresh one is reported, naming the file and the reading.
+
+F. The tool SHALL offer a mode in which no reading is reused.
+
+G. A run recording per-test line coverage for test impact analysis SHALL run with no reading reused.
+
+### Rationale
+
+REQ-o00075 names rebuilding as the cost a serving process amortises, and its rationale admits sharing derived read-only state; a reading of a file is exactly that. A is what makes reuse an optimisation rather than a behaviour: it may change how long a build takes and nothing a build produces. B is what A rests on. A reading is a function of its text, its arguments and the grammar it was read under, and the grammar is a function of the identifier configuration of every member whose identifiers it recognises (REQ-d00269-C); a key holding all of them cannot answer one reading with another. A reading that consults no path is keyed without one, so a copy of a file read elsewhere is the same reading.
+
+C exists because a build changes what it is handed: a reading reused by reference would carry one build's changes into the next. D keeps a long-lived serving process from growing without limit as files change under it.
+
+E is how A is checked rather than assumed: a whole test suite run in that mode reads every file afresh and compares, so a key missing something the reading depends on is reported where it happens rather than surfacing as a wrong graph. F keeps reuse a choice, for diagnosing a build and for G.
+
+G protects test impact analysis. A reused reading runs none of the reader's code, so per-test coverage would credit those lines only to the first test that read each file, and a change to the reader would select only that test. The tool's own per-test line attribution meets the same effect in an ordinary run, as it does for any first-use cache.
+
+### Changelog
+
+- 2026-10-12 | 53734f81 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-12 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-000: reuse a file's reading between builds when nothing it depends on changed
+
+*End* *Reuse of File Readings Between Builds* | **Hash**: 53734f81

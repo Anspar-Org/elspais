@@ -49,7 +49,10 @@ def parse_calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
     Building a dispatcher's grammar evaluates literals through ``ast`` too, so
     a test counts the parses of the content it dispatched, not every call.
+    The parse cache is off, since a reading it answers parses nothing.
     """
+    # A cached reading parses nothing, so the count is of a reading made.
+    monkeypatch.setenv("ELSPAIS_PARSE_CACHE", "0")
     calls: list[str] = []
     real_parse = ast.parse
 

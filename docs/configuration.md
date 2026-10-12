@@ -891,6 +891,14 @@ than silently falling through. The name this override was once written under,
 `ELSPAIS_SPAWNER_PID`, is not read; a session that sets only that one is told
 so once on stderr and named the variable that is read.
 
+`ELSPAIS_PARSE_CACHE` controls the parse cache, which lets a build reuse a
+file's reading from an earlier build in the same process when the text, the
+path and every identifier setting the reading depends on are unchanged. Unset
+or `1` reuses readings, `0` reuses nothing, and `verify` reads every file
+afresh and fails, naming the file, wherever a held reading differs from the
+fresh one. Any other value is refused. The cache changes how long a build
+takes and nothing a build produces.
+
 `ELSPAIS_PROXY_SECRET` is the value a viewer server shares with an
 authenticating proxy in front of it. A request carrying the same value in
 `X-Elspais-Proxy-Secret` is believed about who sent it, and the user named

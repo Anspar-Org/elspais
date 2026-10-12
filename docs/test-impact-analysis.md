@@ -60,6 +60,11 @@ the tier builds the baseline directory. The tier's exit code is still pytest's.
 A baseline that cannot be built is reported, and the tier's verdict is
 unaffected.
 
+A recording run also sets `ELSPAIS_PARSE_CACHE=0`. The parse cache answers a
+file reading asked for again without running the parser, so with it on the
+parser's lines would be credited only to the first test in each worker that
+read each file, and a change to the parser would select only those tests.
+
 The baseline directory (default `.results/tia/baseline`, or
 `$ELSPAIS_TIA_BASELINE`) holds two files:
 
@@ -391,6 +396,9 @@ following:
   for example a module-level dict filled lazily, a Jinja environment, or
   `linecache`. A change to the code that fills such a cache can miss later
   readers. The mutant probes are the instrument for finding these cases.
+  The largest such cache, the parse cache (`ELSPAIS_PARSE_CACHE`), is turned
+  off while a baseline is recorded, so the parser is credited to every test
+  that reads a file; see [How a baseline is recorded](#how-a-baseline-is-recorded).
 - **Dynamic lookup.** Code reached through `getattr` with a computed name,
   plugin discovery, or `importlib` with a computed name is only partly
   covered. String-literal references and recorded directory listings

@@ -515,9 +515,23 @@ a `$schema` self-reference for IDE autocompletion. A committed copy lives at
 
 Every setting comes from `.elspais.toml`, with `.elspais.local.toml` merged
 over it for values that differ per machine. The environment supplies no
-configuration: `ELSPAIS_VERSION`, `ELSPAIS_CLIENT_PID` and
-`ELSPAIS_PROXY_SECRET` are read directly by the code that wants them and are
-not settings.
+configuration: `ELSPAIS_VERSION`, `ELSPAIS_CLIENT_PID`,
+`ELSPAIS_PROXY_SECRET` and `ELSPAIS_PARSE_CACHE` are read directly by the code
+that wants them and are not settings.
+
+`ELSPAIS_PARSE_CACHE` controls the parse cache, which lets a build reuse a
+file's reading from an earlier build in the same process when the text, the
+path and every identifier setting the reading depends on are unchanged. It
+changes how long a build takes and nothing a build produces:
+
+    ELSPAIS_PARSE_CACHE unset or 1   reuse readings (the default)
+    ELSPAIS_PARSE_CACHE=0            reuse nothing; every file is read afresh
+    ELSPAIS_PARSE_CACHE=verify       read every file afresh and fail, naming
+                                     the file, where a held reading differs
+
+Any other value is refused. The cache is bounded and held in memory only, so
+it matters to a process that builds more than once: the daemon and the viewer
+after each edit, or a test suite.
 
 To register an associate without editing either file, use `elspais associate`.
 
