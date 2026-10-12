@@ -1,0 +1,95 @@
+# Implements: REQ-o00080-A+B+C+D+E+F
+name: Stack Sync
+
+# Keeps a stack of pull requests consistent (docs/stacked-pull-requests.md):
+# when a pull request merges, the ones stacked on it are retargeted and brought
+# up to date; when a branch gains commits, every pull request stacked above it
+# takes them. tools/stack/sync.py holds the logic; this file only wires events.
+on:
+  pull_request:
+    types: [closed]
+  push:
+    branches-ignore: [main]
+
+# One run at a time, in event order: two runs updating the same stack at once
+# would race to push the same branches.
+concurrency:
+  group: stack-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    name: Stack sync
+    # A merged pull request from this repository, or a push to any branch but
+    # main (a deleted branch has nothing to sync). Branches of pull requests from
+    # forks are never touched (REQ-o00080-F).
+    if: >-
+      (github.event_name == 'pull_request'
+        && github.event.pull_request.merged == true
+        && github.event.pull_request.head.repo.full_name == github.repository)
+      || (github.event_name == 'push' && !github.event.deleted)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # A push made with the workflow's own GITHUB_TOKEN starts no other
+      # workflow, so the pull requests this updates would not be re-tested
+      # until their next push, and it may not push a merge that changes
+      # .github/workflows/ at all. A STACK_SYNC_TOKEN secret (a fine-grained
+      # token or GitHub App token with contents, pull-requests and workflows
+      # write access) makes its merges trigger CI like anyone's push.
+      #
+      # The sync tool is run from the commit the event is about: the pushed
+      # commit, or the branch a pull request merged into. The default branch
+      # would not carry it until the change adding it had merged. The tool
+      # loads only the standard library before it starts switching branches,
+      # so the branches it checks out need not carry it.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'push' && github.sha || github.event.pull_request.base.ref }}
+          token: ${{ secrets.STACK_SYNC_TOKEN || github.token }}
+
+      - name: Check the sync tool is present
+        id: tool
+        run: |
+          if [ -f tools/stack/sync.py ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "This commit predates stack sync (no tools/stack/sync.py); nothing to do."
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.tool.outputs.present == 'true'
+        with:
+          python-version: "3.12"
+
+      - name: Identify the merge commits
+        if: steps.tool.outputs.present == 'true'
+        run: |
+          git config user.name "elspais stack sync"
+          git config user.email "stack-sync@users.noreply.github.com"
+
+      - name: Sync after a merge
+        if: github.event_name == 'pull_request' && steps.tool.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.STACK_SYNC_TOKEN || github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+          HEAD: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python -m tools.stack.sync --repo "$GITHUB_REPOSITORY" merged \
+            --pr "$PR" --base "$BASE" --head "$HEAD" --head-sha "$HEAD_SHA"
+
+      - name: Sync after a push
+        if: github.event_name == 'push' && steps.tool.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.STACK_SYNC_TOKEN || github.token }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          python -m tools.stack.sync --repo "$GITHUB_REPOSITORY" pushed --branch "$BRANCH"
