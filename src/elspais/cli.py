@@ -819,7 +819,7 @@ def _http_registration_url() -> str:
     return _ADDRESS_VARIABLE
 
 
-# Implements: REQ-o00076-K
+# Implements: REQ-o00076-K, REQ-o00076-P
 def _mcp_install(global_scope: bool = False, transport: str = "http") -> int:
     """Register elspais MCP server with Claude Code.
 
@@ -917,9 +917,11 @@ def _mcp_install(global_scope: bool = False, transport: str = "http") -> int:
         # A shell that never sets the variable launches a client that
         # cannot connect. Say what sets it, here, rather than leaving it
         # to be discovered from a failure.
+        from elspais.mcp.daemon import env_instruction
+
         print("The registration names ELSPAIS_MCP_URL, which each shell supplies:")
-        print('  eval "$(elspais mcp env)"')
-        print("Run that before launching the client, in whichever tree you are in.")
+        print(f"  {env_instruction()}")
+        print("Run that before launching the client. Another working tree uses its own elspais.")
     if not global_scope:
         print("Tip: Use --global to make elspais MCP available in all projects.")
     return 0

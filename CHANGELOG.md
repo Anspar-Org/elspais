@@ -4,6 +4,14 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-000
+
+- **The `mcp env` line names the program that printed it (REQ-o00076-P)** -- `elspais mcp install` and the unset-variable notice printed `eval "$(elspais mcp env)"`. A bare `elspais` runs the first installation on the reader's PATH, so following the line could replace the serving daemon with another program. The line now names the program that printed it.
+
+- **`make setup` registers the MCP server over http** -- where `claude` is on PATH, setup runs this checkout's `elspais mcp install`. That replaces a local registration that ran another elspais.
+
+- **The test-impact recorder tests no longer depend on installed pytest plugins** -- the recorded inner run loads no plugins by entry point, so an autouse fixture from an installed plugin no longer enters the shard.
+
 ### TOOL-148
 
 - **A fix leaves a file holding a requirement it cannot correct unchanged (REQ-d00250-G+H)** -- a full fix that also had another file to fix still rewrote such a file, although it reported skipping it. A fix named for that requirement, or for another requirement in the same file, wrote the file and exited 0. Both now leave the file as it is and exit 1, naming the requirement to move to a shallower heading.

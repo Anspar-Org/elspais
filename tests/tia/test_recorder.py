@@ -118,6 +118,9 @@ def project(pytester, monkeypatch) -> Path:
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
     monkeypatch.setenv("PYTHONDONTWRITEBYTECODE", "1")
+    # The inner run otherwise loads every pytest plugin installed in the venv,
+    # and their fixtures enter the shard; it needs none of them.
+    monkeypatch.setenv("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
     monkeypatch.setenv(
         "PYTHONPATH", os.pathsep.join(filter(None, [ELSPAIS, os.environ.get("PYTHONPATH")]))
     )
@@ -145,7 +148,7 @@ def project(pytester, monkeypatch) -> Path:
 
 def run_recorded(pytester, project: Path) -> dict:
     result = pytester.runpytest_subprocess(
-        "-p", "tools.tia.recorder", "-p", "no:cacheprovider", "--no-cov", "tests"
+        "-p", "tools.tia.recorder", "-p", "no:cacheprovider", "tests"
     )
     result.assert_outcomes(passed=7, failed=1, skipped=1)
     with open(project / "tia-out" / "tia-shard-main.json", encoding="utf-8") as fh:

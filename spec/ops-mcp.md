@@ -620,6 +620,8 @@ N. An operator SHALL be able to start the process serving a working tree on a po
 
 O. When a process takes a port the operator did not name, the tool SHALL report the port that process took.
 
+P. A command the tool prints for an operator to locate or start the serving process SHALL invoke the program that printed it.
+
 ### Rationale
 
 A client and the process serving it meet at one point — the client asks which process serves its working tree, and acts on the answer. Everything here is a property of that meeting: that it can happen at all, that the answer is true, and that what answers is what the client would have run. That a process exists and that exactly one of them serves a tree is REQ-o00075's subject and is not restated.
@@ -652,8 +654,12 @@ M does not cover a shell holding another tree's address. That ends when the addr
 
 N and O exist for whoever starts a process beside others that are already running -- several servers on one machine, or a test suite starting many at once. Naming a port then means guessing one that is free, and two starters can guess the same port; the second process then fails to start, or a client reaches the first one. Letting the process take any available port removes the guess. O is what makes such a process reachable: an address nobody named is useless until the tool says what it is. The report is the record a client locates the process through (C, E), so the port it names is the port the process took, never the one it was asked for. On the command line the request is a port of 0, and the report is the port in the working tree's state record.
 
+P exists because a process serves from the program that started it (I). A command spelled with the bare program name runs whichever installation the reader's search path finds first. That installation can differ from the one that printed the command. If it does, then following the command can replace the serving process with that other program.
+
 ### Changelog
 
+- 2026-10-12 | 3d546e35 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-12 | - | - | Michael Lewis (<michael@anspar.org>) | Add P: a command printed to locate or start the serving process invokes the program that printed it
 - 2026-10-02 | 85f1f1a5 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | Add N and O: an operator can start the serving process on any available port, and the tool reports the port it took
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the daemon record with the Defined Term Daemon Record in the Rationale
@@ -665,7 +671,7 @@ N and O exist for whoever starts a process beside others that are already runnin
 - 2026-08-18 | cd6333aa | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-08-18 | d2a0addf | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash, add missing changelog section
 
-*End* *Reaching the Serving Process* | **Hash**: 85f1f1a5
+*End* *Reaching the Serving Process* | **Hash**: 3d546e35
 
 ## REQ-o00077: Serving From the Installed Program
 

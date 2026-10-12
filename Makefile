@@ -19,6 +19,14 @@ setup: ## Set up development environment
 # Without the browser binaries the browser tier does not fail -- it is
 # deselected, and a run that covers none of it still reports green.
 	$(VENV_PATH) $(VENV)/bin/playwright install chromium
+# Claude Code reaches elspais over http, at the address ELSPAIS_MCP_URL names.
+# A local registration overrides .mcp.json, and one that runs another elspais
+# answers from that program, so setup replaces it with the http registration.
+	@if command -v claude >/dev/null 2>&1; then \
+		$(VENV_PATH) $(VENV)/bin/elspais mcp install; \
+	else \
+		echo "claude is not on PATH: the MCP registration was skipped."; \
+	fi
 	@echo ""
 	@echo "Development environment ready."
 	@echo "  Virtualenv: $(VENV)"

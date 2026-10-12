@@ -1,4 +1,4 @@
-# Verifies: REQ-d00214-A+B+C+D+E+F+G, REQ-o00076-K, REQ-o00076-L
+# Verifies: REQ-d00214-A+B+C+D+E+F+G, REQ-o00076-K, REQ-o00076-L, REQ-o00076-P
 """Tests for elspais mcp install/uninstall/env subcommands."""
 
 from __future__ import annotations
@@ -214,6 +214,32 @@ class TestMcpInstallLocal:
 
         captured = capsys.readouterr()
         assert "Tip: Use --global" in captured.out
+
+    @patch("subprocess.run")
+    @patch("shutil.which")
+    # Verifies: REQ-o00076-P
+    def test_REQ_o00076_P_install_names_the_program_that_printed_it(
+        self, mock_which, mock_run, capsys, monkeypatch, tmp_path
+    ):
+        """The line that sets the address names the program that is running,
+        not whichever `elspais` the PATH finds: the stand-in PATH answer here
+        is a different file, and the line must not name it."""
+        from elspais.mcp.daemon import env_instruction
+
+        script = tmp_path / "venv" / "bin" / "elspais"
+        script.parent.mkdir(parents=True)
+        script.write_text("#!/bin/sh\n")
+        script.chmod(0o755)
+        monkeypatch.setattr("sys.argv", [str(script), "mcp", "install"])
+        mock_which.side_effect = lambda name: f"/usr/bin/{name}"
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        assert _mcp_install(global_scope=False) == 0
+
+        out = capsys.readouterr().out
+        assert env_instruction() in out
+        assert str(script) in out
+        assert "/usr/bin/elspais" not in out
 
 
 class TestMcpInstallGlobal:

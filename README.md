@@ -177,6 +177,15 @@ hooks. The hooks and the test targets both run the tools from that
 directory, so what they report describes this checkout and not some other
 installation of elspais.
 
+Where Claude Code is installed, `make setup` also registers the elspais MCP
+server over http. The daemon behind it runs the program that started it, so
+start it with this checkout's elspais before launching Claude Code:
+
+```bash
+eval "$(.venv/bin/elspais mcp env)"
+claude
+```
+
 ## License
 
 GNU Affero General Public License v3 (AGPL-3.0) — see [LICENSE](LICENSE).
