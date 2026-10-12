@@ -1,15 +1,15 @@
 """Keep a stack of pull requests consistent when one merges or gains commits.
 
 A stack is a chain of pull requests, each based on the branch of the one below
-it. Two events need repair (REQ-o00080):
+it. Two events need repair (REQ-o00066-L):
 
 * ``merged``: a pull request merged. Each open pull request based on its branch
-  is retargeted to the branch it merged into (A) and brought up to date with
-  that branch (B), then everything stacked above is brought up to date (C).
+  is retargeted to the branch it merged into and brought up to date with
+  that branch, then everything stacked above is brought up to date.
 * ``pushed``: a branch gained commits. Each open pull request based on it, and
-  each one stacked above those, is brought up to date with the branch below (C).
+  each one stacked above those, is brought up to date with the branch below.
 
-Bringing a branch up to date is always a merge commit added on top (D). This
+Bringing a branch up to date is always a merge commit added on top. This
 repository squash-merges, and a squash commit is unrelated to the commits it
 replaced, so before bringing the new base in, the merged pull request's last
 commit is recorded as already merged (``git merge -s ours`` on a temporary
@@ -18,8 +18,8 @@ the merged pull request, and cannot conflict with that pull request's own
 changes appearing a second time.
 
 A merge that conflicts is aborted: that branch and everything above it are left
-untouched, and the conflict is reported on the pull request once (E). Pull
-requests whose branch lives in another repository are never changed (F).
+untouched, and the conflict is reported on the pull request once. Pull
+requests whose branch lives in another repository are never changed.
 
 The plan is a pure function of the event and the open pull requests
 (``plan_merged``, ``plan_pushed``), so it is tested without git or GitHub; the
@@ -72,7 +72,7 @@ class Update:
     ``merged_head`` is set on the first update after a merge: the merged pull
     request's last commit, recorded as merged before ``base`` is brought in.
     ``parent`` is the update this one stacks on: if that one cannot be made,
-    neither can this one (E).
+    neither can this one.
     """
 
     pr: PullRequest
@@ -104,7 +104,7 @@ def _stack_above(
             continue  # a cycle in base/head names; GitHub forbids it, but never loop
         seen.add(child.number)
         if child.cross_repository:
-            plan.skipped.append(f"#{child.number}: branch lives in another repository (F)")
+            plan.skipped.append(f"#{child.number}: branch lives in another repository")
             continue
         plan.updates.append(Update(child, branch, parent=parent))
         _stack_above(child.head, open_prs, plan, child.number, seen)
@@ -116,7 +116,7 @@ def plan_merged(merged: PullRequest, merged_head_sha: str, open_prs: list[PullRe
     for child in _children(merged.head, open_prs):
         seen.add(child.number)
         if child.cross_repository:
-            plan.skipped.append(f"#{child.number}: branch lives in another repository (F)")
+            plan.skipped.append(f"#{child.number}: branch lives in another repository")
             continue
         plan.retargets.append(Retarget(child, merged.base))
         retargeted = PullRequest(child.number, merged.base, child.head, child.title)
@@ -234,7 +234,7 @@ class Executor:
                 "--no-edit",
                 "-m",
                 f"{prefix}Record {u.merged_head[:12]} as merged into {u.base} "
-                f"(stack sync)\n\nREQ-o00080-B",
+                f"(stack sync)\n\nREQ-o00066-L",
                 u.merged_head,
             )
             self._run("git", "checkout", "--quiet", head)
@@ -246,7 +246,7 @@ class Executor:
                 "--no-ff",
                 "--no-edit",
                 "-m",
-                f"{prefix}Merge {u.base} into {head} (stack sync)\n\nREQ-o00080-C",
+                f"{prefix}Merge {u.base} into {head} (stack sync)\n\nREQ-o00066-L",
                 incoming,
             ],
             capture_output=True,
@@ -295,7 +295,7 @@ class Executor:
             ".comments[].body",
         )
         if marker in existing:
-            return  # reported once (E)
+            return  # reported once
         files = sorted(
             {
                 ln.split("Merge conflict in ", 1)[1].strip()
