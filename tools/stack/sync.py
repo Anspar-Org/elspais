@@ -42,10 +42,12 @@ import json
 import re
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 
 TICKET = re.compile(r"\[[A-Z]{2,10}-[0-9]+\]")
 CONFLICT_MARKER = "<!-- stack-sync:conflict:{base}:{head} -->"
+GITHUB_SERVER_ERROR = re.compile(r"\bHTTP 5[0-9][0-9]\b")
 
 
 @dataclass(frozen=True)
@@ -147,9 +149,24 @@ class Executor:
         self.dry_run = dry_run
         self.log: list[str] = []
         self.updated: set[str] = set()  # branches this run moved locally
+        # Waits between attempts of a call that may be repeated, when GitHub
+        # answers with a server error (it does, now and then, for a moment).
+        self.retry_delays: tuple[float, ...] = (2.0, 8.0, 30.0)
 
-    def _run(self, *cmd: str, check: bool = True, input: str | None = None) -> str:
-        proc = subprocess.run(cmd, capture_output=True, text=True, input=input)
+    def _run(
+        self, *cmd: str, check: bool = True, input: str | None = None, retry: bool = False
+    ) -> str:
+        """Run a command. With ``retry``, a call GitHub fails with a server
+        error is repeated after each of ``retry_delays``; only calls that are
+        safe to repeat (reads, and setting a pull request's base) pass it."""
+        delays = list(self.retry_delays) if retry else []
+        while True:
+            proc = subprocess.run(cmd, capture_output=True, text=True, input=input)
+            if proc.returncode == 0 or not delays or not GITHUB_SERVER_ERROR.search(proc.stderr):
+                break
+            wait = delays.pop(0)
+            self.say(f"  GitHub server error; retrying in {wait:g}s: {proc.stderr.strip()}")
+            time.sleep(wait)
         if check and proc.returncode != 0:
             raise RuntimeError(f"{' '.join(cmd)} failed: {proc.stderr.strip()}")
         return proc.stdout
@@ -171,6 +188,7 @@ class Executor:
             "500",
             "--json",
             "number,baseRefName,headRefName,title,isCrossRepository",
+            retry=True,
         )
         return [
             PullRequest(
@@ -179,6 +197,40 @@ class Executor:
             for p in json.loads(out)
         ]
 
+    def retargeted_by_github(
+        self, merged: PullRequest, merged_head_sha: str, open_prs: list[PullRequest]
+    ) -> list[PullRequest]:
+        """The open pull requests GitHub itself already moved off the merged
+        branch. When a repository deletes merged branches, GitHub retargets the
+        pull requests based on one to its base before this run lists them, so
+        they no longer name the merged branch. One that targets the merged pull
+        request's base and holds its last commit was stacked on it; each is
+        returned based on the merged branch again, so it is planned as a pull
+        request stacked there."""
+        self._run(
+            "git", "fetch", "--quiet", "origin", f"refs/pull/{merged.number}/head", check=False
+        )
+        known = subprocess.run(
+            ["git", "cat-file", "-e", f"{merged_head_sha}^{{commit}}"], capture_output=True
+        )
+        if known.returncode != 0:
+            self.say(
+                f"cannot read #{merged.number}'s last commit {merged_head_sha[:12]}; pull requests"
+                f" GitHub already retargeted to {merged.base} are not checked"
+            )
+            return []
+        found = []
+        for p in open_prs:
+            if p.base != merged.base or p.cross_repository or p.head == merged.head:
+                continue
+            holds = subprocess.run(
+                ["git", "merge-base", "--is-ancestor", merged_head_sha, f"origin/{p.head}"],
+                capture_output=True,
+            )
+            if holds.returncode == 0:
+                found.append(PullRequest(p.number, merged.head, p.head, p.title))
+        return found
+
     def run(self, plan: Plan) -> int:
         for line in plan.skipped:
             self.say(f"skip {line}")
@@ -186,7 +238,15 @@ class Executor:
             self.say(f"retarget #{r.pr.number}: {r.pr.base} -> {r.new_base}")
             if not self.dry_run:
                 self._run(
-                    "gh", "pr", "edit", str(r.pr.number), "--repo", self.repo, "--base", r.new_base
+                    "gh",
+                    "pr",
+                    "edit",
+                    str(r.pr.number),
+                    "--repo",
+                    self.repo,
+                    "--base",
+                    r.new_base,
+                    retry=True,
                 )
         if not self.dry_run:
             self._run("git", "fetch", "--quiet", "origin")
@@ -333,6 +393,7 @@ class Executor:
             "comments",
             "--jq",
             ".comments[].body",
+            retry=True,
         )
         if marker in existing:
             return  # reported once
@@ -386,7 +447,10 @@ def main(argv: list[str] | None = None) -> int:
     ex = Executor(args.repo, dry_run=args.dry_run)
     prs = ex.open_prs()
     if args.event == "merged":
-        plan = plan_merged(PullRequest(args.pr, args.base, args.head), args.head_sha, prs)
+        merged = PullRequest(args.pr, args.base, args.head)
+        moved = {p.number: p for p in ex.retargeted_by_github(merged, args.head_sha, prs)}
+        prs = [moved.get(p.number, p) for p in prs]
+        plan = plan_merged(merged, args.head_sha, prs)
     else:
         plan = plan_pushed(args.branch, prs)
     if not plan.retargets and not plan.updates and not plan.skipped:

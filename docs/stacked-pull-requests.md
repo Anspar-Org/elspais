@@ -107,6 +107,7 @@ These are set by a repository administrator, not by a pull request:
     workflow, so without this secret the pull requests stack sync updates are
     not re-tested until their author's next push.
   - With the secret, stack sync's merges trigger CI like anyone else's.
-- **Automatically delete head branches (optional)**: GitHub then also
-  retargets dependent pull requests itself. Stack sync does this either way and
-  does not depend on the setting.
+- **Automatically delete head branches (optional)**: GitHub then retargets
+  dependent pull requests itself, before stack sync runs. Stack sync still
+  recognises them, by the merged pull request's last commit on their branches,
+  and repairs the ones that need it, so it does not depend on the setting.

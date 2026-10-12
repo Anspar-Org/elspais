@@ -24,6 +24,7 @@ from tools.stack.sync import (
     PullRequest,
     Retarget,
     Update,
+    main,
     plan_merged,
     plan_pushed,
 )
@@ -139,6 +140,14 @@ state = os.environ["FAKE_GH_STATE"]
 args = sys.argv[1:]
 with open(os.path.join(state, "calls.jsonl"), "a") as f:
     f.write(json.dumps(args) + "\\n")
+failures_path = os.path.join(state, "failures.json")
+failures = json.load(open(failures_path)) if os.path.exists(failures_path) else {{}}
+pending = failures.get(" ".join(args[:2]))
+if pending and pending["count"] > 0:
+    pending["count"] -= 1
+    json.dump(failures, open(failures_path, "w"))
+    sys.stderr.write(pending["stderr"] + "\\n")
+    sys.exit(1)
 comments_path = os.path.join(state, "comments.json")
 comments = json.load(open(comments_path)) if os.path.exists(comments_path) else {{}}
 if args[:2] == ["pr", "list"]:
@@ -222,6 +231,17 @@ class Forge:
         ]
         (self.state / "prs.json").write_text(json.dumps(data))
         return list(prs)
+
+    def fail_next(self, subcommand: str, count: int, stderr: str) -> None:
+        """Have the next ``count`` calls of ``gh <subcommand>`` (e.g. ``pr list``)
+        fail, writing ``stderr`` and exiting 1."""
+        path = self.state / "failures.json"
+        failures = json.loads(path.read_text()) if path.exists() else {}
+        failures[subcommand] = {"count": count, "stderr": stderr}
+        path.write_text(json.dumps(failures))
+
+    def calls_of(self, subcommand: str) -> list[list[str]]:
+        return [c for c in self.gh_calls() if " ".join(c[:2]) == subcommand]
 
     def comments(self, number: int) -> list[str]:
         path = self.state / "comments.json"
@@ -412,6 +432,102 @@ class TestMergedUnchangedStack:
         assert any(ln.startswith("update #2 ") for ln in ex.log)
 
 
+def _main_merged(forge: Forge, monkeypatch, a_head: str) -> int:
+    """Run the tool end to end for the squash merge of #1 (a -> main)."""
+    monkeypatch.chdir(forge.checkout_for_sync())
+    return main(
+        [
+            "--repo",
+            "owner/repo",
+            "merged",
+            "--pr",
+            "1",
+            "--base",
+            "main",
+            "--head",
+            "a",
+            "--head-sha",
+            a_head,
+        ]
+    )
+
+
+class TestRetargetedByGitHub:
+    """A repository that deletes merged branches has GitHub retarget the pull
+    requests stacked on a merged one to its base before stack sync lists them;
+    they are still planned as stacked on the merged branch."""
+
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_retargeted_conflicting_pr_is_still_updated(
+        self, forge, squashed_stack, monkeypatch, capsys
+    ):
+        forge.open_prs(PullRequest(2, "main", "b", "[TOOL-2] B"))
+
+        status = _main_merged(forge, monkeypatch, squashed_stack["a_head"])
+
+        assert status == 0
+        out = capsys.readouterr().out
+        assert "no pull request is stacked" not in out
+        new_head = forge.origin_sha("b")
+        assert new_head != squashed_stack["b_head"]
+        assert forge.is_ancestor(squashed_stack["b_head"], new_head)
+        assert forge.is_ancestor(squashed_stack["other"], new_head)
+        assert forge.origin_show("b", "f.txt") == "line1\na-line edited"
+        diff = _git("diff", "--name-only", "refs/heads/main", "refs/heads/b", cwd=forge.origin)
+        assert diff == "f.txt"
+        patch = _git("diff", "refs/heads/main", "refs/heads/b", cwd=forge.origin)
+        changed = [
+            ln for ln in patch.splitlines() if ln[:1] in "+-" and not ln.startswith(("+++", "---"))
+        ]
+        assert changed == ["-a-line", "+a-line edited"]
+        assert forge.comments(2) == []
+
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_retargeted_clean_pr_is_left_as_is(self, forge, monkeypatch, capsys):
+        forge.checkout("a", "main")
+        forge.commit("f.txt", "line1\na-line\n", "[TOOL-1] add a-line")
+        a_head = forge.commit("a.txt", "a\n", "[TOOL-1] add a.txt")
+        forge.checkout("b", "a")
+        b_head = forge.commit("b.txt", "b\n", "[TOOL-2] add b.txt")
+        _squash_merge_a(forge, a_head, "b")
+        forge.open_prs(PullRequest(2, "main", "b", "[TOOL-2] B"))
+
+        status = _main_merged(forge, monkeypatch, a_head)
+
+        assert status == 0
+        assert forge.origin_sha("b") == b_head
+        out = capsys.readouterr().out
+        assert "no pull request is stacked" not in out
+        (kept,) = [ln for ln in out.splitlines() if ln.startswith("#2 ")]
+        assert "left as is, so its CI result still applies" in kept
+        assert not any(ln.startswith("update #") for ln in out.splitlines())
+
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_unrelated_pr_on_the_base_is_not_planned(
+        self, forge, squashed_stack, monkeypatch, capsys
+    ):
+        forge.checkout("z", "main")
+        forge.commit("z.txt", "z\n", "[TOOL-5] add z.txt")
+        forge.push("z")
+        z_before = forge.origin_sha("z")
+        forge.open_prs(
+            PullRequest(2, "main", "b", "[TOOL-2] B"),
+            PullRequest(5, "main", "z", "[TOOL-5] Z"),
+        )
+        assert not forge.is_ancestor(squashed_stack["a_head"], "refs/heads/z")
+
+        status = _main_merged(forge, monkeypatch, squashed_stack["a_head"])
+
+        assert status == 0
+        assert forge.origin_sha("z") == z_before
+        calls = forge.gh_calls()
+        assert not any(c[:3] == ["pr", "edit", "5"] for c in calls)
+        assert ["pr", "edit", "2", "--repo", "owner/repo", "--base", "main"] in calls
+        out = capsys.readouterr().out
+        assert "#5" not in out
+        assert any(ln.startswith("update #2 ") for ln in out.splitlines())
+
+
 class TestPushCascade:
     # Verifies: REQ-o00066-L
     def test_REQ_o00066_L_push_to_bottom_reaches_every_branch_above(self, forge, monkeypatch):
@@ -493,6 +609,81 @@ class TestConflict:
         assert status == 1
         assert len(forge.comments(2)) == 1
         assert {br: forge.origin_sha(br) for br in "abc"} == before
+
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_conflict_comment_is_not_retried_on_server_error(
+        self, forge, conflicting, monkeypatch
+    ):
+        slept: list[float] = []
+        monkeypatch.setattr("tools.stack.sync.time.sleep", slept.append)
+        forge.fail_next("pr comment", 1, BAD_GATEWAY)
+
+        with pytest.raises(RuntimeError, match="HTTP 502"):
+            _sync(forge, monkeypatch, conflicting)
+
+        assert len(forge.calls_of("pr comment")) == 1
+        assert slept == []
+        assert forge.comments(2) == []
+
+
+BAD_GATEWAY = "HTTP 502: 502 Bad Gateway (https://api.github.com/graphql)"
+
+
+class TestGitHubServerErrorRetry:
+    """A call that is safe to repeat is retried when GitHub answers with a
+    server error (HTTP 5xx); anything else fails at once."""
+
+    @pytest.fixture
+    def executor(self, forge, monkeypatch):
+        forge.open_prs(PullRequest(2, "a", "b", "[TOOL-2] B"), PullRequest(3, "b", "c"))
+        slept: list[float] = []
+        monkeypatch.setattr("tools.stack.sync.time.sleep", slept.append)
+        ex = Executor("owner/repo")
+        ex.slept = slept
+        return ex
+
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_pr_list_succeeds_after_transient_server_errors(self, forge, executor):
+        forge.fail_next("pr list", 2, BAD_GATEWAY)
+
+        prs = executor.open_prs()
+
+        assert [(p.number, p.base, p.head) for p in prs] == [(2, "a", "b"), (3, "b", "c")]
+        assert len(forge.calls_of("pr list")) == 3
+        assert executor.slept == [2.0, 8.0]
+        retries = [ln for ln in executor.log if "GitHub server error; retrying in" in ln]
+        assert len(retries) == 2 and all("502 Bad Gateway" in ln for ln in retries)
+
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_pr_list_fails_once_retries_are_exhausted(self, forge, executor):
+        forge.fail_next(
+            "pr list", 10, "HTTP 504: 504 Gateway Timeout (https://api.github.com/graphql)"
+        )
+
+        with pytest.raises(RuntimeError, match="HTTP 504"):
+            executor.open_prs()
+
+        assert len(forge.calls_of("pr list")) == 4
+        assert executor.slept == [2.0, 8.0, 30.0]
+
+    # Verifies: REQ-o00066-L
+    @pytest.mark.parametrize(
+        "stderr",
+        [
+            "HTTP 404: Not Found (https://api.github.com/graphql)",
+            "could not resolve to a Repository with the name 'owner/repo'",
+        ],
+    )
+    def test_REQ_o00066_L_failure_other_than_server_error_is_not_retried(
+        self, forge, executor, stderr
+    ):
+        forge.fail_next("pr list", 1, stderr)
+
+        with pytest.raises(RuntimeError, match="failed"):
+            executor.open_prs()
+
+        assert len(forge.calls_of("pr list")) == 1
+        assert executor.slept == []
 
 
 class TestRefusedPush:
