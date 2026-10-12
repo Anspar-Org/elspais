@@ -231,6 +231,7 @@ the same key and runs the tier otherwise. Nothing in elspais reads them, and
 | The venv first on `PATH` | e2e | Kept: a fixture's target shells out to a bare `python` | The hooks and `run-target` put `.venv/bin` first on `PATH`. A session selecting e2e tests where no `python` is on `PATH` stops with a usage error saying so; the program the tests spawn is found in this checkout's venv whatever `PATH` says |
 | The `mcp` extra | all | Kept | A session without it stops with a usage error naming `make setup`, unless `ELSPAIS_TEST_WITHOUT` names `mcp` |
 | The `browser` extra and chromium | e2e, browser | Kept | A session whose marker expression selects browser tests stops with a usage error naming `make setup`, unless `ELSPAIS_TEST_WITHOUT` names `browser`; `pytest -m browser` without playwright stops whatever that variable says |
+| The installed versions of every dependency | all | Kept, pinned: `make setup` and CI install from `requirements/dev.lock` | A venv built otherwise, or not rebuilt after the lock moves, differs from the environment a TIA baseline was recorded in, and `pre-commit` runs the full tier instead of a selection; `make setup` rebuilds it |
 | `ELSPAIS_TEST_WORKERS` | unit, e2e | Kept, as an override of half the available processors | A value that is not a positive whole number stops the tier with a message naming the variable |
 | Git's hook environment (`GIT_DIR` and the rest) | all | Removed: `tests/conftest.py` and `unit-verdict` clear it | Never |
 | The developer's daemon, home and Claude configuration | e2e | Removed: each e2e test that runs elspais works in its own copy with its own daemon, on a port its viewer bound, with a private home for the claude CLI | Never |
@@ -261,7 +262,8 @@ Install these tools for full hook functionality:
 ```bash
 # This tree's venv, its editable elspais and the Python test tools -- ruff,
 # pytest, pytest-cov, pytest-xdist and the rest of the `dev` extra -- plus
-# the browser extra and chromium for the browser tests the e2e tier runs.
+# the browser extra and chromium for the browser tests the e2e tier runs,
+# each at the version requirements/dev.lock pins.
 # The hooks prefer .venv/bin, and the e2e tier refuses to run against an
 # elspais that does not import from this checkout.
 make setup

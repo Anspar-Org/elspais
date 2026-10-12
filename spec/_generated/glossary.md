@@ -56,6 +56,10 @@
 : One outcome of one test that a results producer wrote, such as one test case in a JUnit XML file or one test entry in a pytest JSON report.
 *Defined in: file:REQ:spec/glossary.md (REQ)*
 
+**Retained Result**
+: A result that a run of a test target takes from an earlier run of that target, for a test that the run did not execute.
+*Defined in: file:REQ:spec/glossary.md (REQ)*
+
 ## S
 
 **Specification**

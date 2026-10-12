@@ -732,9 +732,7 @@ def build_identity_refusal(program: str | None = None) -> str | None:
     expected = _os.path.realpath(REPO_ROOT / "src" / "elspais")
     if program is None:
         return (
-            "the e2e tier found no elspais program to run. Build this "
-            "checkout's venv: python3 -m venv .venv && "
-            '.venv/bin/pip install -e ".[all,mcp,dev]"'
+            "the e2e tier found no elspais program to run. Build this checkout's venv: make setup"
         )
     found = program_source(program)
     if found == expected:
@@ -743,8 +741,7 @@ def build_identity_refusal(program: str | None = None) -> str | None:
         f"the e2e tier would run {program}, which imports elspais from "
         f"{found or '<a place its interpreter could not report>'}, not from this "
         f"checkout ({expected}). Its results would describe that build, not this "
-        f"one. Build this checkout's venv (python3 -m venv .venv && "
-        f'.venv/bin/pip install -e ".[all,mcp,dev]"), or point ELSPAIS_BIN at '
+        f"one. Build this checkout's venv (make setup), or point ELSPAIS_BIN at "
         f"a launcher whose interpreter imports elspais from this checkout."
     )
 

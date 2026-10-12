@@ -4,7 +4,9 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
-### TOOL-000
+### TOOL-157
+
+- **Local venvs and CI install the same dependency versions, so a CI baseline selects tests locally** -- `requirements/dev.lock` pins every package of the `dev`, `all` and `browser` extras for each supported Python, in one universal `uv pip compile` resolution. `make setup` and every CI job that installs the project install under it, and the unit, test-impact and TIA calibration jobs install the same extras `make setup` does. A Test Impact Analysis baseline now compares Python as major.minor and leaves out the installers `pip`, `setuptools` and `wheel`, which a venv and the CI image each seed differently; every other installed distribution is compared at its exact version. `make lock` regenerates the lock, and CI's `lint` job fails while it is out of date with `pyproject.toml`. Baselines recorded before this change are not accepted; the next push to `main` records one.
 
 - **The `mcp env` line names the program that printed it (REQ-o00076-P)** -- `elspais mcp install` and the unset-variable notice printed `eval "$(elspais mcp env)"`. A bare `elspais` runs the first installation on the reader's PATH, so following the line could replace the serving daemon with another program. The line now names the program that printed it.
 

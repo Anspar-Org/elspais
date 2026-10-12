@@ -1573,6 +1573,8 @@ O. When the system reports a run of a test target as in progress, the system SHA
 
 P. A result SHALL keep binding to the test it names after the tree its run executed in moves to another directory.
 
+Q. The system SHALL read the *Retained Results* of a recorded run as results of its test target.
+
 ### Rationale
 
 The inputs of a test target are the files whose content can change what its run reports, so results stay current exactly as long as those files are unchanged, and reuse of results from an earlier run is legitimate. The default takes every file because a missed dependency makes old results look current, which is worse than a needless run. What a run writes, and what tools keep for themselves while it runs, changes during every run, so the project names those paths in its global skip list. An *Evidence Snapshot* is written from a run's results after the run ends, so it is never an input of that run.
@@ -1581,6 +1583,8 @@ A run empties its output area when it starts and writes its results while it run
 
 A tree that moves after its tests ran keeps its results. A reporter often records absolute paths, and reading such a path against the new root alone matches no test, so the results read as fresh while crediting nothing. P states that property. The *Result Fingerprint* records where its run executed, so a recorded path can be read against that place.
 
+A run need not execute every test of its target. A runner that can tell which tests a change can affect executes those and keeps the earlier run's results for the others. Q reads those *Retained Results* with the run's own results, so the target holds a result for every test. The run's own *Result Fingerprint* decides whether the target is fresh or stale (B, C).
+
 ### Changelog
 
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a run in progress replaces the freshness judgement of its results, and leaves to REQ-d00283-R whether an expected target is missing them (N)
@@ -1588,7 +1592,7 @@ A tree that moves after its tests ran keeps its results. A reporter often record
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the run fingerprint with the Defined Term Result Fingerprint (D)
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: the Evidence Snapshot directory is never an input of a test target (M)
 
-*End* *Test Result Freshness* | **Hash**: 4a31d912
+*End* *Test Result Freshness* | **Hash**: 0e15379c
 
 ## REQ-d00312: Test Target Output Areas
 
@@ -1779,6 +1783,16 @@ J. When every line coverage that contributes to a figure is carried, the system 
 
 K. When the system reports a figure that carried line coverage contributes to, the system SHALL state why that line coverage is stale.
 
+L. The system SHALL treat every *Retained Result* as carried.
+
+M. When the system reports a *Retained Result*, the system SHALL name the earlier run that it was taken from.
+
+N. When the system reports a *Retained Result*, the system SHALL state the reason that the runner recorded for retaining it.
+
+O. When a run holds *Retained Results*, the system SHALL state how many *Retained Results* the run holds.
+
+P. The system SHALL treat as carried the line coverage that a run takes from an earlier run of its test target.
+
 ### Rationale
 
 The carried mark exists for the reader who must not mistake old evidence for new. A figure built from carried results and shown without the mark makes that mistake for them, so the mark follows the evidence wherever the evidence is counted. C names the conducted case because a requirement credited only through the requirements that refine it has no results of its own, and the mark must not depend on where the results are attached.
@@ -1789,7 +1803,9 @@ A result whose fingerprint judgement is stale was produced by a tree other than 
 
 A test target's line coverage is measured by the same run as its results, so it is stale exactly when they are. I, J and K apply the rule for results to the figures line coverage makes -- the executed lines, and the *Assertion* credit taken from them: a figure built only from line coverage the current tree did not produce is marked, and a report of it says why the coverage is stale.
 
-*End* *Carried Result Provenance* | **Hash**: c64d2571
+A *Retained Result* describes a tree other than the one being reported on, whatever reason the runner gives for keeping it, so L carries it. M and N let a reader judge whether to trust it. M names the run that produced it, by the tree that run executed in and the time it started. N gives the reason the runner recorded, such as a test impact analysis that found the change cannot affect the test. O states the count, so a reader can tell a target that ran a few tests from one that ran them all. P applies the same rule to line coverage, because the earlier run measured that coverage on another tree.
+
+*End* *Carried Result Provenance* | **Hash**: 6c0eeda0
 
 ## REQ-d00327: Origin of a Recorded Source Path
 

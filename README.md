@@ -177,6 +177,13 @@ hooks. The hooks and the test targets both run the tools from that
 directory, so what they report describes this checkout and not some other
 installation of elspais.
 
+Every dependency is installed at the version `requirements/dev.lock` pins, and
+CI installs the same, so a test run here and in CI on the same Python minor
+version see the same packages. After changing the dependencies in
+`pyproject.toml`, run `make lock` and commit the regenerated lock with the
+change; CI fails while the lock is out of date. Run `make setup` again when the
+lock moves.
+
 Where Claude Code is installed, `make setup` also registers the elspais MCP
 server over http. The daemon behind it runs the program that started it, so
 start it with this checkout's elspais before launching Claude Code:

@@ -47,15 +47,17 @@ jobs:
       - name: Mark workspace safe for git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      # The environment the `test` job records baselines in, and `make setup`
+      # builds.
       - name: Install package with dev dependencies
-        run: pip install -e ".[dev,all]"
+        run: pip install -c requirements/dev.lock -e ".[dev,all,browser]"
 
       - name: Restore the previous baseline
         uses: actions/cache/restore@v4
         with:
           path: .results/tia/baseline
-          key: tia-baseline-v1-py3.13-${{ github.sha }}
-          restore-keys: tia-baseline-v1-py3.13-
+          key: tia-baseline-v2-py3.13-${{ github.sha }}
+          restore-keys: tia-baseline-v2-py3.13-
 
       - name: Keep it aside
         run: |

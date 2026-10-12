@@ -114,6 +114,15 @@
 - REQ-d00294:section:1
 - REQ-d00329:section:1
 
+## Retained Result
+
+**REQ:**
+
+- REQ-d00323-L
+- REQ-d00323-M
+- REQ-d00323-N
+- REQ-d00323:section:1
+
 ## Specification
 
 **REQ:**

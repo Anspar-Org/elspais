@@ -113,7 +113,7 @@ if [ "$E2E_ENV_SRC" != "$E2E_REPO_SRC" ]; then
     echo ""
     echo "A run here would describe that install, not this branch."
     echo "Build this worktree's venv:"
-    echo "  python3 -m venv .venv && .venv/bin/pip install -e \".[all,mcp,dev]\""
+    echo "  make setup"
     echo ""
     exit 1
 fi

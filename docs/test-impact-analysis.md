@@ -132,7 +132,7 @@ selection can be conservative about it:
 | Files read as data, such as fixture projects, docs, templates, `.github/workflows` and the repository's own sources. | Through an audit hook, the repository files each test phase opened and the directories it listed. Import-machinery reads are excluded. | A changed non-Python file selects the tests that read it. For an added file, it selects the tests that listed its directory, or the nearest listed ancestor directory. |
 | Subprocesses: code that runs in a child process is invisible to coverage. | The programs each test spawned. | A test that spawns `python*` or `elspais*` is *opaque*. It is selected whenever any non-test file changes. |
 | Tests that did not pass have partial coverage. | The outcome of each test. | A test that did not pass in the baseline (failed, error, skipped, xfail) is always selected. |
-| The interpreter or dependencies differ. | The Python version and every installed distribution except `elspais`. | Any difference runs the full suite (`on_environment_change`). |
+| The interpreter or dependencies differ. | The implementation, the platform, the Python major and minor version, and the exact version of every installed distribution except `elspais` and the installers `pip`, `setuptools` and `wheel`. | Any difference runs the full suite (`on_environment_change`). |
 
 The recorder never raises into the run. An internal error is written into
 the shard. The error makes the baseline invalid instead of silently
@@ -324,7 +324,7 @@ cache steps save and restore.
 - `test` (unchanged) runs the full unit tier on every supported Python. On a
   push to `main`, the Python 3.13 leg also records a baseline and, when the
   run passed outright, saves it to the Actions cache under the key
-  `tia-baseline-v1-py3.13-<sha>`.
+  `tia-baseline-v2-py3.13-<sha>`.
 - `test-impact` (pull requests, advisory) restores the newest baseline from
   `main`, runs `python -m tools.tia run`, and uploads the manifest as the
   `tia-manifest` artifact. It does not replace the full unit job.
@@ -333,6 +333,24 @@ cache steps save and restore.
   report and fails when a failure was missed. It builds the fresh baseline
   even from a run with failing tests, because it measures the revision as it
   is, and it saves that baseline nowhere a pull request selects from.
+
+### One environment in CI and locally
+
+A baseline is accepted only by an environment whose fingerprint matches the
+one it was recorded in. `make setup` and every CI job that records or reads a
+baseline install the same extras (`dev`, `all` and `browser`) under the same
+constraints file, `requirements/dev.lock`. The lock is one universal
+resolution covering every supported Python and platform, so a venv and the
+CI image on one Python minor version hold the same distributions at the same
+versions. The fingerprint leaves out what legitimately differs between them:
+the Python patch release, and the installers `pip`, `setuptools` and `wheel`,
+which a venv and the `python:<version>-slim` image each seed with their own
+releases. The lock pins none of those three, and no test imports them.
+
+`make lock` regenerates the lock after a change to the dependencies in
+`pyproject.toml`; CI's `lint` job fails when the committed lock is not what
+`make lock` produces. A venv built before the lock last moved selects nothing
+until it is rebuilt with `make setup`.
 
 ## Measurements
 

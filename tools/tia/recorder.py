@@ -111,19 +111,33 @@ def git_identity(root: str) -> dict:
     return ident
 
 
+# Installers, which a venv and a container image each seed with their own
+# releases. requirements/dev.lock pins none of them, and no test imports them.
+INSTALLER_DISTRIBUTIONS = frozenset({"pip", "setuptools", "wheel"})
+
+
 def environment_fingerprint() -> dict:
-    """Interpreter and installed distributions (excluding this project)."""
+    """The interpreter and the installed distributions a test run could depend on.
+
+    A baseline is accepted only by an environment with the same fingerprint.
+    Python is compared as major.minor, because a CI image and a developer's
+    venv carry different patch releases of one minor version. Every installed
+    distribution is compared at its exact version, except this project and
+    INSTALLER_DISTRIBUTIONS. `make setup` and CI both install under
+    requirements/dev.lock, so on one minor version their fingerprints match.
+    """
     from importlib import metadata
 
+    excluded = INSTALLER_DISTRIBUTIONS | {"elspais", ""}
     dists = sorted(
         {
             f"{(d.metadata['Name'] or '').lower()}=={d.version}"
             for d in metadata.distributions()
-            if (d.metadata["Name"] or "").lower() not in ("elspais", "")
+            if (d.metadata["Name"] or "").lower() not in excluded
         }
     )
     return {
-        "python": ".".join(str(v) for v in sys.version_info[:3]),
+        "python": ".".join(str(v) for v in sys.version_info[:2]),
         "implementation": sys.implementation.name,
         "platform": sys.platform,
         "distributions": dists,

@@ -114,8 +114,11 @@ jobs:
       - name: Mark workspace safe for git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      # The extras and the lock `make setup` installs: the 3.13 leg records the
+      # TIA baseline, which an environment selects from only where every
+      # installed distribution matches it (docs/test-impact-analysis.md).
       - name: Install package with dev dependencies
-        run: pip install -e ".[dev,all]"
+        run: pip install -c requirements/dev.lock -e ".[dev,all,browser]"
 
       # On a push to main, the 3.13 leg also records a Test Impact Analysis
       # baseline (docs/test-impact-analysis.md) for pull requests to select
@@ -130,7 +133,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .results/tia/baseline
-          key: tia-baseline-v1-py3.13-${{ github.sha }}
+          key: tia-baseline-v2-py3.13-${{ github.sha }}
 
   test-impact:
     # Pull requests only, never the merge queue: the queue runs the full unit
@@ -163,15 +166,16 @@ jobs:
       - name: Mark workspace safe for git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      # The environment the `test` job recorded the baseline in.
       - name: Install package with dev dependencies
-        run: pip install -e ".[dev,all]"
+        run: pip install -c requirements/dev.lock -e ".[dev,all,browser]"
 
       - name: Restore TIA baseline
         uses: actions/cache/restore@v4
         with:
           path: .results/tia/baseline
-          key: tia-baseline-v1-py3.13-${{ github.event.pull_request.base.sha }}
-          restore-keys: tia-baseline-v1-py3.13-
+          key: tia-baseline-v2-py3.13-${{ github.event.pull_request.base.sha }}
+          restore-keys: tia-baseline-v2-py3.13-
 
       - name: Run impacted unit tests
         env:
@@ -215,7 +219,7 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Install package with e2e test dependencies
-        run: pip install -e ".[dev,all,browser]"
+        run: pip install -c requirements/dev.lock -e ".[dev,all,browser]"
 
       - name: Install chromium
         run: playwright install --with-deps chromium
@@ -263,7 +267,7 @@ jobs:
 
       - name: Install package with dev dependencies
         if: steps.filter.outputs.concurrency == 'true' || github.event_name != 'pull_request' || inputs.ref
-        run: pip install -e ".[dev,all]"
+        run: pip install -c requirements/dev.lock -e ".[dev,all,browser]"
 
       - name: Run concurrency stress battery
         if: steps.filter.outputs.concurrency == 'true' || github.event_name != 'pull_request' || inputs.ref
@@ -320,7 +324,7 @@ jobs:
 
       - name: Install package with browser test dependencies
         if: steps.filter.outputs.viewer == 'true' || github.event_name != 'pull_request' || inputs.ref
-        run: pip install -e ".[dev,all,browser]"
+        run: pip install -c requirements/dev.lock -e ".[dev,all,browser]"
 
       - name: Install chromium
         if: steps.filter.outputs.viewer == 'true' || github.event_name != 'pull_request' || inputs.ref
@@ -376,10 +380,18 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dev dependencies
+      # Before the install: a pyproject.toml change the lock does not carry
+      # can make the constrained install fail, and this names the remedy.
+      - name: Check the dependency lock is current
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          make lock PY=python
+          if ! git diff --exit-code -- requirements/dev.lock; then
+            echo "::error file=requirements/dev.lock::requirements/dev.lock is out of date with pyproject.toml. Run 'make lock' and commit the result."
+            exit 1
+          fi
+
+      - name: Install dev dependencies
+        run: pip install -c requirements/dev.lock -e ".[dev]"
 
       - name: Check with ruff
         run: ruff check src/ tests/ tools/
@@ -409,9 +421,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install elspais
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .
+        run: pip install -c requirements/dev.lock -e .
 
       - name: Run health checks on specs
         # --lenient so the missing-test-results warning (which now flips
@@ -462,13 +472,13 @@ jobs:
           python-version: "3.12"
 
       - name: Install package
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[all]"
+        run: pip install -c requirements/dev.lock -e ".[all]"
 
+      # The audit tools install under the lock too, so a dependency they share
+      # with the project stays at the version the lock pins and is audited there.
       - name: Audit dependencies for known vulnerabilities
         run: |
-          pip install pip-audit
+          pip install -c requirements/dev.lock pip-audit
           pip-audit \
             --ignore-vuln CVE-2026-4539 \
             --ignore-vuln CVE-2026-3219
@@ -477,6 +487,6 @@ jobs:
 
       - name: Check with safety
         run: |
-          pip install safety
+          pip install -c requirements/dev.lock safety
           safety check
         continue-on-error: true

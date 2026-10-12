@@ -220,7 +220,7 @@
 | REQ-d00298 | Report Export                                                 | dev-cli.md              | 8c1b78eb |
 | REQ-d00299 | Configuration as Graph Content                                | dev-graph-config.md     | 0577c0a5 |
 | REQ-d00300 | Viewer Remembered State                                       | dev-traceview-review.md | f794104b |
-| REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | 4a31d912 |
+| REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | 0e15379c |
 | REQ-d00312 | Test Target Output Areas                                      | dev-graph-core.md       | a0788b2a |
 | REQ-d00313 | Served Graph Currency                                         | dev-traceview-review.md | 8822f2a7 |
 | REQ-d00314 | Concurrent Test Target Runs                                   | dev-graph-core.md       | 228b3b98 |
@@ -229,7 +229,7 @@
 | REQ-d00320 | Viewer Edit Controls State What They Do                       | dev-traceview-review.md | e8010396 |
 | REQ-d00321 | Static View Embedded Content                                  | dev-traceview-review.md | 736babc4 |
 | REQ-d00322 | Evidence Snapshot                                             | dev-graph-core.md       | 13a665c5 |
-| REQ-d00323 | Carried Result Provenance                                     | dev-graph-core.md       | c64d2571 |
+| REQ-d00323 | Carried Result Provenance                                     | dev-graph-core.md       | 6c0eeda0 |
 | REQ-d00324 | Refusal of a Retired Configuration Value                      | dev-graph-config.md     | 530fb06a |
 | REQ-d00325 | Changelog Reason for a Saved Change                           | dev-graph-file-nodes.md | 4ebffc32 |
 | REQ-d00326 | Path-Shaped Skip Patterns                                     | dev-graph-config.md     | 797c3fe4 |

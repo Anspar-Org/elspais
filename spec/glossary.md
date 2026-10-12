@@ -25,6 +25,9 @@ Reader Preference
 Result Fingerprint
 : A statement of one run of a test target that gives the inputs the run read, the content digest of each input, the root of the tree the run executed in, and the times the run started and finished.
 
+Retained Result
+: A result that a run of a test target takes from an earlier run of that target, for a test that the run did not execute.
+
 Result Record
 : One outcome of one test that a results producer wrote, such as one test case in a JUnit XML file or one test entry in a pytest JSON report.
 

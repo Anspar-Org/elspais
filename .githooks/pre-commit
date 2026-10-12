@@ -263,7 +263,7 @@ if command -v elspais &> /dev/null; then
         echo "this repo's spec estate. Refusing to run it."
         echo ""
         echo "To fix, create a venv for this worktree:"
-        echo "  python3 -m venv .venv && .venv/bin/pip install -e \".[all,mcp,dev]\""
+        echo "  make setup"
         echo "This hook prefers \$REPO_ROOT/.venv/bin automatically once it exists."
         exit 1
     fi
