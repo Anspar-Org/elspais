@@ -1,11 +1,11 @@
-# Implements: REQ-o00066-F+G+L
+# Implements: REQ-o00066-F+G+L+M
 name: PR Validation
 
 # Every pull request is validated, whatever branch it targets: a stacked pull
 # request's title becomes a squash commit too. In the merge queue there is no
 # pull request title or commit range to read, and the title was validated when
 # the pull request was opened; the jobs still run there and pass as not
-# applicable, so a required check never holds the queue (REQ-o00066-L).
+# applicable, so a required check never holds the queue (REQ-o00066-M).
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]

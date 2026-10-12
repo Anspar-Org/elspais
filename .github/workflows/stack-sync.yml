@@ -1,4 +1,4 @@
-# Implements: REQ-o00080-A+B+C+D+E+F
+# Implements: REQ-o00066-L
 name: Stack Sync
 
 # Keeps a stack of pull requests consistent (docs/stacked-pull-requests.md):
@@ -26,7 +26,7 @@ jobs:
     name: Stack sync
     # A merged pull request from this repository, or a push to any branch but
     # main (a deleted branch has nothing to sync). Branches of pull requests from
-    # forks are never touched (REQ-o00080-F).
+    # forks are never touched.
     if: >-
       (github.event_name == 'pull_request'
         && github.event.pull_request.merged == true

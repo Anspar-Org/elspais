@@ -1,4 +1,4 @@
-"""Tests for the stacked-pull-request sync tool (REQ-o00080).
+"""Tests for the stacked-pull-request sync tool (REQ-o00066-L).
 
 The plan is a pure function of an event and the open pull requests, tested
 directly. The executor is tested against real git repositories in a temporary
@@ -37,16 +37,16 @@ def _order(plan) -> list[tuple[int, str, int | None]]:
 
 
 class TestPlanMerged:
-    # Verifies: REQ-o00080-A
-    def test_REQ_o00080_A_each_direct_child_is_retargeted_to_the_merged_base(self):
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_each_direct_child_is_retargeted_to_the_merged_base(self):
         merged = PullRequest(1, "main", "a")
         b, c = PullRequest(2, "a", "b"), PullRequest(3, "a", "c")
         unrelated = PullRequest(4, "main", "z")
         plan = plan_merged(merged, "f" * 40, [c, unrelated, b])
         assert plan.retargets == [Retarget(b, "main"), Retarget(c, "main")]
 
-    # Verifies: REQ-o00080-B
-    def test_REQ_o00080_B_first_update_carries_the_merged_head(self):
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_first_update_carries_the_merged_head(self):
         merged = PullRequest(1, "develop", "a")
         plan = plan_merged(merged, "abc123", [PullRequest(2, "a", "b", "[TOOL-2] B")])
         (update,) = plan.updates
@@ -57,8 +57,8 @@ class TestPlanMerged:
             merged_pr=1,
         )
 
-    # Verifies: REQ-o00080-B+C
-    def test_REQ_o00080_C_three_deep_cascade_is_bottom_up(self):
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_three_deep_cascade_is_bottom_up(self):
         merged = PullRequest(1, "main", "a")
         stack = [PullRequest(4, "c", "d"), PullRequest(2, "a", "b"), PullRequest(3, "b", "c")]
         plan = plan_merged(merged, "sha", stack)
@@ -69,8 +69,8 @@ class TestPlanMerged:
 
 
 class TestPlanPushed:
-    # Verifies: REQ-o00080-C
-    def test_REQ_o00080_C_branching_stack_is_depth_first_lowest_first(self):
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_branching_stack_is_depth_first_lowest_first(self):
         """Two pull requests on one base: the lower-numbered one and everything
         stacked on it come first, each branch before anything above it."""
         prs = [
@@ -85,16 +85,16 @@ class TestPlanPushed:
         assert plan.retargets == []
         assert all(u.merged_head is None for u in plan.updates)
 
-    # Verifies: REQ-o00080-C
-    def test_REQ_o00080_C_branch_nobody_stacks_on_plans_nothing(self):
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_branch_nobody_stacks_on_plans_nothing(self):
         plan = plan_pushed("lonely", [PullRequest(2, "a", "b"), PullRequest(3, "b", "c")])
         assert (plan.retargets, plan.updates, plan.skipped) == ([], [], [])
 
 
 class TestCrossRepository:
-    # Verifies: REQ-o00080-F
+    # Verifies: REQ-o00066-L
     @pytest.mark.parametrize("event", ["merged", "pushed"])
-    def test_REQ_o00080_F_fork_and_its_descendants_are_not_planned(self, event):
+    def test_REQ_o00066_L_fork_and_its_descendants_are_not_planned(self, event):
         fork = PullRequest(3, "a", "fork-branch", cross_repository=True)
         prs = [PullRequest(2, "a", "b"), fork, PullRequest(4, "fork-branch", "d")]
         if event == "merged":
@@ -105,8 +105,8 @@ class TestCrossRepository:
         assert [u.pr.number for u in plan.updates] == [2]
         assert len(plan.skipped) == 1 and plan.skipped[0].startswith("#3:")
 
-    # Verifies: REQ-o00080-F
-    def test_REQ_o00080_F_fork_higher_in_stack_is_not_planned(self):
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_fork_higher_in_stack_is_not_planned(self):
         prs = [
             PullRequest(2, "a", "b"),
             PullRequest(3, "b", "fork-branch", cross_repository=True),
@@ -295,8 +295,8 @@ def squashed_stack(forge):
 
 
 class TestSquashMerge:
-    # Verifies: REQ-o00080-A+B+D
-    def test_REQ_o00080_B_upper_branch_takes_main_without_the_merged_work_again(
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_upper_branch_takes_main_without_the_merged_work_again(
         self, forge, squashed_stack, monkeypatch
     ):
         # A plain merge of main into b conflicts: the squash commit is unrelated
@@ -325,8 +325,8 @@ class TestSquashMerge:
         ]
         assert changed == ["-a-line", "+a-line edited"]
 
-    # Verifies: REQ-o00080-D
-    def test_REQ_o00080_D_previous_head_is_kept(self, forge, squashed_stack, monkeypatch):
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_previous_head_is_kept(self, forge, squashed_stack, monkeypatch):
         plan = plan_merged(
             PullRequest(1, "main", "a"), squashed_stack["a_head"], [squashed_stack["upper"]]
         )
@@ -341,8 +341,8 @@ class TestSquashMerge:
 
 
 class TestPushCascade:
-    # Verifies: REQ-o00080-C+D
-    def test_REQ_o00080_C_push_to_bottom_reaches_every_branch_above(self, forge, monkeypatch):
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_push_to_bottom_reaches_every_branch_above(self, forge, monkeypatch):
         forge.checkout("a", "main")
         forge.commit("a.txt", "a\n", "a")
         forge.checkout("b", "a")
@@ -367,8 +367,8 @@ class TestPushCascade:
             assert forge.is_ancestor(before[br], f"refs/heads/{br}"), br
             assert forge.origin_show(br, "a.txt") == "a fixed"
 
-    # Verifies: REQ-o00080-C
-    def test_REQ_o00080_C_already_up_to_date_pushes_nothing(self, forge, monkeypatch):
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_already_up_to_date_pushes_nothing(self, forge, monkeypatch):
         forge.checkout("a", "main")
         forge.commit("a.txt", "a\n", "a")
         forge.checkout("b", "a")
@@ -400,8 +400,8 @@ class TestConflict:
         prs = forge.open_prs(PullRequest(2, "a", "b"), PullRequest(3, "b", "c"))
         return plan_pushed("a", prs)
 
-    # Verifies: REQ-o00080-E
-    def test_REQ_o00080_E_conflict_leaves_stack_unchanged_and_reports_once(
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_conflict_leaves_stack_unchanged_and_reports_once(
         self, forge, conflicting, monkeypatch
     ):
         before = {br: forge.origin_sha(br) for br in "abc"}
@@ -450,7 +450,7 @@ class TestRefusedPush:
 
         return plan_pushed("a", prs), refuse
 
-    # Verifies: REQ-o00080-C+E
+    # Verifies: REQ-o00066-L
     @pytest.mark.parametrize(
         "message, hinted",
         [
@@ -458,7 +458,7 @@ class TestRefusedPush:
             ("protected branch hook declined", False),
         ],
     )
-    def test_REQ_o00080_E_refused_push_leaves_branch_and_stack_above_unchanged(
+    def test_REQ_o00066_L_refused_push_leaves_branch_and_stack_above_unchanged(
         self, forge, stack_with_refusing_origin, monkeypatch, message, hinted
     ):
         plan, refuse = stack_with_refusing_origin
@@ -509,19 +509,19 @@ def _event(name: str, **overrides) -> dict:
 
 
 class TestStackSyncWorkflow:
-    # Verifies: REQ-o00080-B+C
+    # Verifies: REQ-o00066-L
     @pytest.mark.parametrize(
         "event, expected",
         [("push", "github.sha"), ("pull_request", "github.event.pull_request.base.ref")],
     )
-    def test_REQ_o00080_C_checkout_is_the_commit_the_event_is_about(
+    def test_REQ_o00066_L_checkout_is_the_commit_the_event_is_about(
         self, sync_job, event, expected
     ):
         (checkout,) = [s for s in sync_job["steps"] if "checkout" in s.get("uses", "")]
         context = _event(event)
         assert evaluate(checkout["with"]["ref"], context) == context[expected]
 
-    # Verifies: REQ-o00080-C
+    # Verifies: REQ-o00066-L
     @pytest.mark.parametrize("event", ["push", "pull_request"])
     @pytest.mark.parametrize(
         "present",
@@ -530,7 +530,7 @@ class TestStackSyncWorkflow:
             "",
         ],
     )
-    def test_REQ_o00080_C_no_tool_skips_every_later_step(self, sync_job, event, present):
+    def test_REQ_o00066_L_no_tool_skips_every_later_step(self, sync_job, event, present):
         steps = sync_job["steps"]
         (index,) = [i for i, s in enumerate(steps) if s.get("id") == "tool"]
         later = steps[index + 1 :]
@@ -544,7 +544,7 @@ class TestStackSyncWorkflow:
         else:
             assert ran == []
 
-    # Verifies: REQ-o00080-C+F
+    # Verifies: REQ-o00066-L
     @pytest.mark.parametrize(
         "event, overrides, expected",
         [
@@ -560,7 +560,7 @@ class TestStackSyncWorkflow:
         ],
         ids=["push", "deleted-branch", "merged-pr", "closed-unmerged", "fork-pr"],
     )
-    def test_REQ_o00080_F_job_runs_only_for_live_pushes_and_same_repo_merges(
+    def test_REQ_o00066_L_job_runs_only_for_live_pushes_and_same_repo_merges(
         self, sync_job, event, overrides, expected
     ):
         assert runs(sync_job, _event(event, **overrides)) is expected

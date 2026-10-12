@@ -1,11 +1,11 @@
-# Implements: REQ-o00066-B+C+D+E+I+J+K+L
+# Implements: REQ-o00066-B+C+D+E+I+J+K+L+M
 name: CI
 
 # A pull request runs CI whatever branch it targets, so a pull request stacked
-# on another one's branch is tested too (REQ-o00066-I+J,
+# on another one's branch is tested too (REQ-o00066-L,
 # docs/stacked-pull-requests.md). `merge_group` is the merge queue: it tests
 # the commit that will actually land, with the checks a pull request into main
-# gets (REQ-o00066-L). Path-filtered tiers always run there, because the queue
+# gets (REQ-o00066-M). Path-filtered tiers always run there, because the queue
 # is the last gate before main.
 on:
   pull_request:

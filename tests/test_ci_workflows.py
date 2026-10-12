@@ -129,13 +129,12 @@ class TestCITestSuite:
         their pull requests."""
         assert _triggers(ci_config)["push"]["branches"] == ["main"]
 
-    # Verifies: REQ-o00066-J
-    def test_REQ_o00066_J_merge_group_runs_e2e_on_one_version(self, ci_config):
+    # Verifies: REQ-o00066-M
+    def test_REQ_o00066_M_merge_group_runs_e2e_on_one_version(self, ci_config):
         """A merge-queue candidate runs the e2e tier as a pull request does."""
         versions = _e2e_versions(ci_config, "merge_group")
         assert versions == _e2e_versions(ci_config, "pull_request") == ["3.13"]
 
-    # Verifies: REQ-o00066-I+K
     # Verifies: REQ-o00066-I+K
     def test_REQ_o00066_I_test_job_runs_pytest(self, ci_config):
         """The unit job runs the tier through the runner the pre-commit hook
@@ -156,9 +155,9 @@ def _load(name: str) -> dict:
 
 
 class TestTriggers:
-    # Verifies: REQ-o00066-I+J+F+G
+    # Verifies: REQ-o00066-L+F+G
     @pytest.mark.parametrize("workflow", sorted(_WORKFLOWS))
-    def test_REQ_o00066_I_pull_request_runs_whatever_its_base(self, workflow):
+    def test_REQ_o00066_L_pull_request_runs_whatever_its_base(self, workflow):
         """A pull request stacked on another one's branch is checked too: the
         pull_request trigger filters on no base branch."""
         triggers = _triggers(_load(workflow))
@@ -166,16 +165,16 @@ class TestTriggers:
         pr_trigger = triggers["pull_request"] or {}
         assert not {"branches", "branches-ignore"} & set(pr_trigger), pr_trigger
 
-    # Verifies: REQ-o00066-L
+    # Verifies: REQ-o00066-M
     @pytest.mark.parametrize("workflow", sorted(_WORKFLOWS))
-    def test_REQ_o00066_L_runs_on_merge_group(self, workflow):
+    def test_REQ_o00066_M_runs_on_merge_group(self, workflow):
         triggers = _triggers(_load(workflow))
         assert "merge_group" in triggers
         assert not {"branches", "branches-ignore"} & set(triggers["merge_group"] or {})
 
-    # Verifies: REQ-o00066-L
+    # Verifies: REQ-o00066-M
     @pytest.mark.parametrize("workflow", sorted(_WORKFLOWS))
-    def test_REQ_o00066_L_merge_group_runs_every_job_a_pull_request_runs(self, workflow):
+    def test_REQ_o00066_M_merge_group_runs_every_job_a_pull_request_runs(self, workflow):
         """No job-level condition drops a merge-queue candidate from a job a
         pull request into main gets."""
         jobs = _load(workflow)["jobs"]
@@ -201,9 +200,9 @@ def _filter_steps(job: dict, output: str) -> tuple[dict, list[dict], list[dict]]
 
 
 class TestPathFilteredTiers:
-    # Verifies: REQ-o00066-L
+    # Verifies: REQ-o00066-M
     @pytest.mark.parametrize("job_name", sorted(_FILTERED))
-    def test_REQ_o00066_L_merge_group_runs_tier_unconditionally(self, ci_config, job_name):
+    def test_REQ_o00066_M_merge_group_runs_tier_unconditionally(self, ci_config, job_name):
         """In the merge queue the filter step is skipped (its output reads
         empty) and the tier runs anyway; the skip notice does not."""
         filter_step, tier, notices = _filter_steps(ci_config["jobs"][job_name], _FILTERED[job_name])
@@ -237,7 +236,7 @@ def _step_with(job: dict, needle: str) -> dict:
 
 
 class TestPRValidationInMergeQueue:
-    # Verifies: REQ-o00066-L
+    # Verifies: REQ-o00066-M
     @pytest.mark.parametrize(
         "job_name",
         [
@@ -245,14 +244,14 @@ class TestPRValidationInMergeQueue:
             "validate-commit-messages",
         ],
     )
-    def test_REQ_o00066_L_every_job_runs_a_step_in_merge_queue(self, pr_config, job_name):
+    def test_REQ_o00066_M_every_job_runs_a_step_in_merge_queue(self, pr_config, job_name):
         """Each required check reports on a merge-queue candidate by running
         something there, rather than by having nothing to run."""
         steps = pr_config["jobs"][job_name]["steps"]
         assert any(_runs(s, _context("merge_group")) for s in steps)
 
-    # Verifies: REQ-o00066-L+F+G
-    def test_REQ_o00066_L_title_and_commit_checks_skip_merge_queue(self, pr_config):
+    # Verifies: REQ-o00066-M+F+G
+    def test_REQ_o00066_M_title_and_commit_checks_skip_merge_queue(self, pr_config):
         """The merge queue has no title or commit range to read; a pull
         request still has both checked."""
         for step in _pr_check_steps(pr_config):
