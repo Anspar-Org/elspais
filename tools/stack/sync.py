@@ -4,8 +4,11 @@ A stack is a chain of pull requests, each based on the branch of the one below
 it. Two events need repair (REQ-o00066-L):
 
 * ``merged``: a pull request merged. Each open pull request based on its branch
-  is retargeted to the branch it merged into and brought up to date with
-  that branch, then everything stacked above is brought up to date.
+  is retargeted to the branch it merged into. That is all, when the pull
+  request already holds the merged one's last commit and merges cleanly into
+  its new base: its CI ran on that same content, so the result still applies
+  and it can be merged at once. Otherwise it is brought up to date with its new
+  base, and everything stacked above it after it.
 * ``pushed``: a branch gained commits. Each open pull request based on it, and
   each one stacked above those, is brought up to date with the branch below.
 
@@ -188,11 +191,23 @@ class Executor:
         if not self.dry_run:
             self._run("git", "fetch", "--quiet", "origin")
         blocked: set[int] = set()
+        kept: set[int] = set()
         conflicts = 0
         for u in plan.updates:
             if u.parent in blocked:
                 blocked.add(u.pr.number)
                 self.say(f"#{u.pr.number}: left unchanged; #{u.parent} below it was not updated")
+                continue
+            if u.parent in kept:
+                kept.add(u.pr.number)
+                self.say(f"#{u.pr.number}: left as is; #{u.parent} below it did not change")
+                continue
+            if u.merged_head and self._still_tested(u):
+                kept.add(u.pr.number)
+                self.say(
+                    f"#{u.pr.number} ({u.pr.head}) holds #{u.merged_pr}'s last commit and merges"
+                    f" cleanly into {u.base}; left as is, so its CI result still applies"
+                )
                 continue
             self.say(f"update #{u.pr.number} ({u.pr.head}) with {u.base}")
             if self.dry_run:
@@ -203,6 +218,31 @@ class Executor:
                 conflicts += 1
                 blocked.add(u.pr.number)
         return 1 if conflicts else 0
+
+    def _still_tested(self, u: Update) -> bool:
+        """Whether a pull request retargeted after a merge can be merged as it
+        stands: its branch holds the merged pull request's last commit, so its
+        CI ran on the content that is now in the base, and it merges into the
+        base without conflict. A squash merge leaves the base with exactly that
+        content, so merging the pull request gives the content its CI tested."""
+        if u.merged_pr is not None:
+            self._run(
+                "git", "fetch", "--quiet", "origin", f"refs/pull/{u.merged_pr}/head", check=False
+            )
+        head = f"origin/{u.pr.head}"
+        holds = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", u.merged_head or "", head], capture_output=True
+        )
+        if holds.returncode != 0:
+            return False
+        # Exit 0 is a clean merge, 1 a conflict; anything else is an error, and
+        # an error is treated as a conflict, so the pull request is updated.
+        clean = subprocess.run(
+            ["git", "merge-tree", "--write-tree", self._base_ref(u.base), head],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return clean.returncode == 0
 
     def _base_ref(self, base: str) -> str:
         """The base as this run left it: a branch this run updated is read
