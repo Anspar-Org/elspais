@@ -139,8 +139,14 @@ J. For every pull request targeting main, the CI pipeline SHALL run the end-to-e
 
 K. For every push to main, the CI pipeline SHALL run the full test suite on every supported Python version.
 
+L. The CI pipeline SHALL support stacked pull requests.
+
+M. The CI pipeline SHALL support a merge queue for main.
+
 ## Changelog
 
+- 2026-10-12 | 826a1e02 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-12 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-155: L supports stacked pull requests; M supports a merge queue for main
 - 2026-10-03 | 3f2127be | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-03 | - | - | Michael Lewis (<michael@anspar.org>) | A retired: a pull request runs the unit tier on every supported version and the end-to-end tier on one (I, J); a push to main runs the full suite on every supported version (K)
 - 2026-09-10 | 133e2f0d | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -149,7 +155,7 @@ K. For every push to main, the CI pipeline SHALL run the full test suite on ever
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: F/G accept any Linear team prefix, not only CUR — the repo's team moved to TOOL; matches the commit-msg hook's existing pattern
 - 2026-03-30 | 315accce | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *CI/CD Pipeline Enforcement* | **Hash**: 3f2127be
+*End* *CI/CD Pipeline Enforcement* | **Hash**: 826a1e02
 ---
 
 # REQ-o00078: Release Completeness Across Distribution Channels

@@ -1,9 +1,15 @@
-# Implements: REQ-o00066-B+C+D+E+I+J+K
+# Implements: REQ-o00066-B+C+D+E+I+J+K+L+M
 name: CI
 
+# A pull request runs CI whatever branch it targets, so a pull request stacked
+# on another one's branch is tested too (REQ-o00066-L,
+# docs/stacked-pull-requests.md). `merge_group` is the merge queue: it tests
+# the commit that will actually land, with the checks a pull request into main
+# gets (REQ-o00066-M). Path-filtered tiers always run there, because the queue
+# is the last gate before main.
 on:
   pull_request:
-    branches: [main]
+  merge_group:
   push:
     branches: [main]
 
@@ -97,9 +103,9 @@ jobs:
     # CLI, MCP and viewer path. It covers the CLI broadly, so it runs on every
     # change rather than behind a path filter. Browser tests carrying the e2e
     # marker run here too, so the browser extra and chromium are installed.
-    # A pull request runs it on the newest supported Python only; the unit
-    # tier already runs on every supported version. A push to main runs it
-    # on every supported version.
+    # A pull request, and a merge-queue candidate, runs it on the newest
+    # supported Python only; the unit tier already runs on every supported
+    # version. A push to main runs it on every supported version.
     name: E2E (Python ${{ matrix.python-version }})
     needs: [compute-hash, prepare-image]
     runs-on: ubuntu-latest
@@ -107,7 +113,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.13"]' || '["3.10", "3.11", "3.12", "3.13"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.13"]' || '["3.10", "3.11", "3.12", "3.13"]') }}
 
     steps:
       - uses: actions/checkout@v4
@@ -142,6 +148,7 @@ jobs:
 
       - name: Detect concurrency-relevant changes
         id: filter
+        if: github.event_name != 'merge_group'
         uses: dorny/paths-filter@v3
         with:
           filters: |
@@ -154,15 +161,15 @@ jobs:
               - '.github/workflows/ci.yml'
 
       - name: Install package with dev dependencies
-        if: steps.filter.outputs.concurrency == 'true'
+        if: steps.filter.outputs.concurrency == 'true' || github.event_name == 'merge_group'
         run: pip install -e ".[dev,all]"
 
       - name: Run concurrency stress battery
-        if: steps.filter.outputs.concurrency == 'true'
+        if: steps.filter.outputs.concurrency == 'true' || github.event_name == 'merge_group'
         run: pytest tests/stress -m stress --tb=short -q
 
       - name: Skipped (no concurrency-relevant changes)
-        if: steps.filter.outputs.concurrency != 'true'
+        if: github.event_name != 'merge_group' && steps.filter.outputs.concurrency != 'true'
         run: echo "No concurrency-relevant files changed; stress battery not required."
 
   browser-test:
@@ -189,6 +196,7 @@ jobs:
 
       - name: Detect viewer-relevant changes
         id: filter
+        if: github.event_name != 'merge_group'
         uses: dorny/paths-filter@v3
         with:
           filters: |
@@ -202,19 +210,19 @@ jobs:
               - '.github/workflows/ci.yml'
 
       - name: Install package with browser test dependencies
-        if: steps.filter.outputs.viewer == 'true'
+        if: steps.filter.outputs.viewer == 'true' || github.event_name == 'merge_group'
         run: pip install -e ".[dev,all,browser]"
 
       - name: Install chromium
-        if: steps.filter.outputs.viewer == 'true'
+        if: steps.filter.outputs.viewer == 'true' || github.event_name == 'merge_group'
         run: playwright install --with-deps chromium
 
       - name: Run viewer browser tier
-        if: steps.filter.outputs.viewer == 'true'
+        if: steps.filter.outputs.viewer == 'true' || github.event_name == 'merge_group'
         run: pytest -m browser --tb=short -q
 
       - name: Skipped (no viewer-relevant changes)
-        if: steps.filter.outputs.viewer != 'true'
+        if: github.event_name != 'merge_group' && steps.filter.outputs.viewer != 'true'
         run: echo "No viewer-relevant files changed; browser tier not required."
 
   promote-image:
