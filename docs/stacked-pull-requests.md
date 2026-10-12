@@ -33,16 +33,25 @@ pull requests are supported) and M (the merge queue).
 
 | Event | Repair |
 | --- | --- |
-| A pull request merges | Each open pull request based on its branch is **retargeted** to the branch it merged into, and **brought up to date** with that branch. Everything stacked above is then brought up to date too. |
+| A pull request merges | Each open pull request based on its branch is **retargeted** to the branch it merged into. If it already holds the merged pull request's last commit and merges cleanly, that is all: its CI result still applies, and it can be merged straight away. Otherwise it is **brought up to date** with that branch, and everything stacked above it after it. |
 | A branch gains commits (a review fix on #A) | Each open pull request based on that branch, and each one stacked above those, **merges the branch below it**, from the bottom up. |
 
 Repairs only ever **add merge commits**. History anyone has reviewed is never
 rewritten, and a contributor's checkout of their branch stays valid.
 
+**Why a merged pull request usually needs nothing more.** CI on a stacked pull
+request tests it combined with the one below. When the one below is
+squash-merged, the base ends up with that pull request's final content, so
+merging the upper pull request gives exactly the content its CI already tested.
+Retargeting re-runs only the title check, not the tests. The pull request's diff
+on GitHub then also shows the merged pull request's changes, because git no
+longer sees them as merged; that is only how the diff is drawn.
+
 **Squash merges.** This repository squash-merges. A squash commit is unrelated
 to the commits it replaced, so a plain `git merge main` into the pull request
 above meets the merged work twice. It conflicts with itself wherever the upper
-pull request edited lines the lower one introduced. Before bringing `main` in,
+pull request edited lines the lower one introduced. So when the upper pull
+request does need bringing up to date, before bringing `main` in,
 stack sync records the merged pull request's last commit as already merged:
 `git merge -s ours` on a temporary branch from `main`. The real merge then sees
 only what `main` gained beyond it, and the upper pull request's diff shows only
