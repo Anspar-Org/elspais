@@ -58,6 +58,10 @@ jobs:
     timeout-minutes: 2
 
     steps:
+      - name: Not applicable in the merge queue
+        if: github.event_name == 'merge_group'
+        run: echo "Validated on the pull request; the merge queue has no commit range to read."
+
       - uses: actions/checkout@v4
         if: github.event_name == 'pull_request'
         with:
