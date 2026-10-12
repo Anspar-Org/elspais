@@ -533,6 +533,11 @@ Any other value is refused. The cache is bounded and held in memory only, so
 it matters to a process that builds more than once: the daemon and the viewer
 after each edit, or a test suite.
 
+A serving process reads the variable from its own environment. A command run
+with `0` or `verify` (or a value naming no mode) therefore never asks a running
+daemon or viewer, and never starts one: it builds its own graph under the mode
+it asked for.
+
 To register an associate without editing either file, use `elspais associate`.
 
 Both documents are kept once they are read. Building a repository's graph

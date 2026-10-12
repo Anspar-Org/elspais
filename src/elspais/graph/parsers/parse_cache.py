@@ -39,6 +39,11 @@ every operation on it holds one lock.
 reuses results; ``0`` reuses nothing and stores nothing; ``verify`` parses
 every time and raises ``AssertionError`` naming the file and the reading
 wherever a held result differs from the fresh one.
+
+A reading may also report something as it reads (``reading_warning``): a
+warning is part of what the reading produced, so it is held beside the result
+and repeated on every reuse, and a reading answered from the cache reports
+exactly what parsing the file would have.
 """
 
 from __future__ import annotations
@@ -46,6 +51,7 @@ from __future__ import annotations
 import dataclasses
 import os
 import pickle
+import sys
 import threading
 from collections import OrderedDict
 from collections.abc import Callable
@@ -170,6 +176,43 @@ def cache() -> ParseCache:
 
 
 # ----------------------------------------------------------------------
+# Warnings a reading reports
+# ----------------------------------------------------------------------
+
+# The warnings the reading in progress on this thread has reported, or None
+# where no cached reading is in progress.
+_REPORTED = threading.local()
+
+
+# Implements: REQ-d00331-A
+def reading_warning(message: str) -> None:
+    """Report *message* on stderr as a reading's warning.
+
+    Every warning a reading emits goes through here, so a reading answered
+    from the cache repeats it: ``cached_reading`` records what the parse it
+    holds reported and reports the same again on each reuse.
+    """
+    print(message, file=sys.stderr)
+    recorded = getattr(_REPORTED, "warnings", None)
+    if recorded is not None:
+        recorded.append(message)
+
+
+def _parse_recording(parse: Callable[[], list]) -> tuple[list, tuple[str, ...]]:
+    """Call *parse*, returning its result and the warnings it reported."""
+    outer = getattr(_REPORTED, "warnings", None)
+    _REPORTED.warnings = []
+    try:
+        result = parse()
+        return result, tuple(_REPORTED.warnings)
+    finally:
+        reported = _REPORTED.warnings
+        _REPORTED.warnings = outer
+        if outer is not None:
+            outer.extend(reported)
+
+
+# ----------------------------------------------------------------------
 # Key derivation
 # ----------------------------------------------------------------------
 
@@ -291,18 +334,21 @@ def cached_reading(
 
     held = _CACHE.get(key)
     if held is not None and selected == MODE_ON:
-        return pickle.loads(held)
+        result, warnings = pickle.loads(held)
+        for message in warnings:
+            reading_warning(message)
+        return result
 
-    result = parse()
+    result, warnings = _parse_recording(parse)
     try:
-        blob = pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL)
+        blob = pickle.dumps((result, warnings), protocol=pickle.HIGHEST_PROTOCOL)
     except Exception:  # noqa: BLE001 - an unpicklable reading is simply not held
         return result
 
     if held is not None:
         # Verify mode: the held reading must be the fresh one.
         _CACHE.verified += 1
-        if blob != held and pickle.loads(held) != result:
+        if blob != held and pickle.loads(held) != (result, warnings):
             named = reported_path or file_path or "<unnamed>"
             _CACHE.mismatches.append((reading, named))
             raise AssertionError(
@@ -324,4 +370,5 @@ __all__ = [
     "cached_reading",
     "grammar_fingerprint",
     "mode",
+    "reading_warning",
 ]

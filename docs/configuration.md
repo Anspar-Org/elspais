@@ -897,7 +897,9 @@ path and every identifier setting the reading depends on are unchanged. Unset
 or `1` reuses readings, `0` reuses nothing, and `verify` reads every file
 afresh and fails, naming the file, wherever a held reading differs from the
 fresh one. Any other value is refused. The cache changes how long a build
-takes and nothing a build produces.
+takes and nothing a build produces. A command run with `0` or `verify` builds its own
+graph rather than asking a running daemon or viewer, whose mode is the one it
+started with.
 
 `ELSPAIS_PROXY_SECRET` is the value a viewer server shares with an
 authenticating proxy in front of it. A request carrying the same value in

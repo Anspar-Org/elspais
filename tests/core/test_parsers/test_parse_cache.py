@@ -1,4 +1,3 @@
-# Verifies: REQ-d00331-A+B+C+D+E+F
 """The parse cache answers a reading asked for again without changing it.
 
 Each test installs a private ``ParseCache`` so what the process's own cache
@@ -88,6 +87,7 @@ READINGS = [
 
 
 class TestHitAndMiss:
+    # Verifies: REQ-d00331-A
     @pytest.mark.parametrize("reading,content,path", READINGS)
     def test_a_repeated_reading_is_answered_from_the_cache(
         self, private_cache, reading, content, path
@@ -102,6 +102,7 @@ class TestHitAndMiss:
         assert again == first
         assert again is not first
 
+    # Verifies: REQ-d00331-F
     @pytest.mark.parametrize("reading,content,path", READINGS)
     def test_off_reads_nothing_from_the_cache_and_holds_nothing(
         self, private_cache, monkeypatch, reading, content, path
@@ -114,11 +115,13 @@ class TestHitAndMiss:
         assert len(private_cache) == 0
         assert (private_cache.hits, private_cache.misses) == (0, 0)
 
+    # Verifies: REQ-d00331-F
     def test_an_unknown_mode_is_refused_naming_the_variable(self, monkeypatch) -> None:
         monkeypatch.setenv(parse_cache.ENV_VAR, "verfy")
         with pytest.raises(ValueError, match=parse_cache.ENV_VAR):
             _read(_dispatcher(), "spec", SPEC, "spec/prd.md")
 
+    # Verifies: REQ-d00331-B
     def test_a_spec_reading_read_at_another_path_is_the_same_reading(self, private_cache) -> None:
         """A spec reading consults no path, so a copy of the file shares it."""
         first = _read(_dispatcher(), "spec", SPEC, "/one/spec/prd.md")
@@ -130,7 +133,48 @@ class TestHitAndMiss:
         assert again == first == uncached
 
 
+# A Dart test() body the prescan cannot balance: it warns as it reads.
+UNBALANCED_DART = """\
+void main() {
+  // Verifies: REQ-p00001-A
+  test('renders', () {
+    expect(render(), isNotNull);
+"""
+
+DART_WARNING = "dart_prescan could not balance a test() body"
+
+
+class TestReadingWarnings:
+    # Verifies: REQ-d00331-A
+    @pytest.mark.parametrize("cache_mode", ["1", "verify", "0"])
+    def test_a_reused_reading_repeats_the_warning_its_parse_reported(
+        self, private_cache, monkeypatch, capsys, cache_mode
+    ) -> None:
+        monkeypatch.setenv(parse_cache.ENV_VAR, cache_mode)
+        dispatcher = _dispatcher()
+        first = dispatcher.dispatch_test(UNBALANCED_DART, "/x/widget_test.dart")
+        first_err = capsys.readouterr().err
+        second = dispatcher.dispatch_test(UNBALANCED_DART, "/x/widget_test.dart")
+        second_err = capsys.readouterr().err
+
+        assert first_err.count(DART_WARNING) == 1
+        assert second_err == first_err
+        assert second == first
+        if cache_mode == "1":
+            assert private_cache.hits == 1
+
+    # Verifies: REQ-d00331-A
+    def test_a_reading_that_warns_nothing_repeats_nothing(self, private_cache, capsys) -> None:
+        _read(_dispatcher(), "test", TEST, "tests/test_widget.py")
+        capsys.readouterr()
+        _read(_dispatcher(), "test", TEST, "tests/test_widget.py")
+
+        assert private_cache.hits == 1
+        assert capsys.readouterr().err == ""
+
+
 class TestIsolation:
+    # Verifies: REQ-d00331-C
     @pytest.mark.parametrize("reading,content,path", READINGS)
     def test_mutating_a_returned_reading_does_not_reach_the_next(
         self, private_cache, reading, content, path
@@ -173,6 +217,7 @@ SETTING_CHANGES = {
 
 
 class TestKeySensitivity:
+    # Verifies: REQ-d00331-B
     @pytest.mark.parametrize("reading,content,path", READINGS)
     def test_changed_content_is_a_miss(self, private_cache, reading, content, path) -> None:
         dispatcher = _dispatcher()
@@ -181,6 +226,7 @@ class TestKeySensitivity:
 
         assert (private_cache.hits, private_cache.misses) == (0, 2)
 
+    # Verifies: REQ-d00331-B
     @pytest.mark.parametrize(
         "reading,content,path,other",
         [
@@ -199,6 +245,7 @@ class TestKeySensitivity:
 
         assert (private_cache.hits, private_cache.misses) == (0, 2)
 
+    # Verifies: REQ-d00331-B
     @pytest.mark.parametrize("setting", sorted(SETTING_CHANGES))
     @pytest.mark.parametrize("reading,content,path", READINGS)
     def test_each_grammar_setting_is_in_the_key(
@@ -211,6 +258,7 @@ class TestKeySensitivity:
         assert private_cache.hits == 0, f"{setting} was not in the key"
         assert private_cache.misses == 2
 
+    # Verifies: REQ-d00331-B
     @pytest.mark.parametrize("reading,content,path", READINGS)
     def test_a_member_resolver_is_in_the_key(self, private_cache, reading, content, path) -> None:
         member = _config(project={"namespace": "LIB"})
@@ -223,6 +271,7 @@ class TestKeySensitivity:
 
         assert (private_cache.hits, private_cache.misses) == (0, 3)
 
+    # Verifies: REQ-d00331-B
     def test_the_test_reading_keys_this_files_prescan_entry(self, private_cache) -> None:
         dispatcher = _dispatcher()
         path = "tests/widget_test.go"
@@ -237,6 +286,7 @@ class TestKeySensitivity:
         # Another file's entry is not read, so it does not split the key.
         assert (private_cache.hits, private_cache.misses) == (1, 3)
 
+    # Verifies: REQ-d00331-B
     def test_the_code_reading_keys_its_line_context(self, private_cache) -> None:
         dispatcher = _dispatcher()
         path = "src/widget.py"
@@ -246,6 +296,7 @@ class TestKeySensitivity:
 
         assert (private_cache.hits, private_cache.misses) == (0, 3)
 
+    # Verifies: REQ-d00331-B
     def test_a_dispatcher_subclass_is_not_cached(self, private_cache) -> None:
         class Reader(FileDispatcher):
             pass
@@ -258,6 +309,7 @@ class TestKeySensitivity:
 
 
 class TestVerify:
+    # Verifies: REQ-d00331-E
     def test_verify_parses_and_passes_when_the_held_reading_matches(
         self, private_cache, monkeypatch
     ) -> None:
@@ -268,6 +320,7 @@ class TestVerify:
         assert private_cache.verified == 1
         assert again
 
+    # Verifies: REQ-d00331-E
     def test_verify_raises_naming_the_file_and_reading_on_a_mismatch(
         self, private_cache, monkeypatch
     ) -> None:
@@ -278,7 +331,7 @@ class TestVerify:
         import pickle
 
         held = pickle.loads(blob)
-        held[0].raw_text = "not what the file says"
+        held[0][0].raw_text = "not what the file says"
         private_cache.put(key, pickle.dumps(held))
 
         monkeypatch.setenv(parse_cache.ENV_VAR, "verify")
@@ -288,6 +341,7 @@ class TestVerify:
 
 
 class TestBounds:
+    # Verifies: REQ-d00331-D
     def test_entries_beyond_the_bound_evict_the_least_recently_used(self, monkeypatch) -> None:
         cache = parse_cache.ParseCache(max_entries=2)
         monkeypatch.setattr(parse_cache, "_CACHE", cache)
@@ -306,6 +360,7 @@ class TestBounds:
         dispatcher.dispatch_code(CODE, "b.py")
         assert cache.hits == 2
 
+    # Verifies: REQ-d00331-D
     def test_bytes_are_bounded(self) -> None:
         cache = parse_cache.ParseCache(max_bytes=10)
         cache.put(("a",), b"12345")
@@ -320,6 +375,7 @@ class TestBounds:
 
 
 class TestThreads:
+    # Verifies: REQ-d00331-A+C
     def test_concurrent_readings_agree_with_an_uncached_one(
         self, private_cache, monkeypatch
     ) -> None:
@@ -360,6 +416,7 @@ def _graph_text(root: Path) -> str:
     return json.dumps(data, default=repr, sort_keys=True)
 
 
+# Verifies: REQ-d00331-A
 @pytest.mark.parametrize("fixture", ["hht-like", "e2e-standard"])
 def test_a_build_is_the_same_graph_with_the_cache_on_or_off(
     private_cache, monkeypatch, fixture
