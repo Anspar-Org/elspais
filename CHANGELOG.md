@@ -10,7 +10,13 @@ All notable changes to elspais will be documented in this file.
 
 - **`make setup` registers the MCP server over http** -- where `claude` is on PATH, setup runs this checkout's `elspais mcp install`. That replaces a local registration that ran another elspais.
 
+- **A release publishes only a commit that passed the full test suite (REQ-o00066-N)** -- the automatic release ran when a labelled pull request merged, beside the CI run that tests the merge, and tagged whatever `main` held at that moment. It now starts when CI's push run on `main` succeeds, and tags and publishes the commit that run tested. Every route to PyPI and the Homebrew tap, a release created by hand included, passes a gate on that exact commit. Where CI's push run passed every job, the release proceeds. Where a job failed, it refuses. Where CI holds no verdict -- no push run, one in progress or cancelled, or a job that never ran -- the release runs the full suite on the commit itself and publishes only if it passes. A push to `main` now runs the stress and browser tiers on every supported Python with no path filter, so that run is the full suite.
+
 - **The test-impact recorder tests no longer depend on installed pytest plugins** -- the recorded inner run loads no plugins by entry point, so an autouse fixture from an installed plugin no longer enters the shard.
+
+- **A commit runs the impacted unit tests, and a push runs none** -- the pre-commit hook runs the unit tests Test Impact Analysis selects, and a failure among them fails the commit. Where TIA cannot narrow the run, the hook runs the full unit tier through `.githooks/unit-verdict`, and `ELSPAIS_UNIT_MODE=full` asks for that run. The pre-push hook runs the e2e tier and no unit tests; CI's unit job runs the full unit tier on every pull request.
+
+- **Every full unit run a hook makes records the worktree's TIA baseline** -- each worktree records its own baseline in `.results/tia/baseline` from its own passing full unit run, so a new worktree's first commit runs the full tier. `python -m tools.tia baseline path` prints the location, and `ELSPAIS_TIA_BASELINE` names another; every command and hook resolves it the same way, and `TIA_BASELINE` is refused naming that variable. Only a run that passed publishes a baseline, so a failing run never replaces a good one. A concurrent reader sees the previous baseline or the new one whole, never a mixture.
 
 ### TOOL-148
 

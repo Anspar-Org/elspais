@@ -2,17 +2,29 @@
 
 A baseline is a directory holding
 
-    baseline.json   identity (tree + dirty overlay), environment, the test
-                    inventory with outcomes, durations, shared-fixture use,
-                    and the data-read / directory-listing / subprocess
-                    attribution the recorder captured
-    coverage.db     the run's coverage.py data file, copied verbatim; its
-                    per-test contexts (`<nodeid>|setup|run|teardown`) are the
-                    test -> production-line map
+    baseline.json           identity (tree + dirty overlay), environment, the
+                            test inventory with outcomes, durations,
+                            shared-fixture use, and the data-read /
+                            directory-listing / subprocess attribution the
+                            recorder captured
+    coverage-<digest>.db    the run's coverage.py data file, copied verbatim
+                            and named by its content; its per-test contexts
+                            (`<nodeid>|setup|run|teardown`) are the test ->
+                            production-line map. baseline.json names the one
+                            it belongs to.
 
-`build_baseline` makes one from a run directory; `load_baseline` reads one
-back and refuses -- with a reason the selector reports as a fallback --
-anything it cannot trust.
+`baseline_dir` is where a baseline lives: `$ELSPAIS_TIA_BASELINE`, else
+`.results/tia/baseline` in the worktree's own root. Each worktree records its
+own, from its own passing full run, because that is the baseline closest to
+its code. `build_baseline` makes one from a run directory; `load_baseline`
+reads one back and refuses -- with a reason the selector reports as a
+fallback -- anything it cannot trust.
+
+Publishing is atomic for a concurrent reader: both files are built in a
+staging directory beside the baseline, the coverage file moves in under its
+own content-derived name, and only then does baseline.json replace the
+previous one. A reader therefore sees the previous baseline or the new one,
+and two writers publishing at once leave whichever renamed baseline.json last.
 """
 
 from __future__ import annotations
@@ -22,14 +34,23 @@ import hashlib
 import json
 import os
 import shutil
+import tempfile
 import time
 from dataclasses import dataclass, field
 
 from . import SCHEMA_VERSION
-from .gitio import object_exists
+from .gitio import object_exists, repo_root
 
 BASELINE_JSON = "baseline.json"
-COVERAGE_DB = "coverage.db"
+COVERAGE_PREFIX = "coverage-"
+COVERAGE_SUFFIX = ".db"
+BASELINE_ENV = "ELSPAIS_TIA_BASELINE"
+_STAGED_COVERAGE = "coverage.db"
+# A coverage file baseline.json no longer names is kept this long, because a
+# selection reading the previous baseline.json while a full run publishes opens
+# that file moments later; past this age, a file nothing names is a superseded or
+# abandoned one.
+_SUPERSEDED_AFTER_SECONDS = 3600.0
 
 
 class BaselineError(Exception):
@@ -66,11 +87,30 @@ def tool_hash(tool_dir: str | None = None) -> str:
     return h.hexdigest()[:16]
 
 
+# -- location ---------------------------------------------------------------
+
+
+def baseline_dir(root: str | None = None) -> str:
+    """Where the baseline lives: `$ELSPAIS_TIA_BASELINE`, else this worktree's own."""
+    explicit = os.environ.get(BASELINE_ENV, "")
+    if explicit:
+        return explicit
+    return os.path.join(repo_root(root or "."), ".results", "tia", "baseline")
+
+
 # -- building ---------------------------------------------------------------
 
 
-def build_baseline(run_dir: str, dest: str, coverage_file: str | None = None) -> dict:
-    """Merge the recorder shards of one run with its coverage into `dest`."""
+def build_baseline(
+    run_dir: str, dest: str, coverage_file: str | None = None, *, only_if_passed: bool = False
+) -> dict:
+    """Merge the recorder shards of one run with its coverage, and publish it at `dest`.
+
+    With `only_if_passed`, a run that did not pass outright -- a pytest exit
+    status other than 0, a recorder error, or a tree that changed while it
+    ran -- is refused before anything at `dest` is touched, so it never
+    replaces the baseline a passing run published there.
+    """
     shards = []
     for p in sorted(glob.glob(os.path.join(run_dir, "tia-shard-*.json"))):
         with open(p, encoding="utf-8") as fh:
@@ -154,49 +194,92 @@ def build_baseline(run_dir: str, dest: str, coverage_file: str | None = None) ->
         and ident_start.get("tree") == ident_end.get("tree")
         and ident_start.get("dirty") == ident_end.get("dirty")
     )
-    os.makedirs(dest, exist_ok=True)
-    cov_dest = os.path.join(dest, COVERAGE_DB)
-    tmp = cov_dest + ".tmp"
-    shutil.copyfile(coverage_file, tmp)
-    os.replace(tmp, cov_dest)
-    contexts = _context_count(cov_dest)
-    manifest = {
-        "schema": SCHEMA_VERSION,
-        "tool": tool_hash(),
-        "created": time.time(),
-        "suite": "unit",
-        "root": ctl["root"],
-        "identity": {
-            "commit": ident_start.get("commit"),
-            "tree": ident_start.get("tree"),
-            "dirty": ident_start.get("dirty") or {},
-            "consistent": consistent,
-            "error": ident_start.get("error") or ident_end.get("error"),
-        },
-        "environment": ctl.get("environment"),
-        "environment_hash": env_hash(ctl.get("environment") or {}),
-        "run": {
-            "exitstatus": ctl.get("exitstatus"),
-            "markexpr": ctl.get("markexpr"),
-            "argv": ctl.get("argv"),
-            "workers": sorted(s["worker"] for s in shards if not s.get("controller")),
-            "started": ctl.get("started"),
-            "finished": ctl.get("finished"),
-        },
-        "coverage": {"file": COVERAGE_DB, "sha256": sha256_file(cov_dest), "contexts": contexts},
-        "tests": dict(sorted(tests.items())),
-        "data_reads": {k: sorted(v) for k, v in sorted(data_reads.items())},
-        "dir_lists": {k: sorted(v) for k, v in sorted(dir_lists.items())},
-        "collection_reads": {k: sorted(v) for k, v in sorted(collection_reads.items())},
-        "session_reads": sorted(session_reads),
-        "external_fixtures": sorted(external_fixtures),
-        "errors": errors,
-    }
-    tmp = os.path.join(dest, BASELINE_JSON + ".tmp")
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(manifest, fh, indent=1, sort_keys=False)
-    os.replace(tmp, os.path.join(dest, BASELINE_JSON))
+    if only_if_passed:
+        why = (
+            f"recorder errors: {errors[0][:200]}"
+            if errors
+            else f"pytest exit status {ctl.get('exitstatus')}"
+            if ctl.get("exitstatus") != 0
+            else "the tree changed while the run was in progress"
+            if not consistent
+            else None
+        )
+        if why:
+            raise BaselineError("baseline-not-published", f"the run did not pass ({why})")
+
+    dest = os.path.abspath(dest)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    staging = tempfile.mkdtemp(prefix=f".{os.path.basename(dest)}.tmp-", dir=os.path.dirname(dest))
+    try:
+        staged_cov = os.path.join(staging, _STAGED_COVERAGE)
+        shutil.copyfile(coverage_file, staged_cov)
+        digest = sha256_file(staged_cov)
+        manifest = {
+            "schema": SCHEMA_VERSION,
+            "tool": tool_hash(),
+            "created": time.time(),
+            "suite": "unit",
+            "root": ctl["root"],
+            "identity": {
+                "commit": ident_start.get("commit"),
+                "tree": ident_start.get("tree"),
+                "dirty": ident_start.get("dirty") or {},
+                "consistent": consistent,
+                "error": ident_start.get("error") or ident_end.get("error"),
+            },
+            "environment": ctl.get("environment"),
+            "environment_hash": env_hash(ctl.get("environment") or {}),
+            "run": {
+                "exitstatus": ctl.get("exitstatus"),
+                "markexpr": ctl.get("markexpr"),
+                "argv": ctl.get("argv"),
+                "workers": sorted(s["worker"] for s in shards if not s.get("controller")),
+                "started": ctl.get("started"),
+                "finished": ctl.get("finished"),
+            },
+            "coverage": {
+                "file": f"{COVERAGE_PREFIX}{digest[:16]}{COVERAGE_SUFFIX}",
+                "sha256": digest,
+                "contexts": _context_count(staged_cov),
+            },
+            "tests": dict(sorted(tests.items())),
+            "data_reads": {k: sorted(v) for k, v in sorted(data_reads.items())},
+            "dir_lists": {k: sorted(v) for k, v in sorted(dir_lists.items())},
+            "collection_reads": {k: sorted(v) for k, v in sorted(collection_reads.items())},
+            "session_reads": sorted(session_reads),
+            "external_fixtures": sorted(external_fixtures),
+            "errors": errors,
+        }
+        _publish(staging, dest, manifest)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
     return manifest
+
+
+def _publish(staging: str, dest: str, manifest: dict) -> None:
+    """Move the staged baseline into `dest`: the coverage file first, baseline.json last."""
+    staged_json = os.path.join(staging, BASELINE_JSON)
+    with open(staged_json, "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, indent=1, sort_keys=False)
+    os.makedirs(dest, exist_ok=True)
+    cov_name = manifest["coverage"]["file"]
+    os.replace(os.path.join(staging, _STAGED_COVERAGE), os.path.join(dest, cov_name))
+    os.replace(staged_json, os.path.join(dest, BASELINE_JSON))
+    _remove_superseded(dest, keep=cov_name)
+
+
+def _remove_superseded(dest: str, keep: str) -> None:
+    cutoff = time.time() - _SUPERSEDED_AFTER_SECONDS
+    for name in os.listdir(dest):
+        is_coverage = name.startswith(COVERAGE_PREFIX) and name.endswith(COVERAGE_SUFFIX)
+        if name == keep or not is_coverage:
+            continue
+        path = os.path.join(dest, name)
+        try:
+            if os.path.isfile(path) and os.path.getmtime(path) < cutoff:
+                os.unlink(path)
+        except OSError:
+            continue  # another writer removed it first
 
 
 def _context_count(db: str) -> int:
@@ -301,7 +384,10 @@ def load_baseline(
         if on_environment_change == "full":
             raise BaselineError("environment-changed", diff)
         b.warnings.append("environment differs from the baseline: " + diff)
-    cov_path = os.path.join(path, m["coverage"].get("file", COVERAGE_DB))
+    cov_name = m["coverage"].get("file")
+    if not cov_name:
+        raise BaselineError("baseline-malformed", "the baseline names no coverage file")
+    cov_path = os.path.join(path, cov_name)
     if not os.path.isfile(cov_path):
         raise BaselineError("coverage-missing", f"{cov_path} not found")
     if sha256_file(cov_path) != m["coverage"].get("sha256"):

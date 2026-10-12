@@ -3,7 +3,7 @@
  "suite": "unit",
  "selection_mode": "test-impact",
  "baseline": {
-  "path": ".results/tia/baseline",
+  "path": "/path/to/worktree/.results/tia/baseline",
   "usable": true,
   "commit": "dfa875986af88e786a77b8b3d9eecddfa9f14628",
   "tree": "a77d1b5f292cf093d22d615ab8f0b698dad0bb19",

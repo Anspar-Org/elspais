@@ -27,6 +27,10 @@ def assert_full(sel, kind: str) -> None:
     assert sel.manifest()["pytest_targets"] == ["<full suite>"]
 
 
+def coverage_file(baseline):
+    return baseline / json.loads((baseline / "baseline.json").read_text())["coverage"]["file"]
+
+
 def edit_json(baseline, edit) -> None:
     path = baseline / "baseline.json"
     data = json.loads(path.read_text())
@@ -52,7 +56,7 @@ def test_missing_baseline_directory(repo, work):
 
 def test_missing_coverage_data(repo, baseline):
     change(repo)
-    (baseline / "coverage.db").unlink()
+    coverage_file(baseline).unlink()
     assert_full(s.select_now(repo, baseline), "coverage-missing")
 
 
@@ -161,7 +165,7 @@ def test_test_that_never_ran(work):
 
 def test_coverage_bytes_changed(repo, baseline):
     change(repo)
-    with open(baseline / "coverage.db", "ab") as fh:
+    with open(coverage_file(baseline), "ab") as fh:
         fh.write(b"\0")
     assert_full(s.select_now(repo, baseline), "coverage-corrupt")
 
@@ -169,10 +173,10 @@ def test_coverage_bytes_changed(repo, baseline):
 def test_coverage_replaced_by_non_coverage_file(repo, baseline):
     # checksum updated to match, so only the content check can refuse it
     change(repo)
-    (baseline / "coverage.db").write_bytes(b"not sqlite at all")
+    coverage_file(baseline).write_bytes(b"not sqlite at all")
     from tools.tia.baseline import sha256_file
 
-    digest = sha256_file(str(baseline / "coverage.db"))
+    digest = sha256_file(str(coverage_file(baseline)))
     edit_json(baseline, lambda d: d["coverage"].update(sha256=digest))
     assert_full(s.select_now(repo, baseline), "coverage-corrupt")
 

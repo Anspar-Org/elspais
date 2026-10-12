@@ -65,10 +65,12 @@ test-all: ## Run all tests (unit, e2e, browser, stress), one tier at a time
 	$(MAKE) -j1 test-stress
 
 # Test Impact Analysis (docs/test-impact-analysis.md). Fast development
-# feedback, never a verdict: the full tiers above stay authoritative.
+# feedback, the same selection the pre-commit hook runs; CI's full unit tier
+# is the run a merge rests on.
 #
 # tia-baseline runs the full unit tier exactly as `make test` does, and also
-# records the baseline that test-impacted selects from.
+# publishes the baseline that test-impacted selects from, when the run passes,
+# in this worktree's .results/tia/baseline.
 tia-baseline: ## Run the unit tier and record a TIA baseline (.results/tia/baseline)
 	ELSPAIS_TIA_RECORD=1 .githooks/run-target elspais-unit .githooks/run-unit-tier
 

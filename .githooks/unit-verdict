@@ -3,13 +3,16 @@
 # unit-verdict: the one authority for the cached unit verdict
 # =====================================================
 #
-# Runs the unit tier and records the verdict in .results/.test-cache-unit,
-# keyed on the staged tree (git write-tree). pre-commit calls it for every
-# commit except a checkpoint (ELSPAIS_CHECKPOINT=1). pre-push calls it for
-# the tree it pushes, so a checkpoint's skipped tier runs before anything
-# leaves the machine. Running this script before `git push` moves the tier
-# out of the push, where a long run otherwise overruns the remote's idle
-# timeout.
+# Runs the full unit tier and records the verdict in .results/.test-cache-unit,
+# keyed on the staged tree (git write-tree). pre-commit calls it where Test
+# Impact Analysis cannot narrow the run, and where ELSPAIS_UNIT_MODE=full asks
+# for the whole tier. CI's unit job runs the full tier on every pull request;
+# this script is the local full run.
+#
+# Every run it makes also records a Test Impact Analysis baseline
+# (ELSPAIS_TIA_RECORD=1), published only if the run passes, in this
+# worktree's own .results/tia/baseline, where its impacted runs select from it
+# (docs/test-impact-analysis.md).
 #
 # A verdict already recorded for the same tree is honored without
 # re-running. Re-run it with ELSPAIS_UNIT_FORCE=1. The verdict is written
@@ -70,6 +73,9 @@ fi
 
 echo -e "${BLUE}Running unit/integration tests with coverage...${NC}"
 echo ""
+
+# A full run is what a baseline is recorded from; see the header.
+export ELSPAIS_TIA_RECORD=1
 
 UNIT_RUN_DIR="$CACHE_DIR/run-unit"
 mkdir -p "$UNIT_RUN_DIR"

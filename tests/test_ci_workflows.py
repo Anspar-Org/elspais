@@ -18,6 +18,8 @@ from tests._workflow_expressions import runs as _runs
 REPO_ROOT = Path(__file__).parent.parent
 CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 PR_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "pr-validation.yml"
+PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "publish-pypi.yml"
+RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "auto-release.yml"
 
 
 @pytest.fixture(scope="module")
@@ -58,12 +60,24 @@ _REFS = {
 
 
 def _context(event: str, filter_output: str = "") -> dict:
+    # A run its own trigger started holds no inputs, and GitHub reads a
+    # property of the empty `inputs` object as null.
     return {
         "github.event_name": event,
         "github.ref": _REFS[event],
+        "inputs.ref": None,
         "steps.filter.outputs.concurrency": filter_output,
         "steps.filter.outputs.viewer": filter_output,
     }
+
+
+def _matrix_versions(ci_config, job: str, context: dict) -> list[str]:
+    """Evaluate a job's python-version matrix in one context."""
+    matrix = ci_config["jobs"][job]["strategy"]["matrix"]["python-version"]
+    versions = _evaluate(matrix, context) if isinstance(matrix, str) else matrix
+    assert isinstance(versions, list)
+    assert all(isinstance(v, str) for v in versions)
+    return versions
 
 
 def _e2e_versions(ci_config, event: str) -> list[str]:
@@ -232,6 +246,216 @@ class TestPathFilteredTiers:
         assert _runs(filter_step, context)
         assert all(_runs(s, context) == changed for s in tier)
         assert all(_runs(s, context) != changed for s in notices)
+
+
+# --- Assertion N: a release publishes only a commit that passed the full suite ---
+
+#: The commit a release names when it calls ci.yml.
+_RELEASED_SHA = "0123456789abcdef0123456789abcdef01234567"
+
+#: Events a run calling ci.yml may have started from. A called run carries
+#: its caller's event, so none of them may decide what the called run tests.
+_CALLER_EVENTS = {
+    "release": "refs/tags/v1.2.3",
+    "workflow_dispatch": "refs/heads/main",
+    "workflow_run": "refs/heads/main",
+    "push": "refs/heads/main",
+    "pull_request": "refs/pull/7/merge",
+}
+
+#: The jobs that run a test tier, each with its matrix.
+_TIER_JOBS = ("test", "e2e-test", "stress-test", "browser-test")
+
+
+def _called_context(caller_event: str) -> dict:
+    """ci.yml called with a commit to test, from a run of `caller_event`. A
+    path filter step that does not run reports an empty output."""
+    return {
+        "github.event_name": caller_event,
+        "github.ref": _CALLER_EVENTS[caller_event],
+        "github.sha": "fedcba9876543210fedcba9876543210fedcba98",
+        "inputs.ref": _RELEASED_SHA,
+        "steps.filter.outputs.concurrency": "",
+        "steps.filter.outputs.viewer": "",
+    }
+
+
+def _load_path(path: Path) -> dict:
+    with open(path) as f:
+        return yaml.safe_load(f)
+
+
+class TestReleaseRunsTheFullSuite:
+    # Verifies: REQ-o00066-N
+    def test_REQ_o00066_N_ci_is_callable_with_the_commit_to_test(self, ci_config):
+        call = _triggers(ci_config)["workflow_call"]
+        assert call["inputs"]["ref"]["required"] is True
+
+    # Verifies: REQ-o00066-N
+    @pytest.mark.parametrize("caller_event", sorted(_CALLER_EVENTS))
+    @pytest.mark.parametrize("job_name", _TIER_JOBS)
+    def test_REQ_o00066_N_called_run_tests_every_tier_on_every_version(
+        self, ci_config, job_name, caller_event
+    ):
+        """A called run runs each tier on every supported Python, whatever
+        event started its caller."""
+        context = _called_context(caller_event)
+        assert _runs(ci_config["jobs"][job_name], context)
+        assert sorted(_matrix_versions(ci_config, job_name, context)) == sorted(
+            _unit_versions(ci_config)
+        )
+
+    # Verifies: REQ-o00066-N
+    @pytest.mark.parametrize("caller_event", sorted(_CALLER_EVENTS))
+    @pytest.mark.parametrize("job_name", sorted(_FILTERED))
+    def test_REQ_o00066_N_called_run_ignores_the_path_filter(
+        self, ci_config, job_name, caller_event
+    ):
+        filter_step, tier, notices = _filter_steps(ci_config["jobs"][job_name], _FILTERED[job_name])
+        context = _called_context(caller_event)
+        assert not _runs(filter_step, context)
+        assert all(_runs(s, context) for s in tier)
+        assert not any(_runs(s, context) for s in notices)
+
+    # Verifies: REQ-o00066-N
+    @pytest.mark.parametrize("caller_event", sorted(_CALLER_EVENTS))
+    @pytest.mark.parametrize("job_name", ["test-impact", "promote-image"])
+    def test_REQ_o00066_N_called_run_skips_jobs_a_release_has_no_use_for(
+        self, ci_config, job_name, caller_event
+    ):
+        assert not _runs(ci_config["jobs"][job_name], _called_context(caller_event))
+
+    # Verifies: REQ-o00066-N
+    @pytest.mark.parametrize("caller_event", sorted(_CALLER_EVENTS))
+    def test_REQ_o00066_N_called_run_checks_out_the_released_commit(self, ci_config, caller_event):
+        """Every checkout in a called run is at the commit the release names,
+        never at the caller's own commit."""
+        context = _called_context(caller_event)
+        checkouts = [
+            step
+            for job in ci_config["jobs"].values()
+            for step in job.get("steps", [])
+            if str(step.get("uses", "")).startswith("actions/checkout@")
+        ]
+        assert checkouts
+        for step in checkouts:
+            assert _evaluate(step["with"]["ref"], context) == _RELEASED_SHA, step
+
+
+def _publish_context(
+    *,
+    gate: str,
+    verdict: str,
+    tests: str,
+    publish: str = "skipped",
+    skip_pypi: bool = False,
+    cancelled: bool = False,
+) -> dict:
+    return {
+        "run.cancelled": cancelled,
+        "inputs.skip_pypi": skip_pypi,
+        "needs.gate.result": gate,
+        "needs.gate.outputs.verdict": verdict,
+        "needs.tests.result": tests,
+        "needs.publish.result": publish,
+    }
+
+
+#: (gate result, gate verdict, tests result) -> whether the commit may ship.
+#: A gate that refused reports no verdict, and `tests` is then skipped.
+_VERDICTS = [
+    pytest.param("success", "passed", "skipped", True, id="ci-passed"),
+    pytest.param("success", "untested", "success", True, id="release-tests-passed"),
+    pytest.param("success", "untested", "failure", False, id="release-tests-failed"),
+    pytest.param("success", "untested", "cancelled", False, id="release-tests-cancelled"),
+    pytest.param("failure", "", "skipped", False, id="gate-refused"),
+]
+
+
+@pytest.fixture(scope="module")
+def publish_jobs():
+    return _load_path(PUBLISH_WORKFLOW)["jobs"]
+
+
+@pytest.fixture(scope="module")
+def release_config():
+    return _load_path(RELEASE_WORKFLOW)
+
+
+class TestReleaseGate:
+    # Verifies: REQ-o00066-N
+    @pytest.mark.parametrize("verdict", ["passed", "untested", ""])
+    def test_REQ_o00066_N_release_runs_tests_only_without_a_verdict(self, publish_jobs, verdict):
+        """The release runs the suite itself only where CI holds no verdict,
+        and runs it on the commit the gate resolved."""
+        job = publish_jobs["tests"]
+        context = {"needs.gate.outputs.verdict": verdict, "needs.gate.outputs.sha": _RELEASED_SHA}
+        assert _runs(job, context) == (verdict == "untested")
+        assert job["uses"] == "./.github/workflows/ci.yml"
+        assert _evaluate(job["with"]["ref"], context) == _RELEASED_SHA
+
+    # Verifies: REQ-o00066-N
+    @pytest.mark.parametrize("gate,verdict,tests,ships", _VERDICTS)
+    def test_REQ_o00066_N_publish_needs_a_passing_verdict(
+        self, publish_jobs, gate, verdict, tests, ships
+    ):
+        context = _publish_context(gate=gate, verdict=verdict, tests=tests)
+        assert _runs(publish_jobs["publish"], context) == ships
+        assert not _runs(publish_jobs["publish"], {**context, "run.cancelled": True})
+
+    # Verifies: REQ-o00066-N
+    @pytest.mark.parametrize("skip_pypi", [False, True])
+    @pytest.mark.parametrize("gate,verdict,tests,ships", _VERDICTS)
+    def test_REQ_o00066_N_homebrew_needs_a_passing_verdict(
+        self, publish_jobs, gate, verdict, tests, ships, skip_pypi
+    ):
+        """The tap is updated after PyPI, or alone where PyPI is skipped, and
+        in neither case for a commit without a passing verdict."""
+        publish = "success" if ships and not skip_pypi else "skipped"
+        context = _publish_context(
+            gate=gate, verdict=verdict, tests=tests, publish=publish, skip_pypi=skip_pypi
+        )
+        assert _runs(publish_jobs["update-homebrew"], context) == ships
+
+
+class TestAutoRelease:
+    # Verifies: REQ-o00066-N
+    def test_REQ_o00066_N_release_follows_ci_on_main(self, release_config, ci_config):
+        trigger = _triggers(release_config)["workflow_run"]
+        assert trigger["workflows"] == [ci_config["name"]]
+        assert trigger["types"] == ["completed"]
+        assert trigger["branches"] == ["main"]
+
+    # Verifies: REQ-o00066-N
+    @pytest.mark.parametrize("conclusion", ["success", "failure", "cancelled", "skipped"])
+    @pytest.mark.parametrize("event", ["push", "pull_request", "merge_group", "workflow_dispatch"])
+    def test_REQ_o00066_N_release_starts_only_from_a_passing_push_run(
+        self, release_config, event, conclusion
+    ):
+        context = {
+            "github.event.workflow_run.event": event,
+            "github.event.workflow_run.conclusion": conclusion,
+        }
+        expected = event == "push" and conclusion == "success"
+        assert _runs(release_config["jobs"]["release"], context) == expected
+
+    # Verifies: REQ-o00066-N
+    def test_REQ_o00066_N_release_targets_the_tested_commit(self, release_config):
+        """The tag, the version read and the published commit are the commit
+        the CI run tested, not whatever main holds when the release runs."""
+        context = {"github.event.workflow_run.head_sha": _RELEASED_SHA}
+        job = release_config["jobs"]["release"]
+        (checkout,) = [
+            s for s in job["steps"] if str(s.get("uses", "")).startswith("actions/checkout@")
+        ]
+        assert _evaluate(checkout["with"]["ref"], context) == _RELEASED_SHA
+        (create,) = [s for s in job["steps"] if "gh release create" in s.get("run", "")]
+        assert '--target "${SHA}"' in create["run"]
+        assert _evaluate(create["env"]["SHA"], context) == _RELEASED_SHA
+        assert _evaluate(job["outputs"]["sha"], context) == _RELEASED_SHA
+        assert (
+            release_config["jobs"]["publish"]["with"]["sha"] == "${{ needs.release.outputs.sha }}"
+        )
 
 
 def _pr_check_steps(pr_config) -> list[dict]:

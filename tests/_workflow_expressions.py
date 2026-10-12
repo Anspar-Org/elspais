@@ -2,9 +2,16 @@
 
 Enough of the expression language to evaluate `if:` conditions and expression
 values as GitHub would: string literals, context names, `==`/`!=`, `!`, `&&`,
-`||` (which yield an operand, not a boolean), parentheses and `fromJSON`. A name
-the context does not supply raises, so a condition reading something a test did
-not anticipate fails loudly rather than evaluating to nothing.
+`||` (which yield an operand, not a boolean), parentheses, `fromJSON` and the
+status functions `always()` and `cancelled()`. A name the context does not
+supply raises, so a condition reading something a test did not anticipate fails
+loudly rather than evaluating to nothing.
+
+`cancelled()` reads the context key `run.cancelled`, which names no GitHub
+context: whether the run was cancelled is a fact about the run, and a test
+states it like any other input. `runs()` does not add the `success()` GitHub
+assumes for a job condition that calls no status function, so a test of such a
+job supplies the results of its needs itself.
 """
 
 from __future__ import annotations
@@ -18,6 +25,10 @@ _TOKEN = re.compile(
 )
 _LITERALS = {"true": True, "false": False, "null": None}
 _FUNCTIONS = {"fromJSON": json.loads}
+_STATUS_FUNCTIONS = {
+    "always": lambda context: True,
+    "cancelled": lambda context: context["run.cancelled"],
+}
 
 
 def _tokens(text: str) -> list[tuple[str, str]]:
@@ -103,11 +114,16 @@ class _Expression:
             raise ValueError(f"unexpected token {value!r}")
         if self._peek() == ("op", "("):
             self._take()
-            args = [self._or()]
-            while self._peek() == ("op", ","):
-                self._take()
+            args = []
+            if self._peek() != ("op", ")"):
                 args.append(self._or())
+                while self._peek() == ("op", ","):
+                    self._take()
+                    args.append(self._or())
             self._take(")")
+            if value in _STATUS_FUNCTIONS:
+                assert not args, f"{value}() takes no arguments"
+                return _STATUS_FUNCTIONS[value](self.context)
             return _FUNCTIONS[value](*args)
         if value in _LITERALS:
             return _LITERALS[value]
