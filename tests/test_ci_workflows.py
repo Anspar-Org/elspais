@@ -154,6 +154,12 @@ def _load(name: str) -> dict:
         return yaml.safe_load(f)
 
 
+#: Jobs that run for a pull request and deliberately not in the merge queue.
+#: test-impact selects a subset of the unit tier for fast feedback on a pull
+#: request; the queue runs the full tier in `test`, so a selection adds nothing.
+_PR_ONLY_ADVISORY_JOBS = {"ci": ("test-impact",)}
+
+
 class TestTriggers:
     # Verifies: REQ-o00066-L+F+G
     @pytest.mark.parametrize("workflow", sorted(_WORKFLOWS))
@@ -176,9 +182,15 @@ class TestTriggers:
     @pytest.mark.parametrize("workflow", sorted(_WORKFLOWS))
     def test_REQ_o00066_M_merge_group_runs_every_job_a_pull_request_runs(self, workflow):
         """No job-level condition drops a merge-queue candidate from a job a
-        pull request into main gets."""
+        pull request into main gets, except the advisory ones the queue has
+        no use for (a job skipped by its own condition reports success, so it
+        never holds the queue)."""
         jobs = _load(workflow)["jobs"]
         for name, job in jobs.items():
+            if name in _PR_ONLY_ADVISORY_JOBS.get(workflow, ()):
+                assert _runs(job, _context("pull_request")), name
+                assert not _runs(job, _context("merge_group")), name
+                continue
             assert _runs(job, _context("merge_group")) == _runs(job, _context("pull_request")), name
 
 
