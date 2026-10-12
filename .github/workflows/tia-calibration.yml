@@ -24,6 +24,11 @@ on:
         description: "Number of seeded fault probes"
         default: "8"
 
+# The job only reads the repository. The Actions cache and artifact steps
+# authenticate with the runner's own token, not GITHUB_TOKEN.
+permissions:
+  contents: read
+
 jobs:
   calibrate:
     name: TIA calibration
