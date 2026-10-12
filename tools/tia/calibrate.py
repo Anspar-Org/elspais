@@ -207,13 +207,14 @@ def run_mutants(
             if selected_files is None:
                 record.update(complement_tests=0, missed_failures=[], verdict="full suite selected")
             else:
-                complement = sorted(
-                    {
-                        t["file"]
-                        for n_, t in base.tests.items()
-                        if t["file"] not in selected_files and n_ not in sel.tests
-                    }
-                )
+                # Every baseline test the selector did not choose, by node id:
+                # at test granularity an unselected test can share a file with
+                # selected ones, and those are the ones this probe is about.
+                complement_ids = sorted(n_ for n_ in base.tests if n_ not in sel.tests)
+                complement = sorted({base.tests[n_]["file"] for n_ in complement_ids})
+                spec = os.path.join(mdir, "complement.json")
+                with open(spec, "w", encoding="utf-8") as fh:
+                    json.dump({"nodeids": complement_ids, "new_files": []}, fh)
                 junit = os.path.join(mdir, "complement.xml")
                 cmd = [
                     sys.executable,
@@ -227,14 +228,22 @@ def run_mutants(
                     "junit_family=xunit1",
                     "-p",
                     "no:cacheprovider",
+                    "-p",
+                    "tools.tia.pytest_select",
                     "-n",
                     str(worker_count(root)),
                     "--dist",
                     "loadfile",
                     *complement,
                 ]
+                env = dict(os.environ, TIA_SELECT_FILE=spec)
+                env["PYTHONPATH"] = root + (
+                    os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
+                )
                 t0 = time.time()
-                subprocess.run(cmd, cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(
+                    cmd, cwd=root, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
                 js = junit_summary(junit)
                 baseline_failing = {
                     nodeid_to_junit_key(n_)

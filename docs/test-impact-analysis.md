@@ -206,26 +206,39 @@ Every fallback is listed in the manifest's `fallbacks` with a `kind`, a
 
 ## The manifest
 
-`.results/tia/run/manifest.json` (abridged):
+`.results/tia/run/manifest.json`. The excerpt below is abridged from an actual
+run: a two-line edit to the body of `TraceGraph.style_findings` in
+`src/elspais/graph/builder.py`. The complete manifest is in
+[`test-impact-analysis-sample-manifest.json`](test-impact-analysis-sample-manifest.json).
 
 ```json
 {
-  "selection_mode": "test-impact",
-  "baseline": {"commit": "...", "tree": "...", "dirty_files": [], "tests": 10369},
-  "change": {"files": [{
-      "path": "src/elspais/graph/metrics.py", "status": "modified",
-      "category": "production-python",
-      "regions": ["src/elspais/graph/metrics.py:203-205 CoverageDimension.rolled_direct changed"],
-      "notes": ["hunk src/elspais/graph/metrics.py:205-205 (baseline) -> 205-206"],
-      "tests_selected": 812}]},
-  "granularity": "file",
-  "total_tests": 10369, "selected_tests": 1003, "skipped_tests": 9366,
-  "new_test_files": [], "fallbacks": [],
-  "pytest_targets": ["tests/graph/test_metrics.py", "..."],
-  "tests": [{"test": "tests/...::test_x", "reasons": ["covers changed region src/elspais/graph/metrics.py:203-205 (CoverageDimension.rolled_direct)"]}],
-  "run": {"exit_code": 0, "elapsed_seconds": 41.2, "executed_tests": 1003, "outcomes": {"passed": 1003}}
+ "selection_mode": "test-impact",
+ "baseline": {"path": ".results/tia/baseline", "usable": true,
+   "commit": "dfa875986af88e786a77b8b3d9eecddfa9f14628",
+   "tree": "a77d1b5f292cf093d22d615ab8f0b698dad0bb19", "dirty_files": [], "tests": 10505},
+ "change": {"against": "working tree (tracked + untracked) vs baseline tree", "files": [{
+   "path": "src/elspais/graph/builder.py", "status": "modified", "category": "production-python",
+   "regions": ["src/elspais/graph/builder.py:904-906 TraceGraph.style_findings changed"],
+   "notes": ["hunk src/elspais/graph/builder.py:906-906 (baseline) -> 906-907"],
+   "tests_selected": 506}]},
+ "granularity": "test",
+ "total_tests": 10505, "selected_tests": 1196, "skipped_tests": 9309,
+ "fallbacks": [], "selection_seconds": 3.925,
+ "tests": [
+  {"test": "tests/commands/test_checks_fix_consistency.py::TestChecksFixConsistency::test_REQ_p00004_A_clean_fixture_checks_pass",
+   "reasons": ["covers changed region src/elspais/graph/builder.py:904-906 (TraceGraph.style_findings)"]},
+  {"test": "tests/commands/test_checks_fix_consistency.py::TestChecksFixConsistency::test_REQ_p00004_A_checks_cwd_independent",
+   "reasons": ["same test class as a selected test"]}
+ ],
+ "run": {"exit_code": 1, "elapsed_seconds": 233.62, "executed_tests": 1196,
+   "outcomes": {"passed": 1188, "skipped": 6, "failed": 2}}
 }
 ```
+
+The two failures are the environment-dependent tests described under
+[Measurements](#measurements). They are selected on every change because
+they did not pass in the baseline.
 
 Each selected test lists up to six reasons. The `run` block is added by
 `run`. `skipped_tests` counts baseline tests that were not selected. Tests in
@@ -275,6 +288,100 @@ instruments:
 - `.github/workflows/tia-calibration.yml` (nightly and on demand) records a
   fresh baseline and runs `calibrate` with mutant probes. It uploads the
   report and fails when a failure was missed.
+
+## Measurements
+
+These measurements come from this repository, on a 4-CPU container with 2
+xdist workers. The baseline was recorded at commit `dfa8759`: 10,505
+unit-tier tests.
+
+Each change was applied to a clean tree, selected and run with
+`python -m tools.tia run` (default configuration), then reverted. The
+*file granularity* column is the selection count of the same change under
+`--granularity file`.
+
+Two reference points for the full unit tier:
+
+- **389 s** without coverage. This is how TIA runs its selection, so it is
+  the fair comparison.
+- **647 s** with coverage. This is how the commit hook runs the tier today.
+
+| Change | Mode | Selected | Skipped | Selected, file granularity | TIA wall time | Saved vs 389 s | Saved vs 647 s |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Function body edit in a leaf command (`pdf_cmd._check_tool`) | test-impact | 992 | 90.6% | 3,450 | 218 s | 44% | 66% |
+| Method body edit in the graph builder | test-impact | 1,196 | 88.6% | 4,345 | 238 s | 39% | 63% |
+| 12 lines inserted at the top of `hasher.py`, plus a function edit below them | test-impact | 1,716 | 83.7% | 4,312 | 260 s | 33% | 60% |
+| Module-level constant in `commands/_targets.py` | test-impact | 6,384 | 39.2% | 7,037 | 367 s | 6% | 43% |
+| New test file | test-impact | 51 | 99.5% | 364 | 11 s | 97% | 98% |
+| Test added to an existing test file | test-impact | 70 | 99.3% | 383 | 12 s | 97% | 98% |
+| CLI doc (`src/elspais/docs/cli/analysis.md`) | test-impact | 1,268 | 87.9% | 3,725 | 234 s | 40% | 64% |
+| `pyproject.toml` version bump only | test-impact | 307 | 97.1% | 1,186 | 48 s | 88% | 93% |
+| HTML template partial | test-impact | 1,167 | 88.9% | 3,780 | 238 s | 39% | 63% |
+| New file in a test fixture project | test-impact | 281 | 97.3% | 1,195 | 110 s | 72% | 83% |
+| Root `README.md` | test-impact | 313 | 97.0% | 1,058 | 47 s | 88% | 93% |
+| `pyproject.toml` dependency added | full (`broad-impact-file`) | 10,505 | 0% | 10,505 | 389 s | 0% | 40% |
+
+Selection itself takes 0.2 to 4 seconds. Recording a baseline adds 3–4% to
+a full run: 660 s against 638 s, measured back to back.
+
+### Why time falls less than the test count
+
+525 tests read this repository's own `src/*.py` as data, because they build
+traceability graphs of the live checkout. They are 5% of the suite and 42% of
+its test time (506 s of 1,193 s). Any source edit legitimately selects most of
+them, so they set a floor of about 200 s under every source change here.
+
+Two other contributions:
+
+- 196 *opaque* tests spawn `python`, `elspais` or a shell. They are selected
+  on any non-test change, and cost 46 s of test time.
+- 2 tests fail in this container because it injects `GIT_CONFIG_*` into the
+  environment, and 6 tests are skipped. These 8 tests did not pass in the
+  baseline, so they always run.
+
+Both effects are specific to this repository. A codebase whose tests do not
+read the live tree should see time savings closer to the test-count savings.
+Here, pointing those graph-of-the-repository tests at a frozen fixture copy
+would lower both the TIA floor and the full-suite time.
+
+### Calibration results
+
+**Same revision.** The builder-method change above was run as the TIA
+selection (1,196 tests, 221 s) and as the full suite (10,509 tests, 396 s).
+The result was 0 missed failures and 0 outcome disagreements among the
+tests that ran in both. The full run's only failures were the two known
+environmental ones, and TIA selected both.
+
+**Mutant probes** (`calibrate --mutants 6 --seed 7`). Each probe forced one
+covered function to raise, then ran every test TIA did not select. A probe
+uses a few seconds of selection and 1 to 3.5 minutes of complement running.
+
+| Mutated function | Baseline tests covering it | Selected | Unselected tests run | Missed |
+| --- | --- | --- | --- | --- |
+| `RequirementTransformer._last_line` (spec parser) | 2,583 | 4,001 | 6,504 | 0 |
+| `aggregation.measure_phrase` | 111 | 1,255 | 9,250 | 0 |
+| `ServingDifference.__bool__` (daemon) | 15 | 1,078 | 9,427 | 0 |
+| `glossary_cmd.write_term_outputs` | 13 | 1,067 | 9,438 | 0 |
+| `health._target_outcomes` | 126 | 1,140 | 9,365 | 0 |
+| `IdResolver._canonical_assertion_sep` | 30 | 1,095 | 9,410 | 0 |
+
+Six probes and one real change are a small sample. They show the mechanism
+working on this suite; they do not prove it never misses. The nightly
+calibration workflow adds eight new probes every night, with a new seed each
+run, plus a comparison of the real changes merged that day.
+
+### Full-suite fallbacks in practice
+
+Among the measured changes, the full suite was chosen only for the
+dependency change (`broad-impact-file`). It is also always chosen for the
+following:
+
+- changes to `tools/tia/` itself, or to `.githooks/run-unit-tier`;
+- `tests/conftest.py` (every test is under it);
+- a lock file or build configuration;
+- a baseline that is missing, stale, corrupt, or from another environment;
+- a production module whose dependants cannot be determined;
+- a selection reaching 85% of the suite.
 
 ## Known limitations
 

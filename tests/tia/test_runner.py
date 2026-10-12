@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from tools.tia.calibrate import compare_runs
@@ -122,3 +124,67 @@ def test_tia_run_outcomes_are_compared(full_junit, tmp_path):
     report = compare_runs(m, full_junit)
     assert report["outcome_disagreements"] == [nodeid_to_junit_key(CASES[0][0])]
     assert report["tia_failures"] == [nodeid_to_junit_key(CASES[0][0])]
+
+
+_MUL = "tests/test_core.py::test_mul"
+_BROKEN = "tests/test_err.py::test_broken"
+
+
+def _manifest_with_baseline(baseline_dir, outcomes=None):
+    """Select only test_add; record ``outcomes`` as the baseline's results.
+
+    With ``outcomes`` None no baseline.json is written at ``baseline_dir``.
+    """
+    if outcomes is not None:
+        baseline_dir.mkdir(parents=True, exist_ok=True)
+        tests = {n: {"outcome": o} for n, o in outcomes.items()}
+        (baseline_dir / "baseline.json").write_text(json.dumps({"tests": tests}), encoding="utf-8")
+    m = _manifest("test-impact", ["tests/test_core.py::test_add"])
+    m["baseline"] = {"path": str(baseline_dir)}
+    return m
+
+
+@pytest.mark.parametrize("baseline_outcome", ["failed", "error"])
+def test_unselected_failure_known_from_baseline_is_not_missed(
+    full_junit, tmp_path, baseline_outcome
+):
+    m = _manifest_with_baseline(
+        tmp_path / "base",
+        {_MUL: baseline_outcome, _BROKEN: "passed", "tests/test_core.py::test_add": "passed"},
+    )
+    report = compare_runs(m, full_junit)
+    assert report["unselected_known_failures"] == [nodeid_to_junit_key(_MUL)]
+    assert report["missed_failures"] == [nodeid_to_junit_key(_BROKEN)]
+    assert report["verdict"] == "MISSED FAILURES"
+
+
+def test_every_unselected_failure_known_from_baseline_misses_nothing(full_junit, tmp_path):
+    m = _manifest_with_baseline(tmp_path / "base", {_MUL: "failed", _BROKEN: "error"})
+    report = compare_runs(m, full_junit)
+    assert report["missed_failures"] == []
+    assert report["unselected_known_failures"] == sorted(
+        nodeid_to_junit_key(n) for n in (_MUL, _BROKEN)
+    )
+    assert report["verdict"] == "no missed failures"
+
+
+@pytest.mark.parametrize("baseline_outcome", ["passed", "skipped", None])
+def test_unselected_failure_not_failing_in_baseline_is_missed(
+    full_junit, tmp_path, baseline_outcome
+):
+    # None: the baseline does not know the test at all
+    outcomes = {_BROKEN: "error"}
+    if baseline_outcome is not None:
+        outcomes[_MUL] = baseline_outcome
+    report = compare_runs(_manifest_with_baseline(tmp_path / "base", outcomes), full_junit)
+    assert report["missed_failures"] == [nodeid_to_junit_key(_MUL)]
+    assert report["unselected_known_failures"] == [nodeid_to_junit_key(_BROKEN)]
+    assert report["verdict"] == "MISSED FAILURES"
+
+
+def test_absent_baseline_treats_every_unselected_failure_as_missed(full_junit, tmp_path):
+    m = _manifest_with_baseline(tmp_path / "no-such-baseline")
+    report = compare_runs(m, full_junit)
+    assert report["missed_failures"] == sorted(nodeid_to_junit_key(n) for n in (_MUL, _BROKEN))
+    assert report["unselected_known_failures"] == []
+    assert report["verdict"] == "MISSED FAILURES"
