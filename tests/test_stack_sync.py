@@ -340,6 +340,78 @@ class TestSquashMerge:
         assert subject.startswith("[TOOL-2] ")
 
 
+def _squash_merge_a(forge: Forge, a_head: str, *branches: str) -> None:
+    """Squash-merge branch a into main, push, and delete a as GitHub does,
+    keeping its head as refs/pull/1/head."""
+    forge.checkout("main")
+    forge.git("merge", "--quiet", "--squash", "a")
+    forge.git("commit", "--quiet", "-m", "[TOOL-1] A (#1)")
+    forge.push("main", "a", *branches)
+    _git("update-ref", "refs/pull/1/head", a_head, cwd=forge.origin)
+    forge.git("push", "--quiet", "origin", "--delete", "a")
+
+
+class TestMergedUnchangedStack:
+    """After a squash merge, a pull request whose branch already holds the
+    merged one's last commit and merges cleanly is only retargeted."""
+
+    @pytest.fixture(params=[False, True], ids=["main-unchanged", "main-gained-unrelated"])
+    def clean_stack(self, forge, request):
+        forge.checkout("a", "main")
+        forge.commit("f.txt", "line1\na-line\n", "[TOOL-1] add a-line")
+        a_head = forge.commit("a.txt", "a\n", "[TOOL-1] add a.txt")
+        forge.checkout("b", "a")
+        forge.commit("b.txt", "b\n", "[TOOL-2] add b.txt")
+        forge.checkout("c", "b")
+        forge.commit("c.txt", "c\n", "[TOOL-3] add c.txt")
+        if request.param:
+            forge.checkout("main")
+            forge.commit("other.txt", "other\n", "[TOOL-9] unrelated work on main")
+        _squash_merge_a(forge, a_head, "b", "c")
+        prs = forge.open_prs(PullRequest(2, "a", "b", "[TOOL-2] B"), PullRequest(3, "b", "c"))
+        return plan_merged(PullRequest(1, "main", "a"), a_head, prs)
+
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_holding_merged_head_and_merging_cleanly_is_only_retargeted(
+        self, forge, clean_stack, monkeypatch
+    ):
+        before = {br: forge.origin_sha(br) for br in "bc"}
+
+        status, ex = _sync(forge, monkeypatch, clean_stack)
+
+        assert status == 0
+        assert ["pr", "edit", "2", "--repo", "owner/repo", "--base", "main"] in forge.gh_calls()
+        assert {br: forge.origin_sha(br) for br in "bc"} == before
+        assert "b" not in ex.updated and "c" not in ex.updated
+        (kept,) = [ln for ln in ex.log if ln.startswith("#2 ")]
+        assert "left as is, so its CI result still applies" in kept
+        assert "#3: left as is; #2 below it did not change" in ex.log
+        assert not any(ln.startswith("update #") for ln in ex.log)
+
+    # Verifies: REQ-o00066-L
+    def test_REQ_o00066_L_branch_missing_merged_head_is_updated(self, forge, monkeypatch):
+        forge.checkout("a", "main")
+        forge.commit("a.txt", "a\n", "[TOOL-1] add a.txt")
+        forge.checkout("b", "a")
+        b_head = forge.commit("b.txt", "b\n", "[TOOL-2] add b.txt")
+        forge.checkout("a")
+        a_head = forge.commit("a2.txt", "a2\n", "[TOOL-1] review fix")
+        _squash_merge_a(forge, a_head, "b")
+        prs = forge.open_prs(PullRequest(2, "a", "b", "[TOOL-2] B"))
+        assert not forge.is_ancestor(a_head, "refs/heads/b")
+
+        plan = plan_merged(PullRequest(1, "main", "a"), a_head, prs)
+        status, ex = _sync(forge, monkeypatch, plan)
+
+        assert status == 0
+        new_head = forge.origin_sha("b")
+        assert new_head != b_head
+        assert forge.is_ancestor(a_head, new_head)
+        assert forge.is_ancestor("refs/heads/main", new_head)
+        assert not any("left as is" in ln for ln in ex.log)
+        assert any(ln.startswith("update #2 ") for ln in ex.log)
+
+
 class TestPushCascade:
     # Verifies: REQ-o00066-L
     def test_REQ_o00066_L_push_to_bottom_reaches_every_branch_above(self, forge, monkeypatch):
