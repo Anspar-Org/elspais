@@ -38,26 +38,44 @@ jobs:
     steps:
       # A push made with the workflow's own GITHUB_TOKEN starts no other
       # workflow, so the pull requests this updates would not be re-tested
-      # until their next push. A STACK_SYNC_TOKEN secret (a fine-grained token
-      # or GitHub App token with contents and pull-requests write access) makes
-      # its merges trigger CI like anyone's push.
+      # until their next push, and it may not push a merge that changes
+      # .github/workflows/ at all. A STACK_SYNC_TOKEN secret (a fine-grained
+      # token or GitHub App token with contents, pull-requests and workflows
+      # write access) makes its merges trigger CI like anyone's push.
+      #
+      # The sync tool is run from the commit the event is about: the pushed
+      # commit, or the branch a pull request merged into. The default branch
+      # would not carry it until the change adding it had merged. The tool
+      # loads only the standard library before it starts switching branches,
+      # so the branches it checks out need not carry it.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ github.event_name == 'push' && github.sha || github.event.pull_request.base.ref }}
           token: ${{ secrets.STACK_SYNC_TOKEN || github.token }}
 
+      - name: Check the sync tool is present
+        id: tool
+        run: |
+          if [ -f tools/stack/sync.py ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "This commit predates stack sync (no tools/stack/sync.py); nothing to do."
+          fi
+
       - uses: actions/setup-python@v5
+        if: steps.tool.outputs.present == 'true'
         with:
           python-version: "3.12"
 
       - name: Identify the merge commits
+        if: steps.tool.outputs.present == 'true'
         run: |
           git config user.name "elspais stack sync"
           git config user.email "stack-sync@users.noreply.github.com"
 
       - name: Sync after a merge
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && steps.tool.outputs.present == 'true'
         env:
           GH_TOKEN: ${{ secrets.STACK_SYNC_TOKEN || github.token }}
           PR: ${{ github.event.pull_request.number }}
@@ -69,7 +87,7 @@ jobs:
             --pr "$PR" --base "$BASE" --head "$HEAD" --head-sha "$HEAD_SHA"
 
       - name: Sync after a push
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && steps.tool.outputs.present == 'true'
         env:
           GH_TOKEN: ${{ secrets.STACK_SYNC_TOKEN || github.token }}
           BRANCH: ${{ github.ref_name }}

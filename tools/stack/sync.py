@@ -199,7 +199,7 @@ class Executor:
                 continue
             outcome = self._update(u)
             self.say(f"  {outcome}")
-            if outcome.startswith("conflict"):
+            if outcome.startswith(("conflict", "refused")):
                 conflicts += 1
                 blocked.add(u.pr.number)
         return 1 if conflicts else 0
@@ -261,7 +261,21 @@ class Executor:
         self.updated.add(head)
         if after == before:
             return "already up to date"
-        self._run("git", "push", "--quiet", "origin", f"{head}:{head}")
+        push = subprocess.run(
+            ["git", "push", "--quiet", "origin", f"{head}:{head}"], capture_output=True, text=True
+        )
+        if push.returncode != 0:
+            self._run("git", "checkout", "--quiet", "-B", head, f"origin/{head}")
+            self.updated.discard(head)
+            hint = ""
+            if "workflow" in push.stderr.lower():
+                hint = (
+                    " The merge changes files under .github/workflows/, which the workflow's"
+                    " own GITHUB_TOKEN may not push: set a STACK_SYNC_TOKEN secret with"
+                    " Contents, Pull requests and Workflows write access"
+                    " (docs/stacked-pull-requests.md)."
+                )
+            return f"refused: push to {head} failed: {push.stderr.strip()}{hint}"
         return f"pushed {after[:12]}"
 
     def _report_conflict(self, u: Update, detail: str) -> None:
