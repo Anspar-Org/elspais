@@ -15,7 +15,9 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
+from tests._workflow_expressions import evaluate, runs
 from tools.stack.sync import (
     CONFLICT_MARKER,
     Executor,
@@ -419,3 +421,146 @@ class TestConflict:
         assert status == 1
         assert len(forge.comments(2)) == 1
         assert {br: forge.origin_sha(br) for br in "abc"} == before
+
+
+class TestRefusedPush:
+    @pytest.fixture
+    def stack_with_refusing_origin(self, forge):
+        """a <- b <- c, a gained a commit, and origin refuses every push to b."""
+        forge.checkout("a", "main")
+        forge.commit("a.txt", "a\n", "a")
+        forge.checkout("b", "a")
+        forge.commit("b.txt", "b\n", "b")
+        forge.checkout("c", "b")
+        forge.commit("c.txt", "c\n", "c")
+        forge.checkout("a")
+        forge.commit("a.txt", "a fixed\n", "review fix")
+        forge.push("a", "b", "c")
+        prs = forge.open_prs(PullRequest(2, "a", "b"), PullRequest(3, "b", "c"))
+
+        def refuse(message: str) -> None:
+            hook = forge.origin / "hooks" / "pre-receive"
+            hook.write_text(
+                "#!/bin/sh\n"
+                "while read old new ref; do\n"
+                f'  if [ "$ref" = refs/heads/b ]; then echo "{message}" >&2; exit 1; fi\n'
+                "done\n"
+            )
+            hook.chmod(0o755)
+
+        return plan_pushed("a", prs), refuse
+
+    # Verifies: REQ-o00080-C+E
+    @pytest.mark.parametrize(
+        "message, hinted",
+        [
+            ("refusing to allow a GitHub App to create or update workflow without scope", True),
+            ("protected branch hook declined", False),
+        ],
+    )
+    def test_REQ_o00080_E_refused_push_leaves_branch_and_stack_above_unchanged(
+        self, forge, stack_with_refusing_origin, monkeypatch, message, hinted
+    ):
+        plan, refuse = stack_with_refusing_origin
+        refuse(message)
+        before = {br: forge.origin_sha(br) for br in "bc"}
+
+        status, ex = _sync(forge, monkeypatch, plan)
+
+        assert status == 1
+        assert {br: forge.origin_sha(br) for br in "bc"} == before
+        # The local branch is put back where origin has it, and is not read as
+        # an updated base by anything above it.
+        assert _git("rev-parse", "b", cwd=Path.cwd()) == before["b"]
+        assert "b" not in ex.updated
+        (refused,) = [ln for ln in ex.log if ln.strip().startswith("refused:")]
+        assert message in refused
+        assert ("STACK_SYNC_TOKEN" in refused and "Workflows" in refused) == hinted
+        assert any(ln.startswith("#3: left unchanged") for ln in ex.log)
+        assert forge.comments(2) == forge.comments(3) == []
+
+
+# --- Workflow wiring (.github/workflows/stack-sync.yml) ------------------------
+
+STACK_WORKFLOW = Path(__file__).parent.parent / ".github" / "workflows" / "stack-sync.yml"
+
+
+@pytest.fixture(scope="module")
+def sync_job() -> dict:
+    with open(STACK_WORKFLOW) as f:
+        return yaml.safe_load(f)["jobs"]["sync"]
+
+
+def _event(name: str, **overrides) -> dict:
+    """A context for the stack-sync job: a merged same-repo pull request, or a
+    push of a live branch, with any field overridden."""
+    context = {
+        "github.event_name": name,
+        "github.sha": "c0ffee" * 6 + "c0ff",
+        "github.repository": "owner/repo",
+        "github.event.deleted": False,
+        "github.event.pull_request.merged": name == "pull_request",
+        "github.event.pull_request.base.ref": "main" if name == "pull_request" else None,
+        "github.event.pull_request.head.repo.full_name": "owner/repo",
+        "steps.tool.outputs.present": "true",
+    }
+    context.update(overrides)
+    return context
+
+
+class TestStackSyncWorkflow:
+    # Verifies: REQ-o00080-B+C
+    @pytest.mark.parametrize(
+        "event, expected",
+        [("push", "github.sha"), ("pull_request", "github.event.pull_request.base.ref")],
+    )
+    def test_REQ_o00080_C_checkout_is_the_commit_the_event_is_about(
+        self, sync_job, event, expected
+    ):
+        (checkout,) = [s for s in sync_job["steps"] if "checkout" in s.get("uses", "")]
+        context = _event(event)
+        assert evaluate(checkout["with"]["ref"], context) == context[expected]
+
+    # Verifies: REQ-o00080-C
+    @pytest.mark.parametrize("event", ["push", "pull_request"])
+    @pytest.mark.parametrize(
+        "present",
+        [
+            "true",
+            "",
+        ],
+    )
+    def test_REQ_o00080_C_no_tool_skips_every_later_step(self, sync_job, event, present):
+        steps = sync_job["steps"]
+        (index,) = [i for i, s in enumerate(steps) if s.get("id") == "tool"]
+        later = steps[index + 1 :]
+        context = _event(event, **{"steps.tool.outputs.present": present})
+        ran = [s.get("name", s.get("uses")) for s in later if runs(s, context)]
+        if present:
+            # The sync step for this event runs; the other event's does not.
+            assert any(
+                name.endswith(f"a {'merge' if event == 'pull_request' else 'push'}") for name in ran
+            ), ran
+        else:
+            assert ran == []
+
+    # Verifies: REQ-o00080-C+F
+    @pytest.mark.parametrize(
+        "event, overrides, expected",
+        [
+            ("push", {}, True),
+            ("push", {"github.event.deleted": True}, False),
+            ("pull_request", {}, True),
+            ("pull_request", {"github.event.pull_request.merged": False}, False),
+            (
+                "pull_request",
+                {"github.event.pull_request.head.repo.full_name": "fork/repo"},
+                False,
+            ),
+        ],
+        ids=["push", "deleted-branch", "merged-pr", "closed-unmerged", "fork-pr"],
+    )
+    def test_REQ_o00080_F_job_runs_only_for_live_pushes_and_same_repo_merges(
+        self, sync_job, event, overrides, expected
+    ):
+        assert runs(sync_job, _event(event, **overrides)) is expected

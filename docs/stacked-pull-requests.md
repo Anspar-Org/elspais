@@ -89,8 +89,12 @@ These are set by a repository administrator, not by a pull request:
   for pull requests. Every check in `ci.yml` and `pr-validation.yml` reports in
   the queue, so any of them can be required.
 - **`STACK_SYNC_TOKEN` secret (recommended)**: a fine-grained personal access
-  token or a GitHub App token with *Contents: read and write* and *Pull
-  requests: read and write* on this repository.
+  token or a GitHub App token with *Contents*, *Pull requests* and *Workflows*
+  read and write access on this repository.
+  - The built-in `GITHUB_TOKEN` may not push a commit that changes files
+    under `.github/workflows/`. Without the secret, stack sync cannot carry a
+    lower pull request's workflow change up the stack. The run then fails,
+    naming the branch and this setting, and leaves the branch unchanged.
   - A push made with the workflow's built-in `GITHUB_TOKEN` starts no other
     workflow, so without this secret the pull requests stack sync updates are
     not re-tested until their author's next push.
