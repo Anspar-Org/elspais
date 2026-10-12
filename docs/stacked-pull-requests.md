@@ -8,8 +8,8 @@ reviewed, merged or reverted on its own:
 main  <-  #A (base: main)  <-  #B (base: A's branch)  <-  #C (base: B's branch)
 ```
 
-Requirements: REQ-o00066-I/J/L (what CI runs) and REQ-o00080 (how a stack is
-kept consistent).
+Requirements: REQ-o00066-I/J (CI on pull requests into `main`), L (stacked
+pull requests are supported) and M (the merge queue).
 
 ## What CI does for a stack
 
@@ -37,8 +37,7 @@ kept consistent).
 | A branch gains commits (a review fix on #A) | Each open pull request based on that branch, and each one stacked above those, **merges the branch below it**, from the bottom up. |
 
 Repairs only ever **add merge commits**. History anyone has reviewed is never
-rewritten, and a contributor's checkout of their branch stays valid
-(REQ-o00080-D).
+rewritten, and a contributor's checkout of their branch stays valid.
 
 **Squash merges.** This repository squash-merges. A squash commit is unrelated
 to the commits it replaced, so a plain `git merge main` into the pull request
@@ -52,10 +51,9 @@ its own changes again.
 **Conflicts.** If a merge genuinely conflicts, stack sync aborts it. It leaves
 that branch and every branch stacked above it untouched, and comments once on
 the pull request with the conflicting files and the commands to resolve it.
-After you push the resolution, stack sync carries it up the rest of the stack
-(REQ-o00080-E).
+After you push the resolution, stack sync carries it up the rest of the stack.
 
-Pull requests from forks are never changed (REQ-o00080-F).
+Pull requests from forks are never changed.
 
 To see what stack sync would do without changing anything:
 
