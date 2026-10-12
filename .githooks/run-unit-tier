@@ -14,6 +14,16 @@
 #
 # The output directory defaults to $ELSPAIS_TARGET_OUTPUT, which
 # with-fingerprint sets. Further arguments are passed to pytest.
+#
+# With ELSPAIS_TIA_RECORD=1 the run also records a Test Impact Analysis
+# baseline (docs/test-impact-analysis.md): the tools/tia recorder plugin
+# captures per-test facts coverage cannot see, and once pytest finishes the
+# baseline is built into ELSPAIS_TIA_BASELINE (default .results/tia/baseline).
+# Recording never changes the tier's verdict: the exit code is pytest's, and a
+# baseline that cannot be built is reported and left absent. A recording run
+# turns the parse cache off (ELSPAIS_PARSE_CACHE=0, REQ-d00331-G): a reading
+# the cache answers runs none of the parser's code, so per-test coverage
+# would credit the parser only to the first test that read each file.
 
 _out="${1:-$ELSPAIS_TARGET_OUTPUT}"
 if [ -z "$_out" ]; then
@@ -28,10 +38,33 @@ if ! _workers=$("$_here/test-workers"); then
     exit 2
 fi
 
+_tia_args=()
+if [ "${ELSPAIS_TIA_RECORD:-}" = "1" ]; then
+    _repo=$(cd "$_here/.." && pwd)
+    rm -rf "$_out/tia-shards"
+    export TIA_RECORD_DIR="$_out/tia-shards"
+    export PYTHONPATH="$_repo${PYTHONPATH:+:$PYTHONPATH}"
+    # Implements: REQ-d00331-G
+    export ELSPAIS_PARSE_CACHE=0
+    _tia_args=(-p tools.tia.recorder)
+fi
+
 echo "== unit tier (-n $_workers --dist loadfile)"
 COVERAGE_FILE="$_out/.coverage" pytest tests/ --tb=short -q \
     -n "$_workers" --dist loadfile \
     --junitxml="$_out/junit.xml" -o junit_family=xunit1 \
     --cov=src/elspais --cov-context=test \
     --cov-report=json:"$_out/coverage.json" --cov-report= \
-    "$@"
+    "${_tia_args[@]}" "$@"
+_rc=$?
+
+if [ "${ELSPAIS_TIA_RECORD:-}" = "1" ]; then
+    _dest="${ELSPAIS_TIA_BASELINE:-$_repo/.results/tia/baseline}"
+    if python -m tools.tia baseline build --run-dir "$TIA_RECORD_DIR" \
+        --coverage "$_out/.coverage" --dest "$_dest"; then
+        echo "== TIA baseline recorded in $_dest"
+    else
+        echo "WARNING: the TIA baseline could not be built (the tier's verdict is unaffected)" >&2
+    fi
+fi
+exit "$_rc"

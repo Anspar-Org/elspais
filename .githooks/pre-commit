@@ -159,8 +159,8 @@ PYTHON_FAILED=false
 
 # Run ruff if available
 if command -v ruff &> /dev/null; then
-    echo "  Running ruff check on src/ tests/..."
-    if ! ruff check src/ tests/ 2>&1; then
+    echo "  Running ruff check on src/ tests/ tools/..."
+    if ! ruff check src/ tests/ tools/ 2>&1; then
         PYTHON_FAILED=true
         echo -e "${RED}  ruff check failed${NC}"
     else
@@ -173,8 +173,8 @@ fi
 # Run the formatter. ruff is both the linter above and the formatter here;
 # there is no second formatter to disagree with it.
 if command -v ruff &> /dev/null; then
-    echo "  Running ruff format check on src/ tests/..."
-    if ! ruff format --check --quiet src/ tests/ 2>&1; then
+    echo "  Running ruff format check on src/ tests/ tools/..."
+    if ! ruff format --check --quiet src/ tests/ tools/ 2>&1; then
         # Auto-fix is offered only for files staged in this commit
         if [ -n "$STAGED_PYTHON_FILES" ]; then
             echo -e "${YELLOW}  Files need formatting. Applying fixes to staged files...${NC}"
@@ -183,10 +183,10 @@ if command -v ruff &> /dev/null; then
             echo -e "${GREEN}  Formatted files have been re-staged${NC}"
         fi
         # Anything still unformatted is drift outside this commit — fail loudly
-        if ! ruff format --check src/ tests/ 2>&1; then
+        if ! ruff format --check src/ tests/ tools/ 2>&1; then
             PYTHON_FAILED=true
             echo -e "${RED}  ruff format check failed on files outside this commit${NC}"
-            echo "  Run 'ruff format src/ tests/' and commit the result."
+            echo "  Run 'ruff format src/ tests/ tools/' and commit the result."
         else
             echo -e "${GREEN}  ruff format check passed after formatting staged files${NC}"
         fi
@@ -327,9 +327,29 @@ fi
 # runs the tier through .githooks/run-unit-tier. A checkpoint commit
 # (ELSPAIS_CHECKPOINT=1) defers the tier: it records no verdict for its tree,
 # so pre-push runs the tier for the tree it pushes. Every gate above still ran.
+#
+# ELSPAIS_UNIT_MODE=impacted runs only the unit tests the change since the
+# Test Impact Analysis baseline can affect (docs/test-impact-analysis.md).
+# Like a checkpoint it records NO unit verdict for the tree, so pre-push still
+# runs the full tier before anything leaves the machine. When TIA cannot
+# determine impact it selects the full suite, and then the full tier runs
+# here through unit-verdict, which does record the verdict.
 REPO_ROOT=$(git rev-parse --show-toplevel)
 if [ "${ELSPAIS_CHECKPOINT:-}" = "1" ]; then
     echo -e "${YELLOW}Checkpoint commit: unit tests deferred to pre-push${NC}"
+    echo ""
+elif [ "${ELSPAIS_UNIT_MODE:-}" = "impacted" ] && \
+    _tia_mode=$(cd "$REPO_ROOT" && python -m tools.tia select --out "$REPO_ROOT/.results/tia/run" >/dev/null 2>&1 \
+        && python -c 'import json,sys; print(json.load(open(sys.argv[1]))["selection_mode"])' \
+            "$REPO_ROOT/.results/tia/run/manifest.json") && \
+    [ "$_tia_mode" = "test-impact" ]; then
+    echo -e "${BLUE}Running the impacted unit tests (ELSPAIS_UNIT_MODE=impacted)...${NC}"
+    if ! (cd "$REPO_ROOT" && python -m tools.tia run --out "$REPO_ROOT/.results/tia/run"); then
+        echo ""
+        echo -e "${RED}Impacted unit tests failed!${NC}"
+        exit 1
+    fi
+    echo -e "${YELLOW}Impacted tests passed; the full unit verdict is deferred to pre-push${NC}"
     echo ""
 elif ! "$REPO_ROOT/.githooks/unit-verdict"; then
     echo ""

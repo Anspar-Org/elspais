@@ -34,7 +34,13 @@ from elspais.graph.relations import EdgeKind, Stereotype
 from elspais.graph.render import compute_hash_for_node, render_end_marker, render_save
 from elspais.mcp.server import _add_changelog_for_active_mutations
 from elspais.utilities.hasher import compute_normalized_hash
-from tests.core.test_retired_citation_unresolved import FIXTURES_DIR, _build, _replace_once
+from tests.core.test_retired_citation_unresolved import (
+    FIXTURES_DIR,
+    SharedBuilds,
+    _build,
+    _replace_once,
+    _tree_snapshot,
+)
 
 # ---------------------------------------------------------------------------
 # The state a build decides
@@ -179,6 +185,60 @@ def _copy(tmp_path: Path, fixture: str, repos: tuple[str, ...] = ()) -> Path:
     shutil.copytree(FIXTURES_DIR / fixture, base)
     _git_init(*([base / r for r in repos] or [base]))
     return base
+
+
+class PreparedTrees:
+    """Project trees prepared once per module and copied into each test's directory.
+
+    Preparing a tree (recording its hashes) builds it; every test asking for
+    the same tree would otherwise repeat those builds on identical text. A
+    test gets its own copy, so what it writes never reaches another test.
+    ``verify()`` fails if a prepared tree changed after it was prepared.
+    """
+
+    def __init__(self, directory: Path) -> None:
+        self._directory = directory
+        self._prepared: dict = {}
+
+    def copy(self, key, prepare: Callable[[Path], tuple[Path, Path]], tmp_path: Path):
+        """``prepare``'s ``(base, root)``, copied to ``tmp_path / "project"``."""
+        if key not in self._prepared:
+            base, root = prepare(self._directory / f"tree{len(self._prepared)}")
+            self._prepared[key] = (base, root.relative_to(base), _tree_snapshot(base))
+        prepared_base, relative_root, _snapshot = self._prepared[key]
+        base = tmp_path / "project"
+        shutil.copytree(prepared_base, base, symlinks=True)
+        return base, base / relative_root
+
+    def verify(self) -> None:
+        for key, (base, _root, snapshot) in self._prepared.items():
+            assert _tree_snapshot(base) == snapshot, f"prepared tree {key!r} was written"
+
+
+_PREPARED: list[PreparedTrees] = []
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _prepared_trees(tmp_path_factory):
+    """The module's prepared trees; a prepared tree written to fails teardown."""
+    trees = PreparedTrees(tmp_path_factory.mktemp("prepared-trees"))
+    _PREPARED.append(trees)
+    yield trees
+    _PREPARED.remove(trees)
+    trees.verify()
+
+
+def _prepared_copy(key, prepare: Callable[[Path], tuple[Path, Path]], tmp_path: Path):
+    (trees,) = _PREPARED
+    return trees.copy(key, prepare, tmp_path)
+
+
+@pytest.fixture(scope="module")
+def shared_builds(tmp_path_factory):
+    """Read-only graphs shared by the tests of this module; mutating one fails teardown."""
+    builds = SharedBuilds(tmp_path_factory.mktemp("shared-builds"))
+    yield builds
+    builds.verify()
 
 
 def _write(path: Path, text: str) -> None:
@@ -846,12 +906,15 @@ def _canonical_project(setup: str, *, retired: bool) -> Callable[[Path], tuple[P
     """The setup's project, its template Assertion retired in the text if *retired*."""
     make, spec, assertion, live, _copies, _unrelated = RESTORE_SETUPS[setup]
 
-    def canonical(tmp_path: Path) -> tuple[Path, Path]:
+    def prepare(tmp_path: Path) -> tuple[Path, Path]:
         base, root = make(tmp_path)
         if retired:
             _replace_once(base / spec, f"A. {live}", "A. <RETIRED>")
         _record_hashes(root, assertion.rsplit("-", 1)[0])
         return base, root
+
+    def canonical(tmp_path: Path) -> tuple[Path, Path]:
+        return _prepared_copy(("canonical", setup, retired), prepare, tmp_path)
 
     return canonical
 
@@ -875,12 +938,14 @@ class TestBringingATemplateAssertionBack:
 
     @RESTORE_CASES
     # Verifies: REQ-p00017-H, REQ-p00014-B
-    def test_REQ_p00014_B_bringing_back_makes_the_copy_a_build_makes(self, tmp_path, setup):
+    def test_REQ_p00014_B_bringing_back_makes_the_copy_a_build_makes(
+        self, tmp_path, setup, shared_builds
+    ):
         _make, _spec, assertion, live, copies, _unrelated = RESTORE_SETUPS[setup]
-        pristine_base, pristine_root = _canonical_project(setup, retired=False)(
-            tmp_path / "pristine"
+        pristine_base, _root, pristine_graph = shared_builds.get(
+            ("canonical", setup), _canonical_project(setup, retired=False)
         )
-        pristine = _state(_build(pristine_root), pristine_base)
+        pristine = _state(pristine_graph, pristine_base)
 
         def observe(graph, _base):
             # The label each copy holds before, or None where none exists.
@@ -1176,8 +1241,13 @@ def _record_own_hash(root: Path, req_id: str) -> None:
 
 def _own_hash_project(tmp_path: Path, setup: str):
     make, req_id, copy_id = OWN_HASH_SETUPS[setup]
-    _base, root = make(tmp_path)
-    _record_own_hash(root, req_id)
+
+    def prepare(directory: Path) -> tuple[Path, Path]:
+        base, root = make(directory)
+        _record_own_hash(root, req_id)
+        return base, root
+
+    _base, root = _prepared_copy(("own-hash", setup), prepare, tmp_path)
     graph = _build(root)
     declaring = graph.find_by_id(req_id)
     # Premise: the copy, a requirement holding copied Assertions, is among

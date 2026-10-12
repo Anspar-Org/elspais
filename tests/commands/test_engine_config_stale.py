@@ -15,7 +15,20 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from elspais import __version__
+from elspais.graph.parsers import parse_cache
+
+
+@pytest.fixture(autouse=True)
+def _parse_cache_on(monkeypatch):
+    """Every test here asks about a client in the default parse-cache mode.
+
+    A client asking for another mode never reaches a daemon (see the last
+    test), so the variable the tier itself runs under must not decide these.
+    """
+    monkeypatch.delenv(parse_cache.ENV_VAR, raising=False)
 
 
 def _make_project(tmp_path: Path) -> Path:
@@ -150,3 +163,34 @@ def test_fresh_config_daemon_reused_without_restart(tmp_path: Path):
     assert "config_stale" not in source
     # Nothing differs, so the daemon is never asked whether it holds work.
     assert probes == []
+
+
+# Verifies: REQ-d00331-E+F
+@pytest.mark.parametrize("requested", ["0", "verify", "bogus"])
+def test_a_client_asking_for_another_parse_cache_mode_is_not_served_by_a_daemon(
+    tmp_path: Path, monkeypatch, requested
+):
+    """A serving process reads ELSPAIS_PARSE_CACHE from its own environment.
+
+    A client that sets another mode -- or one naming no mode -- is answered by
+    a local build reading the client's own setting: a running daemon is not
+    asked, and none is started to keep that mode for later clients.
+    """
+    config_path = _make_project(tmp_path)
+
+    from elspais.mcp.daemon import compute_config_hash
+
+    info = _daemon_info(config_hash=compute_config_hash(config_path))
+    asked = []
+
+    def try_port(record, endpoint, params, method):
+        asked.append(record["port"])
+        return {"healthy": True}
+
+    monkeypatch.setenv(parse_cache.ENV_VAR, requested)
+    result, stopped, started, probes = _run_try_daemon(tmp_path, info, try_port)
+
+    assert result is None
+    assert asked == []
+    assert started == []
+    assert stopped == []

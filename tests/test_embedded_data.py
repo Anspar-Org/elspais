@@ -25,12 +25,21 @@ from tests.embedded_page import (
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "hht-like"
 
+# Generating a page reads the committed tree's requirement locations, a whole
+# build of this repository; every test here reads the same tree.
+pytestmark = pytest.mark.usefixtures("shared_committed_req_locations")
 
-@pytest.fixture
-def graph():
-    """Build a graph from the hht-like fixture."""
+
+@pytest.fixture(scope="module")
+def graph(read_only_graph):
+    """Build a graph from the hht-like fixture, once for the module.
+
+    Every test here only reads it; the guard fails teardown if one changed it.
+    """
     config = get_config(start_path=FIXTURE_DIR, quiet=True)
-    return build_graph(config=config, repo_root=FIXTURE_DIR)
+    graph = build_graph(config=config, repo_root=FIXTURE_DIR)
+    with read_only_graph(graph, "graph"):
+        yield graph
 
 
 @pytest.fixture
