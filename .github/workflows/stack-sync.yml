@@ -1,0 +1,77 @@
+# Implements: REQ-o00080-A+B+C+D+E+F
+name: Stack Sync
+
+# Keeps a stack of pull requests consistent (docs/stacked-pull-requests.md):
+# when a pull request merges, the ones stacked on it are retargeted and brought
+# up to date; when a branch gains commits, every pull request stacked above it
+# takes them. tools/stack/sync.py holds the logic; this file only wires events.
+on:
+  pull_request:
+    types: [closed]
+  push:
+    branches-ignore: [main]
+
+# One run at a time, in event order: two runs updating the same stack at once
+# would race to push the same branches.
+concurrency:
+  group: stack-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    name: Stack sync
+    # A merged pull request from this repository, or a push to any branch but
+    # main (a deleted branch has nothing to sync). Branches of pull requests from
+    # forks are never touched (REQ-o00080-F).
+    if: >-
+      (github.event_name == 'pull_request'
+        && github.event.pull_request.merged == true
+        && github.event.pull_request.head.repo.full_name == github.repository)
+      || (github.event_name == 'push' && !github.event.deleted)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # A push made with the workflow's own GITHUB_TOKEN starts no other
+      # workflow, so the pull requests this updates would not be re-tested
+      # until their next push. A STACK_SYNC_TOKEN secret (a fine-grained token
+      # or GitHub App token with contents and pull-requests write access) makes
+      # its merges trigger CI like anyone's push.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.repository.default_branch }}
+          token: ${{ secrets.STACK_SYNC_TOKEN || github.token }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Identify the merge commits
+        run: |
+          git config user.name "elspais stack sync"
+          git config user.email "stack-sync@users.noreply.github.com"
+
+      - name: Sync after a merge
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.STACK_SYNC_TOKEN || github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+          HEAD: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python -m tools.stack.sync --repo "$GITHUB_REPOSITORY" merged \
+            --pr "$PR" --base "$BASE" --head "$HEAD" --head-sha "$HEAD_SHA"
+
+      - name: Sync after a push
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.STACK_SYNC_TOKEN || github.token }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          python -m tools.stack.sync --repo "$GITHUB_REPOSITORY" pushed --branch "$BRANCH"

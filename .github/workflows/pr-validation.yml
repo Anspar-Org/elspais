@@ -1,10 +1,15 @@
-# Implements: REQ-o00066-F+G
+# Implements: REQ-o00066-F+G+L
 name: PR Validation
 
+# Every pull request is validated, whatever branch it targets: a stacked pull
+# request's title becomes a squash commit too. In the merge queue there is no
+# pull request title or commit range to read, and the title was validated when
+# the pull request was opened; the jobs still run there and pass as not
+# applicable, so a required check never holds the queue (REQ-o00066-L).
 on:
   pull_request:
-    branches: [main]
     types: [opened, synchronize, reopened, edited]
+  merge_group:
 
 permissions:
   contents: read
@@ -17,7 +22,12 @@ jobs:
     timeout-minutes: 2
 
     steps:
+      - name: Not applicable in the merge queue
+        if: github.event_name == 'merge_group'
+        run: echo "Validated when the pull request was opened; the merge queue has no title to read."
+
       - name: Check PR title for ticket reference
+        if: github.event_name == 'pull_request'
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_URL: ${{ github.event.pull_request.html_url }}
@@ -49,10 +59,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
         with:
           fetch-depth: 0
 
       - name: Check commits for ticket and requirement references
+        if: github.event_name == 'pull_request'
         run: |
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
           HEAD_SHA="${{ github.event.pull_request.head.sha }}"
