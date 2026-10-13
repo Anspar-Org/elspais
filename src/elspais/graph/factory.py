@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import re
+import sys
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from glob import glob
@@ -2004,6 +2005,22 @@ def _build_repository(
                     builder.add_parsed_content(parsed_content, file_node=fn)
 
                 _record_declined_files(builder, domain_file, "test", repo_root)
+
+            # Implements: REQ-d00332-A
+            # A test file in a language the `ast` extra reads has no test
+            # boundaries without it, so its citations bind to no test. The
+            # build says so once, naming the extra.
+            from elspais.graph.parsers import syntax_tree
+
+            if not syntax_tree.available():
+                unread = sorted(f for f in scanned_test_files if syntax_tree.handles(f))
+                if unread:
+                    print(
+                        f"Warning: {len(unread)} test file(s), such as {unread[0]}, have no "
+                        f"test boundaries without the '{syntax_tree.EXTRA}' extra. "
+                        f"Install: pip install elspais[{syntax_tree.EXTRA}]",
+                        file=sys.stderr,
+                    )
 
             # 6b-target. Ingest results from [[scanning.test.targets]] via reporter registry.
             # Implements: REQ-d00128-A+H

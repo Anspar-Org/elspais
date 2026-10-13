@@ -402,7 +402,7 @@ class FileDispatcher:
         # Build line context if not provided
         if line_context is None:
             lines = [(i + 1, line) for i, line in enumerate(content.split("\n"))]
-            line_context = build_line_context(lines, language, syntax)
+            line_context = build_line_context(lines, language, syntax, file_path)
 
         parser = self._get_ref_parser(file_path)
         tree = parser.parse(content)
@@ -445,6 +445,7 @@ class FileDispatcher:
         file_path: str,
         prescan_data: dict[str, list[dict]] | None,
     ) -> list:
+        from elspais.graph.parsers import syntax_tree
         from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
         from elspais.graph.parsers.prescan import (
             ast_prescan,
@@ -454,6 +455,7 @@ class FileDispatcher:
             read_python,
             reads_test_names,
             text_prescan,
+            tree_prescan,
         )
 
         if not content.endswith("\n"):
@@ -472,7 +474,15 @@ class FileDispatcher:
         # Implements: REQ-d00284-E+G+H
         # The name each test is known by, where the scan can read one. Only a
         # Dart test needs it: its result may record no source line to bind by.
-        test_names: dict[int, str] = dart_test_names(lines) if reads_test_names(file_path) else {}
+        # Implements: REQ-d00332-A
+        # A language the syntax tree reads is parsed once, here, for its tests
+        # and their names alike.
+        tree = syntax_tree.read(file_path, content) if not (is_python or is_dart) else None
+        test_names: dict[int, str] = {}
+        if is_dart and reads_test_names(file_path):
+            test_names = dart_test_names(lines)
+        elif tree is not None and tree.names is not None:
+            test_names = dict(tree.names)
 
         # Implements: REQ-d00332-D
         if prescan_data and file_path in prescan_data:
@@ -485,6 +495,8 @@ class FileDispatcher:
                 line_context, all_test_funcs = text_prescan(lines)
         elif is_dart:
             line_context, all_test_funcs = dart_prescan(lines)
+        elif tree is not None:
+            line_context, all_test_funcs = tree_prescan(lines, tree)
         else:
             line_context, all_test_funcs = text_prescan(lines)
 

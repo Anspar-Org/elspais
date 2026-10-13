@@ -1139,7 +1139,8 @@ links its results to journey step 2, and the journey verdict rolls up into the
 For **per-spec** binding instead of a whole-suite verdict, use
 `match = "source"` -- but the JUnit XML must carry a per-`<testcase>` `file`
 attribute naming each test's real source path, and the specs must be scanned as
-TEST nodes (via `[scanning.test].prescan_command`). Playwright's reporter omits
+TEST nodes (natively with `pip install elspais[ast]`, or via
+`[scanning.test].prescan_command`). Playwright's reporter omits
 `file`, so the runner injects it before elspais ingests the XML. See
 `elspais docs test-targets` (the *Playwright / TypeScript* recipe) for the full
 setup.

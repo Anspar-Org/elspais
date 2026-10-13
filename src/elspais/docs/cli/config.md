@@ -270,6 +270,9 @@ concurrency = 1                  # Most test targets one run executes at once
 # every target that uses it before raising concurrency. `--concurrency N` on
 # `elspais test` and `elspais checks --run-tests` replaces it for one run.
 prescan_command = ""             # External test discovery command
+# Python, Dart, and -- with elspais[ast] -- JavaScript, TypeScript, Go, Java,
+# Kotlin, Rust and C# test files are read without one; see
+# `elspais docs test-targets`, *How the Tests of a File Are Found*.
 # prescan_command receives file paths on stdin, outputs JSON on stdout:
 #   [{"file": "path", "function": "name", "class": "Name|null", "line": N,
 #     "end_line": M}]

@@ -26,6 +26,7 @@ pip install elspais[trace-review]  # Interactive viewer server
 pip install elspais[mcp]           # MCP server for AI integration
 pip install elspais[coverage]      # Per-test line coverage from .coverage files
 pip install elspais[dart]          # Dart and Flutter test selection by imports
+pip install elspais[ast]           # Test and function boundaries in JS/TS, Go, Java, Kotlin, Rust, C#
 pip install elspais[all]           # Everything
 ```
 

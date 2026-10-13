@@ -939,7 +939,7 @@ def _declaration_starts(file_node, cache: dict) -> list[int]:
             text = None
         if text is not None:
             lines = [(i + 1, line) for i, line in enumerate(text.split("\n"))]
-            starts = declaration_starts(lines, detect_language(str(abs_path)))
+            starts = declaration_starts(lines, detect_language(str(abs_path)), path=str(abs_path))
 
     cache[key] = starts
     return starts

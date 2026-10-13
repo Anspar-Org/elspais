@@ -283,7 +283,12 @@ def grammar_fingerprint(reader: Any) -> str | None:
         if not _is_plain(as_data):
             return None
         configs.append(as_data)
-    return content_digest(repr((_grammar_text_digest(), configs)))
+    # Implements: REQ-d00331-A
+    # A code or test reading of a language the syntax tree reads differs with
+    # whether, and at which versions, the `ast` extra is installed.
+    from elspais.graph.parsers.syntax_tree import reader_identity
+
+    return content_digest(repr((_grammar_text_digest(), configs, reader_identity())))
 
 
 def _argument_fingerprint(argument: Any) -> str | None:
