@@ -934,6 +934,12 @@ def _fix_index_rows(args: argparse.Namespace, graph, node, hash_value: str, dry_
             f"INDEX.md{where} does not list {node.id}; a full `elspais fix` regenerates it.",
             file=sys.stderr,
         )
+    if outcome.misshapen:
+        print(
+            f"INDEX.md{where} lists {node.id} in a row whose columns differ from the table "
+            f"elspais writes, so that row was not updated; a full `elspais fix` regenerates it.",
+            file=sys.stderr,
+        )
     return 0
 
 

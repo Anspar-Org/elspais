@@ -186,6 +186,38 @@ class TestNamedFixScope:
         assert "already up to date" in out
         assert "INDEX.md row" not in out
 
+    # Verifies: REQ-d00330-C, REQ-p00015-B
+    def test_misshapen_index_row_is_reported_not_updated(self, solo_repo, capsys):
+        from elspais.commands.fix_cmd import run
+
+        index = solo_repo / "spec" / "INDEX.md"
+        lines = index.read_text(encoding="utf-8").split("\n")
+        (number,) = [i for i, line in enumerate(lines) if line.startswith("| REQ-p00001 ")]
+        cells = lines[number][2:-2].split(" | ")
+        (hash_cell,) = [i for i, cell in enumerate(cells) if cell.strip() == "deadbeef"]
+        del cells[hash_cell]
+        lines[number] = "| " + " | ".join(cells) + " |"
+        index.chmod(0o644)
+        index.write_text("\n".join(lines), encoding="utf-8")
+        core = solo_repo / "spec" / "core.md"
+        core.write_text(
+            core.read_text().replace("SHALL validate input.", "SHALL validate every input.")
+        )
+        index_before = index.read_bytes()
+
+        rc = run(_args(solo_repo, "REQ-p00001"))
+
+        captured = capsys.readouterr()
+        assert rc == 0, captured
+        target_block = core.read_text()[: core.read_text().index("\n---\n")]
+        assert "SHALL validate every input." in target_block
+        assert "deadbeef" not in target_block
+        assert "**Hash**: " in target_block
+        assert index.read_bytes() == index_before
+        assert "REQ-p00001" in captured.err
+        assert "columns differ" in captured.err
+        assert "a full `elspais fix` regenerates it" in captured.err
+
     # Verifies: REQ-d00330-C
     def test_dry_run_writes_nothing_and_names_the_index_row(self, solo_repo, capsys):
         from elspais.commands.fix_cmd import run
