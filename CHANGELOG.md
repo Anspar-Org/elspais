@@ -4,6 +4,10 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-147 follow-up
+
+- **A named fix reports an INDEX.md row it could not update (REQ-d00330-C)** -- where the row listing the requirement had another column count than the table elspais writes, `elspais fix REQ-ID` left the row's stale hash in place without a word. It now says so and names the full fix that regenerates the index.
+
 ### TOOL-157
 
 - **elspais finds the tests of JavaScript, TypeScript, Go, Java, Kotlin, Rust and C# files itself (REQ-d00332-A, REQ-d00284-E+G)** -- the new `elspais[ast]` extra (also in `elspais[all]`) installs tree-sitter and one prebuilt grammar package per language. A Jest-style `it`/`test` call, a Go `Test*` function, a Java or Kotlin method annotated `@Test` and its relatives, a Rust function with `#[test]`, and a C# method with `[Fact]`, `[Test]` and their relatives become tests, each with its exact line extent; `describe` calls, classes and Rust `mod`s that hold tests are their groups. A citation inside a test, or directly above a test or a group holding one, binds to it. A JavaScript or TypeScript test's full name is its `describe` descriptions and its own, so a result that records no line binds by name. Without the extra these test files have no tests, as before, and a build prints one warning naming the extra. `elspais docs test-targets` lists each language's conventions under *How the Tests of a File Are Found*.
