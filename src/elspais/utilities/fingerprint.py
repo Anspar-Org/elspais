@@ -1,9 +1,11 @@
-# Implements: REQ-d00311-A+B+C+D+I+J+K+L+M+N+P, REQ-d00312-A+B+D, REQ-d00329-B
+# Implements: REQ-d00311-A+B+C+D+I+J+K+L+M+N+P+R, REQ-d00312-A+B+D, REQ-d00329-B
 """Record the fingerprint of a test target's run, and judge the freshness of its results.
 
 Terms:
 
-- An input is a file that the results of a test target depend on.
+- An input is something the results of a test target depend on: a file the
+  target selects, each part of the environment the target declares, and the
+  configuration of the target.
 - The output area of a target is the directory ``<output_root>/<name>``.
   The command of the target writes its results and coverage there.
 - A result fingerprint is a statement of one run of a target. It holds a
@@ -15,6 +17,17 @@ A run writes its fingerprint into the output area when the run starts. The
 results are fresh while the manifest matches the inputs on disk. The manifest
 holds one digest for each input. Consequently, a stale finding can name the
 input that changed.
+
+The manifest names a file by its repo-relative path. It names each declared
+part of the environment as ``/environment/<probe name>`` and the configuration
+of the target as ``/configuration``. A repo-relative path never begins with
+``/``, so neither spelling can name a file. The digest of a probe covers the
+exit status and the standard output of its command, so a toolchain missing on
+one machine and present on another differs. The configuration digest covers
+every setting of the target except those that decide only which runs execute
+it, how its finished results are credited, or which files are its inputs: the
+name, groups, resources, ``inputs``, ``credit_coverage`` and
+``min_coverage_fraction``. The file inputs are judged by their own entries.
 
 The file lists the manifest as ``inputs``: a list of objects, each with a
 ``path`` field and a ``digest`` field. No path is ever a JSON key.
@@ -37,13 +50,36 @@ from glob import glob
 from pathlib import Path
 from typing import Any
 
+from elspais.utilities.git import commit_state
+
 #: The name of the fingerprint file in the output area.
 FINGERPRINT_NAME = ".elspais-run.json"
 
 #: The environment variable that holds the path of the output area for the command.
 OUTPUT_ENV = "ELSPAIS_TARGET_OUTPUT"
 
-_FINGERPRINT_VERSION = 2
+#: The format of the *Result Fingerprint* this elspais writes and reads.
+FINGERPRINT_VERSION = 3
+
+#: The manifest spelling that begins each declared part of the environment.
+ENVIRONMENT_PREFIX = "/environment/"
+
+#: The manifest spelling of the configuration of the target.
+CONFIGURATION_ENTRY = "/configuration"
+
+#: The settings of a target left out of its configuration digest.
+_NOT_CONFIGURATION = frozenset(
+    {"name", "groups", "resources", "inputs", "credit_coverage", "min_coverage_fraction"}
+)
+
+#: The longest a probe may run, in seconds. A probe runs inside every build,
+#: so one that does not finish is recorded as such rather than awaited.
+_PROBE_TIMEOUT = 60
+
+#: The digest of each probe ``judge`` has run, keyed by its command and the
+#: directory it ran in. Every judgement of a process shares it, so a build
+#: runs each probe once. A served graph clears it before each rebuild.
+_probe_cache: dict[tuple[str, str], str] = {}
 
 #: The name of the file that names the last run's executed targets, in the output root.
 #: A target name cannot start with ``.``, so no output area can take this name.
@@ -143,13 +179,13 @@ def _digest_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def compute_manifest(
+def file_manifest(
     repo_root: Path,
     config: Any,
     target: Any,
     digest_cache: dict[Path, str] | None = None,
 ) -> dict[str, str]:
-    """Map the repo-relative path of each input of *target* to its content digest.
+    """Map the repo-relative path of each file input of *target* to its content digest.
 
     *digest_cache* maps a path to its digest. Targets often share inputs, so a
     caller judging several targets against one tree passes one cache to
@@ -169,6 +205,94 @@ def compute_manifest(
             # A file that disappears after the walk is not an input.
             continue
     return manifest
+
+
+def forget_probes() -> None:
+    """Forget every probe digest ``judge`` has run, so the next judgement probes again."""
+    _probe_cache.clear()
+
+
+def _run_probe(command: str, cwd: Path) -> str:
+    """Return the digest of the exit status and the standard output of a probe."""
+    h = hashlib.sha256()
+    try:
+        completed = subprocess.run(
+            command,
+            shell=True,
+            cwd=cwd,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            timeout=_PROBE_TIMEOUT,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        h.update(b"timed out\n")
+        return h.hexdigest()
+    except OSError:
+        h.update(b"could not start\n")
+        return h.hexdigest()
+    h.update(f"exit {completed.returncode}\n".encode("ascii"))
+    h.update(completed.stdout)
+    return h.hexdigest()
+
+
+def configuration_digest(target: Any) -> str:
+    """Return the digest of the settings of *target* that can change its outcomes."""
+    settings = {
+        key: value
+        for key, value in target.model_dump(mode="json").items()
+        if key not in _NOT_CONFIGURATION
+    }
+    return hashlib.sha256(json.dumps(settings, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+# Implements: REQ-d00311-R
+def declared_inputs(
+    repo_root: Path, target: Any, probe_cache: dict[tuple[str, str], str] | None = None
+) -> dict[str, str]:
+    """Map the environment and the configuration of *target* to their digests.
+
+    Each probe runs in the target's ``cwd``. *probe_cache* holds the digest
+    of each probe already run, keyed by command and directory. A run never
+    passes one, so a change during the run is seen.
+    """
+    cwd = (Path(repo_root) / target.cwd).resolve()
+    entries: dict[str, str] = {CONFIGURATION_ENTRY: configuration_digest(target)}
+    for probe in target.environment_probes:
+        key = (probe.command, str(cwd))
+        if probe_cache is None:
+            digest = _run_probe(probe.command, cwd)
+        elif (digest := probe_cache.get(key)) is None:
+            digest = probe_cache[key] = _run_probe(probe.command, cwd)
+        entries[ENVIRONMENT_PREFIX + probe.name] = digest
+    return entries
+
+
+def compute_manifest(
+    repo_root: Path,
+    config: Any,
+    target: Any,
+    digest_cache: dict[Path, str] | None = None,
+    probe_cache: dict[tuple[str, str], str] | None = None,
+) -> dict[str, str]:
+    """Map every input of *target* to its digest: its files, its environment, its configuration.
+
+    *digest_cache* is passed to :func:`file_manifest` and *probe_cache* to
+    :func:`declared_inputs`.
+    """
+    manifest = file_manifest(repo_root, config, target, digest_cache)
+    manifest.update(declared_inputs(repo_root, target, probe_cache))
+    return manifest
+
+
+# Implements: REQ-d00311-E+F
+def input_label(entry: str) -> str:
+    """Return the words that name one manifest entry: a path, a probe, or the configuration."""
+    if entry == CONFIGURATION_ENTRY:
+        return "the target's configuration"
+    if entry.startswith(ENVIRONMENT_PREFIX):
+        return f"environment probe {entry[len(ENVIRONMENT_PREFIX) :]!r}"
+    return entry
 
 
 def manifest_digest(manifest: dict[str, str]) -> str:
@@ -192,34 +316,6 @@ def differences(recorded: dict[str, str], current: dict[str, str]) -> list[str]:
     )
 
 
-def _git_state(repo_root: Path) -> tuple[str, bool | None]:
-    """Return the current commit and whether the working tree has uncommitted changes.
-
-    The fingerprint stores these values for a human reader only. An empty
-    commit and ``None`` mean that git returned no answer.
-    """
-    try:
-        head = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        status = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
-        return "", None
-    commit = head.stdout.strip() if head.returncode == 0 else ""
-    dirty = bool(status.stdout.strip()) if status.returncode == 0 else None
-    return commit, dirty
-
-
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -235,7 +331,7 @@ def read_fingerprint(folder: Path) -> dict[str, Any] | None:
         return None
     # A fingerprint of another format version reads as no fingerprint. Consequently,
     # its results read as stale, never as fresh.
-    if not isinstance(data, dict) or data.get("version") != _FINGERPRINT_VERSION:
+    if not isinstance(data, dict) or data.get("version") != FINGERPRINT_VERSION:
         return None
     inputs = data.pop("inputs", None)
     if not isinstance(inputs, list):
@@ -284,11 +380,11 @@ def start_run(repo_root: Path, config: Any, target_name: str) -> Path:
     folder = target_folder(root, config, target_name)
     empty_folder(folder)
     manifest = compute_manifest(root, config, target)
-    commit, dirty = _git_state(root)
+    commit, dirty = commit_state(root)
     _write_fingerprint(
         folder,
         {
-            "version": _FINGERPRINT_VERSION,
+            "version": FINGERPRINT_VERSION,
             "target": target_name,
             # Implements: REQ-d00311-P
             # Where the run executed, so a recorded absolute path is read
@@ -402,7 +498,9 @@ def judge(
     """Return the freshness of a target's results on disk.
 
     A stale verdict includes its reason. *digest_cache* is passed to
-    :func:`compute_manifest`.
+    :func:`compute_manifest`. Each probe of the target's environment runs
+    once per process; :func:`forget_probes` makes the next judgement probe
+    again.
     """
     root = Path(repo_root).resolve()
     target = _find_target(config, target_name)
@@ -427,7 +525,7 @@ def judge(
             changed=during,
             fingerprint=fingerprint,
         )
-    current = compute_manifest(root, config, target, digest_cache)
+    current = compute_manifest(root, config, target, digest_cache, _probe_cache)
     changed = tuple(differences(fingerprint["manifest"], current))
     if changed:
         return Freshness(
@@ -449,7 +547,7 @@ def stale_reason(verdict: Freshness) -> str:
     """
     if verdict.reason == "no-fingerprint":
         return "no fingerprint was recorded for its results"
-    shown = ", ".join(verdict.changed[:5])
+    shown = ", ".join(input_label(entry) for entry in verdict.changed[:5])
     more = f" and {len(verdict.changed) - 5} more" if len(verdict.changed) > 5 else ""
     when = "while it ran" if verdict.reason == "changed-during-run" else "since it ran"
     return f"inputs changed {when}: {shown}{more}"

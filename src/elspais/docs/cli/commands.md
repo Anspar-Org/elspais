@@ -18,6 +18,7 @@ Complete reference for all elspais commands.
 | `test` | Reports | Execute test targets and record their results, evaluating no check |
 | `fingerprint` | Reports | Record the fingerprint of a test run elspais did not execute |
 | `evidence` | Reports | Write or verify the Evidence Snapshot: one test run's results, bound to the tree |
+| `baseline` | Reports | Carry recorded test-target runs between trees as a Baseline Run |
 | `gaps` | Gaps & Issues | List which requirements fall short of each coverage dimension |
 | `uncovered` | Gaps & Issues | List requirements without code coverage |
 | `untested` | Gaps & Issues | List requirements without test coverage |
@@ -219,6 +220,24 @@ refuses a `finish` that no `start` began, with exit 1. The reason is that
 `start` empties the folder. Without `start`, the results that an earlier run
 left there would carry the fingerprint of this run. An unknown target name exits 2. See
 `elspais docs test-targets`, *Target Folders and Fresh Results*.
+
+## baseline
+
+Carry the recorded runs of test targets between trees as a *Baseline Run*.
+
+  $ elspais baseline pack --out baseline.tar.gz --targets all   # CI: pack the runs
+  $ elspais baseline fetch                                      # adopt where none is recorded
+
+`pack --out FILE [--targets ...]` writes the selected targets' folders into
+one archive. It refuses, naming the target and the reason (exit 1), a tree
+holding changes no commit holds, a run in progress or one that recorded no
+end, a run whose inputs changed while it ran, and a target with no results. A
+failing run is packed. `fetch [--replace]` runs
+`[scanning.test.baseline] fetch_command` to obtain an archive and adopts each
+packed run where this tree records none; `--replace` replaces a recorded run.
+It reports each target as adopted, skipped or refused, and exits 1 where the
+command fails, leaves nothing, or a target is refused. See
+`elspais docs baseline`.
 
 ## evidence
 
@@ -1020,6 +1039,7 @@ Read the user guide.
 | `checks` | CHECKS |
 | `pdf` | PDF COMPILATION |
 | `test-targets` | elspais test-targets |
+| `baseline` | BASELINE RUNS |
 | `doctor` | DOCTOR |
 | `analysis` | ANALYSIS |
 | `terms` | DEFINED TERMS |

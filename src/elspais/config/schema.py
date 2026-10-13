@@ -710,6 +710,29 @@ PATH_ORIGIN_CWD = "working-directory"
 PATH_ORIGINS = (PATH_ORIGIN_ROOT, PATH_ORIGIN_CWD)
 
 
+# Implements: REQ-d00311-R
+class EnvironmentProbeConfig(_StrictModel):
+    """One part of a test target's environment, identified by what a command prints.
+
+    The command runs in the target's ``cwd``. Its exit status and its standard
+    output identify that part of the environment, such as the version of a
+    toolchain or the packages installed for the target.
+    """
+
+    name: str
+    command: str
+
+    @field_validator("name", "command")
+    @classmethod
+    def _check_present(cls, v: str, info: ValidationInfo) -> str:
+        if not v.strip():
+            raise ValueError(
+                f"an environment probe needs a {info.field_name}: a probe is a table "
+                f'such as {{ name = "python", command = "python --version" }}'
+            )
+        return v
+
+
 class TestTargetConfig(_StrictModel):
     """One test target: how its results + coverage are produced and ingested."""
 
@@ -771,6 +794,27 @@ class TestTargetConfig(_StrictModel):
     # test file the target scans. It stands beside the reporter rather than in
     # its place, so one target can hold per-test results and file-level ones.
     file_results: bool = False
+    # Implements: REQ-d00311-R
+    # The parts of the environment this target's outcomes depend on beyond the
+    # files of the repository. Each probe is an input of the target, recorded
+    # under its own name.
+    environment_probes: list[EnvironmentProbeConfig] = Field(default_factory=list)
+
+    # Implements: REQ-d00311-R
+    @model_validator(mode="after")
+    def _check_probe_names(self) -> TestTargetConfig:
+        seen: dict[str, str] = {}
+        for probe in self.environment_probes:
+            key = probe.name.strip().lower()
+            if key in seen:
+                raise ValueError(
+                    f'test target "{self.name}" declares environment probes '
+                    f'"{seen[key]}" and "{probe.name}", which differ only in case or '
+                    f"spacing; each probe names one part of the environment, so give "
+                    f"each a distinct name"
+                )
+            seen[key] = probe.name
+        return self
 
     # Implements: REQ-d00283-X
     @field_validator("name")
@@ -851,6 +895,30 @@ class TestTargetConfig(_StrictModel):
         return self
 
 
+# Implements: REQ-d00333-F
+class BaselineConfig(_StrictModel):
+    """Where a *Baseline Run* comes from.
+
+    ``fetch_command`` fills the directory that ``{dest}`` names with one archive
+    that ``elspais baseline pack`` wrote. The project's command decides which
+    run to fetch and how to reach it; elspais knows no host.
+    """
+
+    fetch_command: str = ""
+
+    @field_validator("fetch_command")
+    @classmethod
+    def _check_dest(cls, v: str) -> str:
+        if v.strip() and "{dest}" not in v:
+            raise ValueError(
+                f"scanning.test.baseline.fetch_command {v!r} does not name {{dest}}. "
+                f"Write {{dest}} where the command takes the empty directory it fills "
+                f"with a packed baseline, such as "
+                f'"tools/fetch-baseline.sh {{dest}}"; elspais substitutes it shell-quoted'
+            )
+        return v
+
+
 class TestScanningConfig(ScanningKindConfig):
     __test__ = False  # Prevent pytest collection
 
@@ -879,6 +947,9 @@ class TestScanningConfig(ScanningKindConfig):
     # output_root names the directory that holds the output area of each target.
     # The path is relative to the repository root.
     output_root: str = ".results"
+    # Implements: REQ-d00333-F
+    # How `elspais baseline fetch` obtains a packed Baseline Run.
+    baseline: BaselineConfig = Field(default_factory=BaselineConfig)
 
     # Implements: REQ-d00312-B
     @field_validator("output_root")

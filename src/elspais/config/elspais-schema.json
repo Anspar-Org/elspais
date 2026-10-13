@@ -120,6 +120,19 @@
       "title": "AssociatedPatternConfig",
       "type": "object"
     },
+    "BaselineConfig": {
+      "additionalProperties": false,
+      "description": "Where a *Baseline Run* comes from.\n\n``fetch_command`` fills the directory that ``{dest}`` names with one archive\nthat ``elspais baseline pack`` wrote. The project's command decides which\nrun to fetch and how to reach it; elspais knows no host.",
+      "properties": {
+        "fetch_command": {
+          "default": "",
+          "title": "Fetch Command",
+          "type": "string"
+        }
+      },
+      "title": "BaselineConfig",
+      "type": "object"
+    },
     "ChangelogConfig": {
       "additionalProperties": false,
       "properties": {
@@ -411,6 +424,26 @@
         }
       },
       "title": "DocsScanningConfig",
+      "type": "object"
+    },
+    "EnvironmentProbeConfig": {
+      "additionalProperties": false,
+      "description": "One part of a test target's environment, identified by what a command prints.\n\nThe command runs in the target's ``cwd``. Its exit status and its standard\noutput identify that part of the environment, such as the version of a\ntoolchain or the packages installed for the target.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "command": {
+          "title": "Command",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "command"
+      ],
+      "title": "EnvironmentProbeConfig",
       "type": "object"
     },
     "FederationConfig": {
@@ -1273,6 +1306,9 @@
           "title": "Output Root",
           "type": "string"
         },
+        "baseline": {
+          "$ref": "#/$defs/BaselineConfig"
+        },
         "evidence": {
           "default": "",
           "title": "Evidence",
@@ -1383,6 +1419,13 @@
           "default": false,
           "title": "File Results",
           "type": "boolean"
+        },
+        "environment_probes": {
+          "items": {
+            "$ref": "#/$defs/EnvironmentProbeConfig"
+          },
+          "title": "Environment Probes",
+          "type": "array"
         }
       },
       "required": [

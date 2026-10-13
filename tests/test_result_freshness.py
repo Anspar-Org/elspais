@@ -20,7 +20,10 @@ from elspais.utilities.fingerprint import (
     FINGERPRINT_NAME,
     Freshness,
     RunNotStarted,
+    compute_manifest,
+    file_manifest,
     finish_run,
+    forget_probes,
     input_files,
     judge,
     read_fingerprint,
@@ -534,3 +537,175 @@ def test_a_reason_names_the_first_five_changed_inputs_and_counts_the_rest():
         "inputs changed since it ran: src/m0.py, src/m1.py, src/m2.py, src/m3.py, "
         "src/m4.py and 2 more"
     )
+
+
+# The environment and the configuration of a target are inputs of it.
+
+
+def _probe_target(command: str = "cat toolchain.txt", **extra) -> dict:
+    return _target(environment_probes=[{"name": "toolchain", "command": command}], **extra)
+
+
+@pytest.fixture
+def fresh_probes():
+    """Each test starts with no probe digest remembered from another."""
+    forget_probes()
+    yield
+    forget_probes()
+
+
+# Verifies: REQ-d00311-R, REQ-d00311-C, REQ-d00311-E, REQ-d00311-F
+def test_a_changed_environment_makes_results_stale_and_names_the_probe(tmp_path, fresh_probes):
+    root = _project(tmp_path)
+    (root / "toolchain.txt").write_text("1.0\n", encoding="utf-8")
+    config = _config([_probe_target(inputs={"directories": ["src"]})])
+    _run(root, config)
+    assert judge(root, config, "unit").state == "fresh"
+
+    (root / "toolchain.txt").write_text("2.0\n", encoding="utf-8")
+    forget_probes()
+    verdict = judge(root, config, "unit")
+
+    assert verdict.state == "stale"
+    assert verdict.changed == ("/environment/toolchain",)
+    assert stale_reason(verdict) == "inputs changed since it ran: environment probe 'toolchain'"
+    (finding,) = _check(root, config).findings
+    assert finding.related == ["environment probe 'toolchain'"]
+
+
+# Verifies: REQ-d00311-R, REQ-d00311-C
+def test_a_probe_that_starts_failing_makes_results_stale(tmp_path, fresh_probes):
+    """The exit status is part of what a probe records, so a missing tool differs."""
+    root = _project(tmp_path)
+    (root / "toolchain.txt").write_text("1.0\n", encoding="utf-8")
+    config = _config([_probe_target(inputs={"directories": ["src"]})])
+    _run(root, config)
+
+    (root / "toolchain.txt").unlink()
+    forget_probes()
+
+    assert judge(root, config, "unit").changed == ("/environment/toolchain",)
+
+
+# Verifies: REQ-d00311-R, REQ-d00311-C, REQ-d00311-F
+@pytest.mark.parametrize(
+    "setting",
+    [
+        {"command": "pytest -x"},
+        {"reporter": "pytest-json"},
+        {"cwd": "src"},
+        {"environment_probes": [{"name": "python", "command": "echo 3.12"}]},
+    ],
+    ids=["command", "reporter", "cwd", "probes"],
+)
+def test_a_changed_configuration_makes_results_stale_and_says_so(tmp_path, setting, fresh_probes):
+    root = _project(tmp_path)
+    _run(root, _config([_target()]))
+
+    verdict = judge(root, _config([_target(**setting)]), "unit")
+
+    assert verdict.state == "stale"
+    assert "/configuration" in verdict.changed
+    assert "the target's configuration" in stale_reason(verdict)
+
+
+# Verifies: REQ-d00311-R, REQ-d00311-B
+@pytest.mark.parametrize(
+    "setting",
+    [
+        {"groups": ["default"]},
+        {"credit_coverage": "verified"},
+        {"min_coverage_fraction": 0.5},
+    ],
+    ids=["groups", "credit_coverage", "min_coverage_fraction"],
+)
+def test_a_setting_that_cannot_change_outcomes_leaves_results_fresh(tmp_path, setting):
+    root = _project(tmp_path)
+    _run(root, _config([_target()]))
+
+    assert judge(root, _config([_target(**setting)]), "unit").state == "fresh"
+
+
+# Verifies: REQ-d00311-R, REQ-d00311-C, REQ-d00311-F
+def test_an_environment_changed_while_the_run_was_going_makes_results_stale(tmp_path, fresh_probes):
+    root = _project(tmp_path)
+    (root / "toolchain.txt").write_text("1.0\n", encoding="utf-8")
+    config = _config([_probe_target()])
+    folder = start_run(root, config, "unit")
+    (folder / "junit.xml").write_text(_JUNIT, encoding="utf-8")
+    (root / "toolchain.txt").write_text("2.0\n", encoding="utf-8")
+    fingerprint = finish_run(root, config, "unit")
+
+    assert "/environment/toolchain" in fingerprint["changed_during_run"]
+    verdict = judge(root, config, "unit")
+    assert verdict.reason == "changed-during-run"
+    assert "environment probe 'toolchain'" in stale_reason(verdict)
+
+
+# Verifies: REQ-d00311-R
+def test_a_report_runs_each_probe_once_until_the_probes_are_forgotten(tmp_path, fresh_probes):
+    """Every build judges every target, so a probe runs once per process."""
+    root = _project(tmp_path)
+    config = _config(
+        [
+            _probe_target("echo x >> probe-calls.log; echo 1.0", name="a"),
+            _probe_target("echo x >> probe-calls.log; echo 1.0", name="b"),
+        ],
+        skip=["probe-calls.log"],
+    )
+    _run(root, config, "a")
+    _run(root, config, "b")
+    calls = root / "probe-calls.log"
+    calls.unlink()
+
+    for _ in range(3):
+        assert judge(root, config, "a").state == "fresh"
+        assert judge(root, config, "b").state == "fresh"
+    assert calls.read_text(encoding="utf-8").count("x") == 1
+
+    forget_probes()
+    judge(root, config, "a")
+    assert calls.read_text(encoding="utf-8").count("x") == 2
+
+
+# Verifies: REQ-d00311-R, REQ-d00311-K
+def test_an_include_set_selects_the_files_and_leaves_the_environment_an_input(
+    tmp_path, fresh_probes
+):
+    root = _project(tmp_path)
+    (root / "toolchain.txt").write_text("1.0\n", encoding="utf-8")
+    config = _config([_probe_target(inputs={"directories": ["src"]})])
+    folder = _run(root, config)
+
+    recorded = read_fingerprint(folder)["manifest"]
+
+    assert sorted(recorded) == ["/configuration", "/environment/toolchain", "src/a.py"]
+
+
+# Verifies: REQ-d00311-R, REQ-d00322-A
+def test_the_files_an_evidence_snapshot_digests_exclude_the_environment(tmp_path, fresh_probes):
+    """A snapshot is a function of the tree, so it holds no machine's environment."""
+    root = _project(tmp_path)
+    (root / "toolchain.txt").write_text("1.0\n", encoding="utf-8")
+    config = validate_config(_config([_probe_target()]))
+    target = config.scanning.test.targets[0]
+
+    files = file_manifest(root, config, target)
+
+    assert not any(entry.startswith("/") for entry in files)
+    assert set(compute_manifest(root, config, target)) - set(files) == {
+        "/configuration",
+        "/environment/toolchain",
+    }
+
+
+# Verifies: REQ-d00311-D
+def test_a_fingerprint_of_the_previous_format_reads_as_none(tmp_path):
+    root = _project(tmp_path)
+    config = _config([_target()])
+    folder = _run(root, config)
+    path = folder / FINGERPRINT_NAME
+    path.write_text(path.read_text(encoding="utf-8").replace('"version": 3', '"version": 2'))
+
+    assert read_fingerprint(folder) is None
+    assert judge(root, config, "unit").reason == "no-fingerprint"

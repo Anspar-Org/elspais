@@ -525,8 +525,13 @@ def rebuild_shared_graph(state: SharedServerState) -> dict[str, Any]:
     """
     from elspais.config import get_config
     from elspais.graph.factory import build_graph
+    from elspais.utilities.fingerprint import forget_probes
 
     working_dir = state["working_dir"]
+    # Implements: REQ-d00311-R
+    # A rebuild judges each target's results again, so it probes the
+    # environment again rather than reading what an earlier build saw.
+    forget_probes()
 
     try:
         new_config = get_config(start_path=working_dir, quiet=True)

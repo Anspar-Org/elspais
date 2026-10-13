@@ -460,7 +460,7 @@ def derive_snapshot(
     """
     import elspais
     from elspais.graph.GraphNode import NodeKind
-    from elspais.utilities.fingerprint import compute_manifest, manifest_digest
+    from elspais.utilities.fingerprint import file_manifest, manifest_digest
 
     by_name = {t.name: t for t in config.scanning.test.targets}
     unknown = sorted(set(targets) - set(by_name))
@@ -533,7 +533,9 @@ def derive_snapshot(
         tree = tree_digest(repo_root, exclude=config.scanning.test.evidence)
 
     def inputs_digest(name: str) -> str:
-        manifest = compute_manifest(repo_root, config, by_name[name])
+        # The files alone: the environment and the configuration of a target
+        # differ between machines, and the snapshot is a function of the tree.
+        manifest = file_manifest(repo_root, config, by_name[name])
         return manifest_digest({p: d for p, d in manifest.items() if p in tree.paths})
 
     return Snapshot(

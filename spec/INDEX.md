@@ -220,7 +220,7 @@
 | REQ-d00298 | Report Export                                                 | dev-cli.md              | 8c1b78eb |
 | REQ-d00299 | Configuration as Graph Content                                | dev-graph-config.md     | 0577c0a5 |
 | REQ-d00300 | Viewer Remembered State                                       | dev-traceview-review.md | f794104b |
-| REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | d61efc8a |
+| REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | ee45c6f3 |
 | REQ-d00312 | Test Target Output Areas                                      | dev-graph-core.md       | a0788b2a |
 | REQ-d00313 | Served Graph Currency                                         | dev-traceview-review.md | 8822f2a7 |
 | REQ-d00314 | Concurrent Test Target Runs                                   | dev-graph-core.md       | 228b3b98 |
@@ -239,7 +239,7 @@
 | REQ-d00330 | What a Fix Run Changes                                        | prd-core.md             | 9365d280 |
 | REQ-d00331 | Reuse of File Readings Between Builds                         | dev-graph-core.md       | 53734f81 |
 | REQ-d00332 | Per-Test Attribution                                          | dev-graph-core.md       | a5224a66 |
-| REQ-d00333 | Per-Test Result Retention                                     | dev-graph-core.md       | 2daa6310 |
+| REQ-d00333 | Per-Test Result Retention                                     | dev-graph-core.md       | 04d03072 |
 
 ## User Journeys
 

@@ -23,7 +23,7 @@
 
 **REQ:**
 
-- REQ-d00333-G
+- REQ-d00333-F
 - REQ-d00333:section:1
 
 ## Daemon Record
@@ -51,6 +51,7 @@
 - REQ-d00333-B
 - REQ-d00333-C
 - REQ-d00333-D
+- REQ-d00333-K
 - REQ-d00333:section:1
 
 ## Evidence Snapshot
@@ -140,10 +141,9 @@
 - REQ-d00323-P
 - REQ-d00333-B
 - REQ-d00333-E
-- REQ-d00333-F
+- REQ-d00333-G
 - REQ-d00333-H
 - REQ-d00333-I
-- REQ-d00333-J
 - REQ-d00322:section:1
 - REQ-d00323:section:1
 - REQ-d00333:section:1

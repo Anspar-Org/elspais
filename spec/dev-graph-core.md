@@ -1552,7 +1552,7 @@ I. The system SHALL reach the same freshness judgement for a run that a runner o
 
 J. The system SHALL use every file in the repository as an input of a test target that declares no include set.
 
-K. Where a test target declares an include set, the system SHALL use as its inputs only the files that the include set selects.
+K. Where a test target declares an include set, the system SHALL use as the files among its inputs only the files that the include set selects.
 
 L. Where a test target declares an exclude set, the system SHALL exclude from its inputs every file that the exclude set selects.
 
@@ -1566,6 +1566,8 @@ P. A result SHALL keep binding to the test it names after the tree its run execu
 
 Q. The system SHALL report as a finding each tracked file of the repository that no test target declares as an input or excludes.
 
+R. The system SHALL treat the environment that a test target declares, and the configuration of that test target, as inputs of that test target.
+
 ### Rationale
 
 The inputs of a test target are the files whose content can change what its run reports, so results stay current exactly as long as those files are unchanged, and reuse of results from an earlier run is legitimate. The default takes every file because a missed dependency makes old results look current, which is worse than a needless run. What a run writes, and what tools keep for themselves while it runs, changes during every run, so the project names those paths in its global skip list. An *Evidence Snapshot* is written from a run's results after the run ends, so it is never an input of that run.
@@ -1576,6 +1578,8 @@ A tree that moves after its tests ran keeps its results. A reporter often record
 
 Q restores a safety that a declared include set gives up. Where every file is an input, a change anywhere stales every target; once targets declare their inputs, a tracked file that no target takes and none excludes is a change that executes nothing, so the project is told to place it. A file excluded from the inputs of every target, such as one the global skip list names, is placed already.
 
+R reaches what no file of the repository shows. The environment of a test target is what the project declares can change its outcomes without changing a file of the repository, such as the versions of its toolchain and the packages installed for it. The configuration of a test target is what the project declares for it, such as its command and its reporter. A run recorded on another machine, such as the continuous integration run that a worktree adopts, may differ in either, and each can change every outcome, so a difference makes the results stale and names what differs.
+
 ### Changelog
 
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a run in progress replaces the freshness judgement of its results, and leaves to REQ-d00283-R whether an expected target is missing them (N)
@@ -1583,7 +1587,7 @@ Q restores a safety that a declared include set gives up. Where every file is an
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the run fingerprint with the Defined Term Result Fingerprint (D)
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: the Evidence Snapshot directory is never an input of a test target (M)
 
-*End* *Test Result Freshness* | **Hash**: d61efc8a
+*End* *Test Result Freshness* | **Hash**: ee45c6f3
 
 ## REQ-d00312: Test Target Output Areas
 
@@ -1997,25 +2001,25 @@ A run need not execute every test of its test target. This requirement states wh
 
 A. The system SHALL read the *Retained Results* of a recorded run as results of its test target.
 
-B. A run SHALL take a *Retained Result* for a test only where every file of the *Dependency Evidence* of that test holds the content it held when the run that last executed that test began.
+B. A run SHALL take a *Retained Result* for a test only where no input in the *Dependency Evidence* of that test has changed since the run that last executed that test began.
 
 C. A test target SHALL be able to declare the source of the *Dependency Evidence* of its tests.
 
 D. If the *Dependency Evidence* of a test holds a file of the repository that is not an input of its test target, then the system SHALL report that file as a finding.
 
-E. A run SHALL take a *Retained Result* only from an earlier run that recorded the same environment and configuration of its test target as the current run.
+E. A run SHALL take a *Retained Result* only from a run that recorded its end.
 
-F. A run SHALL take a *Retained Result* only from a run that recorded its end.
+F. A run SHALL take as a *Baseline Run* only a recorded run of a tree identical to a commit.
 
-G. A run SHALL take as a *Baseline Run* only a recorded run of a tree identical to a commit.
+G. A run SHALL take a *Retained Result* only for a test whose last execution passed or was skipped.
 
-H. A run SHALL take a *Retained Result* only for a test whose last execution passed or was skipped.
+H. A run of a test target SHALL fail when a test of the current tree has neither a result from that run nor a *Retained Result*.
 
-I. A run of a test target SHALL fail when a test of the current tree has neither a result from that run nor a *Retained Result*.
+I. When a run asks to execute every test of its test targets, that run SHALL take no *Retained Result*.
 
-J. When a run asks to execute every test of its test targets, that run SHALL take no *Retained Result*.
+J. The system SHALL take line coverage of a source file from an earlier run only where that file holds the content it held in the run that measured that coverage.
 
-K. The system SHALL take line coverage of a source file from an earlier run only where that file holds the content it held in the run that measured that coverage.
+K. Where a test target declares that a part of its environment leaves retention unaffected, the system SHALL leave that part out of the *Dependency Evidence* of the tests of that target.
 
 ### Rationale
 
@@ -2025,18 +2029,20 @@ B decides which results a run may retain. A *Retained Result* is honest only whi
 
 C lets a project name where its evidence comes from: imports, per-test coverage, or tooling of its own. A source the project declares serves tests in every language alike.
 
-D reports a dependency that the declared inputs of its target miss. Such a file would leave the target fresh after it changed, so the declaration needs correcting, and naming the file says where. A file that the project excluded is reported too, because the exclusion claims that the file cannot change the results and the evidence shows that it can. Files outside the repository, such as an interpreter or an installed package, are the concern of E.
+D reports a dependency that the declared inputs of its target miss. Such a file would leave the target fresh after it changed, so the declaration needs correcting, and naming the file says where. A file that the project excluded is reported too, because the exclusion claims that the file cannot change the results and the evidence shows that it can. Files outside the repository, such as an interpreter or an installed package, belong to the environment of the target.
 
-E and F cover what the evidence cannot see. The environment of a test target is what the project declares can change its outcomes without changing a file of the repository, such as the versions of its toolchain and the packages installed for it. A different environment or target configuration can change every outcome, and a run that recorded no end may hold results that are partial or that describe a run that crashed.
+E covers what the evidence cannot see. A run that recorded no end may hold results that are partial or that describe a run that crashed. The environment and the configuration of the test target are inputs of it (REQ-d00311-R), so B already compares them.
 
-G keeps a *Baseline Run* trustworthy for every tree that adopts it, whatever carried it there. A tree identical to a commit is one that a later tree can descend from, and B then compares that later tree with it file by file.
+F keeps a *Baseline Run* trustworthy for every tree that adopts it, whatever carried it there. A tree identical to a commit is one that a later tree can descend from, and B then compares that later tree with it input by input.
 
-H leaves only passes and skips to be retained. A test whose last result was a failure, an error or nothing, and a test that has never executed, is executed on every run until it passes or is skipped, so every result a run retains is a pass or a skip and the exit status of the run is the verdict of the whole target.
+G leaves only passes and skips to be retained. A test whose last result was a failure, an error or nothing, and a test that has never executed, is executed on every run until it passes or is skipped, so every result a run retains is a pass or a skip and the exit status of the run is the verdict of the whole target.
 
-I closes the run. A test that the run neither retained nor got a result for might have crashed the runner, never started, or been missed by the runner's selection, and an earlier result does not stand in for it. I speaks of tests of the current tree, because a test that the tree no longer holds has no result by being gone.
+H closes the run. A test that the run neither retained nor got a result for might have crashed the runner, never started, or been missed by the runner's selection, and an earlier result does not stand in for it. H speaks of tests of the current tree, because a test that the tree no longer holds has no result by being gone.
 
-J is the run for a project that wants evidence from the current tree alone, such as a release. It composes with a stale-only run (REQ-d00315-B): a run that asks for both executes every test of each target whose results are not fresh.
+I is the run for a project that wants evidence from the current tree alone, such as a release. It composes with a stale-only run (REQ-d00315-B): a run that asks for both executes every test of each target whose results are not fresh.
 
-K keeps line coverage attached to the lines that ran. It compares against the run that measured the coverage, so a chain of runs that each carried it forward never hides a change. Once a source file changes, the lines an earlier run covered no longer correspond to the lines of the file, and every test that reaches the file executes again, so only the current run's measurement describes it.
+J keeps line coverage attached to the lines that ran. It compares against the run that measured the coverage, so a chain of runs that each carried it forward never hides a change. Once a source file changes, the lines an earlier run covered no longer correspond to the lines of the file, and every test that reaches the file executes again, so only the current run's measurement describes it.
 
-*End* *Per-Test Result Retention* | **Hash**: 2daa6310
+K lets a project choose how much a change of environment executes. By default every part of the environment is in the *Dependency Evidence* of every test, so a new version of a tool executes every test of the target. A project that judges a tool's version unlikely to change its outcomes, such as a formatter or a minor compiler release, declares that part, and its change then executes only the tests that the rest of the evidence selects. The results stay truthful either way: the target is still stale and the report names the part of the environment that changed (REQ-d00311-E+F), and each *Retained Result* names the run that executed its test (REQ-d00323-M).
+
+*End* *Per-Test Result Retention* | **Hash**: 04d03072

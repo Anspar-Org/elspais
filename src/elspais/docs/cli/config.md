@@ -292,7 +292,16 @@ prescan_command = ""             # External test discovery command
 # Every run that executes targets records the targets it executed in
 # <output_root>/.elspais-last-run.json; `--targets last-run` on `summary`
 # and `trace` reads it.
+# A target's `environment_probes` -- tables of name and command -- make the
+# toolchain and installed packages inputs of its results, beside its files
+# and its configuration.
 # See: elspais docs test-targets
+
+# `elspais baseline fetch` runs this command to obtain a packed Baseline Run;
+# it fills the empty directory {dest} names with one archive. See:
+# elspais docs baseline
+# [scanning.test.baseline]
+# fetch_command = "tools/fetch-baseline.sh {dest}"
 
 [scanning.journey]
 directories = ["spec"]
@@ -524,10 +533,12 @@ file's reading from an earlier build in the same process when the text, the
 path and every identifier setting the reading depends on are unchanged. It
 changes how long a build takes and nothing a build produces:
 
-    ELSPAIS_PARSE_CACHE unset or 1   reuse readings (the default)
-    ELSPAIS_PARSE_CACHE=0            reuse nothing; every file is read afresh
-    ELSPAIS_PARSE_CACHE=verify       read every file afresh and fail, naming
-                                     the file, where a held reading differs
+```text
+ELSPAIS_PARSE_CACHE unset or 1   reuse readings (the default)
+ELSPAIS_PARSE_CACHE=0            reuse nothing; every file is read afresh
+ELSPAIS_PARSE_CACHE=verify       read every file afresh and fail, naming
+                                 the file, where a held reading differs
+```
 
 Any other value is refused. The cache is bounded and held in memory only, so
 it matters to a process that builds more than once: the daemon and the viewer

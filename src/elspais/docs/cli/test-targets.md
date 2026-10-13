@@ -51,11 +51,14 @@ steps:
 1. It empties the target's folder. Consequently, elspais cannot read a file
    from an earlier run as the results of this run.
 2. It records a fingerprint of the target's inputs in the folder. The
-   fingerprint holds the path of every input file and a digest of its content.
+   fingerprint holds the path of every input file and a digest of its content,
+   a digest for each part of the environment the target declares, and a
+   digest of the target's configuration.
 3. It runs `command` with the absolute path of the folder in the
    `ELSPAIS_TARGET_OUTPUT` environment variable. The command reads that
    variable to find where to write.
-4. It notes any input that changed during the run.
+4. It notes any input that changed during the run, the environment and the
+   configuration included.
 
 `elspais checks` then judges the results of each target separately. The
 results are **fresh** while no input has changed since the run began. This
@@ -120,6 +123,55 @@ remove files. A removal wins over a choice. The example keeps every file
 except documentation. Edits to documentation cannot change what the tests
 report.
 
+### The environment and configuration of a target
+
+A run can change outcome without any file of the repository changing: another
+interpreter, another set of installed packages, another command. The
+environment and the configuration of a target are therefore inputs of it too,
+beside its files.
+
+A target declares the parts of its environment as **probes**. Each probe has a
+name and a command. The command runs in the target's `cwd`, and its exit
+status and standard output identify that part of the environment:
+
+```toml
+[[scanning.test.targets]]
+name     = "unit"
+command  = "pytest tests/ --junitxml=$ELSPAIS_TARGET_OUTPUT/junit.xml"
+reporter = "junit"
+results  = "junit.xml"
+environment_probes = [
+  { name = "python",   command = "python --version" },
+  { name = "packages", command = "python -m pip freeze" },
+]
+```
+
+A probe whose output or exit status differs from the one the run recorded
+makes the results stale, and the finding names the probe:
+`inputs changed since it ran: environment probe 'python'`. A probe that cannot
+start or fails is recorded as such, so a tool missing on one machine and
+present on another differs. A probe that runs for longer than a minute is
+recorded as timed out. Two probes of one target cannot share a name, and
+names differing only in case count as one.
+
+The **configuration** of a target is every setting of it except those that
+decide only which runs execute it or how its finished results are credited:
+`name`, `groups`, `resources`, `credit_coverage` and `min_coverage_fraction`.
+`inputs` is left out too, because the files it selects are inputs of their
+own. A change to any other setting -- `command`, `cwd`, `reporter`, `results`,
+`environment_probes` and the rest -- makes the results stale, and the finding
+names `the target's configuration`.
+
+A run probes the environment when it starts and again when it ends, so a
+toolchain changed while the run was going makes its results stale. A report
+probes each command once per process, in each directory it runs in, because
+every build judges every target. A daemon or viewer therefore learns of an
+environment change only at its next rebuild: a change to the environment
+touches no file it watches, so nothing makes it rebuild.
+
+Keep probes quick and their output stable. A probe printing a time or a
+process number makes every run stale.
+
 ### Recording a run elspais did not execute
 
 A git hook or a CI job that runs a target's tests itself brackets the run.
@@ -148,8 +200,10 @@ fingerprint in the same way. The fingerprint records what a run saw. It is
 not evidence of where results came from.
 
 Copy results from elsewhere with their folder, fingerprint included. An
-example is a baseline that another job produced. Such results read as fresh
-exactly while the inputs here match the inputs they ran against. The
+example is a baseline that another job produced; `elspais baseline` packs and
+adopts one (see `elspais docs baseline`). Such results read as fresh exactly
+while the inputs here -- files, environment and configuration -- match the
+inputs they ran against. The
 fingerprint records the root of the tree the run executed in, and elspais
 reads an absolute path a reporter wrote under that root relative to it.
 Consequently, results keep matching their tests after the tree moves or is
@@ -164,14 +218,19 @@ a bracketed run names the target with `--targets` rather than `last-run`.
 The fingerprint is the JSON file `.elspais-run.json` in the target's folder.
 Its `version` field states the format. Its `root` field names the directory
 the run executed in. Its `exit_status` field, where the run recorded one,
-holds the exit status of the target's command. Its `inputs` field lists one object for each input file,
-with a `path` field and a `digest` field. The digest is the
-SHA-256 of the file's content. No path is ever a JSON key. Consequently, a
+holds the exit status of the target's command. Its `commit` and `dirty`
+fields name the commit the tree was at and whether it held changes no commit
+holds when the run began. Its `inputs` field lists one object for each input,
+with a `path` field and a `digest` field. For a file the path is its path
+from the repository root and the digest is the SHA-256 of its content. A
+probe is listed as `/environment/<name>` and the configuration as
+`/configuration`; no path from the repository root begins with `/`, so
+neither can name a file. No path is ever a JSON key. Consequently, a
 secret scanner that looks for a secret-like key beside a long hex value finds
 nothing in the file. The file is safe to include in build output that a
 secret scan reads. elspais reads a fingerprint of another format version as
 no fingerprint. Consequently, its results read as stale until one fresh run
-rewrites the fingerprint.
+rewrites the fingerprint. The current format is version 3.
 
 ### A run in progress
 

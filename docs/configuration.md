@@ -335,6 +335,17 @@ concurrency = 1
 # names no snapshot.
 # evidence = "test-evidence"
 
+# baseline says how `elspais baseline fetch` obtains a packed Baseline Run: a
+# recorded run of each target, packed by `elspais baseline pack` in a tree
+# identical to a commit. fetch_command runs from the repository root and
+# leaves exactly one such archive in the empty directory {dest} names; elspais
+# substitutes it shell-quoted. The command decides which run to fetch -- a
+# pull request's base branch, else the main branch -- and how to reach it.
+# A fetch_command that does not name {dest} is refused. Empty (the default)
+# configures none. See `elspais docs baseline`.
+# [scanning.test.baseline]
+# fetch_command = "tools/fetch-baseline.sh {dest}"
+
 # Configured test targets - result ingestion and coverage attribution.
 # See `elspais docs test-targets` for full documentation.
 #
@@ -413,6 +424,18 @@ coverage = "lcov.info"  # optional; relative to the target's
 # scanning kind's file selection. skip_dirs and skip_files win over
 # directories and file_patterns.
 # inputs = { directories = ["app"], skip_dirs = ["app/build"] }
+# environment_probes declares the parts of the environment this target's
+# outcomes depend on beyond the files of the repository. Each probe is a
+# table with a name and a command; the command runs in cwd, and its exit
+# status and standard output identify that part. A change to what a probe
+# prints, or to the target's configuration (every setting here except name,
+# groups, resources, inputs, credit_coverage and min_coverage_fraction),
+# makes the results stale and is named. Two probes of one target cannot share
+# a name, regardless of case. A report runs each probe once per process; a
+# serving daemon probes again at its next rebuild. Default: none.
+# environment_probes = [
+#   { name = "flutter", command = "flutter --version" },
+# ]
 
 # File-channel reporter example (junit XML):
 # [[scanning.test.targets]]

@@ -3982,7 +3982,7 @@ def check_test_results_stale(
             "or that an Evidence Snapshot of another tree holds",
         )
 
-    from elspais.utilities.fingerprint import judge
+    from elspais.utilities.fingerprint import input_label, judge
 
     findings: list[HealthFinding] = []
     judged = 0
@@ -4014,7 +4014,7 @@ def check_test_results_stale(
                 HealthFinding(
                     message=_stale_message(verdict),
                     repo=entry.name,
-                    related=list(verdict.changed),
+                    related=[input_label(entry) for entry in verdict.changed],
                 )
             )
 

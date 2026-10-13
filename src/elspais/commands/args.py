@@ -1256,6 +1256,64 @@ class FingerprintArgs:
 
 
 # ---------------------------------------------------------------------------
+# Baseline subcommands
+# ---------------------------------------------------------------------------
+# Implements: REQ-d00333-E+F
+@dataclasses.dataclass
+class BaselinePackArgs:
+    """Pack the selected targets' recorded runs into one archive.
+
+    Refuses, naming the target and the reason, a tree holding changes no
+    commit holds, a run in progress or one that recorded no end, a run whose
+    inputs changed while it ran, and a target with no results. A failing run
+    is packed.
+    """
+
+    out: Path
+    """The archive to write (a gzip-compressed tar file)."""
+
+    targets: Annotated[list[list[str]], tyro.conf.UseAppendAction] = dataclasses.field(
+        default_factory=list
+    )
+    """Targets or groups to pack, by name (space-separated, repeatable), as
+    `checks --run-tests --targets` reads them. Default: the `default` group."""
+
+
+# Implements: REQ-d00311-H+I
+@dataclasses.dataclass
+class BaselineFetchArgs:
+    """Fetch a packed baseline with [scanning.test.baseline] fetch_command and adopt it.
+
+    Adopts each packed target's run where this tree records none, and reports
+    each target as adopted, skipped or refused. A fetch command that fails or
+    leaves nothing changes nothing and exits 1.
+    """
+
+    replace: bool = False
+    """Replace a run already recorded here. A run in progress is never replaced."""
+
+
+BaselineAction = (
+    Annotated[BaselinePackArgs, tyro.conf.subcommand("pack")]
+    | Annotated[BaselineFetchArgs, tyro.conf.subcommand("fetch")]
+)
+
+
+@dataclasses.dataclass
+class BaselineArgs:
+    """Carry recorded test-target runs between trees as a Baseline Run.
+
+    `pack` writes the selected targets' output areas into one archive, which
+    CI publishes. `fetch` runs the project's fetch command to obtain one and
+    adopts it; the checks then judge each adopted run fresh or stale as they
+    judge any run.
+    """
+
+    action: tyro.conf.OmitSubcommandPrefixes[tyro.conf.OmitArgPrefixes[BaselineAction]]
+    """Baseline subcommand (pack, fetch)."""
+
+
+# ---------------------------------------------------------------------------
 # Evidence subcommands
 # ---------------------------------------------------------------------------
 # Implements: REQ-d00322-A+H
@@ -1437,6 +1495,7 @@ Command = (
     | Annotated[TestArgs, tyro.conf.subcommand("test")]
     | Annotated[FingerprintArgs, tyro.conf.subcommand("fingerprint")]
     | Annotated[EvidenceArgs, tyro.conf.subcommand("evidence")]
+    | Annotated[BaselineArgs, tyro.conf.subcommand("baseline")]
     | Annotated[LinkArgs, tyro.conf.subcommand("link")]
     | Annotated[CompletionArgs, tyro.conf.subcommand("completion")]
     | Annotated[GlossaryArgs, tyro.conf.subcommand("glossary")]
@@ -1511,6 +1570,7 @@ COMMAND_GROUPS: dict[str, str] = {
     "test": "Reports",
     "fingerprint": "Reports",
     "evidence": "Reports",
+    "baseline": "Reports",
     "install": "Install",
     "uninstall": "Install",
     "completion": "Install",

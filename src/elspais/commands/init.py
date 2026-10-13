@@ -269,6 +269,11 @@ _FIELD_COMMENTS: dict[str, str] = {
         "Directory of the Evidence Snapshot that evidence write fills and builds read"
         " when a target has no results"
     ),
+    "scanning.test.baseline": ("Where `elspais baseline fetch` obtains a packed Baseline Run"),
+    "scanning.test.baseline.fetch_command": (
+        "Shell command that fills the empty directory {dest} with one archive"
+        " `elspais baseline pack` wrote (default: none)"
+    ),
     "scanning.test.targets": ("Per-package/suite test-ingestion targets (array of tables)"),
     "scanning.test.targets.name": "Unique label for this target (required)",
     "scanning.test.targets.cwd": (
@@ -333,6 +338,10 @@ _FIELD_COMMENTS: dict[str, str] = {
     "scanning.test.targets.file_results": (
         "true: the command's exit status is the result of each test file the"
         " target scans (default false)"
+    ),
+    "scanning.test.targets.environment_probes": (
+        "Tables of name and command; each command's output identifies a part of"
+        " the environment, and a change makes the results stale (default: none)"
     ),
     "scanning.journey": "User journey file scanning",
     "scanning.journey.directories": "Directories to scan for journey files",
@@ -959,6 +968,12 @@ def generate_config(
         ),
         'reporter = "pytest-json"',
         'results = "pytest.json"',
+        "# The toolchain and packages are inputs too: a change to what a probe",
+        "#   prints makes the results stale. Each probe runs in cwd.",
+        "environment_probes = [",
+        '  { name = "python", command = "python --version" },',
+        '  { name = "packages", command = "python -m pip freeze" },',
+        "]",
         "# Tip: a relative path in results is read from the repository root, and",
         "#   one in coverage from cwd. A target whose runner writes otherwise says",
         '#   so: results_origin = "working-directory" | coverage_origin =',

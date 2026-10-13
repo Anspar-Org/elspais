@@ -92,3 +92,69 @@ def test_bare_name_target_still_validates():
     """A target with only name (no command/results/coverage) validates fine."""
     t = TestTargetConfig(name="provenance")
     assert t.reporter == ""
+
+
+# Verifies: REQ-d00311-R
+def test_a_target_declares_its_environment_as_named_probes():
+    t = TestTargetConfig(
+        name="unit",
+        environment_probes=[
+            {"name": "python", "command": "python --version"},
+            {"name": "packages", "command": "pip freeze"},
+        ],
+    )
+    assert [(p.name, p.command) for p in t.environment_probes] == [
+        ("python", "python --version"),
+        ("packages", "pip freeze"),
+    ]
+
+
+# Verifies: REQ-d00311-R
+@pytest.mark.parametrize(
+    "probe,needs",
+    [
+        ({"name": "", "command": "python --version"}, "needs a name"),
+        ({"name": "python", "command": "  "}, "needs a command"),
+    ],
+)
+def test_a_probe_without_a_name_or_a_command_is_refused_naming_the_form(probe, needs):
+    with pytest.raises(ValidationError, match=needs) as exc:
+        TestTargetConfig(name="unit", environment_probes=[probe])
+    assert 'name = "python"' in str(exc.value)
+
+
+# Verifies: REQ-d00311-R
+def test_a_bare_string_probe_is_refused():
+    with pytest.raises(ValidationError):
+        TestTargetConfig(name="unit", environment_probes=["python --version"])
+
+
+# Verifies: REQ-d00311-R
+def test_two_probes_differing_only_in_case_are_refused_naming_both():
+    with pytest.raises(ValidationError, match='"Python" and "python"'):
+        TestTargetConfig(
+            name="unit",
+            environment_probes=[
+                {"name": "Python", "command": "python --version"},
+                {"name": "python", "command": "python3 --version"},
+            ],
+        )
+
+
+# Verifies: REQ-d00333-F
+def test_a_fetch_command_names_the_directory_it_fills():
+    config = TestScanningConfig(baseline={"fetch_command": "tools/fetch.sh {dest}"})
+    assert config.baseline.fetch_command == "tools/fetch.sh {dest}"
+    assert TestScanningConfig().baseline.fetch_command == ""
+
+
+# Verifies: REQ-d00333-F
+def test_a_fetch_command_without_its_placeholder_is_refused_naming_it():
+    with pytest.raises(ValidationError, match=r"does not name \{dest\}"):
+        TestScanningConfig(baseline={"fetch_command": "tools/fetch.sh /tmp/out"})
+
+
+# Verifies: REQ-d00333-F
+def test_an_unknown_baseline_setting_is_refused():
+    with pytest.raises(ValidationError):
+        TestScanningConfig(baseline={"fetch": "tools/fetch.sh {dest}"})

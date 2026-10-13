@@ -2425,6 +2425,117 @@ class TestStaleResultsWarning:
 # ===================================================================
 
 
+class TestEnvironmentAndBaselineRuns:
+    """The environment of a target is an input, and a packed run is adopted by another tree.
+
+    Verifies: REQ-d00311-R, REQ-d00311-H, REQ-d00311-I, REQ-d00333-F
+    """
+
+    _PROBE = 'environment_probes = [{ name = "tool", command = "cat ../tool-version.txt" }]\n'
+
+    @classmethod
+    def _copy_with_probe(cls, scratch, project):
+        TestStaleResultsWarning._results_without_a_run(scratch, project)
+        toml = scratch / ".elspais.toml"
+        text = toml.read_text(encoding="utf-8")
+        marker = 'name = "stub"\n'
+        assert text.count(marker) == 1 and text.count("cli_ttl = 2\n") == 1
+        # A daemon learns of an environment change only at its next rebuild,
+        # and changing the environment touches no file it watches; these
+        # tests judge each invocation afresh.
+        text = text.replace("cli_ttl = 2\n", "cli_ttl = 0\n")
+        toml.write_text(text.replace(marker, marker + cls._PROBE), encoding="utf-8")
+        (scratch.parent / "tool-version.txt").write_text("1.0\n", encoding="utf-8")
+
+    @staticmethod
+    def _record(scratch):
+        assert run_elspais("fingerprint", "start", "stub", cwd=scratch).returncode == 0
+        (scratch / ".results" / "stub" / "test-results.json").write_text(
+            json.dumps(
+                {
+                    "created_at": "fixture",
+                    "summary": {"passed": 1, "failed": 0, "total": 1},
+                    "tests": [
+                        {"nodeid": "test_stub::test_ok", "outcome": "passed", "duration": 0.001}
+                    ],
+                }
+            )
+        )
+        finished = run_elspais("fingerprint", "finish", "stub", cwd=scratch)
+        assert finished.returncode == 0, finished.stderr
+
+    @staticmethod
+    def _stale(scratch):
+        out = run_elspais("checks", "--tests", "--format", "json", "--lenient", cwd=scratch)
+        return TestStaleResultsWarning._stale_check(out)[1]
+
+    # Verifies: REQ-d00311-R, REQ-d00311-F
+    def test_a_changed_environment_makes_results_stale_naming_the_probe(self, tmp_path, project):
+        scratch = tmp_path / "probe" / "repo"
+        scratch.parent.mkdir()
+        self._copy_with_probe(scratch, project)
+        self._record(scratch)
+        assert self._stale(scratch).get("passed") is True
+
+        (scratch.parent / "tool-version.txt").write_text("2.0\n", encoding="utf-8")
+
+        stale = self._stale(scratch)
+        assert stale.get("passed") is False
+        (finding,) = stale.get("findings")
+        assert "environment probe 'tool'" in finding["message"]
+
+    # Verifies: REQ-d00333-F, REQ-d00311-H, REQ-d00311-I
+    def test_a_packed_run_is_adopted_by_a_clone_and_judged_fresh(self, tmp_path, project):
+        import os
+        import subprocess
+
+        scratch = tmp_path / "base" / "repo"
+        scratch.parent.mkdir()
+        self._copy_with_probe(scratch, project)
+        toml = scratch / ".elspais.toml"
+        toml.write_text(
+            toml.read_text(encoding="utf-8")
+            + '\n[scanning.test.baseline]\nfetch_command = "cp ../baseline.tar.gz {dest}"\n',
+            encoding="utf-8",
+        )
+        (scratch / ".gitignore").write_text(".results/\n.elspais/\n", encoding="utf-8")
+        env = {
+            **{k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
+            "GIT_AUTHOR_NAME": "t",
+            "GIT_AUTHOR_EMAIL": "t@example.com",
+            "GIT_COMMITTER_NAME": "t",
+            "GIT_COMMITTER_EMAIL": "t@example.com",
+        }
+
+        def git(cwd, *args):
+            subprocess.run(["git", *args], cwd=cwd, env=env, check=True, capture_output=True)
+
+        git(scratch, "init", "-q", "-b", "main")
+        git(scratch, "add", "-A")
+        git(scratch, "commit", "-q", "-m", "fixture")
+        archive = tmp_path / "base" / "baseline.tar.gz"
+        pack = ("baseline", "pack", "--out", str(archive), "--targets", "stub")
+
+        refused = run_elspais(*pack, cwd=scratch)
+        assert refused.returncode == 1
+        assert "target stub: no Result Fingerprint records a run of it" in refused.stderr
+
+        self._record(scratch)
+        packed = run_elspais(*pack, cwd=scratch)
+        assert packed.returncode == 0, packed.stderr
+
+        clone = tmp_path / "base" / "clone"
+        git(tmp_path, "clone", "-q", str(scratch), str(clone))
+        fetched = run_elspais("baseline", "fetch", cwd=clone)
+        assert fetched.returncode == 0, fetched.stderr
+        assert "stub: adopted" in fetched.stdout
+        assert self._stale(clone).get("passed") is True
+
+        again = run_elspais("baseline", "fetch", cwd=clone)
+        assert again.returncode == 0
+        assert "stub: skipped" in again.stdout
+
+
 class TestServedGraphReadsResultsWrittenWhileServing:
     """Results a run writes while the daemon serves the project reach the
     daemon's answers, without restarting it. Runs against the shared project
