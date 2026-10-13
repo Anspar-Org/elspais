@@ -13,6 +13,10 @@ snapshot file it came from. A line read without ``_line`` is placed by its
 position in the text read.
 
 A snapshot records no duration, so every record carries none.
+
+The same lines, carrying the run that executed each test and why a later run
+retained its result, are the *Retained Results* a run writes into its output
+area. This parser reads both, and passes those two keys through.
 """
 
 from __future__ import annotations
@@ -21,7 +25,7 @@ import json
 from typing import Any
 
 from elspais.graph.parsers.results.diagnostics import DiagnosticRecorder
-from elspais.utilities.evidence import split_lines
+from elspais.utilities.evidence import SnapshotUnreadable, read_result_line, split_lines
 
 
 # Implements: REQ-d00322-J
@@ -37,27 +41,32 @@ class EvidenceSnapshotParser(DiagnosticRecorder):
             except ValueError as exc:
                 self._record_diagnostic(source_path, f"not valid JSON: {exc}", number)
                 continue
-            if not isinstance(row, dict):
-                self._record_diagnostic(source_path, "not a JSON object", number)
+            line = row.pop("_line", number) if isinstance(row, dict) else number
+            try:
+                result = read_result_line(row, source=source_path, number=number)
+            except SnapshotUnreadable as exc:
+                self._record_diagnostic(source_path, exc.reason, number)
                 continue
-            missing = [k for k in ("file", "name", "outcome") if k not in row]
-            if missing:
-                self._record_diagnostic(source_path, f"missing {', '.join(missing)}", number)
-                continue
-            line = row.get("_line", number)
+            record: dict[str, Any] = {}
+            # Implements: REQ-d00323-M
+            # A Retained Result names the run that executed its test.
+            if result.executed_in is not None:
+                record["executed_in"] = result.executed_in
+                record["retained_reason"] = result.retained_reason or ""
             records.append(
-                {
+                record
+                | {
                     "ordinal": line,
-                    "name": row["name"],
+                    "name": result.name,
                     "classname": "",
-                    "status": row["outcome"],
+                    "status": result.outcome,
                     "duration": 0.0,
-                    "message": row.get("skip_reason"),
-                    "source_path": row["file"],
-                    "line": row.get("line"),
+                    "message": result.skip_reason,
+                    "source_path": result.file,
+                    "line": result.line,
                     "root_line": None,
                     "root_path": None,
-                    "runner_path": row.get("runner"),
+                    "runner_path": result.runner,
                     "test_id": None,
                     "result_file": source_path or None,
                     "result_line": line,

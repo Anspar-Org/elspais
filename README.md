@@ -24,6 +24,8 @@ pip install elspais
 pip install elspais[trace-view]    # Static HTML traceability view
 pip install elspais[trace-review]  # Interactive viewer server
 pip install elspais[mcp]           # MCP server for AI integration
+pip install elspais[coverage]      # Per-test line coverage from .coverage files
+pip install elspais[dart]          # Dart and Flutter test selection by imports
 pip install elspais[all]           # Everything
 ```
 
@@ -176,6 +178,22 @@ make test
 hooks. The hooks and the test targets both run the tools from that
 directory, so what they report describes this checkout and not some other
 installation of elspais.
+
+Every dependency is installed at the version `requirements/dev.lock` pins, and
+CI installs the same, so a test run here and in CI on the same Python minor
+version see the same packages. After changing the dependencies in
+`pyproject.toml`, run `make lock` and commit the regenerated lock with the
+change; CI fails while the lock is out of date. Run `make setup` again when the
+lock moves.
+
+Where Claude Code is installed, `make setup` also registers the elspais MCP
+server over http. The daemon behind it runs the program that started it, so
+start it with this checkout's elspais before launching Claude Code:
+
+```bash
+eval "$(.venv/bin/elspais mcp env)"
+claude
+```
 
 ## License
 

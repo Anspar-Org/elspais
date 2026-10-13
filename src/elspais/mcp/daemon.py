@@ -560,7 +560,26 @@ def _registration_notice_path(repo_root: Path) -> Path:
     return _daemon_dir(repo_root) / "daemon.registration-notice"
 
 
-# Implements: REQ-o00076-M
+# Implements: REQ-o00076-P
+def env_instruction() -> str:
+    """The shell line that sets ELSPAIS_MCP_URL, spelled with this program.
+
+    A daemon serves from the program that started it, and a bare `elspais`
+    runs whichever installation the reader's PATH finds first. So the line
+    names the console script that launched this process, or else this
+    interpreter running the package.
+    """
+    import shlex
+
+    script = Path(sys.argv[0])
+    if script.name == "elspais" and script.is_file() and os.access(script, os.X_OK):
+        program = shlex.quote(str(script.absolute()))
+    else:
+        program = shlex.join([sys.executable, "-m", "elspais"])
+    return f'eval "$({program} mcp env)"'
+
+
+# Implements: REQ-o00076-M, REQ-o00076-P
 def notify_registration(repo_root: Path) -> bool:
     """Say once that a client here would not reach this tree.
 
@@ -606,7 +625,7 @@ def notify_registration(repo_root: Path) -> bool:
             message = (
                 "a client registration for this tree names ELSPAIS_MCP_URL, "
                 "which this shell does not set, so a client launched from it "
-                'cannot connect. Run: eval "$(elspais mcp env)"'
+                f"cannot connect. Run: {env_instruction()}"
             )
 
     if not message:

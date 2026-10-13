@@ -1,13 +1,17 @@
 # Test Impact Analysis (TIA)
 
 Test Impact Analysis runs only the unit tests that the change since a
-recorded baseline could have affected. It is a fast development-feedback
-mode. It is not a verdict:
+recorded baseline could have affected. It is fast development feedback, and
+the verdict a merge rests on comes from elsewhere:
 
-- The full unit tier still runs at commit (`.githooks/unit-verdict`), at push,
-  and in CI. Those runs stay authoritative.
-- TIA is an additional execution mode (`make test-impacted`), and an
-  advisory CI job.
+- The pre-commit hook runs the impacted unit tests by default, and a failure
+  among them fails the commit. Where TIA selects the full suite, the hook runs
+  the full unit tier through `.githooks/unit-verdict`, which also records a
+  fresh baseline. `ELSPAIS_UNIT_MODE=full` asks for that full run.
+- CI runs the full unit tier on every pull request and on main, and
+  publishing a release requires the full suite to have passed on the
+  published commit. TIA is also an advisory CI job and a `make` target
+  (`make test-impacted`).
 - When TIA cannot determine impact, it falls back to running more tests,
   up to the complete suite. It never treats missing, corrupt, stale or
   ambiguous data as "no tests need to run".
@@ -46,7 +50,8 @@ The commands underneath:
 python -m tools.tia select [--baseline DIR] [--full] [--granularity file|test] [--list]
 python -m tools.tia run    [--baseline DIR] [--full] [-- extra pytest args]
 python -m tools.tia baseline show [--baseline DIR]
-python -m tools.tia baseline build --run-dir DIR --coverage FILE --dest DIR
+python -m tools.tia baseline path [--baseline DIR]
+python -m tools.tia baseline build --run-dir DIR --coverage FILE [--baseline DIR] [--only-if-passed]
 python -m tools.tia compare --tia-manifest M --full-junit J
 python -m tools.tia calibrate [--full-junit J] [--mutants N --seed S]
 ```
@@ -54,10 +59,14 @@ python -m tools.tia calibrate [--full-junit J] [--mutants N --seed S]
 ## How a baseline is recorded
 
 A baseline is produced by an ordinary full run of the unit tier with
-`ELSPAIS_TIA_RECORD=1` (`make tia-baseline` does this). `.githooks/run-unit-tier`
+`ELSPAIS_TIA_RECORD=1`. `.githooks/unit-verdict` sets it for every full run a
+hook makes, and `make tia-baseline` sets it for one run. `.githooks/run-unit-tier`
 then loads the recorder plugin (`-p tools.tia.recorder`). When pytest exits,
-the tier builds the baseline directory. The tier's exit code is still pytest's.
-A baseline that cannot be built is reported, and the tier's verdict is
+the tier builds the baseline and publishes it, but only from a run that passed
+outright: pytest exit status 0, no recorder error, and a tree that did not
+change while the run was in progress. Any other run publishes nothing, so it
+never replaces a good baseline. The tier's exit code is still pytest's. A
+baseline that is not published is reported, and the tier's verdict is
 unaffected.
 
 A recording run also sets `ELSPAIS_PARSE_CACHE=0`. The parse cache answers a
@@ -65,13 +74,37 @@ file reading asked for again without running the parser, so with it on the
 parser's lines would be credited only to the first test in each worker that
 read each file, and a change to the parser would select only those tests.
 
-The baseline directory (default `.results/tia/baseline`, or
-`$ELSPAIS_TIA_BASELINE`) holds two files:
+The baseline holds two files:
 
 | File | Content |
 | --- | --- |
-| `coverage.db` | The run's coverage.py data file, copied verbatim. Its per-test contexts (`<nodeid>\|setup`, `\|run`, `\|teardown`) are the map from each test to the production lines it ran. |
-| `baseline.json` | The identity, the environment, the test inventory and the recorder's attribution data (see below). Includes a checksum of `coverage.db`. |
+| `coverage-<digest>.db` | The run's coverage.py data file, copied verbatim and named by its content. Its per-test contexts (`<nodeid>\|setup`, `\|run`, `\|teardown`) are the map from each test to the production lines it ran. |
+| `baseline.json` | The identity, the environment, the test inventory and the recorder's attribution data (see below). Names its coverage file and holds its checksum. |
+
+### Where the baseline lives
+
+The baseline directory is `.results/tia/baseline` in the worktree's own root.
+Each worktree records its own baseline from its own passing full unit run:
+every worktree runs a different version of elspais, and a worktree's own last
+full run is the baseline closest to its code. A new worktree has none, so its
+first commit runs the full tier. `python -m tools.tia baseline path` prints
+the directory. `$ELSPAIS_TIA_BASELINE` names another directory, and
+`--baseline DIR` on any command wins over both. Every command and every hook
+resolves the location the same way.
+
+Publishing is atomic for a concurrent reader, such as a selection running
+while a full run finishes. The baseline is built
+in a staging directory beside the baseline directory; the coverage file moves
+in under its content-derived name, and only then does `baseline.json` replace
+the previous one. A reader sees the previous baseline or the new one, never a
+mixture, and two runs publishing at once leave whichever finished last. A
+coverage file that `baseline.json` no longer names is deleted once it is an
+hour old.
+
+The baseline's tree and dirty blobs are objects no commit need reference,
+and `git gc` prunes unreferenced objects once they are older
+than `gc.pruneExpire` (two weeks by default); a baseline whose objects are
+gone is refused (`baseline-revision-unavailable`) and the full suite runs.
 
 ### Identity: what exactly was tested
 
@@ -99,7 +132,7 @@ selection can be conservative about it:
 | Files read as data, such as fixture projects, docs, templates, `.github/workflows` and the repository's own sources. | Through an audit hook, the repository files each test phase opened and the directories it listed. Import-machinery reads are excluded. | A changed non-Python file selects the tests that read it. For an added file, it selects the tests that listed its directory, or the nearest listed ancestor directory. |
 | Subprocesses: code that runs in a child process is invisible to coverage. | The programs each test spawned. | A test that spawns `python*` or `elspais*` is *opaque*. It is selected whenever any non-test file changes. |
 | Tests that did not pass have partial coverage. | The outcome of each test. | A test that did not pass in the baseline (failed, error, skipped, xfail) is always selected. |
-| The interpreter or dependencies differ. | The Python version and every installed distribution except `elspais`. | Any difference runs the full suite (`on_environment_change`). |
+| The interpreter or dependencies differ. | The implementation, the platform, the Python major and minor version, and the exact version of every installed distribution except `elspais` and the installers `pip`, `setuptools` and `wheel`. | Any difference runs the full suite (`on_environment_change`). |
 
 The recorder never raises into the run. An internal error is written into
 the shard. The error makes the baseline invalid instead of silently
@@ -198,7 +231,7 @@ Every fallback is listed in the manifest's `fallbacks` with a `kind`, a
 | `baseline-incomplete` | The baseline run was interrupted (pytest exit status other than 0 or 1), some tests never ran, or the recorder reported errors. |
 | `baseline-identity` | No git identity was recorded, or the tree changed while the baseline was recording. |
 | `baseline-revision-unavailable` | The baseline's tree or its dirty blobs are not in this clone. |
-| `coverage-missing`, `coverage-corrupt` | `coverage.db` is absent, does not match its checksum, has an unsupported schema, holds no lines, or none of its contexts names a recorded test. |
+| `coverage-missing`, `coverage-corrupt` | The coverage file `baseline.json` names is absent, does not match its checksum, has an unsupported schema, holds no lines, or none of its contexts names a recorded test. |
 | `environment-changed` | The interpreter or the installed distributions differ from the baseline's. |
 | `broad-impact-file` | A changed file matched a `full` rule, or a manifest changed beyond its ignored keys. |
 | `session-read` | A changed file was read by pytest before any test ran. That read is configuration. |
@@ -219,7 +252,7 @@ run: a two-line edit to the body of `TraceGraph.style_findings` in
 ```json
 {
  "selection_mode": "test-impact",
- "baseline": {"path": ".results/tia/baseline", "usable": true,
+ "baseline": {"path": "/path/to/worktree/.results/tia/baseline", "usable": true,
    "commit": "dfa875986af88e786a77b8b3d9eecddfa9f14628",
    "tree": "a77d1b5f292cf093d22d615ab8f0b698dad0bb19", "dirty_files": [], "tests": 10505},
  "change": {"against": "working tree (tracked + untracked) vs baseline tree", "files": [{
@@ -282,17 +315,42 @@ instruments:
 
 ## CI
 
+Each CI job that reads or writes a baseline names `.results/tia/baseline`
+through `$ELSPAIS_TIA_BASELINE`, because that is the directory its Actions
+cache steps save and restore.
+
 `.github/workflows/ci.yml`:
 
 - `test` (unchanged) runs the full unit tier on every supported Python. On a
-  push to `main`, the Python 3.13 leg also records a baseline and saves it to
-  the Actions cache under the key `tia-baseline-v1-py3.13-<sha>`.
+  push to `main`, the Python 3.13 leg also records a baseline and, when the
+  run passed outright, saves it to the Actions cache under the key
+  `tia-baseline-v2-py3.13-<sha>`.
 - `test-impact` (pull requests, advisory) restores the newest baseline from
   `main`, runs `python -m tools.tia run`, and uploads the manifest as the
   `tia-manifest` artifact. It does not replace the full unit job.
 - `.github/workflows/tia-calibration.yml` (nightly and on demand) records a
   fresh baseline and runs `calibrate` with mutant probes. It uploads the
-  report and fails when a failure was missed.
+  report and fails when a failure was missed. It builds the fresh baseline
+  even from a run with failing tests, because it measures the revision as it
+  is, and it saves that baseline nowhere a pull request selects from.
+
+### One environment in CI and locally
+
+A baseline is accepted only by an environment whose fingerprint matches the
+one it was recorded in. `make setup` and every CI job that records or reads a
+baseline install the same extras (`dev`, `all` and `browser`) under the same
+constraints file, `requirements/dev.lock`. The lock is one universal
+resolution covering every supported Python and platform, so a venv and the
+CI image on one Python minor version hold the same distributions at the same
+versions. The fingerprint leaves out what legitimately differs between them:
+the Python patch release, and the installers `pip`, `setuptools` and `wheel`,
+which a venv and the `python:<version>-slim` image each seed with their own
+releases. The lock pins none of those three, and no test imports them.
+
+`make lock` regenerates the lock after a change to the dependencies in
+`pyproject.toml`; CI's `lint` job fails when the committed lock is not what
+`make lock` produces. A venv built before the lock last moved selects nothing
+until it is rebuilt with `make setup`.
 
 ## Measurements
 

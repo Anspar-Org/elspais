@@ -609,7 +609,7 @@ class ReferenceTransformer:
                 # Implements: REQ-d00284-E
                 "test_name": self.test_names.get(func_line),
                 "reference_verdicts": verdicts,
-                # Implements: REQ-d00274-G, REQ-d00254-T
+                # Implements: REQ-d00274-G, REQ-d00332-G
                 # A citation reaches a test only if the pre-scan found a test
                 # that encloses it or is declared below it. Otherwise, the
                 # citation reaches no test. This rule includes a citation

@@ -71,8 +71,22 @@ def _call(server, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     result = asyncio.run(server.call_tool(name, arguments))
     if isinstance(result, dict):
         return result
+    if hasattr(result, "content"):
+        return json.loads(result.content[0].text)
     content = result[0] if isinstance(result, tuple) else result
     return json.loads(content[0].text)
+
+
+def _call_over_transport(server, name: str, arguments: dict[str, Any]):
+    """Call *name* as a client's request reaches it; return the CallToolResult."""
+    from mcp import types
+
+    handler = server._mcp_server.request_handlers[types.CallToolRequest]
+    request = types.CallToolRequest(
+        method="tools/call",
+        params=types.CallToolRequestParams(name=name, arguments=arguments),
+    )
+    return asyncio.run(handler(request)).root
 
 
 def _declared(server, name: str) -> list[str]:
@@ -147,3 +161,19 @@ class TestUndeclaredArgumentsAreRefused:
         assert deleted["success"] is True, deleted
         assert len(graph.mutation_log) == 1
         assert assertion_is_retired(graph.find_by_id("REQ-p00001-B"))
+
+    # Verifies: REQ-p00060-F
+    def test_REQ_p00060_F_refusal_reaches_a_client_of_a_tool_answering_with_a_list(self, served):
+        """A refusal is not held to the tool's output schema.
+
+        ``search`` answers with a list, so its published schema fits no
+        refusal; the client still receives the refusal itself.
+        """
+        _graph, server = served
+
+        result = _call_over_transport(server, "search", {"query": "alpha", "bogus": 1})
+
+        assert result.isError is True
+        answer = json.loads(result.content[0].text)
+        assert answer["code"] == "undeclared_argument"
+        assert answer["undeclared"] == ["bogus"]

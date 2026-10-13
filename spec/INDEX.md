@@ -58,7 +58,7 @@
 | REQ-o00063 | MCP File Mutation Tools                           | ops-mcp.md          | 05c1e9c4 |
 | REQ-o00064 | MCP Test Coverage Analysis Tools                  | ops-mcp.md          | a97fc5c4 |
 | REQ-o00065 | Agent-Assisted Link Suggestion                    | ops-mcp.md          | 06f8e1ac |
-| REQ-o00066 | CI/CD Pipeline Enforcement                        | ops-architecture.md | 826a1e02 |
+| REQ-o00066 | CI/CD Pipeline Enforcement                        | ops-architecture.md | 1f14a101 |
 | REQ-o00067 | MCP Subtree Extraction Tool                       | ops-mcp.md          | ea2ba371 |
 | REQ-o00068 | MCP Cursor Protocol                               | ops-mcp.md          | f876db43 |
 | REQ-o00069 | MCP Minimize Requirement Set Tool                 | ops-mcp.md          | 68c20489 |
@@ -68,7 +68,7 @@
 | REQ-o00073 | MCP Org-Wide Context                              | ops-mcp.md          | 346f3031 |
 | REQ-o00074 | Background Daemon Lifetime                        | ops-mcp.md          | fe168c0e |
 | REQ-o00075 | Shared Graph Daemon                               | ops-mcp.md          | 2598192d |
-| REQ-o00076 | Reaching the Serving Process                      | ops-mcp.md          | 85f1f1a5 |
+| REQ-o00076 | Reaching the Serving Process                      | ops-mcp.md          | 3d546e35 |
 | REQ-o00077 | Serving From the Installed Program                | ops-mcp.md          | 3488ba9c |
 | REQ-o00078 | Release Completeness Across Distribution Channels | ops-architecture.md | 3f2d4577 |
 | REQ-o00079 | Serving a Browser Session                         | ops-mcp.md          | abe6acb7 |
@@ -159,7 +159,7 @@
 | REQ-d00236 | Comment Extraction Utilities                                  | prd-core.md             | 26d0fdd6 |
 | REQ-d00237 | Term Reference Scanner Core                                   | prd-core.md             | 637ac760 |
 | REQ-d00238 | Graph-Wide Term Scan                                          | prd-core.md             | b14edde9 |
-| REQ-d00239 | Federated Graph Term Scanner Pass                             | prd-core.md             | acd14bba |
+| REQ-d00239 | Federated Graph Term Scanner Pass                             | prd-core.md             | 0dc7a13a |
 | REQ-d00240 | New Term Health Checks                                        | prd-core.md             | b4e70076 |
 | REQ-d00241 | Code No-Traceability Health Check                             | prd-core.md             | 0a2e48b7 |
 | REQ-d00242 | Terms API Endpoints                                           | prd-features.md         | a4522e0f |
@@ -169,12 +169,12 @@
 | REQ-d00246 | Markdown Emphasis Normalization Utility                       | prd-core.md             | 6db4d559 |
 | REQ-d00247 | Fenced Code Block Preservation                                | prd-core.md             | 499a4ce4 |
 | REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | 99bb6d77 |
-| REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 9e2255c3 |
+| REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 15f1058b |
 | REQ-d00250 | Section Heading Depth                                         | dev-graph-core.md       | 654f055b |
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | b49bd5ee |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 3b102d6f |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | 8360f2f4 |
-| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 06c0380b |
+| REQ-d00254 | Test Evidence: Ingestion and Coverage Crediting               | dev-graph-core.md       | 812dcbf7 |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 1ea68210 |
@@ -220,24 +220,26 @@
 | REQ-d00298 | Report Export                                                 | dev-cli.md              | 8c1b78eb |
 | REQ-d00299 | Configuration as Graph Content                                | dev-graph-config.md     | 0577c0a5 |
 | REQ-d00300 | Viewer Remembered State                                       | dev-traceview-review.md | f794104b |
-| REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | 4a31d912 |
+| REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | ee45c6f3 |
 | REQ-d00312 | Test Target Output Areas                                      | dev-graph-core.md       | a0788b2a |
 | REQ-d00313 | Served Graph Currency                                         | dev-traceview-review.md | 8822f2a7 |
 | REQ-d00314 | Concurrent Test Target Runs                                   | dev-graph-core.md       | 228b3b98 |
-| REQ-d00315 | Stale-Only Test Target Runs                                   | dev-graph-core.md       | 890ea4b2 |
+| REQ-d00315 | Stale-Only Test Target Runs                                   | dev-graph-core.md       | f5931d33 |
 | REQ-d00316 | Record of the Test Targets a Run Executed                     | dev-graph-core.md       | c5639977 |
 | REQ-d00320 | Viewer Edit Controls State What They Do                       | dev-traceview-review.md | e8010396 |
 | REQ-d00321 | Static View Embedded Content                                  | dev-traceview-review.md | 736babc4 |
-| REQ-d00322 | Evidence Snapshot                                             | dev-graph-core.md       | 13a665c5 |
-| REQ-d00323 | Carried Result Provenance                                     | dev-graph-core.md       | c64d2571 |
+| REQ-d00322 | Evidence Snapshot                                             | dev-graph-core.md       | 71339a95 |
+| REQ-d00323 | Carried Result Provenance                                     | dev-graph-core.md       | a322b375 |
 | REQ-d00324 | Refusal of a Retired Configuration Value                      | dev-graph-config.md     | 530fb06a |
 | REQ-d00325 | Changelog Reason for a Saved Change                           | dev-graph-file-nodes.md | 4ebffc32 |
 | REQ-d00326 | Path-Shaped Skip Patterns                                     | dev-graph-config.md     | 797c3fe4 |
-| REQ-d00327 | Origin of a Recorded Source Path                              | dev-graph-core.md       | 0faeeab4 |
+| REQ-d00327 | Origin of a Recorded Source Path                              | dev-graph-core.md       | 35dcf9d4 |
 | REQ-d00328 | Satisfying Named Assertions                                   | dev-graph-core.md       | 6e65b3ba |
 | REQ-d00329 | Test File Results From a Command's Exit Status                | dev-graph-core.md       | 113d1a8d |
 | REQ-d00330 | What a Fix Run Changes                                        | prd-core.md             | 9365d280 |
 | REQ-d00331 | Reuse of File Readings Between Builds                         | dev-graph-core.md       | 53734f81 |
+| REQ-d00332 | Per-Test Attribution                                          | dev-graph-core.md       | a5224a66 |
+| REQ-d00333 | Per-Test Result Retention                                     | dev-graph-core.md       | e53aed54 |
 
 ## User Journeys
 

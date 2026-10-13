@@ -115,6 +115,8 @@ I, J and K divide the test suite by trigger. The end-to-end tier is the slowest 
 
 H is stated apart from B because formatting and linting are enforced by the same tool and were not enforced in the same places. A local hook cannot be the only gate for a standard: it is absent from a fresh clone until configured, a contributor may bypass it, and it never runs at all for a commit created on the forge -- an automated version bump, or an edit accepted through the web. A standard enforced only there reaches main unenforced, and is then inherited by whoever next touches the tree.
 
+N binds a release to K's result for the exact commit it publishes. A local hook runs only the tests a change can affect, so the full suite first runs in CI. A version published before that run finishes can carry code that no full run has passed. A version tagged from a later commit than the tested one can too.
+
 ## Assertions
 
 A. <RETIRED> The CI pipeline SHALL run the full test suite across supported Python versions on every push to main and every pull request targeting main.
@@ -143,8 +145,12 @@ L. The CI pipeline SHALL support stacked pull requests.
 
 M. The CI pipeline SHALL support a merge queue for main.
 
+N. The release process SHALL publish only a commit that passed the full test suite on every supported Python version.
+
 ## Changelog
 
+- 2026-10-12 | 1f14a101 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-12 | - | - | Michael Lewis (<michael@anspar.org>) | Add N: the release process publishes only a commit that passed the full test suite on every supported Python version
 - 2026-10-12 | 826a1e02 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-12 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-155: L supports stacked pull requests; M supports a merge queue for main
 - 2026-10-03 | 3f2127be | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -155,7 +161,7 @@ M. The CI pipeline SHALL support a merge queue for main.
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: F/G accept any Linear team prefix, not only CUR — the repo's team moved to TOOL; matches the commit-msg hook's existing pattern
 - 2026-03-30 | 315accce | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *CI/CD Pipeline Enforcement* | **Hash**: 826a1e02
+*End* *CI/CD Pipeline Enforcement* | **Hash**: 1f14a101
 ---
 
 # REQ-o00078: Release Completeness Across Distribution Channels

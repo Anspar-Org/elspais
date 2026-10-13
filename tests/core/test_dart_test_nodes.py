@@ -300,7 +300,7 @@ def long_comment_graph(resolver):
 
 
 def test_citation_above_a_prose_block_anchors_on_the_test_call_line(long_comment_graph):
-    # Verifies: REQ-d00254-K
+    # Verifies: REQ-d00332-A
     """One TEST node, anchored at the test() call site rather than the citation line."""
     tests = list(long_comment_graph.iter_by_kind(NodeKind.TEST))
     assert len(tests) == 1, f"expected 1 TEST node, got {len(tests)}: {[t.id for t in tests]}"
@@ -312,7 +312,7 @@ def test_citation_above_a_prose_block_anchors_on_the_test_call_line(long_comment
 
 
 def test_citation_above_a_prose_block_still_verifies_its_assertion(long_comment_graph):
-    # Verifies: REQ-d00254-K
+    # Verifies: REQ-d00332-A
     """The test anchored at the test() line carries the assertion the citation named."""
     req = long_comment_graph.find_by_id("REQ-p00001")
     assert req is not None, "REQ-p00001 not found in graph"

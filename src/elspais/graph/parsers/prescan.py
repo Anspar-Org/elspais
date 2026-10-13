@@ -167,7 +167,7 @@ class PythonSyntax:
         return self.error is None
 
 
-# Implements: REQ-d00254-D, REQ-d00254-K, REQ-d00269-E
+# Implements: REQ-d00254-D, REQ-d00332-A, REQ-d00269-E
 def read_python(source: str) -> PythonSyntax:
     """Parse *source* once and walk its tree once, for every Python pre-scan.
 
@@ -812,7 +812,7 @@ def ast_string_literal_lines(source: str, syntax: PythonSyntax | None = None) ->
     return set(syntax.string_literal_lines)
 
 
-# Implements: REQ-d00254-K
+# Implements: REQ-d00332-A
 def ast_prescan(
     source: str,
     lines: list[tuple[int, str]],
@@ -974,73 +974,7 @@ def text_prescan(
     return line_context, all_test_funcs
 
 
-class _DartLineScanner:
-    """Cross-line bracket scanner for Dart.
-
-    Tracks multiline strings (''' / \"\"\"), raw strings (r-prefix: backslash
-    is literal, applies to both quote styles and to raw triple-quoted
-    strings), single-line strings (unterminated ones run to EOL, which is
-    intentional -- Dart single-line strings cannot legally span lines), //
-    line comments, and /* */ block comments that may span lines. Yields only
-    bracket characters that are real code."""
-
-    def __init__(self) -> None:
-        self.multiline_quote: str | None = None  # "'''" or '"""' while inside
-        self.in_block_comment = False
-
-    def brackets(self, code: str):
-        i = 0
-        n = len(code)
-        while i < n:
-            if self.multiline_quote:
-                end = code.find(self.multiline_quote, i)
-                if end < 0:
-                    return  # string continues past EOL
-                i = end + 3
-                self.multiline_quote = None
-                continue
-            if self.in_block_comment:
-                end = code.find("*/", i)
-                if end < 0:
-                    return
-                i = end + 2
-                self.in_block_comment = False
-                continue
-            c = code[i]
-            if c == "/" and i + 1 < n and code[i + 1] == "/":
-                return  # line comment: rest of line is not code
-            if c == "/" and i + 1 < n and code[i + 1] == "*":
-                self.in_block_comment = True
-                i += 2
-                continue
-            # r-prefix applies to both quote styles, including raw triple-
-            # quoted strings -- resolve it before the triple-quote check.
-            raw = c == "r" and i + 1 < n and code[i + 1] in "'\""
-            if raw:
-                i += 1
-                c = code[i]
-            if c == "'" or c == '"':
-                if code[i : i + 3] in ("'''", '"""'):
-                    self.multiline_quote = code[i : i + 3]
-                    i += 3
-                    continue
-                quote = c
-                i += 1
-                while i < n:
-                    if not raw and code[i] == "\\":
-                        i += 2
-                        continue
-                    if code[i] == quote:
-                        i += 1
-                        break
-                    i += 1
-                continue
-            if c in "([{)]}":
-                yield c
-            i += 1
-
-
-# Implements: REQ-d00254-K
+# Implements: REQ-d00332-A
 def _match_brace_end(
     lines: list[tuple[int, str]],
     start_idx: int,
@@ -1052,32 +986,70 @@ def _match_brace_end(
     A clean close is accurate even if a bracket appeared inside a quoted string
     on the way (a slightly-wrong END is harmless; attachment uses the START line).
 
-    A single `_DartLineScanner` instance is threaded across all lines of the
-    span so multiline strings/comments that open on one line and close on a
-    later one are tracked correctly."""
+    The brackets are read from the span's lines joined into one text, so a
+    string or comment that opens on one line and closes on a later one is
+    followed across them. The span closes at the end of the first line where
+    the brackets have balanced.
+    """
+    from bisect import bisect_right
+
+    from elspais.graph.parsers.dart_lexer import code_brackets
+    from elspais.graph.parsers.patterns import comment_pattern_for_path
+
+    span = lines[start_idx:]
+    if stop_line is not None:
+        # The span never reads past the line it is clamped at.
+        bound = next((k for k, (ln, _t) in enumerate(span) if ln >= stop_line), len(span) - 1)
+        span = span[: bound + 1]
+    first = span[0][0]
+
+    def clamped() -> tuple[int, bool]:
+        # Clamped: never balanced before the next test. The clamp must never
+        # produce an end before the span's own start line.
+        return max(first, stop_line - 1), False  # type: ignore[operator]
+
+    if stop_line is not None and first >= stop_line:
+        return clamped()
+    starts: list[int] = []
+    offset = 0
+    for _ln, text in span:
+        starts.append(offset)
+        offset += len(text) + 1
+    joined = "\n".join(text for _ln, text in span)
+    pattern = comment_pattern_for_path(".dart")
+    assert pattern is not None
     depth = 0
     seen = False
-    last = lines[start_idx][0]
-    scanner = _DartLineScanner()
-    for ln, text in lines[start_idx:]:
-        if stop_line is not None and ln >= stop_line:
-            # clamped: never balanced before next test. Guard against
-            # inversion -- the clamp must never produce an end before the
-            # span's own start line.
-            return max(lines[start_idx][0], stop_line - 1), False
-        for ch in scanner.brackets(text):
-            if ch in "([{":
-                depth += 1
-                seen = True
-            elif ch in ")]}":
-                depth -= 1
-        last = ln
+    k = 0  # the line of the span being read
+
+    def finish_line() -> tuple[int, bool] | None:
+        """End line k; the span's end where it closes or is clamped, else None."""
+        nonlocal k
         if seen and depth <= 0:
-            return ln, True  # clean close
-    return last, False  # ran to EOF without closing
+            return span[k][0], True  # clean close
+        if k + 1 >= len(span):
+            return span[k][0], False  # ran to EOF without closing
+        k += 1
+        if stop_line is not None and span[k][0] >= stop_line:
+            return clamped()
+        return None
+
+    for at, bracket in code_brackets(joined, 0, pattern.marker):
+        line = bisect_right(starts, at) - 1
+        while k < line:
+            if (done := finish_line()) is not None:
+                return done
+        if bracket in "([{":
+            depth += 1
+            seen = True
+        else:
+            depth -= 1
+    while True:
+        if (done := finish_line()) is not None:
+            return done
 
 
-# Implements: REQ-d00254-K
+# Implements: REQ-d00332-A
 def dart_prescan(
     lines: list[tuple[int, str]],
 ) -> tuple[
@@ -1140,7 +1112,7 @@ def dart_prescan(
                 best, owner_start, owner_end = s, s, e
         line_context[ln] = (None, None, owner_start, owner_end)
 
-    # Implements: REQ-d00254-S+T
+    # Implements: REQ-d00332-F+G
     # 3) This pass binds each unowned comment (a comment no test encloses) to
     #    the declaration below it.  A group start is a target, like a test
     #    start, only if the group holds a test.  The runner reports results for
@@ -1169,80 +1141,6 @@ def dart_prescan(
     return line_context, all_test_funcs
 
 
-# The escapes a Dart string literal resolves to one character.  ``\x``,
-# ``\u`` and ``\u{...}`` are read separately; any other escaped character
-# stands for itself.
-_DART_SIMPLE_ESCAPES = {"n": "\n", "r": "\r", "t": "\t", "b": "\b", "f": "\f", "v": "\v"}
-_DART_HEX = re.compile(r"[0-9A-Fa-f]+")
-
-
-def _dart_escape(text: str, i: int) -> tuple[str, int] | None:
-    """The character the escape at ``text[i]`` (just past the backslash) stands
-    for, and the index after it, or ``None`` for an escape that does not read."""
-    if i >= len(text):
-        return None
-    c = text[i]
-    if c in _DART_SIMPLE_ESCAPES:
-        return _DART_SIMPLE_ESCAPES[c], i + 1
-    if c == "x":
-        digits = text[i + 1 : i + 3]
-        if len(digits) == 2 and _DART_HEX.fullmatch(digits):
-            return chr(int(digits, 16)), i + 3
-        return None
-    if c == "u":
-        if text.startswith("{", i + 1):
-            close = text.find("}", i + 2)
-            digits = text[i + 2 : close] if close > 0 else ""
-            if digits and _DART_HEX.fullmatch(digits) and len(digits) <= 6:
-                return chr(int(digits, 16)), close + 1
-            return None
-        digits = text[i + 1 : i + 5]
-        if len(digits) == 4 and _DART_HEX.fullmatch(digits):
-            return chr(int(digits, 16)), i + 5
-        return None
-    return c, i + 1
-
-
-def _dart_literal(text: str, i: int) -> tuple[str, int] | None:
-    """Read one string literal starting at ``text[i]``.
-
-    Returns its value and the index after its closing quote, or ``None`` where
-    the literal interpolates a value, does not close, or does not start here.
-    """
-    raw = text.startswith("r", i)
-    if raw:
-        i += 1
-    quote = text[i : i + 3] if text[i : i + 3] in ("'''", '"""') else text[i : i + 1]
-    if quote not in ("'", '"', "'''", '"""'):
-        return None
-    i += len(quote)
-    if len(quote) == 3:
-        # A multi-line literal drops its first line where that line holds
-        # nothing but white space.
-        line_end = text.find("\n", i)
-        if line_end >= 0 and not text[i:line_end].strip(" \t\r"):
-            i = line_end + 1
-    value: list[str] = []
-    while i < len(text):
-        if text.startswith(quote, i):
-            return "".join(value), i + len(quote)
-        c = text[i]
-        if c == "\n" and len(quote) == 1:
-            return None
-        if not raw and c == "\\":
-            escaped = _dart_escape(text, i + 1)
-            if escaped is None:
-                return None
-            value.append(escaped[0])
-            i = escaped[1]
-            continue
-        if not raw and c == "$":
-            return None  # interpolation: the name is decided when the test runs
-        value.append(c)
-        i += 1
-    return None
-
-
 # Implements: REQ-d00284-H
 def _dart_description(text: str, i: int) -> str | None:
     """The description a ``test(`` / ``group(`` call's first argument writes.
@@ -1251,17 +1149,17 @@ def _dart_description(text: str, i: int) -> str | None:
     over many lines.  The description is known only where the argument is one
     or more adjacent string literals, which Dart joins into one string.
     """
-    parts: list[str] = []
-    while True:
-        while i < len(text) and text[i] in " \t\r\n":
-            i += 1
-        if i < len(text) and text[i] in ",)" and parts:
-            return "".join(parts)
-        literal = _dart_literal(text, i)
-        if literal is None:
-            return None
-        parts.append(literal[0])
-        i = literal[1]
+    from elspais.graph.parsers.dart_lexer import dart_string
+
+    while i < len(text) and text[i] in " \t\r\n":
+        i += 1
+    read = dart_string(text, i)
+    if read is None:
+        return None
+    value, i = read
+    while i < len(text) and text[i] in " \t\r\n":
+        i += 1
+    return value if i < len(text) and text[i] in ",)" else None
 
 
 # Implements: REQ-d00284-E
@@ -1322,7 +1220,7 @@ def dart_test_names(lines: list[tuple[int, str]]) -> dict[int, str]:
     return names
 
 
-# Implements: REQ-d00254-K, REQ-d00254-V
+# Implements: REQ-d00332-A, REQ-d00332-I
 def external_prescan(
     file_entries: list[dict],
     lines: list[tuple[int, str]],
@@ -1358,7 +1256,7 @@ def external_prescan(
         start = entry["line"]
         fname = entry["function"]
         cname = entry.get("class")
-        # Implements: REQ-d00254-K+M
+        # Implements: REQ-d00332-A+C
         # An attribution record names one test, so an attribution record IS a
         # test. Reading a naming convention here asked every framework to spell its tests the way
         # pytest does, and a test named otherwise reached no node at all --
@@ -1382,7 +1280,7 @@ def external_prescan(
                 line_context[ln] = (fname, cname, start, end)
                 break
 
-    # Implements: REQ-d00254-D+N+S
+    # Implements: REQ-d00254-D, REQ-d00332-D+F
     # A citation above a test belongs to that test.  Every built-in pre-scan
     # route reads a citation the same way.
     by_start = {start: (fname, cname, start, end) for start, end, fname, cname in func_ranges}

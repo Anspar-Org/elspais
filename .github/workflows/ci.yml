@@ -6,12 +6,26 @@ name: CI
 # docs/stacked-pull-requests.md). `merge_group` is the merge queue: it tests
 # the commit that will actually land, with the checks a pull request into main
 # gets (REQ-o00066-M). Path-filtered tiers always run there, because the queue
-# is the last gate before main.
+# is the last gate before main. A push to main runs every tier on every
+# supported Python with no path filter (REQ-o00066-K), because the release
+# takes that run's verdict on the commit it publishes (REQ-o00066-N).
+#
+# The release calls this workflow (`workflow_call`) for a commit no push run
+# has passed. A called run takes its caller's event, so `inputs.ref` is what
+# selects the push behaviour there: every tier, every supported Python, no
+# path filter, each checkout at `inputs.ref`. A called run records no TIA
+# baseline and promotes no image.
 on:
   pull_request:
   merge_group:
   push:
     branches: [main]
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Commit to test, with the full suite a push to main runs'
+        type: string
+        required: true
 
 env:
   REGISTRY: ghcr.io
@@ -25,6 +39,8 @@ jobs:
       hash: ${{ steps.hash.outputs.hash }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - name: Compute Dockerfile hash
         id: hash
         run: |
@@ -45,6 +61,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -84,30 +102,38 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
+    env:
+      # The cache steps below save and restore this directory.
+      ELSPAIS_TIA_BASELINE: .results/tia/baseline
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Mark workspace safe for git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      # The extras and the lock `make setup` installs: the 3.13 leg records the
+      # TIA baseline, which an environment selects from only where every
+      # installed distribution matches it (docs/test-impact-analysis.md).
       - name: Install package with dev dependencies
-        run: pip install -e ".[dev,all]"
+        run: pip install -c requirements/dev.lock -e ".[dev,all,browser]"
 
       # On a push to main, the 3.13 leg also records a Test Impact Analysis
       # baseline (docs/test-impact-analysis.md) for pull requests to select
       # from. Recording does not change the tier: same tests, same verdict.
       - name: Run tests
         env:
-          ELSPAIS_TIA_RECORD: ${{ (github.event_name == 'push' && matrix.python-version == '3.13') && '1' || '' }}
+          ELSPAIS_TIA_RECORD: ${{ (github.event_name == 'push' && !inputs.ref && matrix.python-version == '3.13') && '1' || '' }}
         run: .githooks/run-unit-tier .results/elspais-unit
 
       - name: Save TIA baseline
-        if: ${{ !cancelled() && github.event_name == 'push' && matrix.python-version == '3.13' && hashFiles('.results/tia/baseline/baseline.json') != '' }}
+        if: ${{ !cancelled() && github.event_name == 'push' && !inputs.ref && matrix.python-version == '3.13' && hashFiles('.results/tia/baseline/baseline.json') != '' }}
         uses: actions/cache/save@v4
         with:
           path: .results/tia/baseline
-          key: tia-baseline-v1-py3.13-${{ github.sha }}
+          key: tia-baseline-v2-py3.13-${{ github.sha }}
 
   test-impact:
     # Pull requests only, never the merge queue: the queue runs the full unit
@@ -122,29 +148,34 @@ jobs:
     # environment, a broad-impact file, ...). Add the label `full-tests` to a
     # pull request to bypass selection.
     name: Test Impact (advisory)
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && !inputs.ref
     needs: [compute-hash, prepare-image]
     runs-on: ubuntu-latest
     container: ghcr.io/anspar-org/elspais-ci:py3.13-sha-${{ needs.compute-hash.outputs.hash }}
+    env:
+      # The restore step below fills this directory.
+      ELSPAIS_TIA_BASELINE: .results/tia/baseline
 
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.ref }}
           # The baseline names a tree on main; the selector diffs against it.
           fetch-depth: 0
 
       - name: Mark workspace safe for git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      # The environment the `test` job recorded the baseline in.
       - name: Install package with dev dependencies
-        run: pip install -e ".[dev,all]"
+        run: pip install -c requirements/dev.lock -e ".[dev,all,browser]"
 
       - name: Restore TIA baseline
         uses: actions/cache/restore@v4
         with:
           path: .results/tia/baseline
-          key: tia-baseline-v1-py3.13-${{ github.event.pull_request.base.sha }}
-          restore-keys: tia-baseline-v1-py3.13-
+          key: tia-baseline-v2-py3.13-${{ github.event.pull_request.base.sha }}
+          restore-keys: tia-baseline-v2-py3.13-
 
       - name: Run impacted unit tests
         env:
@@ -177,16 +208,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && '["3.13"]' || '["3.10", "3.11", "3.12", "3.13"]') }}
+        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && !inputs.ref && '["3.13"]' || '["3.10", "3.11", "3.12", "3.13"]') }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Mark workspace safe for git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Install package with e2e test dependencies
-        run: pip install -e ".[dev,all,browser]"
+        run: pip install -c requirements/dev.lock -e ".[dev,all,browser]"
 
       - name: Install chromium
         run: playwright install --with-deps chromium
@@ -196,23 +229,31 @@ jobs:
 
   stress-test:
     # Concurrency stress battery (pytest -m stress): races live daemon
-    # surfaces with barrier-released writer threads. Only required when the
-    # change can affect the concurrency machinery — the guard/lock/shared-
-    # state code paths — so unrelated PRs don't pay for it.
-    name: Concurrency Stress
+    # surfaces with barrier-released writer threads. A pull request runs it on
+    # one Python, and only when the change can affect the concurrency
+    # machinery -- the guard/lock/shared-state code paths -- so unrelated pull
+    # requests don't pay for it. A merge-queue candidate always runs it. A
+    # push to main always runs it on every supported version.
+    name: Concurrency Stress (Python ${{ matrix.python-version }})
     needs: [compute-hash, prepare-image]
     runs-on: ubuntu-latest
-    container: ghcr.io/anspar-org/elspais-ci:py3.12-sha-${{ needs.compute-hash.outputs.hash }}
+    container: ghcr.io/anspar-org/elspais-ci:py${{ matrix.python-version }}-sha-${{ needs.compute-hash.outputs.hash }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJSON((github.event_name == 'push' || inputs.ref) && '["3.10", "3.11", "3.12", "3.13"]' || '["3.12"]') }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Mark workspace safe for git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Detect concurrency-relevant changes
         id: filter
-        if: github.event_name != 'merge_group'
+        if: github.event_name == 'pull_request' && !inputs.ref
         uses: dorny/paths-filter@v3
         with:
           filters: |
@@ -225,21 +266,23 @@ jobs:
               - '.github/workflows/ci.yml'
 
       - name: Install package with dev dependencies
-        if: steps.filter.outputs.concurrency == 'true' || github.event_name == 'merge_group'
-        run: pip install -e ".[dev,all]"
+        if: steps.filter.outputs.concurrency == 'true' || github.event_name != 'pull_request' || inputs.ref
+        run: pip install -c requirements/dev.lock -e ".[dev,all,browser]"
 
       - name: Run concurrency stress battery
-        if: steps.filter.outputs.concurrency == 'true' || github.event_name == 'merge_group'
+        if: steps.filter.outputs.concurrency == 'true' || github.event_name != 'pull_request' || inputs.ref
         run: pytest tests/stress -m stress --tb=short -q
 
       - name: Skipped (no concurrency-relevant changes)
-        if: github.event_name != 'merge_group' && steps.filter.outputs.concurrency != 'true'
+        if: github.event_name == 'pull_request' && !inputs.ref && steps.filter.outputs.concurrency != 'true'
         run: echo "No concurrency-relevant files changed; stress battery not required."
 
   browser-test:
     # Playwright viewer tier (pytest -m browser). Kept off the main test job
-    # because it needs a browser binary the CI image does not carry, and only
-    # required when the change can reach what the viewer renders.
+    # because it needs a browser binary the CI image does not carry. A pull
+    # request runs it on one Python, and only when the change can reach what
+    # the viewer renders. A merge-queue candidate always runs it. A push to
+    # main always runs it on every supported version.
     #
     # This tier reported green for its whole life without running: the module
     # opens with `pytest.importorskip("playwright")`, no install path reached
@@ -247,20 +290,26 @@ jobs:
     # user-facing feature set, not a test one), and nothing invoked the marker.
     # tests/conftest.py now errors when the marker is asked for and the extra
     # is missing, so a run that cannot honour the request says so.
-    name: Viewer Browser Tier
+    name: Viewer Browser Tier (Python ${{ matrix.python-version }})
     needs: [compute-hash, prepare-image]
     runs-on: ubuntu-latest
-    container: ghcr.io/anspar-org/elspais-ci:py3.12-sha-${{ needs.compute-hash.outputs.hash }}
+    container: ghcr.io/anspar-org/elspais-ci:py${{ matrix.python-version }}-sha-${{ needs.compute-hash.outputs.hash }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJSON((github.event_name == 'push' || inputs.ref) && '["3.10", "3.11", "3.12", "3.13"]' || '["3.12"]') }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Mark workspace safe for git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Detect viewer-relevant changes
         id: filter
-        if: github.event_name != 'merge_group'
+        if: github.event_name == 'pull_request' && !inputs.ref
         uses: dorny/paths-filter@v3
         with:
           filters: |
@@ -274,25 +323,25 @@ jobs:
               - '.github/workflows/ci.yml'
 
       - name: Install package with browser test dependencies
-        if: steps.filter.outputs.viewer == 'true' || github.event_name == 'merge_group'
-        run: pip install -e ".[dev,all,browser]"
+        if: steps.filter.outputs.viewer == 'true' || github.event_name != 'pull_request' || inputs.ref
+        run: pip install -c requirements/dev.lock -e ".[dev,all,browser]"
 
       - name: Install chromium
-        if: steps.filter.outputs.viewer == 'true' || github.event_name == 'merge_group'
+        if: steps.filter.outputs.viewer == 'true' || github.event_name != 'pull_request' || inputs.ref
         run: playwright install --with-deps chromium
 
       - name: Run viewer browser tier
-        if: steps.filter.outputs.viewer == 'true' || github.event_name == 'merge_group'
+        if: steps.filter.outputs.viewer == 'true' || github.event_name != 'pull_request' || inputs.ref
         run: pytest -m browser --tb=short -q
 
       - name: Skipped (no viewer-relevant changes)
-        if: github.event_name != 'merge_group' && steps.filter.outputs.viewer != 'true'
+        if: github.event_name == 'pull_request' && !inputs.ref && steps.filter.outputs.viewer != 'true'
         run: echo "No viewer-relevant files changed; browser tier not required."
 
   promote-image:
     name: Promote CI Image (Python ${{ matrix.python-version }})
     needs: [compute-hash, test, e2e-test, stress-test, browser-test]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && !inputs.ref
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -323,16 +372,26 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install dev dependencies
+      # Before the install: a pyproject.toml change the lock does not carry
+      # can make the constrained install fail, and this names the remedy.
+      - name: Check the dependency lock is current
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          make lock PY=python
+          if ! git diff --exit-code -- requirements/dev.lock; then
+            echo "::error file=requirements/dev.lock::requirements/dev.lock is out of date with pyproject.toml. Run 'make lock' and commit the result."
+            exit 1
+          fi
+
+      - name: Install dev dependencies
+        run: pip install -c requirements/dev.lock -e ".[dev]"
 
       - name: Check with ruff
         run: ruff check src/ tests/ tools/
@@ -353,6 +412,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -360,9 +421,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install elspais
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .
+        run: pip install -c requirements/dev.lock -e .
 
       - name: Run health checks on specs
         # --lenient so the missing-test-results warning (which now flips
@@ -381,7 +440,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: traceability-${{ github.sha }}
+          name: traceability-${{ inputs.ref || github.sha }}
           path: build-reports/
           retention-days: 30
 
@@ -392,6 +451,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.ref }}
           fetch-depth: 0
 
       - name: Scan for secrets with TruffleHog
@@ -412,13 +472,13 @@ jobs:
           python-version: "3.12"
 
       - name: Install package
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[all]"
+        run: pip install -c requirements/dev.lock -e ".[all]"
 
+      # The audit tools install under the lock too, so a dependency they share
+      # with the project stays at the version the lock pins and is audited there.
       - name: Audit dependencies for known vulnerabilities
         run: |
-          pip install pip-audit
+          pip install -c requirements/dev.lock pip-audit
           pip-audit \
             --ignore-vuln CVE-2026-4539 \
             --ignore-vuln CVE-2026-3219
@@ -427,6 +487,6 @@ jobs:
 
       - name: Check with safety
         run: |
-          pip install safety
+          pip install -c requirements/dev.lock safety
           safety check
         continue-on-error: true

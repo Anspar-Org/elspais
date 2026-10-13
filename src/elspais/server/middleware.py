@@ -28,20 +28,49 @@ class NoCacheMiddleware(BaseHTTPMiddleware):
         return response
 
 
+#: The paths, below the prefix, whose answers depend on the freshness of
+#: test results: the reports, their exports and the MCP tools.
+_FRESHNESS_PATHS = ("/api/run/", "/api/export/", "/mcp")
+
+
 class AutoRefreshMiddleware(BaseHTTPMiddleware):
     """Call state.ensure_fresh() on every request (throttled internally).
 
     CLI daemon clients send ``X-Force-Fresh: 1`` to bypass the throttle,
     ensuring the graph reflects any file changes made since the last request
     (e.g., after ``elspais fix`` writes spec files).
+
+    A request whose answer depends on the freshness of test results, from any
+    client, also has the environment probed again first (REQ-d00311-R): at
+    most once per ``PROBE_MIN_AGE``, or every time for a client that asked for
+    a fresh answer. Polling, the event stream and every other route never
+    probe.
     """
+
+    def __init__(self, app, base_path: str = "") -> None:
+        super().__init__(app)
+        self._probe_paths = tuple(base_path + p for p in _FRESHNESS_PATHS)
+
+    def _asks_freshness(self, request: Request) -> bool:
+        path = request.url.path
+        if path.startswith(self._probe_paths[-1]):
+            # An MCP request is a tool call where it posts; a GET holds a stream.
+            return request.method == "POST"
+        return path.startswith(self._probe_paths[:-1])
 
     async def dispatch(self, request: Request, call_next) -> Response:
         app_state = getattr(request.app.state, "app_state", None)
         if app_state is not None:
-            if request.headers.get("x-force-fresh"):
+            force = bool(request.headers.get("x-force-fresh"))
+            if force:
                 app_state._last_stale_check = 0  # bypass throttle
-            app_state.ensure_fresh()
+            probed = None
+            # Implements: REQ-d00311-R
+            if self._asks_freshness(request):
+                from starlette.concurrency import run_in_threadpool
+
+                probed = await run_in_threadpool(lambda: app_state.probe_environment(force=force))
+            app_state.ensure_fresh(probed)
         return await call_next(request)
 
 

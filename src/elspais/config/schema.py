@@ -10,6 +10,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    ValidationError,
     ValidationInfo,
     field_validator,
     model_validator,
@@ -710,6 +711,107 @@ PATH_ORIGIN_CWD = "working-directory"
 PATH_ORIGINS = (PATH_ORIGIN_ROOT, PATH_ORIGIN_CWD)
 
 
+# Implements: REQ-d00311-R
+class EnvironmentProbeConfig(_StrictModel):
+    """One part of a test target's environment, identified by what a command prints.
+
+    The command runs in the target's ``cwd``. Its exit status and its standard
+    output identify that part of the environment, such as the version of a
+    toolchain or the packages installed for the target.
+    """
+
+    name: str
+    command: str
+    # Implements: REQ-d00333-K
+    # Whether a change of this part of the environment executes every unit of
+    # a target that declares units. False leaves the part out of each unit's
+    # Dependency Evidence; the target is still stale when the part changes.
+    affects_retention: bool = True
+
+    @field_validator("name", "command")
+    @classmethod
+    def _check_present(cls, v: str, info: ValidationInfo) -> str:
+        if not v.strip():
+            raise ValueError(
+                f"an environment probe needs a {info.field_name}: a probe is a table "
+                f'such as {{ name = "python", command = "python --version" }}'
+            )
+        return v
+
+
+#: The placeholder in a test target's command that the selected units replace.
+SELECTION_PLACEHOLDER = "{selection}"
+
+# Implements: REQ-d00249-O
+# How a target's command receives the units a run selects. "placeholder"
+# replaces `{selection}` in the command with them; "file" leaves the command
+# as it is, and the command reads the list from the file $ELSPAIS_SELECTION
+# names.
+SELECTION_RECEIVERS = ("placeholder", "file")
+
+
+# Implements: REQ-d00333-C, REQ-d00249-O
+class UnitsConfig(_StrictModel):
+    """The units of a test target: its test files, which a run may execute in part.
+
+    ``dependencies`` names the source of each unit's *Dependency Evidence*
+    (``source``) and holds the settings that source validates. ``observes``
+    selects the files the source observes, read from the repository root;
+    unset means the source's own default. ``tests`` selects, from the
+    repository root, the scanned test files below the target's working
+    directory that its command executes; unset means all of them.
+    ``receives`` says how the command receives the selected units.
+    ``full_selection`` is what ``{selection}`` becomes on a run of every unit.
+    """
+
+    dependencies: dict[str, Any]
+    observes: ScanningKindConfig | None = None
+    tests: ScanningKindConfig | None = None
+    receives: str = "placeholder"
+    full_selection: str = ""
+
+    @field_validator("receives")
+    @classmethod
+    def _check_receives(cls, v: str) -> str:
+        if v not in SELECTION_RECEIVERS:
+            names = ", ".join(f'"{r}"' for r in SELECTION_RECEIVERS)
+            raise ValueError(f"units.receives must be one of {names}")
+        return v
+
+    @model_validator(mode="after")
+    def _check_source(self) -> UnitsConfig:
+        from elspais.graph.dependencies import source_names
+
+        name = self.dependencies.get("source")
+        if not isinstance(name, str) or not name:
+            known = ", ".join(f'"{n}"' for n in source_names())
+            raise ValueError(
+                f"units.dependencies needs a source, one of {known}, such as "
+                f'dependencies = {{ source = "declared" }}'
+            )
+        try:
+            self.source_settings()
+        except KeyError as exc:
+            raise ValueError(str(exc.args[0])) from exc
+        except ValidationError as exc:
+            raise ValueError(
+                f"units.dependencies does not suit the {name!r} source: {exc}"
+            ) from exc
+        return self
+
+    def source_name(self) -> str:
+        """The name of the dependency source."""
+        return str(self.dependencies["source"])
+
+    def source_settings(self) -> BaseModel:
+        """The source's own settings: the keys beside ``source``, validated by its model."""
+        from elspais.graph.dependencies import validate_settings
+
+        return validate_settings(
+            self.source_name(), {k: v for k, v in self.dependencies.items() if k != "source"}
+        )
+
+
 class TestTargetConfig(_StrictModel):
     """One test target: how its results + coverage are produced and ingested."""
 
@@ -727,6 +829,20 @@ class TestTargetConfig(_StrictModel):
     results: str = ""
     # lcov/coverage file relative to the target's output folder; empty = no coverage.
     coverage: str = ""
+
+    # Implements: REQ-d00312-A
+    # A file whose name begins `.elspais-` in an output area is written by
+    # elspais itself, so a target's own results or coverage never names one.
+    @field_validator("results", "coverage")
+    @classmethod
+    def _check_not_elspais_file(cls, v: str, info: ValidationInfo) -> str:
+        if any(part.startswith(".elspais-") for part in v.replace("\\", "/").split("/")):
+            raise ValueError(
+                f"{info.field_name} {v!r} names a file elspais writes in the output "
+                f"area; name the file the target's command writes"
+            )
+        return v
+
     match: str = "source"  # "source" | "aggregate"
     # Implements: REQ-d00283-A+C+F
     # The groups this target belongs to. Empty means the target claims none,
@@ -771,6 +887,81 @@ class TestTargetConfig(_StrictModel):
     # test file the target scans. It stands beside the reporter rather than in
     # its place, so one target can hold per-test results and file-level ones.
     file_results: bool = False
+    # Implements: REQ-d00311-R
+    # The parts of the environment this target's outcomes depend on beyond the
+    # files of the repository. Each probe is an input of the target, recorded
+    # under its own name.
+    environment_probes: list[EnvironmentProbeConfig] = Field(default_factory=list)
+    # Implements: REQ-d00333-C, REQ-d00249-O
+    # The units of this target and where their Dependency Evidence comes from.
+    # Unset, the target is one unit and every run executes all of it.
+    units: UnitsConfig | None = None
+
+    # Implements: REQ-d00249-O, REQ-d00333-C
+    @model_validator(mode="after")
+    def _check_units(self) -> TestTargetConfig:
+        named = f'test target "{self.name}"'
+        holds = SELECTION_PLACEHOLDER in self.command
+        if self.units is None:
+            if holds:
+                raise ValueError(
+                    f"{named}: its command holds {SELECTION_PLACEHOLDER}, which only a "
+                    f"target declaring units replaces; declare "
+                    f"[scanning.test.targets.units] or remove {SELECTION_PLACEHOLDER}"
+                )
+            return self
+        if not self.command:
+            raise ValueError(f"{named}: units need a command for a run to execute them")
+        if self.units.receives == "placeholder" and not holds:
+            raise ValueError(
+                f"{named}: its units are received through {SELECTION_PLACEHOLDER}, and "
+                f"its command does not hold it; put {SELECTION_PLACEHOLDER} where the "
+                f'test files go, or set units.receives = "file" for a command that reads '
+                f"the list from $ELSPAIS_SELECTION"
+            )
+        if self.units.receives == "file" and holds:
+            raise ValueError(
+                f'{named}: units.receives = "file" reads the selection from '
+                f"$ELSPAIS_SELECTION, so {SELECTION_PLACEHOLDER} would reach the shell "
+                f"as written; remove it from the command"
+            )
+        if not self.results:
+            raise ValueError(
+                f"{named}: units need a results pattern, because a run reads each "
+                f"unit's outcome from the files the command writes into "
+                f"$ELSPAIS_TARGET_OUTPUT"
+            )
+        if self.file_results:
+            raise ValueError(
+                f"{named}: units cannot stand with file_results = true, because after a "
+                f"run of some units the exit status speaks for those units alone"
+            )
+        from elspais.graph.dependencies import get_source, observes_required
+
+        if self.units.observes is None:
+            if observes_required(get_source(self.units.source_name())):
+                raise ValueError(
+                    f"{named}: the {self.units.source_name()!r} dependency source observes "
+                    f"what the project declares; set units.observes to the files its "
+                    f"evidence covers"
+                )
+        return self
+
+    # Implements: REQ-d00311-R
+    @model_validator(mode="after")
+    def _check_probe_names(self) -> TestTargetConfig:
+        seen: dict[str, str] = {}
+        for probe in self.environment_probes:
+            key = probe.name.strip().lower()
+            if key in seen:
+                raise ValueError(
+                    f'test target "{self.name}" declares environment probes '
+                    f'"{seen[key]}" and "{probe.name}", which differ only in case or '
+                    f"spacing; each probe names one part of the environment, so give "
+                    f"each a distinct name"
+                )
+            seen[key] = probe.name
+        return self
 
     # Implements: REQ-d00283-X
     @field_validator("name")
@@ -851,6 +1042,30 @@ class TestTargetConfig(_StrictModel):
         return self
 
 
+# Implements: REQ-d00333-F
+class BaselineConfig(_StrictModel):
+    """Where a *Baseline Run* comes from.
+
+    ``fetch_command`` fills the directory that ``{dest}`` names with one archive
+    that ``elspais baseline pack`` wrote. The project's command decides which
+    run to fetch and how to reach it; elspais knows no host.
+    """
+
+    fetch_command: str = ""
+
+    @field_validator("fetch_command")
+    @classmethod
+    def _check_dest(cls, v: str) -> str:
+        if v.strip() and "{dest}" not in v:
+            raise ValueError(
+                f"scanning.test.baseline.fetch_command {v!r} does not name {{dest}}. "
+                f"Write {{dest}} where the command takes the empty directory it fills "
+                f"with a packed baseline, such as "
+                f'"tools/fetch-baseline.sh {{dest}}"; elspais substitutes it shell-quoted'
+            )
+        return v
+
+
 class TestScanningConfig(ScanningKindConfig):
     __test__ = False  # Prevent pytest collection
 
@@ -879,6 +1094,9 @@ class TestScanningConfig(ScanningKindConfig):
     # output_root names the directory that holds the output area of each target.
     # The path is relative to the repository root.
     output_root: str = ".results"
+    # Implements: REQ-d00333-F
+    # How `elspais baseline fetch` obtains a packed Baseline Run.
+    baseline: BaselineConfig = Field(default_factory=BaselineConfig)
 
     # Implements: REQ-d00312-B
     @field_validator("output_root")

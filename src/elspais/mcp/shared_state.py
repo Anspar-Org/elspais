@@ -73,6 +73,10 @@ class SharedServerState(dict):
         # process that watches nothing registers none, and then nothing is
         # disclosed because nothing is known.
         self.graph_predates: Callable[[], list[Path]] | None = None
+        # Implements: REQ-d00311-R
+        # The changes of a test target's environment the watching process saw
+        # and could not rebuild for, because it holds pending mutations.
+        self.environment_predates: Callable[[], list[str]] | None = None
         # Raised the instant this process decides to stop, before the
         # signal that starts the drain. Every write critical section
         # checks it under the same lock, so a write arriving after the
@@ -489,7 +493,9 @@ def persist_pending(
 
 
 # Implements: REQ-p00004-J, REQ-p00004-O, REQ-p00015-F, REQ-d00205-B
-def rebuild_shared_graph(state: SharedServerState) -> dict[str, Any]:
+def rebuild_shared_graph(
+    state: SharedServerState, probes: dict[tuple[str, str], str] | None = None
+) -> dict[str, Any]:
     """Rebuild the live graph from disk and publish it. The only rebuild path.
 
     Every surface that reloads the graph reaches this function: the viewer's
@@ -517,6 +523,9 @@ def rebuild_shared_graph(state: SharedServerState) -> dict[str, Any]:
 
     Args:
         state: The process-wide holder. ``working_dir`` names the repo root.
+        probes: Probe digests measured just now, keyed as the probe cache
+            keys them. The rebuild takes them as the probes' answers; every
+            other probe runs again.
 
     Returns:
         ``{"success", "message", "node_count", "config"}``. ``config`` is the
@@ -525,8 +534,15 @@ def rebuild_shared_graph(state: SharedServerState) -> dict[str, Any]:
     """
     from elspais.config import get_config
     from elspais.graph.factory import build_graph
+    from elspais.utilities.fingerprint import forget_probes, remember_probes
 
     working_dir = state["working_dir"]
+    # Implements: REQ-d00311-R
+    # A rebuild judges each target's results again, so it probes the
+    # environment again rather than reading what an earlier build saw.
+    forget_probes()
+    if probes:
+        remember_probes(probes)
 
     try:
         new_config = get_config(start_path=working_dir, quiet=True)

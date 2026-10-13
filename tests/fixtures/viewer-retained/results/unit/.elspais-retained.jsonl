@@ -1,0 +1,1 @@
+{"executed_in":{"commit":"0123456789abcdef","root":"/ci/work","started_at":"2026-10-11T09:14:00+00:00"},"file":"tests/test_refunds.py","line":2,"name":"test_refunds","outcome":"passed","retained_reason":"no input of its evidence changed since it executed","target":"unit"}

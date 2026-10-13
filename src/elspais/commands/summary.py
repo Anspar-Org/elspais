@@ -680,6 +680,18 @@ def _file_bound_sentence(data: dict) -> str | None:
     )
 
 
+# Implements: REQ-d00323-O
+def retained_lines(data: dict) -> list[str]:
+    """One line per target holding *Retained Results*: what its run executed and retained."""
+    tally = data.get("retained_results") or {}
+    return [
+        f"{t['target']}"
+        + (f" ({t['namespace']})" if t.get("namespace") else "")
+        + f": {t['executed']} result(s) executed, {t['retained']} retained from earlier runs"
+        for t in tally.get("targets") or []
+    ]
+
+
 #: The footnote a carried line figure points at (REQ-d00323-J).
 _CARRIED_LINES_NOTE = "line coverage from a run the current tree did not produce (stale)"
 
@@ -777,6 +789,9 @@ def _render_text(data: dict, config: dict | None = None) -> str:
     if carried > 0:
         lines.append("")
         lines.append(f"* {carried}/{total_targets} test results from previous runs")
+    # Implements: REQ-d00323-O
+    for line in retained_lines(data):
+        lines.append(f"  {line}")
     # Implements: REQ-d00323-J
     if _carried_lines(data):
         lines.append("")
@@ -885,6 +900,9 @@ def _render_markdown(data: dict, config: dict | None = None) -> str:
     if carried > 0:
         lines.append("")
         lines.append(f"* {carried}/{total_targets} test results from previous runs")
+    # Implements: REQ-d00323-O
+    for line in retained_lines(data):
+        lines.append(f"  {line}")
     # Implements: REQ-d00323-J
     if _carried_lines(data):
         lines.append("")
@@ -1001,4 +1019,11 @@ def _render_csv(data: dict, config: dict | None = None) -> str:
                 total_targets,
             ]
         )
+    # Implements: REQ-d00323-O
+    retained = (data.get("retained_results") or {}).get("targets") or []
+    if retained:
+        writer.writerow([])
+        writer.writerow(["Namespace", "Target", "Executed Results", "Retained Results"])
+        for t in retained:
+            writer.writerow([t["namespace"], t["target"], t["executed"], t["retained"]])
     return buf.getvalue()

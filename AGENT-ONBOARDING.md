@@ -36,7 +36,7 @@ assertions, every assertion is implemented, every implementation is tested.
 ```shell
 pip install elspais            # core (validation, tracing, CLI)
 pip install elspais[mcp]       # + MCP server for AI agent integration
-pip install elspais[all]       # + HTML viewer, review server, MCP
+pip install elspais[all]       # + HTML viewer, review server, MCP, coverage, Dart imports
 ```
 
 ## 2. Initialize the Project

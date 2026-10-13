@@ -98,6 +98,12 @@ class ResultLine:
     runner: str | None
     outcome: str
     skip_reason: str | None = None
+    # Implements: REQ-d00323-M
+    # The run that executed the test, and why a later run retained its
+    # result. Only a Retained Result carries them; an Evidence Snapshot never
+    # does, and its reader refuses a line that holds them.
+    executed_in: dict[str, str] | None = None
+    retained_reason: str | None = None
 
     def key(self) -> tuple[Any, ...]:
         return (
@@ -111,6 +117,12 @@ class ResultLine:
 
     def to_json(self) -> dict[str, Any]:
         return {k: v for k, v in self.__dict__.items() if v is not None}
+
+    def as_retained(self, executed_in: dict[str, str], reason: str) -> ResultLine:
+        """This line as a *Retained Result* of a later run."""
+        from dataclasses import replace
+
+        return replace(self, executed_in=dict(executed_in), retained_reason=reason)
 
 
 @dataclass(frozen=True)
@@ -155,6 +167,16 @@ def _json_line(obj: dict[str, Any]) -> str:
     return json.dumps(obj, **_LINE_JSON) + "\n"
 
 
+# Implements: REQ-d00322-C, REQ-d00333-A
+def result_line_text(line: ResultLine) -> str:
+    """The one byte form of a result line, ending in a line feed.
+
+    An *Evidence Snapshot*'s `results.jsonl` and a run's *Retained Results*
+    both hold their lines in it.
+    """
+    return _json_line(line.to_json())
+
+
 # Implements: REQ-d00322-C, REQ-d00322-E, REQ-d00322-M, REQ-d00322-N
 def render_files(s: Snapshot) -> dict[str, str]:
     """Return each snapshot file's exact text, keyed by file name.
@@ -173,7 +195,7 @@ def render_files(s: Snapshot) -> dict[str, str]:
     report = s.report if s.report.endswith("\n") else s.report + "\n"
     return {
         "results.jsonl": "".join(
-            _json_line(r.to_json()) for r in sorted(s.results, key=ResultLine.key)
+            result_line_text(r) for r in sorted(s.results, key=ResultLine.key)
         ),
         "snapshot.json": json.dumps(meta, indent=1, sort_keys=True) + "\n",
         TIMINGS_FILE: "".join(_json_line(t.to_json()) for t in sorted(s.timings, key=Timing.key)),
@@ -229,7 +251,7 @@ def _expect(path: Path, line: int | None, obj: dict[str, Any], key: str, kinds: 
     return value
 
 
-def _optional(path: Path, line: int, obj: dict[str, Any], key: str, kinds: tuple) -> Any:
+def _optional(path: Path, line: int | None, obj: dict[str, Any], key: str, kinds: tuple) -> Any:
     return _expect(path, line, obj, key, kinds) if key in obj else None
 
 
@@ -255,13 +277,20 @@ def _lines(path: Path, text: str) -> list[tuple[int, dict[str, Any]]]:
     return out
 
 
-def _result_line(path: Path, number: int, obj: dict[str, Any]) -> ResultLine:
+#: The keys only a *Retained Result* holds.
+_RETAINED_KEYS = frozenset({"executed_in", "retained_reason"})
+
+
+def _result_line(
+    path: Path, number: int | None, obj: dict[str, Any], *, retained: bool = False
+) -> ResultLine:
+    """Read one result line. *retained* admits the keys a *Retained Result* holds."""
     _check_keys(
         path,
         number,
         obj,
         {"target", "file", "name", "outcome"},
-        {"line", "runner", "skip_reason"},
+        {"line", "runner", "skip_reason", *(_RETAINED_KEYS if retained else ())},
     )
     outcome = _expect(path, number, obj, "outcome", (str,))
     if outcome not in OUTCOMES:
@@ -276,7 +305,34 @@ def _result_line(path: Path, number: int, obj: dict[str, Any]) -> ResultLine:
         runner=_optional(path, number, obj, "runner", (str,)),
         outcome=outcome,
         skip_reason=_optional(path, number, obj, "skip_reason", (str,)),
+        executed_in=_run_reference(path, number, obj) if retained else None,
+        retained_reason=_optional(path, number, obj, "retained_reason", (str,)),
     )
+
+
+def _run_reference(path: Path, number: int | None, obj: dict[str, Any]) -> dict[str, str] | None:
+    """The run reference a *Retained Result* names, checked against the keys a run holds."""
+    from elspais.utilities.fingerprint import RUN_REFERENCE_KEYS
+
+    if "executed_in" not in obj:
+        return None
+    value = _expect(path, number, obj, "executed_in", (dict,))
+    _check_keys(path, number, value, set(RUN_REFERENCE_KEYS), set())
+    return {key: _expect(path, number, value, key, (str,)) for key in RUN_REFERENCE_KEYS}
+
+
+# Implements: REQ-d00333-A
+def read_result_line(
+    obj: dict[str, Any], *, source: Path | str = "", number: int | None = None
+) -> ResultLine:
+    """Read one result line of an *Evidence Snapshot* or of *Retained Results*.
+
+    Raises:
+        SnapshotUnreadable: *obj* is not a result line this module writes.
+    """
+    if not isinstance(obj, dict):
+        raise SnapshotUnreadable(Path(source), number, "not a JSON object")
+    return _result_line(Path(source), number, obj, retained=True)
 
 
 def _timing(path: Path, number: int, obj: dict[str, Any]) -> Timing:
@@ -389,7 +445,7 @@ class SnapshotRefused(Exception):
 
 
 # A status a reporter gives, as the outcome a snapshot holds.
-_OUTCOME_OF = {"passed": "passed", "failed": "failed", "error": "failed", "skipped": "skipped"}
+OUTCOME_OF = {"passed": "passed", "failed": "failed", "error": "failed", "skipped": "skipped"}
 
 
 def _relative(path: str | None) -> bool:
@@ -431,7 +487,50 @@ def _declared_at(result: Any) -> tuple[str, int | None] | None:
     return next(iter(places)) if len(places) == 1 else None
 
 
-# Implements: REQ-d00322-A+C+D+E+M
+# Implements: REQ-d00322-C+E, REQ-d00329-E
+def result_line_of(node: Any, spell: Callable[[str], str] = str) -> ResultLine | str:
+    """Return the result line of one RESULT *node*, or the reason it has none.
+
+    The line places the result at its bound test's declared file and line, so
+    a reader binds it back to that test. *spell* names the target as the
+    reader selects it, in a reason.
+    """
+    target = node.get_field("target")
+    name = node.get_field("name") or ""
+    where = f"target {spell(target)}: {node.get_field('source_file') or '?'}"
+    where += f":{node.get_field('line')} {name}" if node.get_field("line") else f" {name}"
+    status = node.get_field("status")
+    outcome = OUTCOME_OF.get(status or "")
+    if outcome is None:
+        return f"{where}: outcome {status!r} is not passed, failed or skipped"
+    if node.get_field("match") == "file":
+        return (
+            f"{where}: the result is the file-level result of the command's exit "
+            f"status, which an Evidence Snapshot does not hold"
+        )
+    place = _declared_at(node)
+    if place is None:
+        return f"{where}: the result binds to no single test"
+    file, line = place
+    runner = node.get_field("runner_file")
+    runner = runner if runner and runner != file else None
+    if not file:
+        return f"{where}: the result names no file"
+    if not _relative(file) or (runner is not None and not _relative(runner)):
+        return f"{where}: the test lies outside the repository"
+    skip_reason = node.get_field("message") if outcome == "skipped" else None
+    return ResultLine(
+        target=target,
+        file=file,
+        line=line,
+        name=name,
+        runner=runner,
+        outcome=outcome,
+        skip_reason=skip_reason or None,
+    )
+
+
+# Implements: REQ-d00322-A+B+C+D+E+M
 def derive_snapshot(
     graph: Any,
     repo_root: Path,
@@ -460,7 +559,7 @@ def derive_snapshot(
     """
     import elspais
     from elspais.graph.GraphNode import NodeKind
-    from elspais.utilities.fingerprint import compute_manifest, manifest_digest
+    from elspais.utilities.fingerprint import file_manifest, manifest_digest
 
     by_name = {t.name: t for t in config.scanning.test.targets}
     unknown = sorted(set(targets) - set(by_name))
@@ -471,60 +570,38 @@ def derive_snapshot(
     results: list[ResultLine] = []
     timings: list[Timing] = []
     reasons: list[str] = []
+    retained_by_target: dict[str, int] = {}
     for node in graph.nodes_by_kind(NodeKind.RESULT, namespace=config.project.namespace):
         target = node.get_field("target")
         if target not in selected:
             continue
-        name = node.get_field("name") or ""
-        where = f"target {spell(target)}: {node.get_field('source_file') or '?'}"
-        where += f":{node.get_field('line')} {name}" if node.get_field("line") else f" {name}"
-        status = node.get_field("status")
-        outcome = _OUTCOME_OF.get(status or "")
-        if outcome is None:
-            reasons.append(f"{where}: outcome {status!r} is not passed, failed or skipped")
+        # Implements: REQ-d00322-B
+        # A Retained Result is evidence of an earlier tree, and a snapshot
+        # holds the results of one run of its own tree.
+        if node.get_field("retained_from"):
+            retained_by_target[target] = retained_by_target.get(target, 0) + 1
             continue
-        # Implements: REQ-d00329-E
-        if node.get_field("match") == "file":
-            reasons.append(
-                f"{where}: the result is the file-level result of the command's exit "
-                f"status, which an Evidence Snapshot does not hold"
-            )
+        line = result_line_of(node, spell)
+        if isinstance(line, str):
+            reasons.append(line)
             continue
-        place = _declared_at(node)
-        if place is None:
-            reasons.append(f"{where}: the result binds to no single test")
-            continue
-        file, line = place
-        runner = node.get_field("runner_file")
-        runner = runner if runner and runner != file else None
-        if not file:
-            reasons.append(f"{where}: the result names no file")
-            continue
-        if not _relative(file) or (runner is not None and not _relative(runner)):
-            reasons.append(f"{where}: the test lies outside the repository")
-            continue
-        skip_reason = node.get_field("message") if outcome == "skipped" else None
-        results.append(
-            ResultLine(
-                target=target,
-                file=file,
-                line=line,
-                name=name,
-                runner=runner,
-                outcome=outcome,
-                skip_reason=skip_reason or None,
-            )
-        )
+        results.append(line)
         timings.append(
             Timing(
-                target=target,
-                file=file,
-                line=line,
-                name=name,
-                runner=runner,
+                target=line.target,
+                file=line.file,
+                line=line.line,
+                name=line.name,
+                runner=line.runner,
                 duration=float(node.get_field("duration") or 0.0),
                 output=node.get_field("output") or "",
             )
+        )
+    for target, count in sorted(retained_by_target.items()):
+        reasons.append(
+            f"target {spell(target)}: its results include {count} Retained Result(s), "
+            f"which an earlier run executed; run `elspais test --targets {spell(target)}`, "
+            f"which executes every test of the target"
         )
     if reasons:
         raise SnapshotRefused(sorted(reasons))
@@ -533,7 +610,9 @@ def derive_snapshot(
         tree = tree_digest(repo_root, exclude=config.scanning.test.evidence)
 
     def inputs_digest(name: str) -> str:
-        manifest = compute_manifest(repo_root, config, by_name[name])
+        # The files alone: the environment and the configuration of a target
+        # differ between machines, and the snapshot is a function of the tree.
+        manifest = file_manifest(repo_root, config, by_name[name])
         return manifest_digest({p: d for p, d in manifest.items() if p in tree.paths})
 
     return Snapshot(

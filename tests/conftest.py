@@ -235,7 +235,7 @@ def pytest_configure(config):
             raise pytest.UsageError(
                 "pytest -m browser was requested but playwright is not installed, "
                 "so the browser tier would report success having run nothing. "
-                'Install it with: pip install -e ".[browser]" && playwright install chromium'
+                "Install it with: make setup, which installs the [browser] extra and chromium"
             ) from None
 
     # A tier must run what it selects or say why it did not. An extra the

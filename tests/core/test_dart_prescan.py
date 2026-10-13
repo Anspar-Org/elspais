@@ -316,7 +316,7 @@ group('everything', () {
     ],
 )
 def test_comment_binds_to_first_declaration_below(source, comment_line, expected_owner_start):
-    # Verifies: REQ-d00254-K
+    # Verifies: REQ-d00332-A
     # Attribution binds a scanned test to its own identity and extent; a
     # citation written above a test is attributed to that test, however much
     # prose sits between them, and a citation above a group() is attributed to
@@ -333,7 +333,7 @@ def test_comment_binds_to_first_declaration_below(source, comment_line, expected
     ],
 )
 def test_comment_does_not_bind_across_a_non_comment_line(source, comment_line):
-    # Verifies: REQ-d00254-K
+    # Verifies: REQ-d00332-A
     # The negative space of per-test attribution: a file header separated from
     # the first declaration by an import describes the file, not that
     # declaration, and binding it there would attribute a citation to a test it

@@ -1325,6 +1325,31 @@ class TestEnvironmentTagRendering:
         found = sorted(envs.nth(i).inner_text().strip() for i in range(envs.count()))
         assert found == ["chromium", "firefox"], f"expected both projects, got {found}"
 
+    # Verifies: REQ-d00323-M
+    @pytest.mark.browser
+    @pytest.mark.e2e
+    def test_REQ_d00323_M_a_retained_result_names_the_run_that_executed_its_test(
+        self, page_retained, viewer_url_retained
+    ):
+        """A Retained Result's row names the earlier run that executed its
+        test, with the reason it was retained, and a result the last run
+        executed names no earlier run."""
+        page_retained.goto(viewer_url_retained, wait_until="networkidle")
+        panel = _open_results_panel(page_retained, "REQ-d00001", "A")
+
+        rows = panel.locator(".assertion-test-item")
+        rows.first.wait_for(state="visible", timeout=10_000)
+        retained = panel.locator(".result-stale", has_text="retained from")
+        assert retained.count() == 1, f"expected one retained row of {rows.count()}"
+        tag = retained.first
+        assert tag.inner_text().strip() == (
+            "retained from the run of 0123456789ab started 2026-10-11T09:14:00+00:00 in /ci/work"
+        )
+        assert tag.get_attribute("title") == "no input of its evidence changed since it executed"
+        texts = [rows.nth(i).inner_text() for i in range(rows.count())]
+        assert [t for t in texts if "retained from" in t and "test_refunds" in t], texts
+        assert not [t for t in texts if "retained from" in t and "test_pays" in t], texts
+
     # Verifies: REQ-d00294-F
     @pytest.mark.browser
     @pytest.mark.e2e

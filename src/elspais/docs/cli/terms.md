@@ -227,5 +227,5 @@ no_traceability_severity = "info"   # or "warning" or "error"
 In federated setups with `[associates]`:
 - Each repo builds its own term dictionary during parsing
 - Dictionaries merge during federation -- duplicates across repos are flagged
-- Reference resolution runs after federation (a term defined in repo A can be referenced in repo B)
+- Reference resolution runs after federation. A repo's text is read against the terms it defines and those of the repos its `[associates]` declarations reach, directly or transitively, and no others: a repo can reference its associate's term, but an associate never references a term only the repo declaring it defines. The same rule decides which unmarked occurrences `elspais fix` marks and `spec.needs_rewrite` reports
 - Generated output groups references by namespace

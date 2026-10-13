@@ -461,7 +461,7 @@ class TestTermRepoNameAndPath:
             "left over from the associate's inner federation"
         )
 
-    # Verifies: REQ-d00239-A
+    # Verifies: REQ-d00242-B
     def test_scan_terms_uses_req_namespace_not_repo_name(self, tmp_path: Path) -> None:
         """TermRef.namespace must be the REQ-prefix, not the host-side RepoEntry.name.
 

@@ -17,10 +17,13 @@
 #
 # With ELSPAIS_TIA_RECORD=1 the run also records a Test Impact Analysis
 # baseline (docs/test-impact-analysis.md): the tools/tia recorder plugin
-# captures per-test facts coverage cannot see, and once pytest finishes the
-# baseline is built into ELSPAIS_TIA_BASELINE (default .results/tia/baseline).
-# Recording never changes the tier's verdict: the exit code is pytest's, and a
-# baseline that cannot be built is reported and left absent. A recording run
+# captures per-test facts coverage cannot see, and once pytest finishes
+# `python -m tools.tia baseline build` publishes the baseline in this
+# worktree's .results/tia/baseline (`python -m tools.tia baseline path` names
+# it). Only a run that passed outright publishes one, so a failing run never
+# replaces a good baseline. Recording never changes the tier's verdict: the
+# exit code is pytest's, and a baseline that is not published is reported and
+# the previous one is left in place. A recording run
 # turns the parse cache off (ELSPAIS_PARSE_CACHE=0, REQ-d00331-G): a reading
 # the cache answers runs none of the parser's code, so per-test coverage
 # would credit the parser only to the first test that read each file.
@@ -59,12 +62,9 @@ COVERAGE_FILE="$_out/.coverage" pytest tests/ --tb=short -q \
 _rc=$?
 
 if [ "${ELSPAIS_TIA_RECORD:-}" = "1" ]; then
-    _dest="${ELSPAIS_TIA_BASELINE:-$_repo/.results/tia/baseline}"
-    if python -m tools.tia baseline build --run-dir "$TIA_RECORD_DIR" \
-        --coverage "$_out/.coverage" --dest "$_dest"; then
-        echo "== TIA baseline recorded in $_dest"
-    else
-        echo "WARNING: the TIA baseline could not be built (the tier's verdict is unaffected)" >&2
+    if ! python -m tools.tia baseline build --only-if-passed \
+        --run-dir "$TIA_RECORD_DIR" --coverage "$_out/.coverage"; then
+        echo "WARNING: no TIA baseline was published (the tier's verdict is unaffected)" >&2
     fi
 fi
 exit "$_rc"

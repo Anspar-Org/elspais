@@ -349,6 +349,33 @@ def list_index_files(repo_root: Path) -> list[str]:
     return [path for path in result.stdout.split("\0") if path]
 
 
+# Implements: REQ-d00333-F
+def commit_state(repo_root: Path) -> tuple[str, bool | None]:
+    """Return the full commit HEAD names and whether the tree holds changes no commit holds.
+
+    A *Result Fingerprint* records both, so a reader learns which tree a run
+    executed in. An empty commit means that git named none; ``None`` means
+    that git could not say whether the tree holds changes.
+    """
+    try:
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return "", None
+    commit = head.stdout.strip() if head.returncode == 0 else ""
+    try:
+        dirty: bool | None = bool(list_uncommitted_files(repo_root))
+    except (subprocess.CalledProcessError, OSError):
+        dirty = None
+    return commit, dirty
+
+
 # Implements: REQ-d00322-D
 def list_uncommitted_files(repo_root: Path) -> list[str]:
     """Return the repo-relative path of every file holding a change no commit holds.

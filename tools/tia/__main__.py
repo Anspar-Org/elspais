@@ -1,13 +1,15 @@
 """Command line: python -m tools.tia <command>.
 
-    baseline build   merge a recorded run into a baseline directory
+    baseline build   merge a recorded run into the baseline and publish it
     baseline show    validate a baseline and print what it holds
+    baseline path    print where the baseline lives
     select           compute the selection and write its manifest
     run              select, then run the selected tests with pytest
     compare          compare a TIA run with a full run of the same revision
     calibrate        run TIA and the full suite on this revision and compare
 
-Environment: TIA_BASELINE (baseline directory, default .results/tia/baseline),
+Environment: ELSPAIS_TIA_BASELINE (the baseline directory; default
+.results/tia/baseline in this worktree's root),
 TIA_FULL=1 (bypass selection: run the full suite).
 """
 
@@ -18,12 +20,11 @@ import json
 import os
 import sys
 
-from .baseline import BaselineError, build_baseline, load_baseline
+from .baseline import BASELINE_ENV, BaselineError, baseline_dir, build_baseline, load_baseline
 from .config import load_config
 from .gitio import repo_root
 from .selector import select
 
-DEFAULT_BASELINE = os.path.join(".results", "tia", "baseline")
 DEFAULT_OUT = os.path.join(".results", "tia", "run")
 
 
@@ -80,9 +81,15 @@ def _print_summary(m: dict, out=sys.stdout) -> None:
 
 def cmd_baseline(args) -> int:
     root = repo_root()
+    if args.action == "path":
+        print(args.baseline)
+        return 0
     if args.action == "build":
+        dest = args.baseline
         try:
-            m = build_baseline(args.run_dir, args.dest, args.coverage)
+            m = build_baseline(
+                args.run_dir, dest, args.coverage, only_if_passed=args.only_if_passed
+            )
         except BaselineError as exc:
             print(f"tia: cannot build a baseline: {exc}", file=sys.stderr)
             return 2
@@ -90,7 +97,7 @@ def cmd_baseline(args) -> int:
         print(
             f"tia: baseline of {len(m['tests'])} tests at tree {m['identity']['tree']} "
             f"(commit {m['identity']['commit']}, {len(m['identity']['dirty'])} dirty file(s), "
-            f"{len(bad)} not passing) -> {args.dest}"
+            f"{len(bad)} not passing) -> {dest}"
         )
         if m["errors"]:
             print(
@@ -203,14 +210,22 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     def common(sp):
-        sp.add_argument("--baseline", default=os.environ.get("TIA_BASELINE", DEFAULT_BASELINE))
+        sp.add_argument(
+            "--baseline",
+            default=None,
+            help=f"baseline directory (default ${BASELINE_ENV}, else this worktree's own)",
+        )
         sp.add_argument("--config", default=None, help="rule file (default tools/tia/config.toml)")
 
     b = sub.add_parser("baseline", help="build or inspect a baseline")
-    b.add_argument("action", choices=["build", "show"])
+    b.add_argument("action", choices=["build", "show", "path"])
     b.add_argument("--run-dir", help="directory holding the recorder's tia-shard-*.json")
     b.add_argument("--coverage", help="the run's .coverage file (default <run-dir>/.coverage)")
-    b.add_argument("--dest", default=DEFAULT_BASELINE)
+    b.add_argument(
+        "--only-if-passed",
+        action="store_true",
+        help="publish nothing unless the run passed outright",
+    )
     common(b)
     b.set_defaults(func=cmd_baseline)
 
@@ -251,8 +266,16 @@ def main(argv: list[str] | None = None) -> int:
     k.set_defaults(func=cmd_calibrate)
 
     args = p.parse_args(argv)
+    if "TIA_BASELINE" in os.environ:
+        print(
+            f"tia: TIA_BASELINE is not read; name the baseline directory with {BASELINE_ENV}",
+            file=sys.stderr,
+        )
+        return 2
     if getattr(args, "pytest_args", None) and args.pytest_args[0] == "--":
         args.pytest_args = args.pytest_args[1:]
+    if hasattr(args, "baseline") and not args.baseline:
+        args.baseline = baseline_dir(repo_root())
     return args.func(args)
 
 

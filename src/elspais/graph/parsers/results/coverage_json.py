@@ -91,6 +91,12 @@ class CoverageJsonParser(DiagnosticRecorder):
                 "covered_lines": covered_lines,
                 "contexts": contexts,
             }
+            # Implements: REQ-d00333-J+L
+            # Coverage a run retained records the digest of the file it
+            # measured and the runs that measured it.
+            provenance = file_data.get("elspais")
+            if isinstance(provenance, dict):
+                results[file_path]["provenance"] = provenance
 
         return results
 
@@ -107,6 +113,72 @@ class CoverageJsonParser(DiagnosticRecorder):
         """
         name = file_path.name.lower()
         return file_path.suffix.lower() == ".json" and "coverage" in name
+
+
+# Implements: REQ-d00333-J
+def render_coverage_json(readings: dict[str, dict]) -> str:
+    """Write per-file readings, in the shape :meth:`CoverageJsonParser.parse` returns, as JSON.
+
+    The parser reads the text back to the same readings, provenance included.
+    """
+    files: dict[str, dict] = {}
+    for path in sorted(readings):
+        data = readings[path]
+        lines = data.get("line_coverage") or {}
+        entry: dict = {
+            "executed_lines": sorted(int(n) for n, hit in lines.items() if hit),
+            "missing_lines": sorted(int(n) for n, hit in lines.items() if not hit),
+            "summary": {
+                "num_statements": data.get("executable_lines", len(lines)),
+                "covered_lines": sum(1 for hit in lines.values() if hit),
+            },
+        }
+        if data.get("contexts"):
+            entry["contexts"] = {str(n): list(c) for n, c in sorted(data["contexts"].items())}
+        if data.get("provenance"):
+            entry["elspais"] = data["provenance"]
+        files[path] = entry
+    return json.dumps({"files": files}, indent=1, sort_keys=True) + "\n"
+
+
+# Implements: REQ-d00333-J+L
+def merge_readings(a: dict | None, b: dict | None) -> dict:
+    """One file's line coverage from two readings of it, keeping both provenances.
+
+    A line counts the most hits either reading gives it, and holds every test
+    context either recorded. The executable count is the larger. The runs
+    that measured either reading are named once each, in order. Where only
+    one reading exists it is returned as it is.
+    """
+    if not a or not b:
+        return dict(a or b or {})
+    lines = dict(a.get("line_coverage") or {})
+    for line, hit in (b.get("line_coverage") or {}).items():
+        lines[line] = max(lines.get(line, 0), hit)
+    contexts: dict[int, list[str]] | None = None
+    if a.get("contexts") or b.get("contexts"):
+        contexts = {}
+        for reading in (a, b):
+            for line, names in (reading.get("contexts") or {}).items():
+                contexts[line] = sorted(set(contexts.get(line, [])) | set(names))
+    runs: list[dict] = []
+    for reading in (a, b):
+        for run in (reading.get("provenance") or {}).get("measured_in", []):
+            if run not in runs:
+                runs.append(run)
+    provenance = dict(a.get("provenance") or b.get("provenance") or {})
+    if runs:
+        provenance["measured_in"] = runs
+    out = {
+        **a,
+        "line_coverage": lines,
+        "executable_lines": max(a.get("executable_lines", 0), b.get("executable_lines", 0)),
+        "covered_lines": sum(1 for hit in lines.values() if hit),
+        "contexts": contexts,
+    }
+    if provenance:
+        out["provenance"] = provenance
+    return out
 
 
 def create_parser() -> CoverageJsonParser:

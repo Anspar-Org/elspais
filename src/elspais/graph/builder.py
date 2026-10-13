@@ -7167,7 +7167,7 @@ class GraphBuilder:
             # Implements: REQ-d00131-G
             # Store raw comment text for render protocol
             node.set_field("raw_text", content.raw_text)
-            # Implements: REQ-d00254-U
+            # Implements: REQ-d00332-H
             # function_end_line records the last line of the declaration. A
             # group of tests is one such declaration. If a result binds to a
             # test inside the group, then the result also reaches the group.
@@ -7302,6 +7302,11 @@ class GraphBuilder:
             # Why the results of this result's target are stale, where they
             # are. Empty for results the current tree produced.
             "stale_reason": data.get("stale_reason", ""),
+            # Implements: REQ-d00323-L+M
+            # The run that executed the test of a Retained Result, and why a
+            # later run retained it. Absent for every other result.
+            "retained_from": data.get("retained_from"),
+            "retained_reason": data.get("retained_reason"),
             "target": data.get("target"),
             # Results-file provenance: where this result was RECORDED
             # (e.g. junit.xml path + <testcase> line), distinct from
@@ -8066,7 +8071,7 @@ class GraphBuilder:
                 if target is not None:
                     target.link(result_node, EdgeKind.YIELDS)
                     result_node.set_field("match_scope", "test")
-                    # Implements: REQ-d00254-U
+                    # Implements: REQ-d00332-H
                     # A runner reports the tests inside a group. It never
                     # reports the group itself. Consequently, a citation on
                     # the group takes its verdict from the results of its tests.

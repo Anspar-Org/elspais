@@ -420,7 +420,7 @@ class FileDispatcher:
         results.extend(_fault_and_style_content(transformer))
         return results
 
-    # Implements: REQ-d00254-K, REQ-d00331-A
+    # Implements: REQ-d00332-A, REQ-d00331-A
     def dispatch_test(
         self,
         content: str,
@@ -464,7 +464,7 @@ class FileDispatcher:
         # Pre-scan for function/class context
         is_python = file_path.endswith(".py")
         is_dart = file_path.endswith(".dart")
-        # Implements: REQ-d00254-K, REQ-d00269-E
+        # Implements: REQ-d00332-A, REQ-d00269-E
         # The content is parsed ONCE: the tests it holds and the quoted lines
         # are both read from this one reading.
         syntax = read_python(content) if is_python else None
@@ -474,7 +474,7 @@ class FileDispatcher:
         # Dart test needs it: its result may record no source line to bind by.
         test_names: dict[int, str] = dart_test_names(lines) if reads_test_names(file_path) else {}
 
-        # Implements: REQ-d00254-N
+        # Implements: REQ-d00332-D
         if prescan_data and file_path in prescan_data:
             line_context, all_test_funcs = external_prescan(prescan_data[file_path], lines)
         elif is_python:

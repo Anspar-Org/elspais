@@ -15,7 +15,7 @@ test's ``testStart`` and ``testDone`` events.
 scenario declared in a shared file and executed through a runner file. The
 test's citations sit at the declaration. Consequently, a ``file:`` URL naming
 a Dart source file in ``test.url`` gives ``source_path`` and ``line``, and
-``suite.path`` gives ``runner_path`` (REQ-d00254-Z).
+``suite.path`` gives ``runner_path`` (REQ-d00254-G).
 
 Any other URL names no Dart source line (REQ-d00284-D). For ``testWidgets(...)``,
 ``test.url`` names a frame inside ``package:flutter_test``; for a test run in a
@@ -38,23 +38,9 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from urllib.parse import urlparse
-from urllib.request import url2pathname
 
 from elspais.graph.parsers.results.diagnostics import DiagnosticRecorder
-
-
-def _file_url_path(url: Any) -> str | None:
-    """The path a ``file:`` URL names, or ``None`` for any other URL.
-
-    Dart writes ``file:///abs/path``, and ``file:///C:/abs/path`` on Windows.
-    The platform's own conversion turns the URL path into a local path, so a
-    Windows drive letter is kept. A ``package:`` or ``dart:`` URL names no
-    file of the project.
-    """
-    if isinstance(url, str) and url.startswith("file://"):
-        return url2pathname(urlparse(url).path)
-    return None
+from elspais.graph.parsers.results.placement import file_url_path
 
 
 # Implements: REQ-d00284-D
@@ -64,7 +50,7 @@ def _dart_source_path(url: Any) -> str | None:
     Only such a file holds the line a test is declared on. A compiled
     ``.dart.js`` file, which a browser run reports, holds lines of no source.
     """
-    path = _file_url_path(url)
+    path = file_url_path(url)
     return path if path is not None and path.endswith(".dart") else None
 
 
@@ -113,7 +99,7 @@ class FlutterMachineParser(DiagnosticRecorder):
                 suites[s.get("id")] = s.get("path", "")
             elif etype == "testStart":
                 t = ev.get("test", {})
-                # Implements: REQ-d00254-Z, REQ-d00284-D
+                # Implements: REQ-d00254-G, REQ-d00284-D
                 # A URL that names no Dart source file -- a framework frame,
                 # or the compiled script a browser ran -- has a line of no
                 # source, so the record keeps no line from it. A stream
