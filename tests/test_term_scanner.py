@@ -728,20 +728,18 @@ def test_REQ_d00238_D_non_excluded_file_not_skipped():
 # =============================================================================
 # FederatedGraph._scan_terms() tests
 #
-# Verifies: REQ-d00239
-#
-# Validates REQ-d00239-A+B: federated term scanning runs across all repos
-# using merged TermDictionary with per-repo config isolation.
+# Federated term scanning runs across all repos, each against the terms it
+# reads, with per-repo config isolation.
 # =============================================================================
 
 
-# -- REQ-d00239-A: Cross-repo resolution using merged TermDictionary ----------
+# -- scan_graph records references to whatever dictionary it is handed -------
 
 
-# Verifies: REQ-d00239-A
-def test_REQ_d00239_A_cross_repo_term_resolution():
+# Verifies: REQ-d00238-A
+def test_REQ_d00238_A_term_from_another_dictionary_owner_is_recorded():
     """Term defined in repo A is found in repo B's requirement text."""
-    # Build a merged TermDictionary with "widget" (defined in repo A)
+    # A dictionary holding "widget", which repo A defines
     td = _make_td(("widget", True))
 
     # Repo B has a requirement mentioning "widget"
@@ -750,7 +748,7 @@ def test_REQ_d00239_A_cross_repo_term_resolution():
     req_node.file_node.return_value = file_node
     graph_b = _mock_graph({NodeKind.REQUIREMENT: [req_node]})
 
-    # Simulate what _scan_terms does: call scan_graph with merged dict
+    # Hand scan_graph the dictionary repo B reads
     scan_graph(td, graph_b, namespace="repo-b")
 
     entry = td.lookup("widget")
@@ -761,8 +759,8 @@ def test_REQ_d00239_A_cross_repo_term_resolution():
     assert refs[0].namespace == "repo-b"
 
 
-# Verifies: REQ-d00239-A
-def test_REQ_d00239_A_multiple_repos_accumulate_references():
+# Verifies: REQ-d00238-A
+def test_REQ_d00238_A_multiple_repos_accumulate_references():
     """References from multiple repos accumulate in the merged dictionary."""
     td = _make_td(("widget", True))
 
@@ -788,8 +786,8 @@ def test_REQ_d00239_A_multiple_repos_accumulate_references():
     assert namespaces == {"repo-a", "repo-b"}
 
 
-# Verifies: REQ-d00239-A
-def test_REQ_d00239_A_scan_terms_method_exists_and_calls_scan_graph():
+# Verifies: REQ-d00239-B
+def test_REQ_d00239_B_scan_terms_method_exists_and_calls_scan_graph():
     """FederatedGraph._scan_terms() exists and invokes scan_graph per repo."""
     from pathlib import Path
     from unittest.mock import patch
@@ -1041,7 +1039,10 @@ def test_REQ_d00200_K_refederating_a_held_graph_is_refused_and_counts_stay():
 
 
 def _two_repo_term_federation():
-    """Repo A defines "widget"; both repos reference it. Returns (fed, entries)."""
+    """Repo A defines "widget"; repo B declares A, and both reference it.
+
+    Returns (fed, entries).
+    """
     from pathlib import Path
 
     from elspais.graph.federated import FederatedGraph, RepoEntry
@@ -1074,6 +1075,7 @@ def _two_repo_term_federation():
             config={
                 "project": {"name": "repo-b", "namespace": "REPOB"},
                 "terms": {"markup_styles": ["*"]},
+                "associates": {"repo-a": {"path": "../repo-a", "namespace": "REPOA"}},
             },
             repo_root=Path("/tmp/repo-b"),
         ),
@@ -1081,12 +1083,12 @@ def _two_repo_term_federation():
     return FederatedGraph(repos=list(entries)), entries
 
 
-# Verifies: REQ-d00239-A+D, REQ-d00200-K
+# Verifies: REQ-d00239-D+E, REQ-d00200-K
 def test_REQ_d00239_D_refused_refederation_keeps_the_cross_repo_reference():
     """A refused further federation over a live member leaves the set whole.
 
-    A term defined in one repo collects the references made to it in
-    another. Trying to federate a live member again is refused, and the
+    A term defined in one repo collects the references made to it in a
+    repo declaring it. Trying to federate a live member again is refused, and the
     reference set the original federation holds neither loses the
     reference from the other repo nor gains a copy of any.
     """

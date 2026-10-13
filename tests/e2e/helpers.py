@@ -926,5 +926,9 @@ def mcp_call_all(proc: subprocess.Popen, tool: str, args: dict, msg_id: int | No
     response = _mcp_recv(proc)
     if "error" in response:
         return [{"_error": response["error"]}]
-    content = response["result"]["content"]
-    return [json.loads(item["text"]) for item in content]
+    result = response["result"]
+    # A tool's error result is reported as it is for mcp_call: its text is
+    # not the tool's answer and need not be JSON.
+    if result.get("isError"):
+        return [{"_error": result["content"][0]["text"] if result.get("content") else "unknown"}]
+    return [json.loads(item["text"]) for item in result["content"]]

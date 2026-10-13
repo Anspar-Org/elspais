@@ -399,7 +399,7 @@ function _deactivateEditMode() {
     // canonical raw source — last write wins via onAssertionBlur.
     document.querySelectorAll('.card-assertion-text').forEach(function(el) {
         el.contentEditable = 'false';
-        el.innerHTML = simpleMarkdown(el.dataset.original || '', true);
+        el.innerHTML = simpleMarkdown(el.dataset.original || '', el.dataset.termNamespace || '');
     });
     // Hide comment mode button and exit comment mode if active
     var commentBtn = document.getElementById('btn-comment-mode');

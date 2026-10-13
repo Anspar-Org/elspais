@@ -452,7 +452,9 @@ assertion deletion locates a citing requirement at its Requirement
 Location, the line that declares its identifier.
 A tool called with an argument it does not declare does nothing and answers
 `code: "undeclared_argument"`, listing the undeclared arguments under
-`undeclared` and the ones the tool takes under `accepted`.
+`undeclared` and the ones the tool takes under `accepted`. This refusal, and
+`executable_changed`, arrive as the call's error result (`isError`), whose
+text is the refusal as JSON, whatever the tool answers with otherwise.
 `mutate_add_requirement` accepts an optional `file_id` to place the new
 requirement into a chosen file; when given, `if_version` guards that FILE.
 `mutate_move_node_to_file` creates a missing destination file itself

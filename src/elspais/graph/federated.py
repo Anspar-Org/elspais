@@ -416,7 +416,7 @@ class FederatedGraph:
         self._federated_log._bind_repos(self._repos)
         # Implements: REQ-d00222-C
         self._merge_terms()
-        # Implements: REQ-d00239-A
+        # Implements: REQ-d00239-E
         self._scan_terms()
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -451,18 +451,83 @@ class FederatedGraph:
                 owned.add(replace(term_entry, repo_name=entry.name, references=[]))
             self._term_duplicates.extend(merged.merge(owned))
         self._terms = merged
+        self._terms_read_in: dict[str, TermDictionary] = {}
+        for namespace in self._repos:
+            readable = TermDictionary()
+            for reached in self._declaration_closure(namespace):
+                for term_entry in self._repos[reached].graph._terms.iter_all():
+                    readable.add(merged.lookup(term_entry.term))
+            self._terms_read_in[namespace] = readable
 
-    # Implements: REQ-d00239-A+B+C+D
+    # Implements: REQ-d00239-E
+    def _declaration_closure(self, namespace: str) -> list[str]:
+        """The member and every member its associate declarations reach.
+
+        Declarations are read from each member's own configuration, and only
+        a namespace this federation holds is followed: a declaration set
+        aside for want of a path reaches no member.
+        """
+        from elspais.graph.federation_plan import declared_associates
+
+        reached = [namespace]
+        for current in reached:
+            entry = self._repos[current]
+            for info in declared_associates(entry.config, entry.repo_root).values():
+                declared = info["namespace"]
+                if declared in self._repos and declared not in reached:
+                    reached.append(declared)
+        return reached
+
+    # Implements: REQ-d00239-E
+    def terms_read_in(self, namespace: str) -> TermDictionary:
+        """The terms read in the text of the member holding *namespace*.
+
+        Those are the terms the member defines and the terms every member its
+        associate declarations reach defines. A library declares nothing
+        about its consumers, so its text never reads a consumer's term.
+
+        The dictionary holds this federation's own entries, so a reference
+        recorded through it lands on the term ``terms`` reports. Where two
+        members define one term the federation holds one entry for it, and
+        a member defining it reads that entry.
+
+        # Strategy: special
+        """
+        return self._terms_read_in[namespace]
+
+    # Implements: REQ-d00239-E
+    def members_reading(self, term: str) -> list[str]:
+        """The namespaces of the members whose text reads *term*.
+
+        The inverse of ``terms_read_in``, for a surface that holds a term and
+        marks it in text it knows the member of.
+
+        # Strategy: special
+        """
+        entry = self._terms.lookup(term)
+        if entry is None:
+            return []
+        return [
+            namespace
+            for namespace, readable in self._terms_read_in.items()
+            if readable.lookup(term) is entry
+        ]
+
+    # Implements: REQ-d00239-B+C+D+E
     def _scan_terms(self) -> None:
-        """Run term scanner across all repos using the merged dictionary.
+        """Run the term scanner over every repo, each against the terms it reads.
 
         A scan ESTABLISHES the reference set rather than adding to one.
-        ``scan_graph`` appends, and every repo is scanned against the one
-        merged dictionary so that a term defined in one repo collects the
-        references made to it in another, so the set is only whole once
-        every repo has been walked. Each entry's list is cleared before the
-        first repo is walked, and ``_merge_terms`` supplies entries that
-        belong to this graph alone.
+        ``scan_graph`` appends, and a term one repo defines collects the
+        references made to it in every repo whose declarations reach that
+        repo, so the set is only whole once every repo has been walked. Each entry's list
+        is cleared before the first repo is walked, and ``_merge_terms``
+        supplies entries that belong to this graph alone.
+
+        Each repo is scanned against the ``terms_read_in`` its namespace. A repo
+        reading no terms is not scanned at all, so it reports no emphasis as
+        naming an undefined term either -- the same as a lone repository
+        defining none.
 
         Uses per-repo config for markup_styles and exclude_files so that
         cross-repo term references resolve correctly.  Always canonicalizes
@@ -489,7 +554,7 @@ class FederatedGraph:
             terms_cfg = config.get("terms", {})
             req_namespace = config["project"]["namespace"]
             unmatched = scan_graph(
-                self._terms,
+                self.terms_read_in(entry.namespace),
                 entry.graph,
                 namespace=req_namespace,
                 markup_styles=terms_cfg.get("markup_styles"),

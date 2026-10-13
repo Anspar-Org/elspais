@@ -159,7 +159,7 @@
 | REQ-d00236 | Comment Extraction Utilities                                  | prd-core.md             | 26d0fdd6 |
 | REQ-d00237 | Term Reference Scanner Core                                   | prd-core.md             | 637ac760 |
 | REQ-d00238 | Graph-Wide Term Scan                                          | prd-core.md             | b14edde9 |
-| REQ-d00239 | Federated Graph Term Scanner Pass                             | prd-core.md             | acd14bba |
+| REQ-d00239 | Federated Graph Term Scanner Pass                             | prd-core.md             | 0dc7a13a |
 | REQ-d00240 | New Term Health Checks                                        | prd-core.md             | b4e70076 |
 | REQ-d00241 | Code No-Traceability Health Check                             | prd-core.md             | 0a2e48b7 |
 | REQ-d00242 | Terms API Endpoints                                           | prd-features.md         | a4522e0f |

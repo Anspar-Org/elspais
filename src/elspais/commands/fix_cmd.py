@@ -1107,8 +1107,8 @@ def _select_terms_dictionary(graph, include_associates: bool):
     (default) returns the terms the root repository defines, taken from the
     federation's own dictionary: the references to a term are established
     by the federated scan and live only on the federation's entries, so a
-    primary-only artifact still lists the references made to the root's
-    terms from every member.
+    primary-only artifact takes the root's terms from there to list their
+    references.
     """
     from elspais.graph.terms import TermDictionary
 
@@ -1185,10 +1185,10 @@ def _fix_terms(args: argparse.Namespace, dry_run: bool) -> None:
 
     from elspais.commands.glossary_cmd import write_term_outputs
 
-    # Even with a primary-only term dictionary, term *references* are collected
-    # by the federated term scan and include associate-repo nodes. When not
-    # indexing associates, drop those references so the term index/collection
-    # manifests don't surface associate-namespace sections. Implements: REQ-d00253-C
+    # When not indexing associates, keep every other member's references out of
+    # the term index and collection manifests, so they surface no
+    # associate-namespace section whatever the federated term scan recorded
+    # on the root's terms. Implements: REQ-d00253-C
     ref_filter = None
     if not include_assoc:
         assoc_ns = _foreign_namespaces(graph)

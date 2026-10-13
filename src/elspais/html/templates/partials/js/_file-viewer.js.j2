@@ -147,7 +147,7 @@ function fvRenderContent(data, lineNumber) {
                 ) {
                     j++;
                 }
-                var blockHtml = fvRenderMarkdown(rawLines.slice(i, j).join('\n'));
+                var blockHtml = fvRenderMarkdown(rawLines.slice(i, j).join('\n'), data.namespace);
                 var gutter = '';
                 for (var k = i; k < j; k++) {
                     gutter += '<span class="line-num" data-line="' + (k + 1) +
@@ -166,7 +166,7 @@ function fvRenderContent(data, lineNumber) {
                 '" id="fv-line-' + num + '">' +
                 '<span class="line-num">' + num + '</span>' +
                 '<div class="line-content rendered-line">' +
-                fvRenderMarkdown(rawLines[i]) + '</div>' +
+                fvRenderMarkdown(rawLines[i], data.namespace) + '</div>' +
                 '</div>';
             i++;
         }
@@ -312,12 +312,14 @@ function _alignTableGutter(block) {
     }
 }
 
-function fvRenderMarkdown(text) {
+{# Implements: REQ-d00239-E #}
+function fvRenderMarkdown(text, namespace) {
     // Extract pipe tables first so the per-line regex pipeline doesn't
     // mangle them. The cellTransform escapes, applies inline emphasis,
-    // and annotates defined terms so cell content links into the term
-    // cards. `_annotateTermsInString` is defined in `_card-stack.js.j2`
-    // and is a no-op when `editState.termsLookup` is empty.
+    // and annotates the defined terms the file's member reads, so cell
+    // content links into the term cards. `_annotateTermsInString` is
+    // defined in `_card-stack.js.j2` and is a no-op when
+    // `editState.termsLookup` is empty or `namespace` names no member.
     var cellTransform = function(cellText) {
         var safe = cellText
             .replace(/&/g, '&amp;')
@@ -327,7 +329,7 @@ function fvRenderMarkdown(text) {
             .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*(.+?)\*/g, '<em>$1</em>')
             .replace(/`([^`]+)`/g, '<code>$1</code>');
-        return _annotateTermsInString(safe);
+        return _annotateTermsInString(safe, namespace);
     };
     var extracted = extractMdTables(text.split('\n'), cellTransform);
     var pipelineText = extracted.lines.join('\n');
@@ -351,7 +353,7 @@ function fvRenderMarkdown(text) {
     // Term-annotate non-table content. Table HTML chunks are reinserted
     // after this pass so cells (already annotated above) are not double-
     // wrapped and `class="md-table"`-style attribute strings stay safe.
-    html = _annotateTermsInString(html);
+    html = _annotateTermsInString(html, namespace);
     return '<p>' + reinsertMdTables(html, extracted.chunks) + '</p>';
 }
 

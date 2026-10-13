@@ -540,11 +540,13 @@ function buildAssertionHtml(nodeId, a, data) {
     // raw escaped text via _activateEditMode/_deactivateEditMode so the
     // user types against the markdown source (textContent roundtrips
     // back to the same source on blur).
+    var termNamespace = (data && data.namespace) || '';
     var initialBody = editState.enabled
         ? escapeHtml(text)
-        : simpleMarkdown(text, true);
+        : simpleMarkdown(text, termNamespace);
     h += '<span class="card-assertion-text editable-field" ' +
         'contenteditable="false" data-assertion-id="' + assertionId + '" ' +
+        'data-term-namespace="' + escapeAttr(termNamespace) + '" ' +
         'data-field="assertion" data-original="' + escapeAttr(text) + '" ' +
         'onblur="onAssertionBlur(this)" onkeydown="onEditableKeydown(event)">' +
         initialBody + '</span>';
@@ -644,7 +646,7 @@ function buildAssertionHtml(nodeId, a, data) {
     return h;
 }
 
-function buildRemainderHtml(nodeId, rem, idx) {
+function buildRemainderHtml(nodeId, rem, idx, data) {
     var h = '';
     var remId = rem.id || '';
     var isPreamble = (rem.heading === 'preamble' || rem.continuation === true);
@@ -668,7 +670,7 @@ function buildRemainderHtml(nodeId, rem, idx) {
     }
     h += '</div>';
     h += '<div class="card-body-section-content remainder-text-view" id="body-section-content-' + nodeId + '-' + idx + '">' +
-        simpleMarkdown(rem.text || '', true) + '</div>';
+        simpleMarkdown(rem.text || '', (data && data.namespace) || '') + '</div>';
     if (!isDefBlock) {
         h += '<textarea class="edit-only remainder-text-edit" data-node-id="' + escapeAttr(remId) + '"' +
             ' data-original="' + escapeAttr(rem.text || '') + '"' +
@@ -1009,7 +1011,7 @@ function buildCardHtml(nodeId, data, collapsed) {
                 }
                 html += buildAssertionHtml(nodeId, item.data, data);
             } else {
-                html += buildRemainderHtml(nodeId, item.data, item.idx);
+                html += buildRemainderHtml(nodeId, item.data, item.idx, data);
             }
         });
         html += '</div>';
@@ -1183,7 +1185,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
     if (props.context || editState.enabled) {
         html += '<div class="card-body-section-wrapper">';
         html += '<div class="card-body-section-heading"><span>Context</span></div>';
-        html += '<div class="card-body-section-content journey-field-view">' + simpleMarkdown(props.context || '', true) + '</div>';
+        html += '<div class="card-body-section-content journey-field-view">' + simpleMarkdown(props.context || '', data.namespace || '') + '</div>';
         html += '<textarea class="edit-only journey-field-edit" data-field="context" data-journey-id="' + nodeId + '"' +
             ' onblur="onJourneyFieldBlur(this)"' +
             ' style="width:100%;min-height:120px;font-size:0.8rem;border:1px solid var(--border-color);border-radius:4px;padding:6px;resize:vertical;background:var(--card-bg);color:var(--input-text);">' +
@@ -1380,7 +1382,7 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
         html += '<button class="edit-only journey-section-delete" onclick="onDeleteJourneySection(\'' + nodeId + '\', \'' + escapeAttr(sec.name) + '\')" title="Delete section">&times;</button>';
         html += '</div>';
         // Section content — view + edit
-        html += '<div class="card-body-section-content journey-section-content-view">' + simpleMarkdown(sec.content || '', true) + '</div>';
+        html += '<div class="card-body-section-content journey-section-content-view">' + simpleMarkdown(sec.content || '', data.namespace || '') + '</div>';
         html += '<textarea class="edit-only journey-section-content-edit" data-journey-id="' + nodeId + '"' +
             ' data-section-name="' + escapeAttr(sec.name) + '" onblur="onJourneySectionContentBlur(this)"' +
             ' style="width:100%;min-height:120px;font-size:0.8rem;border:1px solid var(--border-color);border-radius:4px;padding:6px;resize:vertical;background:var(--card-bg);color:var(--input-text);">' +
@@ -1475,7 +1477,9 @@ function buildGenericCardHtml(nodeId, data, collapsed) {
 // Simple Markdown Renderer (for journey body text)
 // =====================================================================
 
-{# Implements: REQ-d00245-A #}
+{# Implements: REQ-d00245-A, REQ-d00239-E #}
+// `annotateTerms` names the namespace of the member whose text this is; only
+// the terms that member reads are marked, and an empty one marks none.
 function simpleMarkdown(text, annotateTerms) {
     // Phase 1: extract pipe tables into HTML chunks keyed by placeholder.
     // Cell content is escaped, bold-transformed, and term-annotated
@@ -1485,7 +1489,7 @@ function simpleMarkdown(text, annotateTerms) {
         var safe = escapeHtml(cellText);
         safe = safe.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
         if (annotateTerms) {
-            safe = _annotateTermsInString(safe);
+            safe = _annotateTermsInString(safe, annotateTerms);
         }
         return safe;
     };
@@ -1507,7 +1511,7 @@ function simpleMarkdown(text, annotateTerms) {
 
     // Phase 3: term annotation on non-table content only.
     if (annotateTerms) {
-        output = _annotateTermsInString(output);
+        output = _annotateTermsInString(output, annotateTerms);
     }
 
     // Phase 4: reinsert table HTML at placeholder positions.
@@ -1516,7 +1520,16 @@ function simpleMarkdown(text, annotateTerms) {
     return output;
 }
 
-function _annotateTermsInString(s) {
+{# Implements: REQ-d00239-E #}
+// Marks the defined terms in `s` that the member named by `namespace` reads.
+// Which members read a term is the server's answer (`read_in` on /api/terms);
+// this only looks the namespace up in it.
+function _termReadIn(entry, namespace) {
+    return !!namespace && (entry.read_in || []).indexOf(namespace) >= 0;
+}
+
+function _annotateTermsInString(s, namespace) {
+    if (!namespace) return s;
     if (!editState.termsLookup || Object.keys(editState.termsLookup).length === 0) {
         return s;
     }
@@ -1527,7 +1540,7 @@ function _annotateTermsInString(s) {
     return s.replace(editState.termsRegex, function(match) {
         var key = match.toLowerCase();
         var entry = editState.termsLookup[key];
-        if (!entry) return match;
+        if (!entry || !_termReadIn(entry, namespace)) return match;
         var tip = entry.definition_short || entry.definition || '';
         if (tip.length > 80) tip = tip.substring(0, 80) + '...';
         return '<span class="defined-term" data-term-key="' + escapeAttr(key) +

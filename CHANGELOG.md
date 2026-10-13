@@ -36,6 +36,10 @@ All notable changes to elspais will be documented in this file.
 
 - **Every full unit run a hook makes records the worktree's TIA baseline** -- each worktree records its own baseline in `.results/tia/baseline` from its own passing full unit run, so a new worktree's first commit runs the full tier. `python -m tools.tia baseline path` prints the location, and `ELSPAIS_TIA_BASELINE` names another; every command and hook resolves it the same way, and `TIA_BASELINE` is refused naming that variable. Only a run that passed publishes a baseline, so a failing run never replaces a good one. A concurrent reader sees the previous baseline or the new one whole, never a mixture.
 
+- **A federation member's text is read against the terms it defines and those of the members its associate declarations reach, and no others (REQ-d00239-E)**, so a library's text records no reference to, is not reported for, is never marked with, and is not highlighted in the viewer with a term only its consumer defines.
+
+- **An MCP refusal reaches the client of a tool that answers with a list (REQ-o00077-F, REQ-p00060-F)** -- `executable_changed` and `undeclared_argument` now arrive as the call's error result carrying the refusal as JSON, rather than as a report that the tool's output failed validation.
+
 ### TOOL-148
 
 - **A fix leaves a file holding a requirement it cannot correct unchanged (REQ-d00250-G+H)** -- a full fix that also had another file to fix still rewrote such a file, although it reported skipping it. A fix named for that requirement, or for another requirement in the same file, wrote the file and exited 0. Both now leave the file as it is and exit 1, naming the requirement to move to a shallower heading.
