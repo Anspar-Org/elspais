@@ -3,6 +3,9 @@
 Reads coverage.py's own data file (the default ``.coverage``, written by
 ``coverage run`` / pytest-cov's ``--cov-context=test``) directly via
 coverage.py's PUBLIC API -- **not** by querying the SQLite schema by hand.
+The statement set of each file comes from coverage.py's own reporter for
+Python source, the one ``Coverage.analysis2`` uses, and the executed lines
+from the per-line contexts map where that map is read.
 Produces the same per-file dict shape as ``CoverageJsonParser`` (see that
 module's docstring) so the factory's coverage-annotation loop needs no
 format-specific handling beyond ``can_parse()`` detection.
@@ -94,6 +97,7 @@ class CoverageSqliteParser(DiagnosticRecorder):
         try:
             import coverage
             from coverage.exceptions import CoverageException
+            from coverage.python import PythonFileReporter
         except ImportError:
             _log.warning(_INSTALL_HINT)
             self._record_diagnostic(source_path, _INSTALL_HINT)
@@ -120,8 +124,19 @@ class CoverageSqliteParser(DiagnosticRecorder):
         results: dict[str, dict] = {}
 
         for file_path in cov_data.measured_files():
+            # Every line a test ran is a key of the per-line contexts map, so
+            # where the map is read, the executed lines are taken from it. That
+            # decodes each test's line data once; a second call to
+            # ``lines()`` would decode all of it again.
+            contexts = self._contexts_for(cov_data, file_path, wanted_files)
+            if contexts is not None:
+                executed = set(contexts)
+            else:
+                executed = set(cov_data.lines(file_path) or [])
             try:
-                _, statements, _excluded, missing, _ = cov.analysis2(file_path)
+                reporter = PythonFileReporter(file_path, coverage=cov)
+                statements = reporter.lines()
+                ran = reporter.translate_lines(executed) & statements
             except (CoverageException, OSError, sqlite3.Error) as exc:
                 # Implements: REQ-d00254-P+Q, REQ-d00285-G
                 # Re-analysing the source is what produces the statement set;
@@ -138,26 +153,21 @@ class CoverageSqliteParser(DiagnosticRecorder):
                     f"line count is unknown: {exc}",
                     partial=True,
                 )
-                executed = cov_data.lines(file_path) or []
                 results[file_path] = {
                     "line_coverage": dict.fromkeys(executed, 1),
                     "executable_lines": 0,
                     "covered_lines": len(executed),
-                    "contexts": self._contexts_for(cov_data, file_path, wanted_files),
+                    "contexts": contexts,
                     "source_analysed": False,
                 }
                 continue
 
-            missing_set = set(missing)
-            line_coverage = {ln: (0 if ln in missing_set else 1) for ln in statements}
-            executable_lines = len(statements)
-            covered_lines = executable_lines - len(missing_set)
-
+            line_coverage = {ln: (1 if ln in ran else 0) for ln in statements}
             results[file_path] = {
                 "line_coverage": line_coverage,
-                "executable_lines": executable_lines,
-                "covered_lines": covered_lines,
-                "contexts": self._contexts_for(cov_data, file_path, wanted_files),
+                "executable_lines": len(statements),
+                "covered_lines": len(ran),
+                "contexts": contexts,
                 "source_analysed": True,
             }
 

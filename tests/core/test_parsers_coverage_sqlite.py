@@ -226,3 +226,138 @@ class TestParse:
 
         monkeypatch.setattr(builtins, "__import__", _fake_import)
         assert CoverageSqliteParser().parse("", str(cov_path)) == {}
+
+
+# A module whose statements span several lines. On every supported Python the
+# tracer reports a line event for a continuation line of some of them and none
+# for the line the statement starts on (the bare parenthesised expression, the
+# ``del``), so a statement is covered only where its executed lines are
+# translated to its first line.
+_MULTI_LINE_SOURCE = """\
+def build(x, pair):
+    table = {
+        "a": x,
+        "b": pair,
+    }
+    if (
+        x
+        and pair
+    ):
+        x = x + 1
+    (
+        table.get
+    )
+    del (
+        table
+    )
+    return x
+
+
+def unused(y):
+    pair = (
+        y,
+        y * 2,
+    )
+    return pair
+
+
+def skipped():  # pragma: no cover
+    return 0
+"""
+
+_IMPORT_CONTEXT = "tests/test_multi.py::test_import|run"
+_BUILD_CONTEXT = "tests/test_multi.py::test_build|run"
+
+
+@pytest.fixture
+def multi_line_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    """Returns (mod_path, cov_path) for a `.coverage` DB over multi-line statements.
+
+    The module is imported under one context and `build()` runs under another;
+    `unused()` never runs and `skipped()` is excluded.
+    """
+    mod_path = tmp_path / "multi.py"
+    mod_path.write_text(_MULTI_LINE_SOURCE, encoding="utf-8")
+    cov_path = tmp_path / ".coverage"
+    cov = coverage.Coverage(data_file=str(cov_path), source=[str(tmp_path)])
+    cov.start()
+    try:
+        spec = importlib.util.spec_from_file_location("cov_sqlite_multi_mod", str(mod_path))
+        mod = importlib.util.module_from_spec(spec)
+        cov.switch_context(_IMPORT_CONTEXT)
+        spec.loader.exec_module(mod)
+        cov.switch_context(_BUILD_CONTEXT)
+        mod.build(1, (2, 3))
+    finally:
+        cov.stop()
+    cov.save()
+    return mod_path, cov_path
+
+
+def _analysis_oracle(mod_path: Path, cov_path: Path) -> tuple[set[int], set[int], set[int]]:
+    """coverage.py's own (statements, missing, raw executed lines) for the file."""
+    cov = coverage.Coverage(data_file=str(cov_path), config_file=False)
+    cov.load()
+    _, statements, _excluded, missing, _ = cov.analysis2(str(mod_path))
+    raw = set(cov.get_data().lines(str(mod_path)) or [])
+    return set(statements), set(missing), raw
+
+
+_WANTED = [
+    pytest.param(None, id="all-files"),
+    pytest.param(lambda f: False, id="file-rejected"),
+]
+
+
+class TestMultiLineStatements:
+    def test_fixture_needs_line_translation(self, multi_line_fixture: tuple[Path, Path]) -> None:
+        """Some covered statement has no line event of its own and some
+        traced line is no statement, so the parser can match coverage.py
+        only by translating executed lines to their statements."""
+        mod_path, cov_path = multi_line_fixture
+        statements, missing, raw = _analysis_oracle(mod_path, cov_path)
+
+        assert (statements - missing) - raw, "a covered statement must be untraced"
+        assert raw - statements, "a traced line must lie inside a statement"
+        assert missing, "the fixture must hold an unexecuted statement"
+
+    @pytest.mark.parametrize("wanted_files", _WANTED)
+    def test_line_figures_match_coverage_analysis(
+        self, multi_line_fixture: tuple[Path, Path], wanted_files
+    ) -> None:
+        """line_coverage, executable_lines and covered_lines equal what
+        coverage.py's own analysis reports, whether or not the file's
+        contexts are read."""
+        mod_path, cov_path = multi_line_fixture
+        statements, missing, _raw = _analysis_oracle(mod_path, cov_path)
+
+        results = CoverageSqliteParser().parse("", str(cov_path), wanted_files=wanted_files)
+        data = results[str(mod_path)]
+
+        assert data["source_analysed"] is True
+        assert data["line_coverage"] == {ln: 0 if ln in missing else 1 for ln in statements}
+        assert data["executable_lines"] == len(statements)
+        assert data["covered_lines"] == len(statements - missing)
+
+    def test_rejected_file_carries_no_contexts(self, multi_line_fixture: tuple[Path, Path]) -> None:
+        mod_path, cov_path = multi_line_fixture
+        results = CoverageSqliteParser().parse("", str(cov_path), wanted_files=lambda f: False)
+        assert results[str(mod_path)]["contexts"] is None
+
+    def test_accepted_file_names_the_context_of_each_executed_line(
+        self, multi_line_fixture: tuple[Path, Path]
+    ) -> None:
+        """Every traced line is attributed, lines inside `build()` to the
+        test that called it and every other line to the import."""
+        mod_path, cov_path = multi_line_fixture
+        _statements, _missing, raw = _analysis_oracle(mod_path, cov_path)
+        build_body = range(2, 18)
+
+        results = CoverageSqliteParser().parse("", str(cov_path), wanted_files=lambda f: True)
+        contexts = results[str(mod_path)]["contexts"]
+
+        assert contexts is not None
+        assert set(contexts) == raw
+        for line, names in contexts.items():
+            expected = _BUILD_CONTEXT if line in build_body else _IMPORT_CONTEXT
+            assert names == [expected], f"line {line}"
