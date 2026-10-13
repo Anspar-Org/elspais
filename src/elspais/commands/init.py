@@ -340,8 +340,28 @@ _FIELD_COMMENTS: dict[str, str] = {
         " target scans (default false)"
     ),
     "scanning.test.targets.environment_probes": (
-        "Tables of name and command; each command's output identifies a part of"
-        " the environment, and a change makes the results stale (default: none)"
+        "Tables of name, command and affects_retention; each command's output"
+        " identifies a part of the environment, and a change makes the results"
+        " stale (default: none)"
+    ),
+    "scanning.test.targets.units": (
+        "The target's test files as units a stale-only run executes in part:"
+        " dependencies, observes, receives, full_selection (default: unset)"
+    ),
+    "scanning.test.targets.units.dependencies": (
+        '{ source = "declared" } | { source = "command", command = "..." } --'
+        " where each test file's dependencies come from"
+    ),
+    "scanning.test.targets.units.observes": (
+        "The files the dependency source sees: directories, file_patterns,"
+        " skip_dirs, skip_files (default: the source's own)"
+    ),
+    "scanning.test.targets.units.receives": (
+        '"placeholder" (the command holds {selection}) | "file" (the command'
+        " reads $ELSPAIS_SELECTION) (default placeholder)"
+    ),
+    "scanning.test.targets.units.full_selection": (
+        "What {selection} becomes on a run of every test file (default empty)"
     ),
     "scanning.journey": "User journey file scanning",
     "scanning.journey.directories": "Directories to scan for journey files",
@@ -974,6 +994,11 @@ def generate_config(
         '  { name = "python", command = "python --version" },',
         '  { name = "packages", command = "python -m pip freeze" },',
         "]",
+        "# Tip: declare units, and put {selection} where the test files go, so",
+        "#   a stale-only run executes only the test files whose dependencies",
+        "#   changed: [scanning.test.targets.units]",
+        '#   dependencies = { source = "declared" }',
+        "#   See: elspais docs test-targets (Running part of a target)",
         "# Tip: a relative path in results is read from the repository root, and",
         "#   one in coverage from cwd. A target whose runner writes otherwise says",
         '#   so: results_origin = "working-directory" | coverage_origin =',

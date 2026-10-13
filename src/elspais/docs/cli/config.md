@@ -294,7 +294,10 @@ prescan_command = ""             # External test discovery command
 # and `trace` reads it.
 # A target's `environment_probes` -- tables of name and command -- make the
 # toolchain and installed packages inputs of its results, beside its files
-# and its configuration.
+# and its configuration. A target's `units` table lets a stale-only run
+# execute only the test files whose dependencies changed and retain the
+# earlier results of the rest; a probe declaring `affects_retention = false`
+# executes no test file for its change alone.
 # See: elspais docs test-targets
 
 # `elspais baseline fetch` runs this command to obtain a packed Baseline Run;

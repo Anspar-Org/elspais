@@ -1784,7 +1784,7 @@ M. When the system reports a *Retained Result*, the system SHALL name the earlie
 
 N. The system SHALL treat as carried the line coverage that a run takes from an earlier run of its test target.
 
-O. When a run holds *Retained Results*, the system SHALL state how many *Retained Results* the run holds.
+O. When a run holds *Retained Results*, the system SHALL state, for each test target, how many of its results the run executed and how many the run retained.
 
 P. When the results of a test target include a *Retained Result*, the system SHALL report a finding that lists each *Retained Result* of that target.
 
@@ -1798,11 +1798,11 @@ A result whose fingerprint judgement is stale was produced by a tree other than 
 
 A test target's line coverage is measured by the same run as its results, so it is stale exactly when they are. I, J and K apply the rule for results to the figures line coverage makes -- the executed lines, and the *Assertion* credit taken from them: a figure built only from line coverage the current tree did not produce is marked, and a report of it says why the coverage is stale.
 
-A *Retained Result* describes a tree other than the one being reported on, whatever reason the runner gives for keeping it, so L carries it. M lets a reader judge whether to trust it. It names the run that executed the test, by the tree that run executed in and the time it started, however many later runs retained the result in turn. O states the count, so a reader can tell a target that ran a few tests from one that ran them all. N applies the same rule to line coverage, because the earlier run measured that coverage on another tree.
+A *Retained Result* describes a tree other than the one being reported on, whatever reason the runner gives for keeping it, so L carries it. M lets a reader judge whether to trust it. It names the run that executed the test, by the tree that run executed in and the time it started, however many later runs retained the result in turn. O states both counts for each target, so a reader can tell a target that ran a few tests from one that ran them all, and a run that executed none of a target's tests from one that executed the target in full. N applies the same rule to line coverage, because the earlier run measured that coverage on another tree.
 
 P lets a project decide how much a *Retained Result* matters to it. Retaining is legitimate in a quick local run, while a release may require evidence from the current tree alone, and the severity of the finding is the project's to set.
 
-*End* *Carried Result Provenance* | **Hash**: 58fde1fb
+*End* *Carried Result Provenance* | **Hash**: a322b375
 
 ## REQ-d00327: Origin of a Recorded Source Path
 
@@ -2013,13 +2013,17 @@ F. A run SHALL take as a *Baseline Run* only a recorded run of a tree identical 
 
 G. A run SHALL take a *Retained Result* only for a test whose last execution passed or was skipped.
 
-H. A run of a test target SHALL fail when a test of the current tree has neither a result from that run nor a *Retained Result*.
+H. A run of a test target that declares the source of the *Dependency Evidence* of its tests SHALL fail when a test of the current tree has neither a result from that run nor a *Retained Result*.
 
 I. When a run asks to execute every test of its test targets, that run SHALL take no *Retained Result*.
 
 J. The system SHALL take line coverage of a source file from an earlier run only where that file holds the content it held in the run that measured that coverage.
 
 K. Where a test target declares that a part of its environment leaves retention unaffected, the system SHALL leave that part out of the *Dependency Evidence* of the tests of that target.
+
+L. When the system reports a figure that line coverage taken from an earlier run contributes to, the system SHALL name the earlier run that measured that line coverage.
+
+M. If a test target declares the source of the *Dependency Evidence* of its tests and holds no scanned test, then the system SHALL refuse to run that target.
 
 ### Rationale
 
@@ -2037,7 +2041,7 @@ F keeps a *Baseline Run* trustworthy for every tree that adopts it, whatever car
 
 G leaves only passes and skips to be retained. A test whose last result was a failure, an error or nothing, and a test that has never executed, is executed on every run until it passes or is skipped, so every result a run retains is a pass or a skip and the exit status of the run is the verdict of the whole target.
 
-H closes the run. A test that the run neither retained nor got a result for might have crashed the runner, never started, or been missed by the runner's selection, and an earlier result does not stand in for it. H speaks of tests of the current tree, because a test that the tree no longer holds has no result by being gone.
+H closes the run. A test that the run neither retained nor got a result for might have crashed the runner, never started, or been missed by the runner's selection, and an earlier result does not stand in for it. H speaks of tests of the current tree, because a test that the tree no longer holds has no result by being gone. H applies to a target that declares where its evidence comes from, because only such a target retains results. A target that declares no source executes every test on every run, and a scanned test that its command does not execute reads as awaiting a result.
 
 I is the run for a project that wants evidence from the current tree alone, such as a release. It composes with a stale-only run (REQ-d00315-B): a run that asks for both executes every test of each target whose results are not fresh.
 
@@ -2045,4 +2049,8 @@ J keeps line coverage attached to the lines that ran. It compares against the ru
 
 K lets a project choose how much a change of environment executes. By default every part of the environment is in the *Dependency Evidence* of every test, so a new version of a tool executes every test of the target. A project that judges a tool's version unlikely to change its outcomes, such as a formatter or a minor compiler release, declares that part, and its change then executes only the tests that the rest of the evidence selects. The results stay truthful either way: the target is still stale and the report names the part of the environment that changed (REQ-d00311-E+F), and each *Retained Result* names the run that executed its test (REQ-d00323-M).
 
-*End* *Per-Test Result Retention* | **Hash**: 04d03072
+L gives line coverage taken from an earlier run the provenance that REQ-d00323-M gives a *Retained Result*. Such coverage describes the lines that the earlier run executed, and a chain of partial runs can carry it through many runs, so the report names the run that measured it rather than the run that last carried it.
+
+M keeps the units of a target and the tests that its command executes the same set. A target that holds no scanned test has nothing to retain or to select, so its command would execute tests that no result of the run can be recorded against, or would never run while the run reports success. The refusal names the working directory of the target and the scan settings, so the project can correct either one.
+
+*End* *Per-Test Result Retention* | **Hash**: e53aed54

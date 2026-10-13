@@ -432,10 +432,36 @@ coverage = "lcov.info"  # optional; relative to the target's
 # groups, resources, inputs, credit_coverage and min_coverage_fraction),
 # makes the results stale and is named. Two probes of one target cannot share
 # a name, regardless of case. A report runs each probe once per process; a
-# serving daemon probes again at its next rebuild. Default: none.
+# serving daemon probes again for each request whose answer depends on the
+# freshness of results. A probe declaring affects_retention = false still
+# makes the results stale, but a stale-only run of a target declaring units
+# does not execute a test file for its change alone. affects_retention and
+# the units settings dependencies and observes decide what a stale-only run
+# retains, so none of them is part of the target's configuration; receives
+# and full_selection change what a run executes, so they are. Default: none.
 # environment_probes = [
 #   { name = "flutter", command = "flutter --version" },
+#   { name = "dart-format", command = "dart format --version", affects_retention = false },
 # ]
+# units divides the target into its test files, so a stale-only run executes
+# only those whose dependencies changed and retains the earlier results of
+# the rest. dependencies names the source of each test file's dependencies:
+# "declared" (each test file depends on itself alone) or "command" (a
+# program of the project's prints them; it needs `command` and `observes`).
+# observes selects the files the source sees, read from the repository root;
+# a change to any other input executes every test file. receives is
+# "placeholder" (the command holds {selection}, replaced by the selected
+# test files) or "file" (the command reads $ELSPAIS_SELECTION).
+# full_selection is what {selection} becomes on a run of every test file.
+# A test file the source leaves out of its answer executes on every run.
+# units need a command, a results pattern and at least one scanned test file
+# under cwd, and cannot stand with file_results = true.
+# See: elspais docs test-targets, "Running part of a target".
+# [scanning.test.targets.units]
+# dependencies   = { source = "declared" }
+# observes       = { file_patterns = ["*_test.dart"] }
+# receives       = "placeholder"
+# full_selection = ""
 
 # File-channel reporter example (junit XML):
 # [[scanning.test.targets]]

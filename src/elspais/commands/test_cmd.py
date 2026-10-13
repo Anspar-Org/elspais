@@ -1,4 +1,4 @@
-# Implements: REQ-d00249-H+I+J+K, REQ-d00315-B+G+H
+# Implements: REQ-d00249-H+I+J+K, REQ-d00315-B+G+H, REQ-d00333-I
 """``elspais test``: execute test targets and record their results, evaluating no check.
 
 A project that splits its suite across parallel jobs runs ``elspais test``
@@ -18,7 +18,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from elspais.config import find_git_root, get_config, validate_config
+from elspais.config import find_git_root, full_refusal, get_config, validate_config
 
 
 # Implements: REQ-d00249-N
@@ -31,6 +31,7 @@ def run(args: argparse.Namespace) -> int:
         not_fresh_targets,
         plan_target_runs,
         run_configured_targets,
+        settle_units,
         unrecorded_targets,
     )
 
@@ -40,6 +41,13 @@ def run(args: argparse.Namespace) -> int:
         config = validate_config(raw_config)
     except Exception as exc:
         print(f"error: failed to load config: {exc}", file=sys.stderr)
+        return 2
+
+    stale_only = bool(getattr(args, "stale_only", False))
+    full = bool(getattr(args, "full", False))
+    # Implements: REQ-d00333-I
+    if refusal := full_refusal(stale_only, full):
+        print(f"error: {refusal}", file=sys.stderr)
         return 2
 
     # Implements: REQ-d00314-O+P
@@ -78,7 +86,7 @@ def run(args: argparse.Namespace) -> int:
         # A stale-only run narrows the selection to the targets whose results
         # are not fresh. When all are fresh it executes nothing, and that is a
         # success.
-        if getattr(args, "stale_only", False):
+        if stale_only:
             only, carry = not_fresh_targets(target_run.config, target_run.repo_root, only)
             print(describe_stale_only(only, carry), file=sys.stderr)
         # Implements: REQ-d00249-N
@@ -90,7 +98,11 @@ def run(args: argparse.Namespace) -> int:
             fail_fast=fail_fast,
             only=only,
             concurrency=concurrency,
+            stale_only=stale_only,
+            full=full,
         )
+        # Implements: REQ-d00333-A+H
+        settle_units(target_run.config, target_run.repo_root, target_run.raw_config, results)
         executed += len(results)
         failed += [target_run.spell(r.name) for r in results if not r.succeeded]
         if fail_fast and failed:

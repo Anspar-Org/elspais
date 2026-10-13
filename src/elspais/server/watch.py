@@ -1,4 +1,4 @@
-# Implements: REQ-d00313-A+B+D
+# Implements: REQ-d00313-A+B+D, REQ-d00311-R
 """The files a served graph was built from, and which of them changed since.
 
 A serving process answers from a graph it built earlier. It judges that graph
@@ -13,6 +13,11 @@ selection is the build's own (``scan_plan`` and ``select_files``), asked again
 at each snapshot, so a new file the selection admits counts, a scanned
 directory created after the build included, and a file it skips or declines
 never does.
+
+The environment probes the graph's judgements ran are watched too, but never
+by modification time: a toolchain changes without touching a file. Only
+:func:`environment_changes` probes them again, and only when a caller asks,
+so polling never pays for a probe.
 """
 
 from __future__ import annotations
@@ -39,6 +44,14 @@ class OutputArea:
 
 
 @dataclass(frozen=True)
+class ProbeWatch:
+    """One environment probe of one test target, as a served graph's judgement ran it."""
+
+    target: str
+    probe: Any
+
+
+@dataclass(frozen=True)
 class WatchSet:
     """What a served graph was built from.
 
@@ -48,22 +61,30 @@ class WatchSet:
             selects counts, a new file included.
         files: Named files, counted whether or not they exist yet.
         areas: The output area of every test target of every member.
+        probes: Every environment probe of every test target of every member.
     """
 
     members: tuple[tuple[Path, dict[str, Any]], ...]
     files: tuple[Path, ...]
     areas: tuple[OutputArea, ...]
+    probes: tuple[ProbeWatch, ...] = ()
 
 
 def watch_set(members: Iterable[tuple[Path, dict[str, Any]]]) -> WatchSet:
     """Return the files a graph was built from, given the root and configuration of each member."""
     from elspais.config import config_document_candidates, validate_config
     from elspais.utilities.evidence import SNAPSHOT_FILES, TIMINGS_FILE
-    from elspais.utilities.fingerprint import target_folder
+    from elspais.utilities.fingerprint import (
+        RETAINED_COVERAGE_NAME,
+        RETAINED_RESULTS_NAME,
+        declared_probes,
+        target_folder,
+    )
 
     planned: list[tuple[Path, dict[str, Any]]] = []
     files: list[Path] = []
     areas: list[OutputArea] = []
+    probes: list[ProbeWatch] = []
     for repo_root, config in members:
         root = Path(repo_root)
         planned.append((root, config or {}))
@@ -78,9 +99,16 @@ def watch_set(members: Iterable[tuple[Path, dict[str, Any]]]) -> WatchSet:
             files.extend(directory / name for name in (*SNAPSHOT_FILES, TIMINGS_FILE))
         for target in typed.scanning.test.targets:
             folder = target_folder(root, typed, target.name)
-            patterns = tuple(str(folder / p) for p in (target.results, target.coverage) if p)
+            # Implements: REQ-d00333-A+J
+            # The Retained Results and retained coverage a run writes are
+            # results the build reads, as the target's own are.
+            named = (target.results, target.coverage, RETAINED_RESULTS_NAME, RETAINED_COVERAGE_NAME)
+            patterns = tuple(str(folder / p) for p in named if p)
             areas.append(OutputArea(folder=folder, patterns=patterns))
-    return WatchSet(members=tuple(planned), files=tuple(files), areas=tuple(areas))
+            probes.extend(ProbeWatch(target.name, p) for p in declared_probes(root, target))
+    return WatchSet(
+        members=tuple(planned), files=tuple(files), areas=tuple(areas), probes=tuple(probes)
+    )
 
 
 def _inside(path: Path, folder: Path) -> bool:
@@ -100,27 +128,14 @@ def _mtime(path: Path) -> float | None:
 
 def snapshot(watch: WatchSet) -> dict[str, float]:
     """Return the modification time of every file in *watch* that exists now."""
-    from elspais.graph.factory import scan_plan
-    from elspais.graph.file_selection import select_files
+    from elspais.graph.factory import kind_files, scan_plan
     from elspais.utilities.fingerprint import FINGERPRINT_NAME
 
     folders = [area.folder.resolve() for area in watch.areas]
     found: dict[str, float] = {}
     scans = [(root, kind) for root, config in watch.members for kind in scan_plan(config, root)]
     for root, kind in scans:
-        selected: set[Path] = set()
-        for directory in kind.directories:
-            # Framed as the build frames a scanned directory: from the
-            # repository root where the directory is inside it, and from the
-            # directory itself where it is not.
-            try:
-                frame, relative = root, directory.resolve().relative_to(root.resolve()).as_posix()
-            except ValueError:
-                frame, relative = directory, "."
-            selection = select_files(
-                frame, [relative], list(kind.skip_dirs), list(kind.skip_files), list(kind.patterns)
-            )
-            selected |= selection.selected
+        selected = kind_files(root, kind)
         for f in selected:
             # An output area inside a scanned directory is watched as an area.
             if any(_inside(f, folder) for folder in folders):
@@ -166,6 +181,32 @@ def changed_files(watch: WatchSet, recorded: dict[str, float]) -> list[Path]:
     return changed
 
 
+# Implements: REQ-d00311-R
+def environment_changes(
+    watch: WatchSet, recorded: dict[tuple[str, str], str]
+) -> tuple[list[str], dict[tuple[str, str], str]]:
+    """Probe the environment again; name each probe whose answer differs from *recorded*.
+
+    *recorded* maps a probe's key to the digest the served graph's judgements
+    saw. A probe the build never ran is not watched. Each distinct probe runs
+    once. Returns the changes and the digests just measured, so a rebuild
+    takes them rather than probing again.
+    """
+    from elspais.utilities.fingerprint import input_label
+
+    now: dict[tuple[str, str], str] = {}
+    changes: list[str] = []
+    for watched in watch.probes:
+        key = watched.probe.key
+        if key not in recorded:
+            continue
+        if key not in now:
+            now[key] = watched.probe.digest()
+        if now[key] != recorded[key]:
+            changes.append(f"target {watched.target}: {input_label(watched.probe.entry)} changed")
+    return changes, now
+
+
 # Implements: REQ-d00313-C
 def graph_predates(holder: Any) -> list[str]:
     """Name each file the graph a holder serves predates, for a reader.
@@ -183,4 +224,8 @@ def graph_predates(holder: Any) -> list[str]:
             named.append(str(path.resolve().relative_to(root)))
         except ValueError:
             named.append(str(path))
-    return sorted(named)
+    # Implements: REQ-d00311-R
+    # A changed environment the process saw and could not rebuild for, because
+    # it holds pending mutations.
+    environment = getattr(holder, "environment_predates", None)
+    return sorted(named) + (list(environment()) if environment is not None else [])

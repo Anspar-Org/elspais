@@ -1,4 +1,4 @@
-# Implements: REQ-d00311-A+B+C+D+I+J+K+L+M+N+P+R, REQ-d00312-A+B+D, REQ-d00329-B
+# Implements: REQ-d00311-A+B+C+D+I+J+K+L+M+N+P+R, REQ-d00312-A+B+D, REQ-d00329-B, REQ-d00333-A
 """Record the fingerprint of a test target's run, and judge the freshness of its results.
 
 Terms:
@@ -72,6 +72,30 @@ _NOT_CONFIGURATION = frozenset(
     {"name", "groups", "resources", "inputs", "credit_coverage", "min_coverage_fraction"}
 )
 
+#: The settings of a target's ``units`` table left out of its configuration
+#: digest: they decide which tests a stale-only run retains, never what a run
+#: that executes a test executes.
+_NOT_UNITS_CONFIGURATION = frozenset({"dependencies", "observes"})
+
+#: The settings of an environment probe left out of the configuration digest:
+#: whether a change of the probe executes every unit decides what executes.
+_NOT_PROBE_CONFIGURATION = frozenset({"affects_retention"})
+
+#: The file in the output area holding the *Retained Results* of the run.
+RETAINED_RESULTS_NAME = ".elspais-retained.jsonl"
+
+#: The file in the output area holding the line coverage the run retained.
+RETAINED_COVERAGE_NAME = ".elspais-retained-coverage.json"
+
+#: The file in the output area recording each unit's last execution.
+UNIT_LEDGER_NAME = ".elspais-units.json"
+
+#: The file in the output area listing the units the run selected.
+SELECTION_NAME = ".elspais-selection"
+
+#: The environment variable naming the selection file for the command.
+SELECTION_ENV = "ELSPAIS_SELECTION"
+
 #: The longest a probe may run, in seconds. A probe runs inside every build,
 #: so one that does not finish is recorded as such rather than awaited.
 _PROBE_TIMEOUT = 60
@@ -99,6 +123,9 @@ class Freshness:
     ``reason`` holds ``"no-fingerprint"``, ``"changed"`` or
     ``"changed-during-run"`` for stale results. Otherwise ``reason`` is empty.
     ``changed`` names the inputs that differ.
+    ``"run-faults"`` means the run recorded faults after its command exited,
+    and ``changed`` then names them. ``current`` is the manifest of the tree
+    the judgement computed, where it computed one.
     """
 
     target: str
@@ -106,6 +133,7 @@ class Freshness:
     reason: str = ""
     changed: tuple[str, ...] = ()
     fingerprint: dict[str, Any] = field(default_factory=dict)
+    current: dict[str, str] | None = None
 
 
 def _typed(config: Any) -> Any:
@@ -212,6 +240,45 @@ def forget_probes() -> None:
     _probe_cache.clear()
 
 
+def remember_probes(digests: dict[tuple[str, str], str]) -> None:
+    """Take *digests*, measured just now, as the answers of their probes for later judgements."""
+    _probe_cache.update(digests)
+
+
+def probe_digests() -> dict[tuple[str, str], str]:
+    """Return a copy of every probe digest ``judge`` has run, keyed by :attr:`DeclaredProbe.key`."""
+    return dict(_probe_cache)
+
+
+@dataclass(frozen=True)
+class DeclaredProbe:
+    """One environment probe of a test target, as it runs: in the target's ``cwd``."""
+
+    name: str
+    command: str
+    cwd: Path
+
+    @property
+    def key(self) -> tuple[str, str]:
+        """The key a probe's digest is held under: its command and its directory."""
+        return (self.command, str(self.cwd))
+
+    @property
+    def entry(self) -> str:
+        """The manifest entry that holds the probe's digest."""
+        return ENVIRONMENT_PREFIX + self.name
+
+    def digest(self) -> str:
+        """Run the probe afresh and return its digest, without consulting or filling the cache."""
+        return _run_probe(self.command, self.cwd)
+
+
+def declared_probes(repo_root: Path, target: Any) -> list[DeclaredProbe]:
+    """The environment probes *target* declares, each with the directory it runs in."""
+    cwd = (Path(repo_root) / target.cwd).resolve()
+    return [DeclaredProbe(p.name, p.command, cwd) for p in target.environment_probes]
+
+
 def _run_probe(command: str, cwd: Path) -> str:
     """Return the digest of the exit status and the standard output of a probe."""
     h = hashlib.sha256()
@@ -243,6 +310,14 @@ def configuration_digest(target: Any) -> str:
         for key, value in target.model_dump(mode="json").items()
         if key not in _NOT_CONFIGURATION
     }
+    settings["environment_probes"] = [
+        {k: v for k, v in probe.items() if k not in _NOT_PROBE_CONFIGURATION}
+        for probe in settings.get("environment_probes", [])
+    ]
+    if settings.get("units") is not None:
+        settings["units"] = {
+            k: v for k, v in settings["units"].items() if k not in _NOT_UNITS_CONFIGURATION
+        }
     return hashlib.sha256(json.dumps(settings, sort_keys=True).encode("utf-8")).hexdigest()
 
 
@@ -256,15 +331,13 @@ def declared_inputs(
     of each probe already run, keyed by command and directory. A run never
     passes one, so a change during the run is seen.
     """
-    cwd = (Path(repo_root) / target.cwd).resolve()
     entries: dict[str, str] = {CONFIGURATION_ENTRY: configuration_digest(target)}
-    for probe in target.environment_probes:
-        key = (probe.command, str(cwd))
+    for probe in declared_probes(repo_root, target):
         if probe_cache is None:
-            digest = _run_probe(probe.command, cwd)
-        elif (digest := probe_cache.get(key)) is None:
-            digest = probe_cache[key] = _run_probe(probe.command, cwd)
-        entries[ENVIRONMENT_PREFIX + probe.name] = digest
+            digest = probe.digest()
+        elif (digest := probe_cache.get(probe.key)) is None:
+            digest = probe_cache[probe.key] = probe.digest()
+        entries[probe.entry] = digest
     return entries
 
 
@@ -407,7 +480,12 @@ class RunNotStarted(Exception):
 
 
 def finish_run(
-    repo_root: Path, config: Any, target_name: str, exit_status: int | None = None
+    repo_root: Path,
+    config: Any,
+    target_name: str,
+    exit_status: int | None = None,
+    *,
+    spawned: bool = True,
 ) -> dict[str, Any]:
     """Finish a run of a target. Record each input that changed during the run.
 
@@ -419,6 +497,9 @@ def finish_run(
     caller knows it. A target declaring ``file_results`` reads its test
     files' result from it, so a run that records none leaves those files
     awaiting a result.
+
+    *spawned* is false where the run retained every result and never started
+    the command, so it records no exit status.
 
     Raises:
         RunNotStarted: No run of the target is in progress.
@@ -436,11 +517,44 @@ def finish_run(
     manifest = compute_manifest(root, config, target)
     fingerprint["changed_during_run"] = differences(fingerprint["manifest"], manifest)
     # Implements: REQ-d00329-B
-    if exit_status is not None:
+    if exit_status is not None and spawned:
         fingerprint["exit_status"] = exit_status
+    # Implements: REQ-d00333-A
+    if not spawned:
+        fingerprint["spawned"] = False
     fingerprint["finished_at"] = _now()
     _write_fingerprint(folder, fingerprint)
     return fingerprint
+
+
+# Implements: REQ-d00333-A
+def command_spawned(folder: Path) -> bool:
+    """Whether the finished run in the output area *folder* started its command.
+
+    A run that retained every result records that it never started it. An
+    area holding no finished run answers true: whatever it lacks, its command
+    was meant to write.
+    """
+    fingerprint = read_fingerprint(folder)
+    return not (
+        fingerprint and fingerprint.get("finished_at") and fingerprint.get("spawned") is False
+    )
+
+
+# Implements: REQ-d00333-H
+def record_run_faults(repo_root: Path, config: Any, target_name: str, faults: list[str]) -> None:
+    """Record *faults* found in a finished run after its command exited.
+
+    A fault fails the run for every later reader, not only for the process
+    that ran it: :func:`judge` reads a run that recorded one as stale and names
+    the faults, so the next stale-only run executes the target again.
+    """
+    folder = target_folder(Path(repo_root).resolve(), config, target_name)
+    fingerprint = read_fingerprint(folder)
+    if fingerprint is None or not fingerprint.get("finished_at") or not faults:
+        return
+    fingerprint["run_faults"] = list(fingerprint.get("run_faults") or []) + list(faults)
+    _write_fingerprint(folder, fingerprint)
 
 
 def run_in_progress(folder: Path) -> dict[str, Any] | None:
@@ -482,6 +596,11 @@ def results_present(repo_root: Path, config: Any, target: Any) -> bool:
         return True
     # Implements: REQ-d00323-I
     if target.coverage and (folder / target.coverage).is_file():
+        return True
+    # Implements: REQ-d00333-A
+    # A run that retained every result spawned no command, and its results
+    # are the Retained Results it wrote.
+    if (folder / RETAINED_RESULTS_NAME).is_file():
         return True
     if not target.results:
         return False
@@ -534,8 +653,28 @@ def judge(
             reason="changed",
             changed=changed,
             fingerprint=fingerprint,
+            current=current,
         )
-    return Freshness(target=target_name, state="fresh", fingerprint=fingerprint)
+    # Implements: REQ-d00333-H
+    faults = tuple(str(f) for f in fingerprint.get("run_faults") or ())
+    if faults:
+        return Freshness(
+            target=target_name,
+            state="stale",
+            reason="run-faults",
+            changed=faults,
+            fingerprint=fingerprint,
+            current=current,
+        )
+    return Freshness(target=target_name, state="fresh", fingerprint=fingerprint, current=current)
+
+
+# Implements: REQ-d00311-E+F
+def describe_inputs(entries: list[str] | tuple[str, ...]) -> str:
+    """Name the first few of *entries* and count the rest, in the words of :func:`input_label`."""
+    shown = ", ".join(input_label(entry) for entry in entries[:5])
+    more = f" and {len(entries) - 5} more" if len(entries) > 5 else ""
+    return f"{shown}{more}"
 
 
 # Implements: REQ-d00311-E+F, REQ-d00323-G
@@ -547,10 +686,46 @@ def stale_reason(verdict: Freshness) -> str:
     """
     if verdict.reason == "no-fingerprint":
         return "no fingerprint was recorded for its results"
-    shown = ", ".join(input_label(entry) for entry in verdict.changed[:5])
-    more = f" and {len(verdict.changed) - 5} more" if len(verdict.changed) > 5 else ""
+    if verdict.reason == "run-faults":
+        shown = "; ".join(verdict.changed[:5])
+        more = f" and {len(verdict.changed) - 5} more" if len(verdict.changed) > 5 else ""
+        return f"its run failed after its command exited: {shown}{more}"
     when = "while it ran" if verdict.reason == "changed-during-run" else "since it ran"
-    return f"inputs changed {when}: {shown}{more}"
+    return f"inputs changed {when}: {describe_inputs(verdict.changed)}"
+
+
+#: The keys of a run reference: the commit, root and start that name a run.
+RUN_REFERENCE_KEYS = ("commit", "root", "started_at")
+
+
+def run_reference(fingerprint: dict[str, Any]) -> dict[str, str]:
+    """The commit, root and start that name the run a fingerprint records."""
+    return {key: str(fingerprint.get(key) or "") for key in RUN_REFERENCE_KEYS}
+
+
+# Implements: REQ-d00323-M, REQ-d00333-L
+def describe_run(run: dict[str, Any]) -> str:
+    """Name a recorded run by its commit, its start and the root it executed in."""
+    commit = str(run.get("commit") or "")[:12] or "an uncommitted tree"
+    started = run.get("started_at") or "an unrecorded time"
+    root = run.get("root")
+    return f"the run of {commit} started {started}" + (f" in {root}" if root else "")
+
+
+# Implements: REQ-d00333-E, REQ-d00311-N
+def ended_run_refusal(fingerprint: dict[str, Any]) -> str:
+    """Return why a recorded run cannot be taken from as an earlier run, or ``""``.
+
+    A run that recorded no end may hold partial results, and inputs that
+    changed while it ran leave its results describing no one tree. Adopting a
+    *Baseline Run* and retaining a result both ask this.
+    """
+    if not fingerprint.get("finished_at"):
+        return "its run is in progress or recorded no end, so its results may be partial"
+    during = fingerprint.get("changed_during_run") or []
+    if during:
+        return f"inputs changed while it ran: {describe_inputs(during)}"
+    return ""
 
 
 def last_run_path(repo_root: Path, config: Any) -> Path:

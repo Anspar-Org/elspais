@@ -287,6 +287,8 @@ that changes to cross-cutting requirements are propagated to their consumers.
 | `tests.uncited_file` | A scanned test file in which no test cites anything -- either no test functions found, or no test in the file links to any requirement (a file with at least one linked test is not flagged). Not the same population as the unlinked NODES the graph API and the MCP `get_unlinked_nodes` tool answer about | info | `[rules.severity]` | `elspais uncited` |
 | `tests.results` | The pass/fail status of every ingested result. One test that runs in several environments writes one result in each of them, so the count is a count of results, not of tests. A result whose target's results are stale counts by its status, and a failure among them states why they are stale | warning | `[rules.severity]` | `elspais failing` |
 | `tests.results_stale` | Test results whose inputs changed since they ran, that carry no fingerprint, or that an Evidence Snapshot of another tree holds | warning | `[rules.severity]` | `elspais checks --run-tests` |
+| `tests.retained_results` | Results a run of a target declaring units retained from an earlier run, because no input their tests depend on changed; each names the run that executed its test | info | `[rules.severity]` | `elspais test` |
+| `tests.dependency_outside_inputs` | A file a test depends on, by its target's dependency source, that is not an input of that target, so a change to it leaves the target's results fresh | warning | `[rules.severity]` | no command resolves this; resolve it by hand |
 | `tests.unmatched_results` | Results matching no known test | warning | `[rules.severity]` | `elspais -v checks --tests` |
 | `tests.tested` | The `tested` coverage dimension (TEST nodes linked to assertions) | error | `[rules.severity]` | `elspais untested` |
 | `tests.verified` | The `verified` (Passing) coverage dimension | error | `[rules.severity]` | `elspais failing` |
@@ -1055,6 +1057,14 @@ carried failing result still fails the run. It prints the division to stderr
 executed targets for a later `--targets last-run`. A selection that
 is all fresh executes nothing, and the checks then run over the results on
 disk.
+
+Of a stale target that declares units, `--stale-only` executes only the test
+files whose dependencies changed, and retains the results of the others;
+`--full` asks it to execute every test instead, and is refused without
+`--stale-only`. `tests.retained_results` lists every Retained Result with the
+run that executed its test, and `tests.dependency_outside_inputs` names a
+file a test depends on that is not an input of its target. See
+`elspais docs test-targets`, *Running part of a target*.
 
 With `[scanning.test] concurrency` above 1, `--run-tests` runs several targets
 at the same time and marks each output line with its target's name. Under

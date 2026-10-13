@@ -149,6 +149,7 @@ def run(args: argparse.Namespace) -> int:
         SelectionRefused,
         plan_target_runs,
         run_configured_targets,
+        settle_units,
         unrecorded_targets,
     )
     from elspais.utilities.evidence import (
@@ -243,6 +244,8 @@ def run(args: argparse.Namespace) -> int:
             )
             return 2
         results, _captured = run_configured_targets(config, repo_root, only=set(selected))
+        # Implements: REQ-d00333-H
+        settle_units(config, repo_root, raw_config, results)
         failed = [chosen.spell(r.name) for r in results if not r.succeeded]
         if failed:
             print(

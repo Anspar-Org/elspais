@@ -209,6 +209,12 @@ def _serialize_result_entry(result_node: Any, graph: FederatedGraph) -> dict[str
     stale = result_node.get_field("stale_reason")
     if stale:
         entry["stale_reason"] = stale
+    # Implements: REQ-d00323-M
+    # A Retained Result names the run that executed its test.
+    retained_from = result_node.get_field("retained_from")
+    if retained_from:
+        entry["retained_from"] = retained_from
+        entry["retained_reason"] = result_node.get_field("retained_reason") or ""
     return entry
 
 
@@ -582,6 +588,9 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             "runner_file",
             "carried",
             "stale_reason",
+            # Implements: REQ-d00323-M
+            "retained_from",
+            "retained_reason",
         ):
             value = node.get_field(field_name)
             if value:

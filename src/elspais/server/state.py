@@ -9,12 +9,17 @@ automatically.
 from __future__ import annotations
 
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from elspais.mcp.shared_state import SharedServerState, rebuild_shared_graph
+
+#: The least time, in seconds, between two probes of the environment for
+#: requests. A request answered within it reads the answer of the last probe.
+PROBE_MIN_AGE = 5.0
 
 if TYPE_CHECKING:
     from elspais.graph.federated import FederatedGraph
@@ -79,11 +84,20 @@ class AppState:
         self._mtimes: dict[str, float] = {}
         self._watch: WatchSet | None = None
         self._last_stale_check = 0.0
+        # Implements: REQ-d00311-R
+        # The probe digests the served graph's judgements saw; when the
+        # environment was last probed again; and what changed in it where
+        # pending mutations held a rebuild back.
+        self._probe_digests: dict[tuple[str, str], str] = {}
+        self._last_probe = 0.0
+        self._probe_lock = threading.Lock()
+        self._environment_changed: list[str] = []
         self.snapshot_mtimes()
         # Implements: REQ-d00313-C
         # Published on the holder so every surface reading this graph can
         # disclose that it predates files on disk, the MCP tools included.
         self.shared.graph_predates = self.changed_files
+        self.shared.environment_predates = lambda: list(self._environment_changed)
         # Change-detection state that lives outside the holder — this object's
         # mtime snapshot, and the config fingerprint recorded for the server
         # this object belongs to. Every rebuild must bring both forward,
@@ -193,9 +207,13 @@ class AppState:
         after it built its graph (REQ-d00313-B).
         """
         from elspais.server.watch import snapshot, watch_set
+        from elspais.utilities.fingerprint import probe_digests
 
         self._watch = watch_set(self._members())
         self._mtimes = snapshot(self._watch)
+        # Implements: REQ-d00311-R
+        self._probe_digests = probe_digests()
+        self._environment_changed = []
 
     def _members(self) -> list[tuple[Path, dict[str, Any]]]:
         """The root and configuration of every member of the served federation."""
@@ -238,9 +256,38 @@ class AppState:
         """Check if any file the served graph was built from changed since its build."""
         return bool(self.changed_files())
 
-    # Implements: REQ-p00015-F, REQ-p00015-B, REQ-p00019-B
-    def ensure_fresh(self) -> bool:
-        """Rebuild graph if files changed.
+    # Implements: REQ-d00311-R
+    def probe_environment(
+        self, *, force: bool = False
+    ) -> tuple[list[str], dict[tuple[str, str], str]] | None:
+        """Probe the environment of every test target again, at most once per minimum age.
+
+        A toolchain changes without touching a file, so a request whose
+        answer depends on the freshness of results asks for this before it is
+        answered. Returns the changes against what the served graph's
+        judgements saw and the digests just measured, or ``None`` where no
+        probe ran: nothing is watched, or the last probe is younger than
+        ``PROBE_MIN_AGE`` seconds, so a burst of requests pays for one probe.
+        *force* probes whatever the age, for a request whose client asked for
+        a fresh answer. A probe can take a while, so the caller runs this off
+        the event loop.
+        """
+        from elspais.server.watch import environment_changes
+
+        if self._watch is None or not self._watch.probes:
+            return None
+        with self._probe_lock:
+            now = time.time()
+            if not force and now - self._last_probe < PROBE_MIN_AGE:
+                return None
+            self._last_probe = now
+            return environment_changes(self._watch, self._probe_digests)
+
+    # Implements: REQ-p00015-F, REQ-p00015-B, REQ-p00019-B, REQ-d00311-R
+    def ensure_fresh(
+        self, probed: tuple[list[str], dict[tuple[str, str], str]] | None = None
+    ) -> bool:
+        """Rebuild graph if files changed, or if *probed* found the environment changed.
 
         Returns True only when a rebuild completed and the new graph is the
         one now being served. A rebuild that was skipped (throttled, pending
@@ -250,15 +297,26 @@ class AppState:
         reported with its cause on stderr rather than being swallowed
         (REQ-p00015-B).
 
-        Throttled to at most one mtime check per second.
+        Throttled to at most one mtime check per second. A changed
+        environment is never throttled, because the probe that found it
+        already is.
+
+        *probed* is what :meth:`probe_environment` returned. A rebuild for a
+        changed environment takes the digests just measured rather than
+        probing again.
 
         NEVER rebuilds over pending in-memory mutations: an auto-rebuild is
         a silent discard of every writer's unsaved work, the exact loss the
         mutation-history guards exist to prevent. Discarding requires an
         explicit, tip-guarded revert/reload/refresh. Implements: REQ-o00062-N
         """
+        environment, digests = probed if probed is not None else ([], {})
+        # What the latest probe found is what is disclosed, so an environment
+        # that changed back stops being reported. A rebuild clears it.
+        if probed is not None:
+            self._environment_changed = list(environment)
         now = time.time()
-        if now - self._last_stale_check < 1.0:
+        if not environment and now - self._last_stale_check < 1.0:
             return False
         self._last_stale_check = now
         # The pending-mutations check and the rebuild must be one atomic
@@ -271,10 +329,10 @@ class AppState:
                 has_pending = False
             if has_pending:
                 return False
-            if not self.is_stale():
+            if not environment and not self.is_stale():
                 return False
             try:
-                self._rebuild()
+                self._rebuild(probes=digests)
             except Exception as exc:
                 # Tolerated failure (visible, not swallowed): keep serving the
                 # previous graph rather than crashing on a bad file state.
@@ -286,7 +344,7 @@ class AppState:
             return True
 
     # Implements: REQ-p00004-J, REQ-p00004-O, REQ-p00015-F
-    def _rebuild(self) -> None:
+    def _rebuild(self, probes: dict[tuple[str, str], str] | None = None) -> None:
         """Rebuild the graph from disk through the one shared rebuild routine.
 
         This object owns no rebuild logic of its own. ``rebuild_shared_graph``
@@ -299,6 +357,6 @@ class AppState:
         Raises on failure so ``ensure_fresh()`` keeps serving the previous
         graph and reports honestly that no rebuild happened.
         """
-        result = rebuild_shared_graph(self.shared)
+        result = rebuild_shared_graph(self.shared, probes=probes)
         if not result.get("success"):
             raise RuntimeError(result.get("message", "graph rebuild failed"))

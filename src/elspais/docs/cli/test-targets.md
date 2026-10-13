@@ -158,16 +158,30 @@ The **configuration** of a target is every setting of it except those that
 decide only which runs execute it or how its finished results are credited:
 `name`, `groups`, `resources`, `credit_coverage` and `min_coverage_fraction`.
 `inputs` is left out too, because the files it selects are inputs of their
-own. A change to any other setting -- `command`, `cwd`, `reporter`, `results`,
+own. So are a probe's `affects_retention` and the `dependencies` and
+`observes` of `units`, which decide which tests a stale-only run retains and
+never what a run executes. `receives` and `full_selection` change the command
+a run spawns, so they are part of the configuration (see
+[Running part of a target](#running-part-of-a-target)). A change to any other setting -- `command`, `cwd`, `reporter`, `results`,
 `environment_probes` and the rest -- makes the results stale, and the finding
 names `the target's configuration`.
 
 A run probes the environment when it starts and again when it ends, so a
 toolchain changed while the run was going makes its results stale. A report
 probes each command once per process, in each directory it runs in, because
-every build judges every target. A daemon or viewer therefore learns of an
-environment change only at its next rebuild: a change to the environment
-touches no file it watches, so nothing makes it rebuild.
+every build judges every target. A change to the environment touches no file,
+so a daemon cannot notice it by watching files. A daemon therefore probes
+the environment again for each request whose answer depends on the freshness
+of results -- a report (`checks`, `summary`, `trace`, `gaps`, `analysis`), an
+export and an MCP tool call -- from any client, and rebuilds where a probe's
+answer differs from the one its graph was built with, taking the answer it
+just measured rather than probing again. A burst of such requests probes once
+every few seconds; a request from the CLI probes every time. A daemon holding
+unsaved changes rebuilds nothing and names the probe beside its answer
+instead, for as long as the probe still answers differently. The viewer's
+own polling, its event stream and every other request never probe. Probes
+the build never ran -- those of a target with no results on disk -- are not
+probed again.
 
 Keep probes quick and their output stable. A probe printing a time or a
 process number makes every run stale.
@@ -322,6 +336,8 @@ later `summary` or `trace` names as fresh, with `--targets last-run`.
 | `credit_coverage` | string | `"off"` | `"off"`, `"tested"`, or `"verified"` -- lcov_tested credit |
 | `min_coverage_fraction` | float | `0.0` | Fraction of impl lines that must be covered (0.0-1.0) |
 | `file_results` | bool | `false` | The exit status of `command` is the result of each test file the target scans (see [file_results](#file_results)) |
+| `environment_probes` | list | `[]` | Parts of the environment the target's results depend on: tables of `name`, `command` and `affects_retention` (see [The environment and configuration of a target](#the-environment-and-configuration-of-a-target)) |
+| `units` | table | unset (one unit) | The target's test files as units a stale-only run can execute in part: `dependencies`, `observes`, `receives`, `full_selection` (see [Running part of a target](#running-part-of-a-target)) |
 
 The target's folder is `<output_root>/<name>`, from the repository root.
 elspais reads `results` and `coverage` from that folder. Consequently, a
@@ -899,6 +915,18 @@ match = "source"
 # true: the command's exit status is the result of each test file the
 # target scans, for files whose runner writes no per-test record.
 # file_results = false
+
+# The parts of the environment the results depend on. A probe declared
+# affects_retention = false still makes the results stale when it changes,
+# but executes no test file a stale-only run could otherwise retain.
+# environment_probes = [{ name = "toolchain", command = "my-tool --version" }]
+
+# Units: a stale-only run executes only the test files whose dependencies
+# changed, and retains the earlier results of the rest. The command holds
+# {selection}, which the selected test files replace.
+# [scanning.test.targets.units]
+# dependencies   = { source = "declared" }   # or { source = "command", command = "..." }
+# full_selection = ""                         # what {selection} becomes on a run of every test
 ```
 
 ## CI Usage
@@ -1431,6 +1459,191 @@ elspais checks --run-tests --targets unit --expect e2e lib:unit
 ```
 
 See also: `elspais docs checks`
+
+## Running part of a target
+
+A target that declares **units** is divided into its test files, and a
+stale-only run of it executes only the test files whose dependencies changed.
+For every other test file it takes the result of the earlier run that last
+executed it. Such a result is a **Retained Result**. A Retained Result is
+marked carried wherever it is counted, and it names the run that executed its
+test.
+
+```toml
+[[scanning.test.targets]]
+name     = "app"
+cwd      = "apps/app"
+command  = "flutter test --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.jsonl {selection}"
+reporter = "flutter-machine"
+results  = "machine.jsonl"
+environment_probes = [
+  { name = "flutter",     command = "flutter --version --machine" },
+  { name = "dart-format", command = "dart format --version", affects_retention = false },
+]
+
+[scanning.test.targets.units]
+dependencies   = { source = "declared" }
+full_selection = ""
+```
+
+Each unit is a test file the target scans: a file the `[scanning.test]`
+selection reads, below the target's `cwd`. A run of a target whose scan holds
+no test file below its `cwd` is refused before its output area is touched,
+naming the `cwd` and the `[scanning.test]` settings to change. A test file the
+command executes and the scan does not read is no unit, so a partial run never
+executes it: widen the scan to reach every test file the command runs.
+
+### Which test files a run executes
+
+A unit is executed when any of these holds, and its earlier result is
+retained otherwise:
+
+- The earlier run never executed it: it is a new test file.
+- Its last execution failed, errored or produced no result, or produced a
+  result that binds to no single test of it, such as a failure in a
+  file-level setup step, or ran in a command that exited non-zero while no
+  result it wrote failed. Only a pass or a skip is retained.
+- The dependency source gave no evidence for it.
+- A file its evidence reaches changed since the run that last executed it.
+- An input of the target that the dependency source does not observe changed.
+  Such an input is a dependency of every unit, so its change executes them
+  all.
+- The environment or the configuration of the target changed, unless the
+  probe that changed declares `affects_retention = false`.
+
+A target runs whole -- every unit executes and nothing is retained -- when the
+earlier run recorded no end, when inputs changed while it ran, when it left no
+readable *Unit Ledger* (below), when the `units` table or the dependency
+source changed since, or when the dependency source cannot answer. The run
+states why on stderr, before the command starts:
+
+```text
+stale-only: executing app; carrying fresh results of none
+units: app: 3 of 212 test files; 209 retained
+```
+
+A stale target whose every unit is retained is recorded as a run without
+starting its command. Only a stale-only run retains. A run without
+`--stale-only` executes every test of every target it executes, and so does a
+stale-only run that also asks for `--full`:
+
+```bash
+elspais test --stale-only            # executes only the changed test files
+elspais test --stale-only --full     # executes every test of each stale target
+elspais test                         # executes every test of every selected target
+```
+
+`--full` without `--stale-only` is refused, because such a run already
+retains nothing.
+
+A run of a target that declares units fails when a test of a test file it
+executed produced no result, because a test the runner never reached has no
+verdict. The failure is recorded with the run, so the target's results read
+as stale naming the tests, and the next stale-only run executes the target
+again. A run that cannot check its results that way fails too. A command
+that executes a retained test file anyway replaces its Retained Results with
+the fresh ones; the run says so, and fails for each test of that file that
+produced no result.
+
+A target that declares no units executes every test on every run, and a
+scanned test its command does not execute reads as awaiting a result.
+
+### Dependency sources
+
+`dependencies.source` names where each unit's dependencies come from. Every
+language reaches elspais through this one setting.
+
+| Source | Each unit depends on | Observes, by default |
+|--------|----------------------|----------------------|
+| `declared` | its own test file | the test files the target scans |
+| `command`  | what the project's command prints | nothing; declare `observes` |
+
+`declared` states that no test file depends on another test file. A change to
+a test file then executes that file alone, and a change to any other input
+executes every unit. It runs nothing, so it serves a target in any language.
+
+`command` runs a program of the project's own:
+
+```toml
+[scanning.test.targets.units]
+dependencies = { source = "command", command = "tools/test-deps" }
+observes     = { directories = ["lib", "test"] }
+```
+
+The command runs in the repository root, receives the repo-relative path of
+each unit on its standard input, one per line, and prints a JSON array:
+
+```json
+[{"unit": "test/a_test.dart", "files": ["test/a_test.dart", "lib/a.dart"]}]
+```
+
+A path may be repo-relative or absolute, through a symbolic link or not. A
+unit the output leaves out has no recorded dependencies, so every run
+executes it, whether or not anything changed. A command that
+exits non-zero or prints anything else makes every unit execute, and the run
+says why.
+
+`observes` selects the files the source can see, in the vocabulary of
+`inputs`, read from the repository root. A change to an input outside it
+executes every unit. Narrowing `observes` is therefore always safe: it can
+only execute more.
+
+A file a unit depends on that is not an input of its target is reported as
+`tests.dependency_outside_inputs`, because a change to it would leave the
+target fresh. Add it to the target's `inputs`.
+
+### Giving the command its selection
+
+`units.receives` says how the command receives the test files a run selects.
+
+- `"placeholder"` (the default): the command holds `{selection}`, which a
+  partial run replaces with the selected test files, each relative to the
+  target's `cwd` and quoted for the shell. A run of every unit replaces it
+  with `units.full_selection`, which is empty by default.
+- `"file"`: the command reads the list itself from the file
+  `$ELSPAIS_SELECTION` names, one path per line, relative to the target's
+  `cwd`. The variable is set only on a partial run, so a command that finds
+  it unset runs everything.
+
+A command holding `{selection}` without units, a `"placeholder"` target whose
+command does not hold it, and a `"file"` target whose command does are each
+refused when the configuration loads. Units also need a `command` and a
+`results` pattern,
+because a run reads each unit's outcome from the results the command writes,
+and they cannot stand with `file_results = true`, because the exit status of
+a partial run speaks for the executed test files alone.
+
+### What a run writes beside its results
+
+| File in the output area | Holds |
+|-------------------------|-------|
+| `.elspais-units.json` | the *Unit Ledger*: per unit, the run that last executed it, its outcome, the digests of the files it reached, and its result lines |
+| `.elspais-retained.jsonl` | the Retained Results, in the result-line form of an Evidence Snapshot, each with the run that executed its test |
+| `.elspais-retained-coverage.json` | the line coverage the run kept from earlier runs |
+| `.elspais-selection` | the test files the run selected |
+
+Line coverage of a source file is kept from an earlier run only where the file
+still holds the content it held when that run measured it, with the test
+names of its per-test contexts made repo-relative. A file's figure is the
+current run's measurement merged with what was kept. Wherever kept coverage
+adds a line the current run did not measure executing, the report names the
+run that measured it; a file with no line the current run measured
+executing is carried. A partial run that started its command and wrote no
+coverage file is reported as missing its coverage, and one that wrote no
+results as missing its results. A *Baseline Run* carries all four
+files, so a baseline adopted from the parent branch serves retention too.
+
+### Reporting Retained Results
+
+- `tests.retained_results` lists, per target, every Retained Result and the
+  run that executed its test. It is `info` by default; set
+  `[rules.severity] "tests.retained_results"` to make it louder.
+- `summary` states, per target, how many results the run executed and how
+  many it retained.
+- A Retained Result counts as carried, so a figure it contributes to is
+  marked.
+- An Evidence Snapshot refuses a target holding Retained Results: run the
+  target whole first.
 
 ## Evidence Snapshot
 

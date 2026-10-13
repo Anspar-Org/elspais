@@ -782,7 +782,7 @@ def _compute_code_tested(
             reason = fn.get_field("line_coverage_stale_reason") or ""
             if reason:
                 stale_reasons.append(reason)
-            else:
+            if not _coverage_carried(fn):
                 any_fresh = True
         if fn.get_field("line_contexts"):
             has_any_contexts = True
@@ -816,6 +816,18 @@ def _compute_code_tested(
         has_contexts=has_any_contexts,
         carried=has_any_coverage and not any_fresh,
         stale_reason=stale_reasons[0] if stale_reasons else "",
+    )
+
+
+# Implements: REQ-d00323-I+J
+def _coverage_carried(file_node: Any) -> bool:
+    """Whether every line measurement a FILE node holds is one the current tree did not produce.
+
+    A file holding stale coverage beside lines this run measured executing
+    is not carried, though its stale part is still reported.
+    """
+    return bool(file_node.get_field("line_coverage_stale_reason")) and not file_node.get_field(
+        "line_coverage_fresh"
     )
 
 
@@ -1073,7 +1085,7 @@ def _compute_lcov_tested(
     file_cwd: dict[str, str | None] = {}
     file_credit: dict[str, CoverageCreditConfig] = {}
     file_owner: dict[str, str | None] = {}
-    file_stale: dict[str, str] = {}
+    file_stale: dict[str, bool] = {}
 
     for edge in node.iter_outgoing_edges():
         if edge.kind != EdgeKind.IMPLEMENTS:
@@ -1095,7 +1107,7 @@ def _compute_lcov_tested(
         if lc is None:
             continue
         file_cov.setdefault(rel, lc)
-        file_stale.setdefault(rel, fn.get_field("line_coverage_stale_reason") or "")
+        file_stale.setdefault(rel, _coverage_carried(fn))
         file_cwd.setdefault(rel, _match_cwd(rel, credit.cwds))
         file_credit.setdefault(rel, credit)
         file_owner.setdefault(rel, owner)

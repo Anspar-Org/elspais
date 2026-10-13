@@ -26,10 +26,10 @@ Result Fingerprint
 : A statement of one run of a test target that gives the inputs the run read, the content digest of each input, the root of the tree the run executed in, and the times the run started and finished.
 
 Retained Result
-: A result that a run of a test target takes from an earlier run of that target, for a test that the run did not execute.
+: A result that a run of a test target takes from an earlier run of that target for a test that the run did not select for execution. The test is one that the tree of that run holds, and the run produced no result for it.
 
 Dependency Evidence
-: For one test, the files of the repository that the source its test target declares recorded that test as depending on, together with every input of that test target that the source does not observe. For a test with no recorded evidence, it is every input of its test target.
+: For one test, the files of the repository that the source its test target declares records or computes as dependencies of that test, together with every input of that test target that the source does not observe. Where the source records dependencies while the test runs, only the record of the last execution of that test counts. A test for which the source holds no record depends on every input of its test target.
 
 Baseline Run
 : A recorded run of a test target, made on another tree, that a run on the current tree takes as the earlier run of that target.

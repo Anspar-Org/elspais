@@ -1,4 +1,4 @@
-# Implements: REQ-d00249-B+C+L+M, REQ-d00312-D, REQ-d00311-B+C, REQ-d00314-C+D, REQ-d00329-B
+# Implements: REQ-d00249-B+C+L+M+O+P, REQ-d00312-D, REQ-d00311-B+C, REQ-d00314-C+D, REQ-d00329-B
 """Configured test-target dispatcher for the checks run-tests feature.
 
 With a ``concurrency`` of one, each entry in ``[[scanning.test.targets]]`` that
@@ -19,6 +19,12 @@ Before a target runs, this module empties the output area and writes the
 fingerprint. After the command exits, this module records each input that
 changed during the run, and the exit status of the command.
 ``ELSPAIS_TARGET_OUTPUT`` gives the command the path of its output area.
+
+A target declaring units is planned before its output area is emptied
+(:func:`elspais.utilities.retention.plan_run`). Where a stale-only run
+retains some of its tests, the command receives the selected test files
+through ``{selection}`` or the file ``ELSPAIS_SELECTION`` names, and where
+it retains every test, the command does not run.
 """
 
 from __future__ import annotations
@@ -270,6 +276,10 @@ class RunnerResult:
     # False where the target was refused before its run began (a cwd outside
     # the repository), so its output area and results are untouched.
     started: bool = True
+    # What a run of a target declaring units executed and retained.
+    plan: Any = None
+    # False where the run retained every result and never started the command.
+    spawned: bool = True
 
     @property
     def succeeded(self) -> bool:
@@ -318,11 +328,15 @@ def run_configured_targets(
     fail_fast: bool = False,
     only: set[str] | None = None,
     concurrency: int | None = None,
+    stale_only: bool = False,
+    full: bool = False,
 ) -> tuple[list[RunnerResult], dict[str, str]]:
     """Execute the selected targets, then record which of them the run executed.
 
     *concurrency* replaces ``[scanning.test] concurrency`` for this run.
-    Everything else is :func:`_run_targets`.
+    *stale_only* says the run asks to execute only targets whose results are
+    not fresh, which lets a target declaring units retain results; *full*
+    asks such a run to retain none. Everything else is :func:`_run_targets`.
     """
     from elspais.utilities.fingerprint import write_last_run
 
@@ -333,9 +347,77 @@ def run_configured_targets(
         config = config.model_copy(
             update={"scanning": config.scanning.model_copy(update={"test": test_cfg})}
         )
-    results, captured = _run_targets(config, repo_root, fail_fast=fail_fast, only=only)
+    results, captured = _run_targets(
+        config, repo_root, fail_fast=fail_fast, only=only, stale_only=stale_only, full=full
+    )
     write_last_run(repo_root, config, [r.name for r in results if r.started])
     return results, captured
+
+
+# Implements: REQ-d00333-A+H, REQ-d00323-O
+def settle_units(
+    config: ElspaisConfig,
+    repo_root: Path,
+    raw_config: dict[str, Any] | None,
+    results: list[RunnerResult],
+) -> list[str]:
+    """Settle the targets declaring units that a run executed; return what failed.
+
+    Each such target's ledger is written from the results of its run. A test
+    with neither a result of this run nor a *Retained Result* fails its
+    target (REQ-d00333-H): the fault is recorded in the target's fingerprint,
+    so every later reader sees the run as failed, its result is marked
+    failed, and it is named in the returned list. A run that cannot be
+    settled fails the same way. Called once per federation member, right
+    after :func:`run_configured_targets`.
+    """
+    from elspais.utilities.fingerprint import record_run_faults
+    from elspais.utilities.retention import settle
+
+    plans = {r.name: r.plan for r in results if r.plan is not None and r.started and not r.error}
+    if not plans:
+        return []
+    by_name = {r.name: r for r in results}
+    failures: list[str] = []
+
+    def fail(name: str, faults: list[str], words: str) -> None:
+        record_run_faults(repo_root, config, name, faults)
+        print(f"<<< {name}: FAILED ({words})", file=sys.stderr)
+        if by_name[name].returncode == 0:
+            by_name[name].returncode = 1
+        failures.append(name)
+
+    try:
+        settled = settle(repo_root, config, raw_config, plans)
+    except Exception as exc:
+        # The tests ran and their results are on disk, but nothing checked
+        # that each test has one, so the run cannot pass.
+        for name in sorted(plans):
+            fault = f"the run could not be settled: {type(exc).__name__}: {exc}"
+            fail(name, [fault], fault)
+        return failures
+    for name, outcome in settled.items():
+        if outcome.ledger_written and not plans[name].whole:
+            print(
+                f"units: {name}: executed {outcome.executed} result(s), "
+                f"retained {outcome.retained}",
+                file=sys.stderr,
+            )
+        if outcome.overrun:
+            print(
+                f"units: {name}: the command also executed retained test files, whose "
+                f"fresh results replace the retained ones: {', '.join(outcome.overrun)}",
+                file=sys.stderr,
+            )
+        if outcome.missing:
+            shown = ", ".join(outcome.missing[:5])
+            more = f" and {len(outcome.missing) - 5} more" if len(outcome.missing) > 5 else ""
+            fail(
+                name,
+                [f"a test produced no result: {m}" for m in outcome.missing],
+                f"tests produced no result: {shown}{more}",
+            )
+    return failures
 
 
 # Implements: REQ-d00314-P
@@ -354,6 +436,8 @@ def _run_targets(
     *,
     fail_fast: bool = False,
     only: set[str] | None = None,
+    stale_only: bool = False,
+    full: bool = False,
 ) -> tuple[list[RunnerResult], dict[str, str]]:
     """Execute each configured target's command in declaration order.
 
@@ -371,6 +455,7 @@ def _run_targets(
         only: If given, restricts execution to targets whose ``name`` is in
             this set; all other configured targets are skipped entirely.
             ``None`` (the default) runs every target with a command.
+        stale_only, full: Passed to :func:`_begin_target`.
 
     Returns:
         A tuple ``(results, captured)`` where ``results`` is one
@@ -378,117 +463,175 @@ def _run_targets(
         and ``captured`` maps target name → stdout text for stdout-channel
         reporters.
     """
-    from elspais.graph.parsers.results.registry import get_reporter
-    from elspais.utilities.fingerprint import OUTPUT_ENV, finish_run, start_run
-
     if config.scanning.test.concurrency > 1:
-        return _run_concurrently(config, repo_root, fail_fast=fail_fast, only=only)
+        return _run_concurrently(
+            config, repo_root, fail_fast=fail_fast, only=only, stale_only=stale_only, full=full
+        )
 
     results: list[RunnerResult] = []
     captured: dict[str, str] = {}
-    resolved_root = repo_root.resolve()
+
+    def emit(text: str) -> None:
+        print(text, file=sys.stderr, end="")
 
     for target in config.scanning.test.targets:
         if not target.command:
             continue
         if only is not None and target.name not in only:
             continue
-
-        # Determine whether this reporter captures stdout.
-        try:
-            spec = get_reporter(target.reporter)
-            is_stdout_channel = spec.channel == "stdout"
-        except KeyError:
-            is_stdout_channel = False
-
-        # Resolve cwd and confine it to the repo root.
-        cwd_candidate = (repo_root / target.cwd).resolve() if target.cwd else resolved_root
-        try:
-            cwd_candidate.relative_to(resolved_root)
-        except ValueError:
-            elapsed = 0.0
-            err = (
-                f"cwd '{target.cwd}' resolves to {cwd_candidate} which is "
-                f"outside the repo root {resolved_root}"
-            )
-            print(
-                f"\n<<< {target.name}: FAILED (config error: {err}) ({elapsed:.1f}s)",
-                file=sys.stderr,
-            )
-            results.append(
-                RunnerResult(
-                    name=target.name,
-                    command=target.command,
-                    cwd=cwd_candidate,
-                    returncode=-1,
-                    duration_seconds=elapsed,
-                    error=err,
-                    started=False,
-                )
-            )
-            if fail_fast:
+        begun = _begin_target(config, repo_root, target, stale_only, full, emit)
+        if isinstance(begun, RunnerResult):
+            results.append(begun)
+            if fail_fast and begun.returncode != 0:
                 break
             continue
-
-        cwd = cwd_candidate
-        print(
-            f"\n>>> Running '{target.name}' target: {target.command}",
-            file=sys.stderr,
-        )
         start = time.monotonic()
-        folder = start_run(repo_root, config, target.name)
-        env = {**os.environ, OUTPUT_ENV: str(folder)}
-        try:
-            if is_stdout_channel:
-                completed = _run_teeing_stdout(target.command, cwd, env)
-                captured[target.name] = completed.stdout
-            else:
-                completed = subprocess.run(
-                    target.command,
-                    shell=True,
-                    cwd=cwd,
-                    env=env,
-                )
-            elapsed = time.monotonic() - start
-            result = RunnerResult(
-                name=target.name,
-                command=target.command,
-                cwd=cwd,
-                returncode=completed.returncode,
-                duration_seconds=elapsed,
-            )
-            tag = "passed" if completed.returncode == 0 else f"FAILED (exit {completed.returncode})"
-            print(
-                f"<<< {target.name}: {tag} ({elapsed:.1f}s)",
-                file=sys.stderr,
-            )
-        except (FileNotFoundError, PermissionError, OSError) as exc:
-            elapsed = time.monotonic() - start
-            result = RunnerResult(
-                name=target.name,
-                command=target.command,
-                cwd=cwd,
-                returncode=-1,
-                duration_seconds=elapsed,
-                error=str(exc),
-            )
-            print(
-                f"<<< {target.name}: FAILED (spawn error: {exc}) ({elapsed:.1f}s)",
-                file=sys.stderr,
-            )
-        # Implements: REQ-d00329-B+I
-        # A command that could not be spawned never exited, so it records no
-        # exit status and its files await a result.
-        finish_run(
-            repo_root,
-            config,
-            target.name,
-            exit_status=None if result.error else result.returncode,
-        )
+        if begun.spawns:
+            try:
+                if begun.is_stdout_channel:
+                    completed = _run_teeing_stdout(begun.command, begun.cwd, begun.env)
+                    captured[target.name] = completed.stdout
+                else:
+                    completed = subprocess.run(
+                        begun.command,
+                        shell=True,
+                        cwd=begun.cwd,
+                        env=begun.env,
+                    )
+                result = begun.result(completed.returncode, time.monotonic() - start)
+            except (FileNotFoundError, PermissionError, OSError) as exc:
+                result = begun.result(-1, time.monotonic() - start, error=str(exc))
+        else:
+            result = begun.result(0, 0.0)
+        _end_target(config, repo_root, target, result, emit)
         results.append(result)
         if fail_fast and result.returncode != 0:
             break
     return results, captured
+
+
+@dataclass(frozen=True)
+class _Begun:
+    """A target whose run has started: its output area is emptied and fingerprinted."""
+
+    target: Any
+    cwd: Path
+    command: str
+    env: dict[str, str]
+    is_stdout_channel: bool
+    plan: Any
+
+    @property
+    def spawns(self) -> bool:
+        """Whether the run executes the command.
+
+        Every run does, except one that retains every test it holds. A run
+        of every test always does, whatever the plan selected.
+        """
+        return self.plan is None or self.plan.whole or bool(self.plan.selected)
+
+    def result(self, returncode: int, elapsed: float, *, error: str = "") -> RunnerResult:
+        return RunnerResult(
+            name=self.target.name,
+            command=self.command,
+            cwd=self.cwd,
+            returncode=returncode,
+            duration_seconds=elapsed,
+            error=error,
+            plan=self.plan,
+            spawned=self.spawns,
+        )
+
+
+# Implements: REQ-d00249-L+M+O+P, REQ-d00333-B+I+M
+def _begin_target(
+    config: ElspaisConfig,
+    repo_root: Path,
+    target: Any,
+    stale_only: bool,
+    full: bool,
+    emit: Any,
+) -> _Begun | RunnerResult:
+    """Start one target's run, or refuse it before anything is touched.
+
+    The working directory is confined to the repository. A target declaring
+    units is planned before ``start_run`` empties its output area, because
+    the plan reads the earlier run's ledger, results and coverage. The
+    retained artifacts and the selection are written into the emptied area,
+    and the command receives the selection.
+    """
+    from elspais.graph.parsers.results.registry import get_reporter
+    from elspais.utilities.fingerprint import OUTPUT_ENV, start_run
+    from elspais.utilities.retention import command_for, plan_run, write_artifacts
+
+    try:
+        is_stdout_channel = get_reporter(target.reporter).channel == "stdout"
+    except KeyError:
+        is_stdout_channel = False
+
+    resolved_root = repo_root.resolve()
+    cwd = (repo_root / target.cwd).resolve() if target.cwd else resolved_root
+    try:
+        cwd.relative_to(resolved_root)
+    except ValueError:
+        err = f"cwd '{target.cwd}' resolves to {cwd} which is outside the repo root {resolved_root}"
+        emit(f"\n<<< {target.name}: FAILED (config error: {err}) (0.0s)\n")
+        return RunnerResult(target.name, target.command, cwd, -1, 0.0, error=err, started=False)
+
+    plan = plan_run(repo_root, config, target, stale_only=stale_only, full=full)
+    # Implements: REQ-d00333-M
+    # A target declaring units whose scan holds no test file has nothing a
+    # run could record, so it is refused before its output area is touched.
+    if plan is not None and not plan.units:
+        err = (
+            f"it declares units, and the test scan selects no test file under its working "
+            f"directory {plan.cwd_rel or '.'!r}; widen [scanning.test] directories and "
+            f"file_patterns to reach its tests, or set the target's cwd to where they lie"
+        )
+        emit(f"\n<<< {target.name}: FAILED (config error: {err}) (0.0s)\n")
+        return RunnerResult(target.name, target.command, cwd, -1, 0.0, error=err, started=False)
+    command = command_for(target.command, plan)
+    if plan is not None:
+        # Implements: REQ-d00315-H, REQ-d00323-O
+        emit(f"units: {target.name}: {plan.describe()}\n")
+    if plan is not None and not plan.whole and not plan.selected:
+        emit(f"\n>>> '{target.name}' target: every test retained; the command does not run\n")
+    else:
+        emit(f"\n>>> Running '{target.name}' target: {command}\n")
+    # The fingerprint is taken here, as the command starts, and never earlier:
+    # a target running alongside can change files while this one waits.
+    folder = start_run(repo_root, config, target.name)
+    env = {**os.environ, OUTPUT_ENV: str(folder), **write_artifacts(folder, plan)}
+    return _Begun(target, cwd, command, env, is_stdout_channel, plan)
+
+
+# Implements: REQ-d00329-B+I
+def _end_target(
+    config: ElspaisConfig, repo_root: Path, target: Any, result: RunnerResult, emit: Any
+) -> None:
+    """Record the end of one target's run, with the exit status of its command.
+
+    A command that could not be spawned never exited, so it records no exit
+    status and its files await a result.
+    """
+    from elspais.utilities.fingerprint import finish_run
+
+    if result.error:
+        tag = f"FAILED (spawn error: {result.error})"
+    elif not result.spawned:
+        tag = "passed (every test retained; the command did not run)"
+    elif result.returncode == 0:
+        tag = "passed"
+    else:
+        tag = f"FAILED (exit {result.returncode})"
+    emit(f"<<< {target.name}: {tag} ({result.duration_seconds:.1f}s)\n")
+    finish_run(
+        repo_root,
+        config,
+        target.name,
+        exit_status=None if result.error else result.returncode,
+        spawned=result.spawned,
+    )
 
 
 # How long the pumps may drain a target's pipes after its command exits.
@@ -516,95 +659,71 @@ def _pump(source: Any, prefix: str, echo: TextIO, keep: list[str] | None) -> Non
 
 # Implements: REQ-d00314-J+K+L, REQ-d00249-B+L+M, REQ-d00312-D
 def _run_one_attributed(
-    config: ElspaisConfig, repo_root: Path, target: Any
+    config: ElspaisConfig,
+    repo_root: Path,
+    target: Any,
+    stale_only: bool = False,
+    full: bool = False,
 ) -> tuple[RunnerResult, str | None]:
     """Run one target with each line of its output marked with its name.
 
     Returns the result and, for a stdout-channel target, the stdout it wrote.
     """
-    from elspais.graph.parsers.results.registry import get_reporter
-    from elspais.utilities.fingerprint import OUTPUT_ENV, finish_run, start_run
 
-    try:
-        is_stdout_channel = get_reporter(target.reporter).channel == "stdout"
-    except KeyError:
-        is_stdout_channel = False
+    def emit(text: str) -> None:
+        _emit(sys.stderr, text)
 
-    resolved_root = repo_root.resolve()
-    cwd = (repo_root / target.cwd).resolve() if target.cwd else resolved_root
-    try:
-        cwd.relative_to(resolved_root)
-    except ValueError:
-        err = f"cwd '{target.cwd}' resolves to {cwd} which is outside the repo root {resolved_root}"
-        _emit(sys.stderr, f"\n<<< {target.name}: FAILED (config error: {err}) (0.0s)\n")
-        return (
-            RunnerResult(target.name, target.command, cwd, -1, 0.0, error=err, started=False),
-            None,
-        )
-
+    begun = _begin_target(config, repo_root, target, stale_only, full, emit)
+    if isinstance(begun, RunnerResult):
+        return begun, None
     prefix = f"[{target.name}] "
-    _emit(sys.stderr, f"\n>>> Running '{target.name}' target: {target.command}\n")
+    kept: list[str] | None = [] if begun.is_stdout_channel else None
     start = time.monotonic()
-    # The fingerprint is taken here, as the command starts, and never earlier:
-    # a target running alongside can change files while this one waits.
-    folder = start_run(repo_root, config, target.name)
-    env = {**os.environ, OUTPUT_ENV: str(folder)}
-    kept: list[str] | None = [] if is_stdout_channel else None
-    try:
-        proc = subprocess.Popen(
-            target.command,
-            shell=True,
-            cwd=cwd,
-            env=env,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            errors="replace",
-            bufsize=1,
-        )
-        # A stdout-channel target's stdout is its results, so it is echoed
-        # to stderr, as a run of one target at a time echoes it.
-        pumps = [
-            threading.Thread(
-                target=_pump,
-                args=(
-                    proc.stdout,
-                    prefix,
-                    sys.stderr if is_stdout_channel else sys.stdout,
-                    kept,
+    if not begun.spawns:
+        result = begun.result(0, 0.0)
+    else:
+        try:
+            proc = subprocess.Popen(
+                begun.command,
+                shell=True,
+                cwd=begun.cwd,
+                env=begun.env,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                errors="replace",
+                bufsize=1,
+            )
+            # A stdout-channel target's stdout is its results, so it is echoed
+            # to stderr, as a run of one target at a time echoes it.
+            pumps = [
+                threading.Thread(
+                    target=_pump,
+                    args=(
+                        proc.stdout,
+                        prefix,
+                        sys.stderr if begun.is_stdout_channel else sys.stdout,
+                        kept,
+                    ),
+                    daemon=True,
                 ),
-                daemon=True,
-            ),
-            threading.Thread(
-                target=_pump, args=(proc.stderr, prefix, sys.stderr, None), daemon=True
-            ),
-        ]
-        for pump in pumps:
-            pump.start()
-        # The target ends when its command exits. A process the command left
-        # in the background can hold the pipes open for as long as it lives,
-        # so the pumps get a bounded time to drain what is already written.
-        returncode = proc.wait()
-        for pump in pumps:
-            pump.join(_DRAIN_SECONDS)
-        elapsed = time.monotonic() - start
-        result = RunnerResult(target.name, target.command, cwd, returncode, elapsed)
-        tag = "passed" if returncode == 0 else f"FAILED (exit {returncode})"
-        _emit(sys.stderr, f"<<< {target.name}: {tag} ({elapsed:.1f}s)\n")
-    except OSError as exc:
-        elapsed = time.monotonic() - start
-        result = RunnerResult(target.name, target.command, cwd, -1, elapsed, error=str(exc))
-        _emit(
-            sys.stderr,
-            f"<<< {target.name}: FAILED (spawn error: {exc}) ({elapsed:.1f}s)\n",
-        )
-    # Implements: REQ-d00329-B+I
-    # A command that could not be spawned never exited, so it records no
-    # exit status and its files await a result.
-    finish_run(
-        repo_root, config, target.name, exit_status=None if result.error else result.returncode
-    )
+                threading.Thread(
+                    target=_pump, args=(proc.stderr, prefix, sys.stderr, None), daemon=True
+                ),
+            ]
+            for pump in pumps:
+                pump.start()
+            # The target ends when its command exits. A process the command left
+            # in the background can hold the pipes open for as long as it lives,
+            # so the pumps get a bounded time to drain what is already written.
+            returncode = proc.wait()
+            for pump in pumps:
+                pump.join(_DRAIN_SECONDS)
+            result = begun.result(returncode, time.monotonic() - start)
+        except OSError as exc:
+            result = begun.result(-1, time.monotonic() - start, error=str(exc))
+    _end_target(config, repo_root, target, result, emit)
     return result, ("".join(list(kept)) if kept is not None else None)
 
 
@@ -619,6 +738,8 @@ def _run_concurrently(
     *,
     fail_fast: bool,
     only: set[str] | None,
+    stale_only: bool = False,
+    full: bool = False,
 ) -> tuple[list[RunnerResult], dict[str, str]]:
     """Run the selected targets, up to ``concurrency`` at a time.
 
@@ -651,7 +772,11 @@ def _run_concurrently(
                         continue
                     pending.remove(target)
                     in_use |= keys
-                    running[pool.submit(_run_one_attributed, config, repo_root, target)] = target
+                    running[
+                        pool.submit(
+                            _run_one_attributed, config, repo_root, target, stale_only, full
+                        )
+                    ] = target
             if not running:
                 break
             done, _ = wait(running, return_when=FIRST_COMPLETED)

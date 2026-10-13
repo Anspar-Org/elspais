@@ -181,6 +181,7 @@ _REMEDIES: dict[str, str] = {
     "tests.uncited_file": "elspais uncited",
     "tests.results": "elspais failing",
     "tests.results_stale": "elspais checks --run-tests",
+    "tests.retained_results": "elspais test",
     "tests.not_run": "elspais checks --run-tests",
     "tests.unmatched_results": "elspais -v checks --tests",
     "tests.tested": "elspais untested",
@@ -394,6 +395,14 @@ _DESCRIPTIONS: dict[str, str] = {
         "Test results whose inputs changed since they ran, that carry no fingerprint, "
         "or that an Evidence Snapshot of another tree holds"
     ),
+    "tests.retained_results": (
+        "Results a run of a target declaring units retained from an earlier run, because "
+        "no input their tests depend on changed; each names the run that executed its test"
+    ),
+    "tests.dependency_outside_inputs": (
+        "A file a test depends on, by its target's dependency source, that is not an "
+        "input of that target, so a change to it leaves the target's results fresh"
+    ),
     "tests.unmatched_results": "Results matching no known test",
     "tests.tested": "The `tested` coverage dimension (TEST nodes linked to assertions)",
     "tests.verified": "The `verified` (Passing) coverage dimension",
@@ -605,6 +614,12 @@ def _registry() -> dict[str, CheckRule]:
         _general("tests.uncited_file", "tests", Severity.INFO),
         _general("tests.results", "tests", Severity.WARNING),
         _general("tests.results_stale", "tests", Severity.WARNING),
+        # Implements: REQ-d00323-P
+        # Retained Results are honest evidence of an unchanged dependency
+        # closure, so the project decides how loudly to list them.
+        _general("tests.retained_results", "tests", Severity.INFO),
+        # Implements: REQ-d00333-D
+        _general("tests.dependency_outside_inputs", "tests", Severity.WARNING),
         _general("tests.unmatched_results", "tests", Severity.WARNING),
         _general("tests.tested", "tests", Severity.ERROR),
         _general("tests.verified", "tests", Severity.ERROR),

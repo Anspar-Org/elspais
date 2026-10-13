@@ -437,6 +437,11 @@
         "command": {
           "title": "Command",
           "type": "string"
+        },
+        "affects_retention": {
+          "default": true,
+          "title": "Affects Retention",
+          "type": "boolean"
         }
       },
       "required": [
@@ -1426,12 +1431,60 @@
           },
           "title": "Environment Probes",
           "type": "array"
+        },
+        "units": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnitsConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
         "name"
       ],
       "title": "TestTargetConfig",
+      "type": "object"
+    },
+    "UnitsConfig": {
+      "additionalProperties": false,
+      "description": "The units of a test target: its test files, which a run may execute in part.\n\n``dependencies`` names the source of each unit's *Dependency Evidence*\n(``source``) and holds the settings that source validates. ``observes``\nselects the files the source observes, read from the repository root;\nunset means the source's own default. ``receives`` says how the command\nreceives the selected units. ``full_selection`` is what ``{selection}``\nbecomes on a run of every unit.",
+      "properties": {
+        "dependencies": {
+          "additionalProperties": true,
+          "title": "Dependencies",
+          "type": "object"
+        },
+        "observes": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScanningKindConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "receives": {
+          "default": "placeholder",
+          "title": "Receives",
+          "type": "string"
+        },
+        "full_selection": {
+          "default": "",
+          "title": "Full Selection",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dependencies"
+      ],
+      "title": "UnitsConfig",
       "type": "object"
     },
     "ValidationConfig": {

@@ -1354,6 +1354,11 @@ function buildJourneyCardHtml(nodeId, data, collapsed) {
                 if (r.stale_reason) {
                     html += '<span class="result-stale" title="' + escapeAttr(r.stale_reason) + '">stale</span>';
                 }
+                {# Implements: REQ-d00323-M #}
+                // A Retained Result names the run that executed its test.
+                if (r.retained_from) {
+                    html += '<span class="result-stale" title="' + escapeAttr(r.retained_reason || '') + '">retained from ' + escapeHtml(r.retained_from) + '</span>';
+                }
                 html += '</div>';
             });
             html += '</div>';
@@ -1827,6 +1832,10 @@ function renderAssertionResults(panel, reqId, label, data) {
         {# Implements: REQ-d00323-F+G #}
         if (r.stale_reason) {
             html += '<span class="result-stale" title="' + escapeAttr(r.stale_reason) + '">stale</span>';
+        }
+        {# Implements: REQ-d00323-M #}
+        if (r.retained_from) {
+            html += '<span class="result-stale" title="' + escapeAttr(r.retained_reason || '') + '">retained from ' + escapeHtml(r.retained_from) + '</span>';
         }
         html += '</div>';
     }

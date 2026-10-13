@@ -7302,6 +7302,11 @@ class GraphBuilder:
             # Why the results of this result's target are stale, where they
             # are. Empty for results the current tree produced.
             "stale_reason": data.get("stale_reason", ""),
+            # Implements: REQ-d00323-L+M
+            # The run that executed the test of a Retained Result, and why a
+            # later run retained it. Absent for every other result.
+            "retained_from": data.get("retained_from"),
+            "retained_reason": data.get("retained_reason"),
             "target": data.get("target"),
             # Results-file provenance: where this result was RECORDED
             # (e.g. junit.xml path + <testcase> line), distinct from

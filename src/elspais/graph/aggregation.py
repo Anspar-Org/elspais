@@ -1473,11 +1473,57 @@ def collect_coverage(
         result["total_result_targets"] = len(all_result_targets)
         result["carried_result_targets"] = len(carried_result_targets_set)
 
+    # Implements: REQ-d00323-O
+    # Where any target holds Retained Results, each such target states how
+    # many of its results its run executed and how many it retained. A target
+    # holding one stays counted as carried above.
+    retained = retained_result_tally(graph)
+    if retained:
+        result["retained_results"] = {
+            "count": sum(t["retained"] for t in retained),
+            "targets": retained,
+        }
+
     return result
+
+
+# Implements: REQ-d00323-O+P
+def results_by_target(graph: Any) -> dict[tuple[str, str], tuple[list[Any], list[Any]]]:
+    """Each test target's RESULT nodes, divided into executed and retained.
+
+    Keyed by the member's namespace and the target's name. A RESULT naming
+    no target is left out. The one walk both the tally of executed and
+    retained results and the listing of *Retained Results* read.
+    """
+    from elspais.graph.GraphNode import parse_structural_id
+
+    out: dict[tuple[str, str], tuple[list[Any], list[Any]]] = {}
+    for node in graph.iter_by_kind(NodeKind.RESULT):
+        target = node.get_field("target")
+        if not target:
+            continue
+        executed, retained = out.setdefault((parse_structural_id(node.id)[1], target), ([], []))
+        (retained if node.get_field("retained_from") else executed).append(node)
+    return out
+
+
+# Implements: REQ-d00323-O
+def retained_result_tally(graph: Any) -> list[dict[str, Any]]:
+    """For each test target holding a *Retained Result*: how many results it executed and retained.
+
+    Targets are named within their member, sorted by namespace and name.
+    """
+    return [
+        {"namespace": ns, "target": name, "executed": len(executed), "retained": len(kept)}
+        for (ns, name), (executed, kept) in sorted(results_by_target(graph).items())
+        if kept
+    ]
 
 
 __all__ = [
     "COVERAGE_DIMENSIONS",
+    "results_by_target",
+    "retained_result_tally",
     "DENOMINATOR_DIMENSION",
     "HEADLINE_MEASURE",
     "MEASURES",

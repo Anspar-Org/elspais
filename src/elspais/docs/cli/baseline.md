@@ -90,5 +90,12 @@ otherwise, naming what differs. See `elspais docs test-targets`, *The
 environment and configuration of a target*. A stale adopted run is carried,
 and `elspais test --stale-only` executes it again.
 
+A target that declares units packs its *Unit Ledger* and its Retained Results
+with the rest of its folder. A stale-only run after a fetch therefore
+executes only the test files whose dependencies differ from the adopted run,
+and retains the results of the others, each naming the run on the parent
+branch that executed its test. See `elspais docs test-targets`, *Running part
+of a target*.
+
 The fingerprint records the directory the run executed in, so the results
 still bind to their tests in a tree checked out elsewhere.

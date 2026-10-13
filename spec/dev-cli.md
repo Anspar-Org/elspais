@@ -638,6 +638,10 @@ M. If the working directory of a test target resolves outside the repository roo
 
 N. A run that executes targets SHALL execute a federation member's target only where the selection names that member's namespace and the target, and SHALL execute it with that member's configuration, repository root and output area.
 
+O. A test target SHALL be able to receive the tests that a run selects for execution.
+
+P. If the command of a test target cannot receive a selection of tests, then a run of that target SHALL select every test of that target for execution.
+
 ### Rationale
 
 A single command executes a project's test targets and then evaluates
@@ -668,8 +672,11 @@ L and M confine a target's command to the repository it belongs to. Which target
 
 N keeps a run inside the repository that asked for it unless the reader names another member. Running a member's target executes a command that the member's configuration declares, so the reader names it explicitly.
 
+O and P let a run execute part of a test target. A run that retains results (REQ-d00333) executes only the tests that it selects, so the command of the target must be able to receive that selection, in whatever language its tests are written. A command that cannot receive one would execute either every test or none of the selected ones, so P makes such a run select every test, and the run then has a result of its own for each test it holds.
+
 ### Changelog
 
+- 2026-10-12 | 15f1058b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-03 | 9e2255c3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a run executes a federation member's target only where the selection names it (N)
 - 2026-10-02 | 3a252869 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -684,7 +691,7 @@ N keeps a run inside the repository that asked for it unless the reader names an
 - 2026-09-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: point the no-runners error at the document carrying target configuration examples (F)
 - 2026-09-12 | 784f8350 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Configured test runner execution* | **Hash**: 9e2255c3
+*End* *Configured test runner execution* | **Hash**: 15f1058b
 
 ## REQ-d00259: Requirement Format Reference Command
 

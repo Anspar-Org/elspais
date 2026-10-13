@@ -2440,9 +2440,8 @@ class TestEnvironmentAndBaselineRuns:
         text = toml.read_text(encoding="utf-8")
         marker = 'name = "stub"\n'
         assert text.count(marker) == 1 and text.count("cli_ttl = 2\n") == 1
-        # A daemon learns of an environment change only at its next rebuild,
-        # and changing the environment touches no file it watches; these
-        # tests judge each invocation afresh.
+        # These tests judge each invocation in a process of its own; a
+        # daemon's answer to a changed environment is tested below.
         text = text.replace("cli_ttl = 2\n", "cli_ttl = 0\n")
         toml.write_text(text.replace(marker, marker + cls._PROBE), encoding="utf-8")
         (scratch.parent / "tool-version.txt").write_text("1.0\n", encoding="utf-8")
@@ -2534,6 +2533,134 @@ class TestEnvironmentAndBaselineRuns:
         again = run_elspais("baseline", "fetch", cwd=clone)
         assert again.returncode == 0
         assert "stub: skipped" in again.stdout
+
+
+class TestUnitsRetainResults:
+    """A target declaring units executes only the test files whose evidence changed.
+
+    Each test runs against a fresh copy of the fixture whose added target runs
+    a stand-in runner over the test files it is handed, writing one result
+    line per test.
+
+    Verifies: REQ-d00333-A+B+I, REQ-d00323-M+O+P, REQ-d00249-O
+    """
+
+    _RUNNER = (
+        "import json, os, pathlib, re, sys\n"
+        "out = pathlib.Path(os.environ['ELSPAIS_TARGET_OUTPUT'])\n"
+        "paths = []\n"
+        "for arg in sys.argv[1:]:\n"
+        "    p = pathlib.Path(arg)\n"
+        "    paths += sorted(p.rglob('test_*.py')) if p.is_dir() else [p]\n"
+        "lines = []\n"
+        "for p in paths:\n"
+        "    for n, text in enumerate(p.read_text().splitlines(), 1):\n"
+        "        m = re.match(r'def (test_\\w+)', text)\n"
+        "        if m:\n"
+        "            lines.append(json.dumps({'target': 'units', 'file': p.as_posix(),\n"
+        "                'line': n, 'name': m.group(1), 'outcome': 'passed'}))\n"
+        "(out / 'results.jsonl').write_text(''.join(l + '\\n' for l in lines))\n"
+        "print('ran', *[p.as_posix() for p in paths])\n"
+    )
+
+    @classmethod
+    def _copy(cls, tmp_path, *, cli_ttl: int = 0):
+        scratch = tmp_path / "repo"
+        scratch.mkdir()
+        load_fixture("e2e-standard", scratch)
+        runner = tmp_path / "runner.py"
+        runner.write_text(cls._RUNNER, encoding="utf-8")
+        toml = scratch / ".elspais.toml"
+        text = toml.read_text(encoding="utf-8").replace("cli_ttl = 2\n", f"cli_ttl = {cli_ttl}\n")
+        text += (
+            "\n[[scanning.test.targets]]\n"
+            'name = "units"\n'
+            'reporter = "evidence-snapshot"\n'
+            'results = "results.jsonl"\n'
+            f"command = 'python {runner} {{selection}}'\n"
+            "\n[scanning.test.targets.units]\n"
+            'dependencies = { source = "declared" }\n'
+            'full_selection = "tests"\n'
+        )
+        toml.write_text(text, encoding="utf-8")
+        return scratch
+
+    @staticmethod
+    def _test(scratch, *args):
+        return run_elspais(
+            "test", "--targets", "units", *args, cwd=scratch, env={"PYTHONDONTWRITEBYTECODE": "1"}
+        )
+
+    # Verifies: REQ-d00333-A+B, REQ-d00249-O, REQ-d00323-M+O+P
+    def test_a_changed_test_file_executes_alone_and_the_rest_are_retained(self, tmp_path):
+        scratch = self._copy(tmp_path)
+        first = self._test(scratch, "--stale-only")
+        assert first.returncode == 0, first.stderr
+        assert "ran tests/test_auth.py tests/test_notifications.py" in first.stderr + first.stdout
+
+        auth = scratch / "tests" / "test_auth.py"
+        auth.write_text(auth.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        second = self._test(scratch, "--stale-only")
+
+        assert second.returncode == 0, second.stderr
+        assert "units: units: 1 of 2 test files; 1 retained" in second.stderr
+        assert "ran tests/test_auth.py\n" in second.stderr + second.stdout
+
+        out = run_elspais("checks", "--tests", "--format", "json", "--lenient", cwd=scratch)
+        checks = {c["name"]: c for c in json.loads(out.stdout)["checks"]}
+        (finding,) = checks["tests.retained_results"]["findings"]
+        assert "target units: 1 result(s) retained" in finding["message"]
+        assert "tests/test_notifications.py" in finding["related"][0]
+        assert "retained from the run of" in finding["related"][0]
+
+        summary = run_elspais("summary", cwd=scratch)
+        assert "units (REQ): 1 result(s) executed, 1 retained" in summary.stdout
+
+    # Verifies: REQ-d00333-I
+    def test_a_full_stale_only_run_executes_every_test_and_full_alone_is_refused(self, tmp_path):
+        scratch = self._copy(tmp_path)
+        assert self._test(scratch, "--stale-only").returncode == 0
+        auth = scratch / "tests" / "test_auth.py"
+        auth.write_text(auth.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+
+        refused = self._test(scratch, "--full")
+        assert refused.returncode == 2
+        assert "Add --stale-only, or drop --full" in refused.stderr
+
+        full = self._test(scratch, "--stale-only", "--full")
+        assert full.returncode == 0, full.stderr
+        assert "every test file: the run asks to execute every test (--full)" in full.stderr
+        assert "ran tests/test_auth.py tests/test_notifications.py" in full.stderr + full.stdout
+
+    # Verifies: REQ-d00311-R
+    def test_a_daemon_answers_a_changed_environment_without_a_file_changing(self, tmp_path):
+        scratch = self._copy(tmp_path, cli_ttl=2)
+        version = tmp_path / "tool-version.txt"
+        version.write_text("1.0\n", encoding="utf-8")
+        toml = scratch / ".elspais.toml"
+        toml.write_text(
+            toml.read_text(encoding="utf-8").replace(
+                'name = "units"\n',
+                'name = "units"\n'
+                f'environment_probes = [{{ name = "tool", command = "cat {version}" }}]\n',
+            ),
+            encoding="utf-8",
+        )
+        assert self._test(scratch).returncode == 0
+
+        def stale():
+            out = run_elspais("checks", "--tests", "--format", "json", "--lenient", cwd=scratch)
+            data = json.loads(out.stdout)
+            return next(c for c in data["checks"] if c["name"] == "tests.results_stale")
+
+        assert stale()["passed"] is True
+        version.write_text("2.0\n", encoding="utf-8")
+
+        check = stale()
+        assert check["passed"] is False
+        assert any("environment probe 'tool'" in f["message"] for f in check["findings"])
+        served = run_elspais("checks", "--tests", "--lenient", cwd=scratch)
+        assert "via daemon" in served.stdout, "the answers did not come from a daemon"
 
 
 class TestServedGraphReadsResultsWrittenWhileServing:

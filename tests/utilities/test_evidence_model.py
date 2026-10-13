@@ -328,3 +328,41 @@ def test_a_value_holding_a_unicode_line_separator_round_trips(tmp_path, separato
     files = render_files(snap)
     assert separator in files["results.jsonl"]
     assert load_snapshot(_write(tmp_path / "ev", files)) == snap
+
+
+_RETAINED = (
+    '{"executed_in":{"commit":"c","root":"/r","started_at":"s"},"file":"a.py","name":"n",'
+    '"outcome":"passed","retained_reason":"why","target":"t"}'
+)
+
+
+# Verifies: REQ-d00322-B
+def test_a_snapshot_line_holding_a_retained_result_refuses(tmp_path):
+    files = render_files(_snapshot())
+    files["results.jsonl"] = _RETAINED + "\n"
+    with pytest.raises(SnapshotUnreadable) as exc:
+        load_snapshot(_write(tmp_path / "ev", files))
+    assert "unknown key executed_in, retained_reason" in str(exc.value)
+
+
+# Verifies: REQ-d00333-A
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"runner": 7},
+        {"skip_reason": 3},
+        {"executed_in": {"commit": "c"}},
+        {"executed_in": {"commit": "c", "root": "/r", "started_at": 1}},
+        {"retained_reason": ["why"]},
+    ],
+    ids=["runner", "skip-reason", "run-missing-keys", "run-not-str", "reason-not-str"],
+)
+def test_a_retained_result_line_is_read_with_the_snapshot_reader_checks(bad):
+    from elspais.utilities.evidence import read_result_line, result_line_text
+
+    good = json.loads(_RETAINED)
+    line = read_result_line(good)
+    assert line.executed_in == {"commit": "c", "root": "/r", "started_at": "s"}
+    assert result_line_text(line) == _RETAINED + "\n"
+    with pytest.raises(SnapshotUnreadable):
+        read_result_line({**good, **bad})

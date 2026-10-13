@@ -1135,3 +1135,33 @@ def test_checks_refuses_concurrency_without_run_tests(tmp_path, monkeypatch, stu
     err = capsys.readouterr().err
     assert "--concurrency chooses what --run-tests executes" in err
     assert "Add --run-tests" in err
+
+
+# ---------------------------------------------------------------------------
+# --full asks a stale-only run to retain no result
+# ---------------------------------------------------------------------------
+
+
+# Verifies: REQ-d00333-I
+@pytest.mark.parametrize(
+    "argv,named",
+    [
+        (["test", "--full"], "Add --stale-only, or drop --full"),
+        (["checks", "--run-tests", "--full"], "Add --stale-only, or drop --full"),
+        (["checks", "--full"], "--full chooses what --run-tests executes"),
+    ],
+    ids=["test", "checks-run-tests", "checks"],
+)
+def test_full_without_the_run_it_qualifies_is_refused(
+    tmp_path, monkeypatch, stub, capsys, argv, named
+):
+    from elspais.cli import main
+
+    log = tmp_path / "runs.log"
+    monkeypatch.setenv("STUB_LOG", str(log))
+    _project(tmp_path, monkeypatch, _toml_target("a", stub("junit", "pass")))
+
+    assert main(argv) == 2
+
+    assert named in capsys.readouterr().err
+    assert not log.exists()

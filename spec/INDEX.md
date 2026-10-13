@@ -169,7 +169,7 @@
 | REQ-d00246 | Markdown Emphasis Normalization Utility                       | prd-core.md             | 6db4d559 |
 | REQ-d00247 | Fenced Code Block Preservation                                | prd-core.md             | 499a4ce4 |
 | REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | 99bb6d77 |
-| REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 9e2255c3 |
+| REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 15f1058b |
 | REQ-d00250 | Section Heading Depth                                         | dev-graph-core.md       | 654f055b |
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | b49bd5ee |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 3b102d6f |
@@ -229,7 +229,7 @@
 | REQ-d00320 | Viewer Edit Controls State What They Do                       | dev-traceview-review.md | e8010396 |
 | REQ-d00321 | Static View Embedded Content                                  | dev-traceview-review.md | 736babc4 |
 | REQ-d00322 | Evidence Snapshot                                             | dev-graph-core.md       | 71339a95 |
-| REQ-d00323 | Carried Result Provenance                                     | dev-graph-core.md       | 58fde1fb |
+| REQ-d00323 | Carried Result Provenance                                     | dev-graph-core.md       | a322b375 |
 | REQ-d00324 | Refusal of a Retired Configuration Value                      | dev-graph-config.md     | 530fb06a |
 | REQ-d00325 | Changelog Reason for a Saved Change                           | dev-graph-file-nodes.md | 4ebffc32 |
 | REQ-d00326 | Path-Shaped Skip Patterns                                     | dev-graph-config.md     | 797c3fe4 |
@@ -239,7 +239,7 @@
 | REQ-d00330 | What a Fix Run Changes                                        | prd-core.md             | 9365d280 |
 | REQ-d00331 | Reuse of File Readings Between Builds                         | dev-graph-core.md       | 53734f81 |
 | REQ-d00332 | Per-Test Attribution                                          | dev-graph-core.md       | a5224a66 |
-| REQ-d00333 | Per-Test Result Retention                                     | dev-graph-core.md       | 04d03072 |
+| REQ-d00333 | Per-Test Result Retention                                     | dev-graph-core.md       | e53aed54 |
 
 ## User Journeys
 

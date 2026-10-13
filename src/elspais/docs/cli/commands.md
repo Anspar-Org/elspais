@@ -145,6 +145,12 @@ To see malformed references, use: `elspais malformed`
                    selected target stays expected, and a carried failure
                    still fails. A selection that is all fresh executes nothing.
                    Requires `--run-tests`; refused without it (exit 2).
+  `--full`         With `--stale-only`, execute every test of each target
+                   whose results are not fresh and retain no result. Without
+                   it, a stale-only run of a target declaring units executes
+                   only the test files whose dependencies changed.
+                   Requires `--run-tests` and `--stale-only`; refused
+                   without them (exit 2).
   `--concurrency N` The most targets this run executes at the same time, in
                    place of `[scanning.test] concurrency`. 1 runs them one at
                    a time, in declaration order. Below 1 is refused (exit 2).
@@ -172,6 +178,7 @@ Execute test targets and record their results. Evaluate no check.
   $ elspais test                       # the `default` group
   $ elspais test --targets unit        # a target or a group
   $ elspais test --stale-only          # only targets whose results are not fresh
+  $ elspais test --stale-only --full   # ... and every test of each of them
   $ elspais checks --expect unit       # later, once: judge every result
 
 The exit code reflects only the targets: 1 if any target failed, 0 if all
@@ -190,6 +197,9 @@ passed. Each run empties the target's folder and records a fingerprint, as
                    finished) and leave the fresh results of the rest in
                    place. A selection that is all fresh executes nothing and
                    exits 0.
+  `--full`         With `--stale-only`, execute every test of each target
+                   whose results are not fresh and retain no result.
+                   Requires `--stale-only`; refused without it (exit 2).
   `--concurrency N` The most targets this run executes at the same time, in
                    place of `[scanning.test] concurrency`. 1 runs them one at
                    a time, in declaration order. Below 1 is refused (exit 2).

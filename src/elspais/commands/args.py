@@ -185,6 +185,13 @@ class ChecksArgs:
     results of the rest. The selection is --targets, or `default`. Every
     selected target stays expected. Requires --run-tests."""
 
+    # Implements: REQ-d00333-I
+    full: bool = False
+    """With --stale-only, execute every test of each target whose results are
+    not fresh, and retain no result. Without it, a stale-only run of a target
+    declaring units executes only the test files whose evidence changed.
+    Requires --run-tests and --stale-only."""
+
     # Implements: REQ-d00314-O
     concurrency: int | None = None
     """The most targets this run executes at the same time, in place of
@@ -1234,6 +1241,13 @@ class TestArgs:
     results of the rest in place. The selection is --targets, or `default`.
     A run in which every selected target is fresh executes nothing and
     passes."""
+
+    # Implements: REQ-d00333-I
+    full: bool = False
+    """With --stale-only, execute every test of each target whose results are
+    not fresh, and retain no result. Without it, a stale-only run of a target
+    declaring units executes only the test files whose evidence changed, and
+    retains the results of the others. Requires --stale-only."""
 
     # Implements: REQ-d00314-O
     concurrency: int | None = None

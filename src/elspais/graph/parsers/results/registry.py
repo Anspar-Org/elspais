@@ -101,6 +101,22 @@ def get_reporter(name: str) -> ReporterSpec:
     return REPORTER_REGISTRY[name]
 
 
+# Implements: REQ-d00254-E
+def coverage_reader_for(path: Any) -> tuple[str, Any] | None:
+    """The coverage reporter that reads the file at *path*, and a reader for it, or ``None``.
+
+    Each coverage format is tried in a fixed order, so one file is read by
+    one format wherever it is read.
+    """
+    from pathlib import Path
+
+    for name in ("lcov", "coverage-json", "coverage-sqlite"):
+        reader = REPORTER_REGISTRY[name].parser_factory()
+        if reader.can_parse(Path(path)):
+            return name, reader
+    return None
+
+
 def _register_builtins() -> None:
     from elspais.graph.parsers.results.evidence_snapshot import EvidenceSnapshotParser
     from elspais.graph.parsers.results.flutter_machine import FlutterMachineParser

@@ -26,13 +26,14 @@ from __future__ import annotations
 
 import io
 import json
-import shlex
 import subprocess
 import tarfile
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
+
+from elspais.utilities.commands import fill_placeholder
 
 #: The name of the manifest file inside a packed baseline.
 PACK_MANIFEST = "elspais-baseline.json"
@@ -65,22 +66,17 @@ class Adoption:
     detail: str = ""
 
 
-# Implements: REQ-d00333-E+F, REQ-d00311-N
+# Implements: REQ-d00333-F
 def _run_refusal(fingerprint: dict[str, Any]) -> str:
     """Return why a recorded run cannot serve as a *Baseline Run*, or ``""``.
 
     Packing and adopting both ask, so an archive assembled by other means
     holds to the same rule.
     """
-    from elspais.utilities.fingerprint import input_label
+    from elspais.utilities.fingerprint import ended_run_refusal
 
-    if not fingerprint.get("finished_at"):
-        return "its run is in progress or recorded no end, so its results may be partial"
-    during = fingerprint.get("changed_during_run") or []
-    if during:
-        shown = ", ".join(input_label(entry) for entry in during[:5])
-        more = f" and {len(during) - 5} more" if len(during) > 5 else ""
-        return f"inputs changed while it ran: {shown}{more}"
+    if refusal := ended_run_refusal(fingerprint):
+        return refusal
     if fingerprint.get("dirty") is not False or not fingerprint.get("commit"):
         return (
             "its run executed in a tree that differs from every commit; commit the "
@@ -367,7 +363,7 @@ def fetch(repo_root: Path, config: Any, *, replace: bool) -> tuple[dict[str, Any
         staging = Path(scratch) / "staging"
         staging.mkdir()
         completed = subprocess.run(
-            command.replace("{dest}", shlex.quote(str(dest))),
+            fill_placeholder(command, "{dest}", [str(dest)]),
             shell=True,
             cwd=root,
             stdin=subprocess.DEVNULL,

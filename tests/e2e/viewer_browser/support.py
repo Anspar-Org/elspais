@@ -1047,23 +1047,20 @@ def _authority_scope_membership(page, viewer_url: str, params: str = "") -> list
     return sorted(resp.json()["ids"])
 
 
-@pytest.fixture(scope="session")
-def viewer_url_environments(tmp_path_factory):
-    """Start a viewer against the viewer-environments fixture.
+def _fixture_viewer(tmp_path_factory, name: str):
+    """Start a viewer against a copy of the fixture project *name*, committed to git.
 
-    The fixture holds one test reported once for each of two browser
-    projects, in one artifact, with the project in each suite's `hostname`.
-    Yields the base URL.
+    Yields the base URL, and stops the viewer afterwards.
     """
     elspais_bin = resolve_elspais()
     if elspais_bin is None:
         pytest.skip("elspais CLI not found on PATH")
 
-    src = REPO_ROOT / "tests" / "fixtures" / "viewer-environments"
+    src = REPO_ROOT / "tests" / "fixtures" / name
     if not src.exists():
-        pytest.skip(f"viewer-environments fixture not present at {src}")
+        pytest.skip(f"{name} fixture not present at {src}")
 
-    dest = tmp_path_factory.mktemp("viewer-environments-run")
+    dest = tmp_path_factory.mktemp(f"{name}-run")
     for item in src.iterdir():
         if item.is_dir():
             shutil.copytree(item, dest / item.name)
@@ -1111,9 +1108,42 @@ def viewer_url_environments(tmp_path_factory):
                 proc.wait(timeout=5)
 
 
+@pytest.fixture(scope="session")
+def viewer_url_environments(tmp_path_factory):
+    """Start a viewer against the viewer-environments fixture.
+
+    The fixture holds one test reported once for each of two browser
+    projects, in one artifact, with the project in each suite's `hostname`.
+    Yields the base URL.
+    """
+    yield from _fixture_viewer(tmp_path_factory, "viewer-environments")
+
+
+@pytest.fixture(scope="session")
+def viewer_url_retained(tmp_path_factory):
+    """Start a viewer against the viewer-retained fixture.
+
+    Its target's output area holds a result its last run executed and a
+    *Retained Result* of an earlier run. Yields the base URL.
+    """
+    yield from _fixture_viewer(tmp_path_factory, "viewer-retained")
+
+
 @pytest.fixture()
 def page_environments(viewer_url_environments):
     """Launch headless Chromium against the environments-fixture viewer."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        pg = context.new_page()
+        pg.set_default_timeout(10_000)
+        yield pg
+        browser.close()
+
+
+@pytest.fixture()
+def page_retained(viewer_url_retained):
+    """Launch headless Chromium against the retained-fixture viewer."""
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context()
