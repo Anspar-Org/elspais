@@ -737,14 +737,17 @@ def test_a_command_that_failed_with_no_failing_result_leaves_nothing_retainable(
 
 # A stand-in Dart test runner: each `test('name', ...)` line of each Dart test
 # file it is handed (or finds under a directory it is handed) passes.
-# RUNNER_PUB_GET names a package configuration it brings up to date first, as
-# `flutter test` resolves packages before it tests.
+# RUNNER_PUB_GET names a package configuration it brings into agreement with
+# the pubspec first, listing package util, as `flutter test` resolves packages
+# before it tests.
 _DART_RUNNER = """
-import json, os, pathlib, re, sys, time
+import json, os, pathlib, re, sys
 out = pathlib.Path(os.environ["ELSPAIS_TARGET_OUTPUT"])
 if os.environ.get("RUNNER_PUB_GET"):
-    later = time.time() + 1000
-    os.utime(os.environ["RUNNER_PUB_GET"], (later, later))
+    config = pathlib.Path(os.environ["RUNNER_PUB_GET"])
+    data = json.loads(config.read_text())
+    data["packages"].append({"name": "util", "rootUri": "../../util/"})
+    config.write_text(json.dumps(data))
 paths = []
 for arg in sys.argv[1:]:
     p = pathlib.Path(arg)
@@ -761,8 +764,6 @@ for p in paths:
 (out / "results.jsonl").write_text("".join(l + "\\n" for l in lines))
 """
 
-_DART_T0 = 1_700_000_000
-
 
 def _dart_test(lib: str) -> str:
     return (
@@ -775,28 +776,34 @@ def _dart_test(lib: str) -> str:
 
 
 def _dart_project(tmp_path: Path) -> tuple[Path, dict]:
-    """A Dart package whose two test files each import their own library file."""
-    import os
+    """A Dart package whose two test files each import their own library file.
 
+    The package depends on the repository package util by path.
+    """
     root = tmp_path / "repo"
     files = {
         "spec/dev.md": _SPEC,
-        "app/pubspec.yaml": "name: app\n",
+        "app/pubspec.yaml": "name: app\ndependencies:\n  util:\n    path: ../util\n",
         "app/pubspec.lock": "packages: {}\n",
+        "util/pubspec.yaml": "name: util\n",
         "app/lib/a.dart": "int a = 1;\n",
         "app/lib/b.dart": "int b = 1;\n",
         "app/test/a_test.dart": _dart_test("a.dart"),
         "app/test/b_test.dart": _dart_test("b.dart"),
         "assets/data.txt": "one\n",
         "app/.dart_tool/package_config.json": json.dumps(
-            {"configVersion": 2, "packages": [{"name": "app", "rootUri": "../"}]}
+            {
+                "configVersion": 2,
+                "packages": [
+                    {"name": "app", "rootUri": "../"},
+                    {"name": "util", "rootUri": "../../util/"},
+                ],
+            }
         ),
     }
     for rel, text in files.items():
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
         (root / rel).write_text(text, encoding="utf-8")
-        later = 100 if rel.endswith("package_config.json") else 0
-        os.utime(root / rel, (_DART_T0, _DART_T0 + later))
     runner = tmp_path / "dart_runner.py"
     runner.write_text(textwrap.dedent(_DART_RUNNER), encoding="utf-8")
     target = {
@@ -804,7 +811,7 @@ def _dart_project(tmp_path: Path) -> tuple[Path, dict]:
         "reporter": "evidence-snapshot",
         "results": "results.jsonl",
         "command": f"{sys.executable} {runner} {{selection}}",
-        "inputs": {"skip_dirs": [".dart_tool"]},
+        "inputs": {"skip_dirs": ["**/.dart_tool"]},
         "units": {"dependencies": {"source": "imports:dart"}, "full_selection": "app/test"},
         "environment_probes": [
             {"name": "sdk", "command": "echo 3"},
@@ -868,16 +875,17 @@ def test_an_input_the_dart_source_does_not_observe_executes_every_test_file(tmp_
 def test_a_run_whose_source_holds_no_evidence_states_why_and_asks_again_once_it_ends(
     tmp_path, monkeypatch, capsys, pub_get
 ):
-    import os
-
     root, config = _dart_project(tmp_path)
     resolved = root / "app/.dart_tool/package_config.json"
-    os.utime(root / "app/pubspec.yaml", (_DART_T0, _DART_T0 + 200))
+    resolved.write_text(
+        json.dumps({"configVersion": 2, "packages": [{"name": "app", "rootUri": "../"}]}),
+        encoding="utf-8",
+    )
     if pub_get:
         monkeypatch.setenv("RUNNER_PUB_GET", str(resolved))
     why = (
-        "app/.dart_tool/package_config.json is older than app/pubspec.yaml; "
-        "run `dart pub get` or `flutter pub get` in app"
+        "app/pubspec.yaml declares util at util, which app/.dart_tool/package_config.json "
+        "does not list; run `dart pub get` or `flutter pub get` in app"
     )
 
     first, failures = _run(root, config)
@@ -947,3 +955,53 @@ def test_different_causes_selecting_every_test_file_are_summarised_for_the_whole
     assert second.plan.whole_reason == "the evidence of every test file changed"
     assert sorted(second.plan.selected) == ["app/test/a_test.dart", "app/test/b_test.dart"]
     assert second.plan.retained == {}
+
+
+def _foreign_test_project(tmp_path: Path, **units) -> tuple[Path, dict]:
+    """A project whose scan below the target's directory holds a test file its command never runs.
+
+    The stand-in runner executes only ``test_*.py`` files; the scan also reads
+    ``*_spec.py``, the way an application's scan holds test files another
+    target runs.
+    """
+    root, config = _project(tmp_path, **units)
+    (root / "tests" / "c_spec.py").write_text(_test_file("c"), encoding="utf-8")
+    config["scanning"]["test"]["file_patterns"] = ["test_*.py", "*_spec.py"]
+    return root, config
+
+
+# Verifies: REQ-d00333-H
+def test_a_scanned_test_file_the_command_never_runs_fails_a_run_that_selects_it(tmp_path):
+    from elspais.utilities.retention import unit_inventory
+
+    root, config = _foreign_test_project(tmp_path)
+    typed = validate_config(config)
+    target = typed.scanning.test.targets[0]
+    assert "tests/c_spec.py" in unit_inventory(root, typed, target)
+
+    result, failures = _run(root, config)
+
+    assert failures == ["unit"]
+    assert not result.succeeded
+    assert read_ledger(_area(root, config)).units["tests/c_spec.py"].outcome == "no-result"
+
+
+# Verifies: REQ-d00333-H
+def test_a_units_target_selecting_its_test_files_leaves_others_out_of_its_units(tmp_path):
+    from elspais.utilities.retention import unit_inventory
+
+    root, config = _foreign_test_project(
+        tmp_path, tests={"directories": ["tests"], "file_patterns": ["test_*.py"]}
+    )
+    typed = validate_config(config)
+    target = typed.scanning.test.targets[0]
+    assert unit_inventory(root, typed, target) == ("tests/test_a.py", "tests/test_b.py")
+
+    result, failures = _run(root, config)
+
+    assert failures == []
+    assert result.succeeded
+    assert sorted(read_ledger(_area(root, config)).units) == [
+        "tests/test_a.py",
+        "tests/test_b.py",
+    ]

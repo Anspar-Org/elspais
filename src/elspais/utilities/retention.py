@@ -243,7 +243,8 @@ def _typed(config: Any) -> Any:
     return config
 
 
-def _observation(kind_config: Any) -> Observation:
+def as_observation(kind_config: Any) -> Observation:
+    """A scanning-kind selection as the dependency interface's *Observation*."""
     return Observation(
         directories=tuple(kind_config.directories),
         file_patterns=tuple(kind_config.file_patterns),
@@ -300,13 +301,15 @@ def observes_frame(repo_root: Path, config: Any, target: Any) -> ObservesFrame:
             skip_dirs=tuple(kind.skip_dirs),
             skip_files=tuple(kind.skip_files),
         )
-    return ObservesFrame(cwd=_cwd_rel(root, target), inputs=_observation(target.inputs), test=test)
+    return ObservesFrame(
+        cwd=_cwd_rel(root, target), inputs=as_observation(target.inputs), test=test
+    )
 
 
 def observation_of(repo_root: Path, config: Any, target: Any) -> Observation:
     """The files the target's dependency source observes: declared, or the source's default."""
     if target.units.observes is not None:
-        return _observation(target.units.observes)
+        return as_observation(target.units.observes)
     source = get_source(target.units.source_name())
     default = source.default_observes(observes_frame(repo_root, config, target))
     # The schema refuses a source without a default unless observes is declared.

@@ -24,6 +24,8 @@ pip install elspais
 pip install elspais[trace-view]    # Static HTML traceability view
 pip install elspais[trace-review]  # Interactive viewer server
 pip install elspais[mcp]           # MCP server for AI integration
+pip install elspais[coverage]      # Per-test line coverage from .coverage files
+pip install elspais[dart]          # Dart and Flutter test selection by imports
 pip install elspais[all]           # Everything
 ```
 

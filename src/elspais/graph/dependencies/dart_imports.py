@@ -19,16 +19,22 @@ a package is still read, because an override or a pub workspace can place a
 package it imports in the repository; only the repository files reached
 through it are evidence.
 
-The source reads; it runs nothing. Whatever it cannot be sure of leaves the
-units it reaches without evidence, so they execute, and the reason names the
-cause:
+The source reads; it runs nothing. It reads ``pubspec.yaml`` files with
+PyYAML, which the ``elspais[dart]`` extra installs; without it the source
+cannot answer, and every test file of the target executes. Whatever it cannot
+be sure of leaves the units it reaches without evidence, so they execute, and
+the reason names the cause:
 
 - a test file with no ``pubspec.yaml`` above it, or whose package no package
   configuration lists;
-- a package configuration that does not read, that is older than a
-  ``pubspec.yaml``, ``pubspec.lock`` or ``pubspec_overrides.yaml`` it
-  depends on (the test runner then resolves the packages again), or that
-  places a package outside the repository, the pub cache and the Flutter SDK;
+- a package configuration that does not read, whose package holds no
+  ``pubspec.lock``, that places a package outside the repository, the pub
+  cache and the Flutter SDK, or that disagrees with the declarations of its
+  program: a package of the program, a pub workspace member or a ``path:``
+  dependency or override, followed transitively, that the configuration does
+  not list or places elsewhere, and a repository package it lists that no
+  pubspec of the program declares. A pubspec that does not read, or a form
+  of declaration the source does not read, counts as a disagreement;
 - a file, in the repository or the environment, that cannot be read, a
   directive that cannot be read, and a URI that names an unlisted package or
   a scheme the source does not follow.
@@ -304,6 +310,223 @@ class _Config:
         return self.placed[path]
 
 
+#: The keys of a dependency that name a source outside the repository.
+_ENVIRONMENT_SOURCES = frozenset({"hosted", "git", "sdk", "version"})
+_GLOB = frozenset("*?[{")
+#: The dependency sections pub reads of a package, by its role in the program;
+#: the root's ``dependency_overrides`` are read apart.
+_SECTIONS_READ = {
+    "root": ("dependencies", "dev_dependencies"),
+    "member": ("dependencies", "dev_dependencies"),
+    "dependency": ("dependencies",),
+}
+
+
+class _Disagreement(Exception):
+    """The configuration misdescribes the program, or a pubspec cannot say; the reason is whole."""
+
+
+class _Agreement:
+    """One package configuration compared with the declarations of its program.
+
+    The program's packages are the configuration's own package, each pub
+    workspace member under it, and each repository package a ``path:``
+    dependency reaches from them, transitively. Pub reads the
+    ``dependencies``, ``dev_dependencies`` and ``dependency_overrides`` of the
+    root package, the ``dependencies`` and ``dev_dependencies`` of a workspace
+    member, and only the ``dependencies`` of any other package, so those are
+    the sections read here. ``pubspec_overrides.yaml`` beside the root
+    replaces the root's ``dependency_overrides`` whole.
+    """
+
+    def __init__(self, reading: _Reading, config: _Config) -> None:
+        self.reading = reading
+        self.config = config
+        self.remedy = f"{_PUB_GET} in {reading.rel(config.directory)}"
+        self.reached: set[Path] = set()
+        self.expected: dict[str, tuple[Path, Path]] = {}
+        self.queue: list[tuple[Path, str]] = []
+
+    def problem(self) -> str:
+        try:
+            self.compare()
+        except _Disagreement as exc:
+            return str(exc)
+        return ""
+
+    def fail(self, why: str) -> _Disagreement:
+        return _Disagreement(f"{why}; {self.remedy}")
+
+    def unreadable(self, file: Path, why: str) -> _Disagreement:
+        return _Disagreement(f"{self.reading.rel(file)} {why}")
+
+    def pubspec(self, directory: Path) -> dict:
+        found = self.reading.pubspec(directory / "pubspec.yaml")
+        if isinstance(found, str):
+            raise _Disagreement(found)
+        return found
+
+    def section(self, file: Path, data: dict, key: str) -> dict:
+        value = data.get(key)
+        if value is None:
+            return {}
+        if not isinstance(value, dict) or not all(isinstance(k, str) for k in value):
+            raise self.unreadable(file, f"holds a {key} that is no mapping of package names")
+        return value
+
+    def path_of(self, file: Path, name: str, spec: object) -> str | None:
+        """The path a dependency *spec* names, or ``None`` where it names the environment."""
+        if spec is None or isinstance(spec, str):
+            return None
+        if isinstance(spec, dict):
+            if "path" in spec:
+                if isinstance(spec["path"], str):
+                    return spec["path"]
+            elif _ENVIRONMENT_SOURCES & set(spec):
+                return None
+        raise self.unreadable(file, f"declares {name} in a form elspais does not read")
+
+    def listed(self, name: str) -> Path | None:
+        entry = self.config.packages.get(name)
+        return None if entry is None else entry[0]
+
+    def place(self, name: str, at: Path, declared: str) -> None:
+        """Hold *name* at *at*, as *declared* states; refuse where the configuration differs."""
+        where = self.reading.rel(at)
+        config = self.reading.rel(self.config.path)
+        resolved = at.resolve()
+        held = self.expected.get(name)
+        if held is not None:
+            if held[0] != resolved:
+                raise self.fail(
+                    f"{declared} {name} at {where}, and another declaration places it at "
+                    f"{self.reading.rel(held[1])}"
+                )
+            return
+        listed = self.listed(name)
+        if listed is None:
+            raise self.fail(f"{declared} {name} at {where}, which {config} does not list")
+        if listed.resolve() != resolved:
+            raise self.fail(
+                f"{declared} {name} at {where}, which {config} places at {self.reading.rel(listed)}"
+            )
+        self.expected[name] = (resolved, at)
+
+    def enter(self, directory: Path, name: str, role: str) -> None:
+        """Read the package at *directory* once, *role* naming the sections pub reads of it."""
+        resolved = directory.resolve()
+        if resolved in self.reached:
+            return
+        self.reached.add(resolved)
+        if self.reading.in_repo(directory) is None or self.config.environment(directory):
+            return
+        data = self.pubspec(directory)
+        file = directory / "pubspec.yaml"
+        if data.get("name") != name:
+            raise self.fail(f"{self.reading.rel(file)} does not name its package {name}")
+        if role != "root" and (
+            "dependency_overrides" in data or (directory / "pubspec_overrides.yaml").exists()
+        ):
+            raise self.unreadable(
+                file,
+                "holds dependency_overrides outside the root package, which elspais does not read",
+            )
+        self.queue.append((directory, role))
+
+    def members(self, directory: Path, data: dict) -> list[Path]:
+        file = directory / "pubspec.yaml"
+        listed = data.get("workspace")
+        if listed is None:
+            return []
+        if not isinstance(listed, list) or not all(isinstance(m, str) for m in listed):
+            raise self.unreadable(file, "holds a workspace that is no list of directories")
+        found = []
+        for member in listed:
+            if _GLOB & set(member):
+                raise self.unreadable(
+                    file, f"names workspace members by the pattern {member}, which is not read"
+                )
+            found.append(Path(os.path.normpath(directory / member)))
+        return found
+
+    def overrides(self, directory: Path, data: dict) -> tuple[Path, dict]:
+        """The root's dependency overrides and the file holding them."""
+        beside = directory / "pubspec_overrides.yaml"
+        if beside.exists():
+            found = self.reading.pubspec(beside)
+            if isinstance(found, str):
+                raise _Disagreement(found)
+            return beside, self.section(beside, found, "dependency_overrides")
+        file = directory / "pubspec.yaml"
+        return file, self.section(file, data, "dependency_overrides")
+
+    def compare(self) -> None:
+        root = self.config.directory
+        data = self.pubspec(root)
+        name = data.get("name")
+        if not isinstance(name, str):
+            raise self.unreadable(root / "pubspec.yaml", "names no package")
+        rel_root = self.reading.rel(root / "pubspec.yaml")
+        self.place(name, root, f"{rel_root} names the package")
+        self.enter(root, name, "root")
+        override_file, overrides = self.overrides(root, data)
+        override_paths: dict[str, Path | None] = {}
+        for dep, spec in overrides.items():
+            path = self.path_of(override_file, dep, spec)
+            override_paths[dep] = (
+                None if path is None else Path(os.path.normpath(override_file.parent / path))
+            )
+        overridden = f"{self.reading.rel(override_file)} overrides"
+        # An override applies wherever the program loads the package, which
+        # may be through a package of the environment, so one the
+        # configuration lists is compared whether or not a pubspec declares it.
+        for dep, at in override_paths.items():
+            if at is not None and self.listed(dep) is not None:
+                self.place(dep, at, overridden)
+                self.enter(at, dep, "dependency")
+        index = 0
+        while index < len(self.queue):
+            directory, role = self.queue[index]
+            index += 1
+            file = directory / "pubspec.yaml"
+            data = self.pubspec(directory)
+            for member in self.members(directory, data) if role != "dependency" else ():
+                if not (member / "pubspec.yaml").is_file():
+                    raise self.fail(
+                        f"{self.reading.rel(file)} names the workspace member "
+                        f"{self.reading.rel(member)}, which holds no pubspec.yaml"
+                    )
+                member_name = self.pubspec(member).get("name")
+                if not isinstance(member_name, str):
+                    raise self.unreadable(member / "pubspec.yaml", "names no package")
+                self.place(
+                    member_name, member, f"{self.reading.rel(file)} names the workspace member"
+                )
+                self.enter(member, member_name, "member")
+            for key in _SECTIONS_READ[role]:
+                for dep, spec in self.section(file, data, key).items():
+                    if dep in override_paths:
+                        at = override_paths[dep]
+                        declared = overridden
+                    else:
+                        path = self.path_of(file, dep, spec)
+                        at = None if path is None else Path(os.path.normpath(directory / path))
+                        declared = f"{self.reading.rel(file)} declares"
+                    if at is None:
+                        continue
+                    self.place(dep, at, declared)
+                    self.enter(at, dep, "dependency")
+        config = self.reading.rel(self.config.path)
+        for dep, (at, _lib) in sorted(self.config.packages.items()):
+            if self.config.environment(at) or self.reading.in_repo(at) is None:
+                continue
+            if at.resolve() not in self.reached:
+                raise self.fail(
+                    f"{config} lists {dep} at {self.reading.rel(at)}, which no pubspec of "
+                    f"its program declares"
+                )
+
+
 class _Reading:
     """One call's reading of a repository; everything read is held for that call alone."""
 
@@ -320,6 +543,7 @@ class _Reading:
         self.implicit: dict[Path, tuple[Path, ...]] = {}
         self.through: dict[tuple[Path, Path], frozenset[Path] | str] = {}
         self.placed: dict[Path, Path | None] = {}
+        self.pubspecs: dict[Path, dict | str] = {}
 
     def rel(self, path: Path) -> str:
         from elspais.graph.parsers.results.placement import placed_in_repo
@@ -439,7 +663,7 @@ class _Reading:
                     f"package {name} resolves to {root}, outside the repository, the pub "
                     f"cache and the Flutter SDK, whose changes elspais cannot see"
                 )
-        return self.staleness(config)
+        return self.disagreement(config)
 
     def repository_packages(self, config: _Config) -> list[Path]:
         """The roots of the packages *config* places in the repository and not the environment."""
@@ -451,42 +675,50 @@ class _Reading:
             }
         )
 
-    def staleness(self, config: _Config) -> str:
-        """Why the test runner would resolve *config*'s packages again, or ``""``.
+    def disagreement(self, config: _Config) -> str:
+        """Where *config* misdescribes which repository packages its program loads, or ``""``.
 
-        The configuration is current only where the last resolution is newer
-        than every file package resolution reads: the ``pubspec.yaml``,
-        ``pubspec.lock`` and ``pubspec_overrides.yaml`` beside its
-        ``.dart_tool``, and the ``pubspec.yaml`` of every package it places in
-        the repository. A resolution that changes nothing rewrites
-        ``package_graph.json`` beside the configuration and leaves the
-        configuration's own bytes and time alone, so the later of the two
-        files dates the last resolution.
+        A resolution that changes nothing leaves the configuration's bytes and
+        time alone, so no file time says whether the configuration is current.
+        It is current where it agrees with the declarations package resolution
+        reads: each package of the program, and each ``path:`` dependency, lies
+        where the configuration places it, and every repository package the
+        configuration lists is one some pubspec of the program declares. A
+        hosted, git or SDK package is environment, which ``pubspec.lock`` and
+        the target's probes cover, so only its absence from the repository is
+        compared.
         """
         directory = config.directory
         if not (directory / "pubspec.lock").is_file():
             return f"{self.rel(directory)} holds no pubspec.lock; {_PUB_GET} there"
-        resolved = config.path.stat().st_mtime
-        try:
-            resolved = max(resolved, (config.path.parent / "package_graph.json").stat().st_mtime)
-        except OSError:
-            pass
-        compared = [directory / "pubspec.lock", directory / "pubspec_overrides.yaml"]
-        compared += sorted(
-            {root / "pubspec.yaml" for root in self.repository_packages(config)}
-            | {directory / "pubspec.yaml"}
-        )
-        for path in compared:
+        return _Agreement(self, config).problem()
+
+    def pubspec(self, path: Path) -> dict | str:
+        """The mapping a pubspec file holds, or why it holds none."""
+        import yaml
+
+        if path not in self.pubspecs:
+            where = self.rel(path)
             try:
-                changed = path.stat().st_mtime
-            except OSError:
-                continue
-            if changed > resolved:
-                return (
-                    f"{self.rel(config.path)} is older than {self.rel(path)}; "
-                    f"{_PUB_GET} in {self.rel(directory)}"
+                data = yaml.safe_load(path.read_text(encoding="utf-8"))
+            except FileNotFoundError:
+                self.pubspecs[path] = f"{where} does not exist"
+            except UnicodeDecodeError:
+                self.pubspecs[path] = f"{where} is not UTF-8"
+            except OSError as exc:
+                self.pubspecs[path] = f"{where} cannot be read: {exc.strerror or exc}"
+            except yaml.YAMLError as exc:
+                mark = getattr(exc, "problem_mark", None)
+                problem = getattr(exc, "problem", None) or "it is not YAML"
+                line = "" if mark is None else f" line {mark.line + 1}"
+                self.pubspecs[path] = f"{where}{line} does not read as YAML: {problem}"
+            else:
+                if data is None:
+                    data = {}
+                self.pubspecs[path] = (
+                    data if isinstance(data, dict) else f"{where} holds no YAML mapping"
                 )
-        return ""
+        return self.pubspecs[path]
 
     # -- files and their edges -----------------------------------------------
 
@@ -710,7 +942,7 @@ _IMPORTED_ONLY = tuple(
 class DartImportsSource:
     name: ClassVar[str] = "imports:dart"
     settings_model: ClassVar[type[BaseModel]] = NoSettings
-    extra: ClassVar[str | None] = None
+    extra: ClassVar[str | None] = "dart"
 
     def default_observes(self, frame: ObservesFrame) -> Observation | None:
         """The Dart inputs a test loads only through an import, and the test files themselves.

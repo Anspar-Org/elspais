@@ -1,23 +1,27 @@
 """Tests for the imports:dart dependency source: directives, package resolution and the closure.
 
-Each test writes a small Dart repository under ``tmp_path``. Every file is
-given one modification time and every package configuration a later one, so
-a configuration is current unless a test makes a file newer than it.
+Each test writes a small Dart repository under ``tmp_path``: pubspec files
+declaring each package's ``path:`` dependencies, and a package configuration
+agreeing with them unless the test makes it disagree.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 from elspais.graph.dependencies import (
     NoSettings,
     Observation,
     ObservesFrame,
     SourceRequest,
+    SourceUnavailable,
+    gather_evidence,
     get_source,
     observes_required,
 )
@@ -27,8 +31,6 @@ from elspais.graph.dependencies.dart_imports import (
     read_directives,
 )
 
-_T0 = 1_700_000_000
-
 
 def _write(root: Path, rel: str, text: str = "") -> Path:
     path = root / rel
@@ -37,9 +39,22 @@ def _write(root: Path, rel: str, text: str = "") -> Path:
     return path
 
 
+def _pubspec(root: Path, rel: str, name: str, **sections) -> Path:
+    """The pubspec of package *name* at *rel*, holding *sections* as written."""
+    return _write(root, f"{rel}/pubspec.yaml", yaml.safe_dump({"name": name, **sections}))
+
+
 def _package(root: Path, rel: str, name: str, **others: str) -> None:
-    """A resolved package at *rel* named *name*; *others* maps package names to root URIs."""
-    _write(root, f"{rel}/pubspec.yaml", f"name: {name}\n")
+    """A resolved package at *rel* named *name*; *others* maps package names to root URIs.
+
+    A relative root URI is a repository package, which the pubspec declares as
+    a ``path:`` dependency; any other is a hosted package.
+    """
+    dependencies = {
+        other: {"path": uri.removeprefix("../").rstrip("/")} if "://" not in uri else "^1.0.0"
+        for other, uri in others.items()
+    }
+    _pubspec(root, rel, name, **({"dependencies": dependencies} if dependencies else {}))
     _write(root, f"{rel}/pubspec.lock", "packages: {}\n")
     _config(root, rel, {name: "../", **others})
 
@@ -50,26 +65,8 @@ def _config(root: Path, rel: str, packages: dict[str, str], **keys) -> Path:
     return _write(root, f"{rel}/.dart_tool/package_config.json", json.dumps(data))
 
 
-def _settle_times(root: Path) -> None:
-    for path in root.rglob("*"):
-        if path.is_file():
-            later = path.name == "package_config.json"
-            os.utime(path, (_T0, _T0 + (100 if later else 0)))
-
-
-def _touch(path: Path) -> None:
-    os.utime(path, (_T0, _T0 + 200))
-
-
-def _evidence(root: Path, *units: str):
-    """The evidence, every package configuration made current first."""
-    _settle_times(root)
-    return _timed_evidence(root, *units)
-
-
-def _timed_evidence(root: Path, *units: str):
-    """The evidence on the modification times the test set, unchanged."""
-    request = SourceRequest(
+def _request(root: Path, *units: str) -> SourceRequest:
+    return SourceRequest(
         repo_root=root.resolve(),
         cwd=root.resolve(),
         target_name="dart",
@@ -79,7 +76,10 @@ def _timed_evidence(root: Path, *units: str):
         settings=NoSettings(),
         environment_probes=("dart",),
     )
-    return get_source("imports:dart").evidence(request)
+
+
+def _evidence(root: Path, *units: str):
+    return get_source("imports:dart").evidence(_request(root, *units))
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +237,14 @@ def test_a_repository_file_reached_through_the_environment_joins_the_evidence(tm
     _write(cache, "hosted/x/lib/src/y.dart", "import 'dart:async';\n")
     _package(repo, "core", "core")
     _write(repo, "core/lib/core.dart")
-    _write(repo, "app/pubspec.yaml", "name: app\n")
+    # The hosted package x depends on core, which an override places in the repository.
+    _pubspec(
+        repo,
+        "app",
+        "app",
+        dependencies={"x": "^1.0.0"},
+        dependency_overrides={"core": {"path": "../core"}},
+    )
     _write(repo, "app/pubspec.lock", "")
     _config(repo, "app", {"app": "../", "x": x, "core": "../../core/"}, **{key: cache.as_uri()})
     _write(repo, "app/test/a_test.dart", "import 'package:x/x.dart';\n")
@@ -281,16 +288,18 @@ def test_a_pub_cache_inside_the_repository_is_environment(tmp_path):
     _write(cache, "hosted/h/hook/build.dart", "import 'package:core/core.dart';\n")
     _package(repo, "core", "core")
     _write(repo, "core/lib/core.dart")
-    _write(repo, "app/pubspec.yaml", "name: app\n")
+    _pubspec(
+        repo,
+        "app",
+        "app",
+        dependencies={"h": "^1.0.0"},
+        dependency_overrides={"core": {"path": "../core"}},
+    )
     _write(repo, "app/pubspec.lock", "")
     _config(repo, "app", {"app": "../", "h": h, "core": "../../core/"}, pubCache=cache.as_uri())
     _write(repo, "app/test/a_test.dart", "import 'package:h/h.dart';\n")
-    _settle_times(repo)
-    # A hosted package's pubspec newer than the configuration is no reason
-    # to resolve again: the lock pins it.
-    _touch(cache / "hosted" / "h" / "pubspec.yaml")
 
-    evidence = _timed_evidence(repo, "app/test/a_test.dart")
+    evidence = _evidence(repo, "app/test/a_test.dart")
 
     assert evidence.no_evidence == {}
     assert evidence.files == {"app/test/a_test.dart": frozenset({"app/test/a_test.dart"})}
@@ -303,7 +312,6 @@ def test_a_target_with_no_probe_that_affects_retention_has_no_evidence(tmp_path)
 
     _package(tmp_path, "app", "app")
     _write(tmp_path, "app/test/a_test.dart")
-    _settle_times(tmp_path)
     request = SourceRequest(
         repo_root=tmp_path.resolve(),
         cwd=tmp_path.resolve(),
@@ -443,9 +451,19 @@ def test_a_part_file_unit_depends_on_its_library_and_one_named_only_by_name_is_u
 # Verifies: REQ-d00333-B
 def test_a_library_is_resolved_with_the_configuration_of_the_test_program(tmp_path):
     # Package b's own configuration maps package:c to c_old; a test of
-    # package a imports b, and a's configuration maps package:c to c_new.
+    # package a imports b, and a's configuration maps package:c to c_new,
+    # where a's override places it.
     _package(tmp_path, "a", "a", b="../../b/", c="../../c_new/")
+    _pubspec(
+        tmp_path,
+        "a",
+        "a",
+        dependencies={"b": {"path": "../b"}},
+        dependency_overrides={"c": {"path": "../c_new"}},
+    )
     _package(tmp_path, "b", "b", c="../../c_old/")
+    _pubspec(tmp_path, "c_new", "c")
+    _pubspec(tmp_path, "c_old", "c")
     _write(tmp_path, "b/lib/b.dart", "import 'package:c/c.dart';\n")
     _write(tmp_path, "c_new/lib/c.dart", "")
     _write(tmp_path, "c_old/lib/c.dart", "")
@@ -496,69 +514,212 @@ def test_the_nearest_flutter_test_config_and_each_build_hook_are_roots(tmp_path)
 # The package configuration
 
 
+_REMEDY = "run `dart pub get` or `flutter pub get` in app"
+_CONFIG_AT = "app/.dart_tool/package_config.json"
+
+
+# Verifies: REQ-d00333-B
+def test_a_pubspec_edit_that_changes_no_resolution_keeps_the_evidence(tmp_path):
+    # Pub rewrites the configuration only where its content changes, so a
+    # pubspec newer than the configuration is no disagreement.
+    _app(tmp_path)
+    _write(tmp_path, "util/lib/util.dart", "")
+    _write(tmp_path, "app/test/a_test.dart", "import 'package:util/util.dart';\n")
+    config = tmp_path / _CONFIG_AT
+    os.utime(config, (1_700_000_000, 1_700_000_000))
+    pubspec = _pubspec(
+        tmp_path,
+        "app",
+        "app",
+        description="A described app.",
+        dependencies={"util": {"path": "../util"}},
+        flutter={"assets": ["assets/"]},
+    )
+    assert pubspec.stat().st_mtime > config.stat().st_mtime
+
+    evidence = _evidence(tmp_path, "app/test/a_test.dart")
+
+    assert evidence.no_evidence == {}
+    assert evidence.files["app/test/a_test.dart"] == {"app/test/a_test.dart", "util/lib/util.dart"}
+
+
 # Verifies: REQ-d00333-B
 @pytest.mark.parametrize(
-    "newer",
+    ("listed", "says"),
     [
-        "app/pubspec.yaml",
-        "app/pubspec.lock",
-        "app/pubspec_overrides.yaml",
-        "util/pubspec.yaml",
+        (
+            {"util": "../../other/"},
+            f"app/pubspec.yaml declares util at util, which {_CONFIG_AT} places at other",
+        ),
+        ({}, f"app/pubspec.yaml declares util at util, which {_CONFIG_AT} does not list"),
     ],
 )
-def test_a_configuration_older_than_a_file_resolution_reads_leaves_its_units_uncertain(
-    tmp_path, newer
+def test_a_path_dependency_the_configuration_places_elsewhere_or_omits_is_uncertain(
+    tmp_path, listed, says
 ):
     _app(tmp_path)
-    _write(tmp_path, "app/pubspec_overrides.yaml", "")
+    _pubspec(tmp_path, "other", "util")
+    _config(tmp_path, "app", {"app": "../", **listed})
     _write(tmp_path, "app/test/a_test.dart", "")
-    _settle_times(tmp_path)
-    _touch(tmp_path / newer)
 
-    evidence = _timed_evidence(tmp_path, "app/test/a_test.dart")
+    evidence = _evidence(tmp_path, "app/test/a_test.dart")
 
     assert evidence.files == {}
-    assert evidence.no_evidence["app/test/a_test.dart"] == (
-        f"app/.dart_tool/package_config.json is older than {newer}; "
-        "run `dart pub get` or `flutter pub get` in app"
-    )
-
-
-def _graph_at(root: Path, rel: str, offset: int) -> None:
-    """A ``package_graph.json`` beside *rel*'s configuration, modified at ``_T0 + offset``."""
-    path = _write(root, f"{rel}/.dart_tool/package_graph.json", "{}")
-    os.utime(path, (_T0, _T0 + offset))
+    assert evidence.no_evidence["app/test/a_test.dart"] == f"{says}; {_REMEDY}"
 
 
 # Verifies: REQ-d00333-B
-def test_a_package_graph_newer_than_the_pubspec_dates_the_resolution(tmp_path):
+@pytest.mark.parametrize(
+    ("listed", "says"),
+    [
+        ("../../util2/", ""),
+        (
+            "../../util/",
+            f"app/pubspec_overrides.yaml overrides util at util2, which {_CONFIG_AT} places at "
+            f"util; {_REMEDY}",
+        ),
+    ],
+)
+def test_pubspec_overrides_replace_the_pubspec_overrides_and_must_agree(tmp_path, listed, says):
     _app(tmp_path)
+    _pubspec(tmp_path, "util2", "util")
+    _pubspec(
+        tmp_path,
+        "app",
+        "app",
+        dependencies={"util": "^1.0.0"},
+        dependency_overrides={"util": {"path": "../util"}},
+    )
+    _write(
+        tmp_path,
+        "app/pubspec_overrides.yaml",
+        yaml.safe_dump({"dependency_overrides": {"util": {"path": "../util2"}}}),
+    )
+    _config(tmp_path, "app", {"app": "../", "util": listed})
     _write(tmp_path, "app/test/a_test.dart", "")
-    _settle_times(tmp_path)
-    _touch(tmp_path / "app/pubspec.yaml")
-    _graph_at(tmp_path, "app", 300)
 
-    evidence = _timed_evidence(tmp_path, "app/test/a_test.dart")
+    evidence = _evidence(tmp_path, "app/test/a_test.dart")
 
-    assert "app/test/a_test.dart" not in evidence.no_evidence
-    assert "app/test/a_test.dart" in evidence.files
+    if says:
+        assert evidence.no_evidence["app/test/a_test.dart"] == says
+    else:
+        assert evidence.no_evidence == {}
+        assert "app/test/a_test.dart" in evidence.files
 
 
 # Verifies: REQ-d00333-B
-def test_a_pubspec_newer_than_the_configuration_and_the_package_graph_is_uncertain(tmp_path):
-    _app(tmp_path)
-    _write(tmp_path, "app/test/a_test.dart", "")
-    _settle_times(tmp_path)
-    _graph_at(tmp_path, "app", 150)
-    _touch(tmp_path / "app/pubspec.yaml")
+@pytest.mark.parametrize(
+    ("listed", "unit", "says"),
+    [
+        (
+            {"ws": "../"},
+            "test/ws_test.dart",
+            "pubspec.yaml names the workspace member m at pkgs/m, which "
+            ".dart_tool/package_config.json does not list",
+        ),
+        (
+            {"ws": "../", "m": "../pkgs/m/", "n": "../pkgs/n/"},
+            "pkgs/m/test/m_test.dart",
+            ".dart_tool/package_config.json lists n at pkgs/n, which no pubspec of its "
+            "program declares",
+        ),
+    ],
+)
+def test_a_workspace_member_the_configuration_omits_or_a_former_member_it_lists_is_uncertain(
+    tmp_path, listed, unit, says
+):
+    _pubspec(tmp_path, ".", "ws", workspace=["pkgs/m"])
+    _write(tmp_path, "pubspec.lock", "")
+    _pubspec(tmp_path, "pkgs/m", "m", resolution="workspace")
+    _pubspec(tmp_path, "pkgs/n", "n", resolution="workspace")
+    _config(tmp_path, ".", listed)
+    _write(tmp_path, unit, "")
 
-    evidence = _timed_evidence(tmp_path, "app/test/a_test.dart")
+    evidence = _evidence(tmp_path, unit)
 
     assert evidence.files == {}
+    assert evidence.no_evidence[unit] == f"{says}; run `dart pub get` or `flutter pub get` in ."
+
+
+# Verifies: REQ-d00333-B
+@pytest.mark.parametrize(
+    ("section", "uncertain"),
+    [("dependencies", True), ("dev_dependencies", False)],
+)
+def test_a_transitive_path_dependency_must_agree_and_a_dev_dependency_of_one_is_not_read(
+    tmp_path, section, uncertain
+):
+    # Pub reads only the dependencies of a package other than the root.
+    _app(tmp_path)
+    _pubspec(tmp_path, "util", "util", **{section: {"core": {"path": "../core"}}})
+    _pubspec(tmp_path, "core", "core")
+    _write(tmp_path, "app/test/a_test.dart", "")
+
+    evidence = _evidence(tmp_path, "app/test/a_test.dart")
+
+    if uncertain:
+        assert evidence.no_evidence["app/test/a_test.dart"] == (
+            f"util/pubspec.yaml declares core at core, which {_CONFIG_AT} does not list; {_REMEDY}"
+        )
+    else:
+        assert evidence.no_evidence == {}
+        assert "app/test/a_test.dart" in evidence.files
+
+
+# Verifies: REQ-d00333-B
+def test_a_repository_package_the_configuration_lists_and_no_pubspec_declares_is_uncertain(
+    tmp_path,
+):
+    # util was removed from app's pubspec; the configuration still lists it.
+    _app(tmp_path)
+    _pubspec(tmp_path, "app", "app")
+    _write(tmp_path, "app/test/a_test.dart", "")
+
+    evidence = _evidence(tmp_path, "app/test/a_test.dart")
+
     assert evidence.no_evidence["app/test/a_test.dart"] == (
-        "app/.dart_tool/package_config.json is older than app/pubspec.yaml; "
-        "run `dart pub get` or `flutter pub get` in app"
+        f"{_CONFIG_AT} lists util at util, which no pubspec of its program declares; {_REMEDY}"
     )
+
+
+# Verifies: REQ-d00333-B
+@pytest.mark.parametrize(
+    ("pubspec", "says"),
+    [
+        ("name: app\ndependencies: [\n", "app/pubspec.yaml line 3 does not read as YAML"),
+        ("- app\n", "app/pubspec.yaml holds no YAML mapping"),
+        (
+            "name: app\ndependencies:\n  util: {path: [../util]}\n",
+            "app/pubspec.yaml declares util in a form elspais does not read",
+        ),
+        (
+            "name: app\nworkspace: ['pkgs/*']\n",
+            "app/pubspec.yaml names workspace members by the pattern pkgs/*, which is not read",
+        ),
+    ],
+)
+def test_a_pubspec_that_does_not_read_leaves_its_units_uncertain(tmp_path, pubspec, says):
+    _app(tmp_path)
+    _write(tmp_path, "app/pubspec.yaml", pubspec)
+    _write(tmp_path, "app/test/a_test.dart", "")
+
+    evidence = _evidence(tmp_path, "app/test/a_test.dart")
+
+    assert evidence.files == {}
+    assert evidence.no_evidence["app/test/a_test.dart"].startswith(says)
+
+
+# Verifies: REQ-d00333-C
+def test_without_pyyaml_the_source_is_unavailable_naming_the_dart_extra(tmp_path, monkeypatch):
+    _app(tmp_path)
+    _write(tmp_path, "app/test/a_test.dart", "")
+    monkeypatch.setitem(sys.modules, "yaml", None)
+
+    with pytest.raises(SourceUnavailable) as raised:
+        gather_evidence(get_source("imports:dart"), _request(tmp_path, "app/test/a_test.dart"))
+
+    assert raised.value.extra == "dart"
+    assert "elspais[dart]" in str(raised.value)
 
 
 # Verifies: REQ-d00333-B

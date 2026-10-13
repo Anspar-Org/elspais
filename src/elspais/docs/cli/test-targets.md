@@ -161,7 +161,8 @@ decide only which runs execute it or how its finished results are credited:
 own. So are a probe's `affects_retention` and the `dependencies` and
 `observes` of `units`, which decide which tests a stale-only run retains and
 never what a run executes. `receives` and `full_selection` change the command
-a run spawns, so they are part of the configuration (see
+a run spawns, and `tests` changes which test files a run requires results
+from, so they are part of the configuration (see
 [Running part of a target](#running-part-of-a-target)). A change to any other setting -- `command`, `cwd`, `reporter`, `results`,
 `environment_probes` and the rest -- makes the results stale, and the finding
 names `the target's configuration`.
@@ -337,7 +338,7 @@ later `summary` or `trace` names as fresh, with `--targets last-run`.
 | `min_coverage_fraction` | float | `0.0` | Fraction of impl lines that must be covered (0.0-1.0) |
 | `file_results` | bool | `false` | The exit status of `command` is the result of each test file the target scans (see [file_results](#file_results)) |
 | `environment_probes` | list | `[]` | Parts of the environment the target's results depend on: tables of `name`, `command` and `affects_retention` (see [The environment and configuration of a target](#the-environment-and-configuration-of-a-target)) |
-| `units` | table | unset (one unit) | The target's test files as units a stale-only run can execute in part: `dependencies`, `observes`, `receives`, `full_selection` (see [Running part of a target](#running-part-of-a-target)) |
+| `units` | table | unset (one unit) | The target's test files as units a stale-only run can execute in part: `dependencies`, `observes`, `tests`, `receives`, `full_selection` (see [Running part of a target](#running-part-of-a-target)) |
 
 The target's folder is `<output_root>/<name>`, from the repository root.
 elspais reads `results` and `coverage` from that folder. Consequently, a
@@ -1477,7 +1478,7 @@ cwd      = "apps/app"
 command  = "flutter test --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.jsonl {selection}"
 reporter = "flutter-machine"
 results  = "machine.jsonl"
-inputs   = { skip_dirs = [".dart_tool", "build"] }
+inputs   = { skip_dirs = ["**/.dart_tool", "**/build"] }
 environment_probes = [
   { name = "flutter",     command = "flutter --version --machine" },
   { name = "dart-format", command = "dart format --version", affects_retention = false },
@@ -1495,6 +1496,19 @@ naming the `cwd` and the `[scanning.test]` settings to change. A test file the
 command executes and the scan does not read is no unit, so a partial run never
 executes it: widen the scan to reach every test file the command runs.
 
+A scan below the `cwd` can also hold test files that another target runs, such
+as browser or device tests. `units.tests` selects, from the repository root,
+the scanned test files below the `cwd` that the command executes, in the form
+of `inputs`; unset, every scanned test file below the `cwd` is a unit. A test
+file the selection leaves out is no unit, so a run never requires its results.
+
+```toml
+[scanning.test.targets.units]
+dependencies   = { source = "imports:dart" }
+tests          = { directories = ["apps/app/test"], file_patterns = ["*_test.dart"] }
+full_selection = ""
+```
+
 ### Which test files a run executes
 
 A unit is executed when any of these holds, and its earlier result is
@@ -1510,7 +1524,7 @@ retained otherwise:
   stale-only run is decided by it:
 
   ```text
-  units: app: no dependency evidence for 14 test files: apps/app/.dart_tool/package_config.json is older than apps/app/pubspec.yaml; run `dart pub get` or `flutter pub get` in apps/app
+  units: app: no dependency evidence for 14 test files: apps/app/pubspec.yaml declares util at packages/util, which apps/app/.dart_tool/package_config.json does not list; run `dart pub get` or `flutter pub get` in apps/app
   ```
 
   Once the command has ended, the source is asked again about those test
@@ -1617,8 +1631,11 @@ target fresh. Add it to the target's `inputs`.
 dependencies = { source = "imports:dart" }
 ```
 
-It takes no other setting and needs no extra. It reads files and runs
-nothing, so it needs no Dart toolchain. The target must declare an
+It takes no other setting. It reads `pubspec.yaml` files with PyYAML, which
+`pip install elspais[dart]` installs; where PyYAML is missing, the source
+gives no evidence and every unit executes, the run naming the extra to
+install. It reads files and runs nothing, so it needs no Dart toolchain. The
+target must declare an
 environment probe that affects retention, such as
 `flutter --version --machine` or `dart --version`: every Dart test loads the
 SDK, which lies outside the repository, so without a probe a change of SDK
@@ -1655,18 +1672,25 @@ evidence for it, so it executes, and the run states why:
 
 - No `pubspec.yaml` lies above the test file, or no package configuration
   lists its package: run `dart pub get` or `flutter pub get` there.
-- The last resolution is older than a `pubspec.yaml`, `pubspec.lock`
-  or `pubspec_overrides.yaml` beside it, or than the `pubspec.yaml` of a
-  repository package it lists. The later of `package_config.json` and
-  `package_graph.json` in `.dart_tool` dates the last resolution: a
-  resolution that changes nothing, such as one after a version bump in
-  `pubspec.yaml`, rewrites only the second. The test runner would resolve the packages
-  again, so what the configuration says may not be what the run uses. A
+- The package holding the configuration has no `pubspec.lock`.
+- The configuration disagrees with the declarations of its program about
+  which repository packages the program loads. Its packages are the
+  configuration's own package, each pub workspace member its `pubspec.yaml`
+  names, and each package a `path:` dependency reaches from them, in turn:
+  the `dependencies`, `dev_dependencies` and `dependency_overrides` of the
+  root package, with `pubspec_overrides.yaml` beside it replacing the
+  overrides, the `dependencies` and `dev_dependencies` of a workspace member,
+  and the `dependencies` of any other package. The configuration disagrees
+  where it does not list one of those packages, places it elsewhere than its
+  declaration, or lists a repository package that no pubspec of the program
+  declares. A `pubspec.yaml` that does not read, or a form of declaration
+  the source does not read, such as a workspace member named by a pattern,
+  counts as a disagreement. A hosted, git or SDK package is environment, so
+  its version is not compared: `pubspec.lock` is an input of the target. A
   command that runs `pub get` itself, as `flutter test` does unless given
   `--no-pub`, removes the cause, and the source is asked again once it ends.
-  A command given `--no-pub` leaves the configuration stale; run `pub get`
-  before it. The comparison is wider than `flutter test`'s own, so a package
-  can execute in full once where `flutter test` saw no need to resolve.
+  A command given `--no-pub` leaves the configuration as it is; run
+  `pub get` before it.
 - The configuration places a package outside the repository, the pub cache
   and the Flutter SDK, such as a sibling checkout named in
   `pubspec_overrides.yaml`. elspais does not see that checkout change, so
@@ -1696,10 +1720,10 @@ dependencies = { source = "imports:dart" }
 observes     = { directories = ["."], file_patterns = ["lib/*.dart", "*_test.dart", "test/helpers/*.dart"] }
 ```
 
-Put `.dart_tool` in the target's `inputs.skip_dirs`. The package
-configuration holds paths of the machine that wrote it, so as an input it
-would differ on every machine and between a run and a *Baseline Run*. The
-source still reads it.
+Put `**/.dart_tool` in the target's `inputs.skip_dirs`; a bare `.dart_tool`
+names only the one at the repository root. The package configuration holds
+paths of the machine that wrote it, so as an input it would differ on every
+machine and between a run and a *Baseline Run*. The source still reads it.
 
 ### Giving the command its selection
 

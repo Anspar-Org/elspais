@@ -346,7 +346,7 @@ _FIELD_COMMENTS: dict[str, str] = {
     ),
     "scanning.test.targets.units": (
         "The target's test files as units a stale-only run executes in part:"
-        " dependencies, observes, receives, full_selection (default: unset)"
+        " dependencies, observes, tests, receives, full_selection (default: unset)"
     ),
     "scanning.test.targets.units.dependencies": (
         '{ source = "declared" } | { source = "imports:dart" } |'
@@ -356,6 +356,10 @@ _FIELD_COMMENTS: dict[str, str] = {
     "scanning.test.targets.units.observes": (
         "The files the dependency source sees: directories, file_patterns,"
         " skip_dirs, skip_files (default: the source's own)"
+    ),
+    "scanning.test.targets.units.tests": (
+        "The scanned test files below cwd that the command executes:"
+        " directories, file_patterns, skip_dirs, skip_files (default: all of them)"
     ),
     "scanning.test.targets.units.receives": (
         '"placeholder" (the command holds {selection}) | "file" (the command'
@@ -961,7 +965,7 @@ def generate_config(
         'match   = "source"',
         'credit_coverage = "verified"',
         "# Tip: write the machine output to a `results` file, put {selection}",
-        "#   where the test files go, skip .dart_tool in `inputs`, declare an",
+        "#   where the test files go, skip **/.dart_tool in `inputs`, declare an",
         '#   environment probe such as { name = "flutter", command =',
         '#   "flutter --version --machine" }, and declare units, so a',
         "#   stale-only run executes only the test files whose imports",

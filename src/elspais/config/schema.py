@@ -757,13 +757,16 @@ class UnitsConfig(_StrictModel):
     ``dependencies`` names the source of each unit's *Dependency Evidence*
     (``source``) and holds the settings that source validates. ``observes``
     selects the files the source observes, read from the repository root;
-    unset means the source's own default. ``receives`` says how the command
-    receives the selected units. ``full_selection`` is what ``{selection}``
-    becomes on a run of every unit.
+    unset means the source's own default. ``tests`` selects, from the
+    repository root, the scanned test files below the target's working
+    directory that its command executes; unset means all of them.
+    ``receives`` says how the command receives the selected units.
+    ``full_selection`` is what ``{selection}`` becomes on a run of every unit.
     """
 
     dependencies: dict[str, Any]
     observes: ScanningKindConfig | None = None
+    tests: ScanningKindConfig | None = None
     receives: str = "placeholder"
     full_selection: str = ""
 

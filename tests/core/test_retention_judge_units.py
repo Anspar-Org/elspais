@@ -267,17 +267,17 @@ def test_a_ledger_result_line_of_the_wrong_shape_makes_the_ledger_unreadable(
     assert read_ledger(tmp_path) is None
 
 
+_NO_LOCK = "app holds no pubspec.lock; run `dart pub get` or `flutter pub get` there"
+
+
 # Verifies: REQ-d00333-B
 def test_a_unit_without_evidence_executes_with_the_reason_its_source_gave():
     evidence = Evidence(
         files={_B: frozenset({_B})},
-        no_evidence={_A: "app/.dart_tool/package_config.json is older than app/pubspec.yaml"},
+        no_evidence={_A: _NO_LOCK},
     )
     judgement = judge_units(
         (_A, _B), _ledger(_entry(_A), _entry(_B)), _manifest(), _manifest(), _OBSERVED, evidence
     )
-    assert judgement.selected == {
-        _A: f"{NO_EVIDENCE_REASON}: app/.dart_tool/package_config.json is older than "
-        "app/pubspec.yaml"
-    }
+    assert judgement.selected == {_A: f"{NO_EVIDENCE_REASON}: {_NO_LOCK}"}
     assert set(judgement.retained) == {_B}

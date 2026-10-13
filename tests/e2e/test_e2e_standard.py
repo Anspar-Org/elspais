@@ -2682,8 +2682,6 @@ class TestUnitsRetainResults:
 
     # Verifies: REQ-d00333-B+C
     def test_a_dart_library_edit_executes_only_the_test_files_importing_it(self, tmp_path):
-        import os
-
         scratch = self._copy(tmp_path)
         (tmp_path / "runner.py").write_text(self._DART_RUNNER, encoding="utf-8")
         toml = scratch / ".elspais.toml"
@@ -2701,7 +2699,7 @@ class TestUnitsRetainResults:
         )
         toml.write_text(text, encoding="utf-8")
         # The package: two test files, each importing its own library file,
-        # and a package configuration newer than its pubspec files.
+        # and a package configuration agreeing with its pubspec.
         files = {
             "pubspec.yaml": "name: app\n",
             "pubspec.lock": "packages: {}\n",
@@ -2722,13 +2720,10 @@ class TestUnitsRetainResults:
                 f"  test('{name}', () {{}});\n"
                 "}\n"
             )
-        t0 = 1_700_000_000
         for rel, body in files.items():
             path = scratch / "dart" / rel
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(body, encoding="utf-8")
-            later = 100 if rel.endswith("package_config.json") else 0
-            os.utime(path, (t0, t0 + later))
 
         first = self._test(scratch, "--stale-only")
         assert first.returncode == 0, first.stderr

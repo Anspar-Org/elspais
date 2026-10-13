@@ -130,3 +130,29 @@ def test_the_selection_a_whole_run_executes_is_part_of_the_configuration_digest(
     plain = _target(command="pytest {selection}", units=_DECLARED)
     changed = _target(command="pytest {selection}", units={**_DECLARED, "full_selection": "tests"})
     assert configuration_digest(plain) != configuration_digest(changed)
+
+
+# Verifies: REQ-d00333-C
+def test_a_units_table_selects_the_test_files_its_command_executes():
+    target = _target(
+        command="pytest {selection}",
+        units={**_DECLARED, "tests": {"directories": ["tests"], "file_patterns": ["test_*.py"]}},
+    )
+    assert target.units.tests.directories == ["tests"]
+    assert target.units.tests.file_patterns == ["test_*.py"]
+    with pytest.raises(ValidationError) as caught:
+        _target(
+            command="pytest {selection}",
+            units={**_DECLARED, "tests": {"directories": ["tests"], "patterns": ["*.py"]}},
+        )
+    assert "units.tests.patterns" in str(caught.value)
+
+
+# Verifies: REQ-d00311-R
+def test_the_test_files_a_units_target_selects_are_part_of_the_configuration_digest():
+    plain = _target(command="pytest {selection}", units=_DECLARED)
+    selected = _target(
+        command="pytest {selection}",
+        units={**_DECLARED, "tests": {"file_patterns": ["test_*.py"]}},
+    )
+    assert configuration_digest(plain) != configuration_digest(selected)

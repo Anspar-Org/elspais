@@ -1452,7 +1452,7 @@
     },
     "UnitsConfig": {
       "additionalProperties": false,
-      "description": "The units of a test target: its test files, which a run may execute in part.\n\n``dependencies`` names the source of each unit's *Dependency Evidence*\n(``source``) and holds the settings that source validates. ``observes``\nselects the files the source observes, read from the repository root;\nunset means the source's own default. ``receives`` says how the command\nreceives the selected units. ``full_selection`` is what ``{selection}``\nbecomes on a run of every unit.",
+      "description": "The units of a test target: its test files, which a run may execute in part.\n\n``dependencies`` names the source of each unit's *Dependency Evidence*\n(``source``) and holds the settings that source validates. ``observes``\nselects the files the source observes, read from the repository root;\nunset means the source's own default. ``tests`` selects, from the\nrepository root, the scanned test files below the target's working\ndirectory that its command executes; unset means all of them.\n``receives`` says how the command receives the selected units.\n``full_selection`` is what ``{selection}`` becomes on a run of every unit.",
       "properties": {
         "dependencies": {
           "additionalProperties": true,
@@ -1460,6 +1460,17 @@
           "type": "object"
         },
         "observes": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScanningKindConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tests": {
           "anyOf": [
             {
               "$ref": "#/$defs/ScanningKindConfig"

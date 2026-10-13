@@ -437,8 +437,9 @@ coverage = "lcov.info"  # optional; relative to the target's
 # makes the results stale, but a stale-only run of a target declaring units
 # does not execute a test file for its change alone. affects_retention and
 # the units settings dependencies and observes decide what a stale-only run
-# retains, so none of them is part of the target's configuration; receives
-# and full_selection change what a run executes, so they are. Default: none.
+# retains, so none of them is part of the target's configuration; tests,
+# receives and full_selection change what a run executes, so they are.
+# Default: none.
 # environment_probes = [
 #   { name = "flutter", command = "flutter --version" },
 #   { name = "dart-format", command = "dart format --version", affects_retention = false },
@@ -448,13 +449,18 @@ coverage = "lcov.info"  # optional; relative to the target's
 # the rest. dependencies names the source of each test file's dependencies:
 # "declared" (each test file depends on itself alone), "imports:dart" (the
 # files a Dart test file's imports, exports and parts reach; it observes the
-# Dart files under lib, hook and integration_test, and the test files, and
-# needs an environment probe covering the SDK), or "command" (a program of the project's prints them;
+# Dart files under lib, hook and integration_test, and the test files, needs
+# an environment probe covering the SDK, and needs elspais[dart]), or
+# "command" (a program of the project's prints them;
 # it needs `command` and `observes`).
 # observes selects the files the source sees, read from the repository root;
-# a change to any other input executes every test file. receives is
-# "placeholder" (the command holds {selection}, replaced by the selected
-# test files) or "file" (the command reads $ELSPAIS_SELECTION).
+# a change to any other input executes every test file. tests selects,
+# from the repository root, the scanned test files below cwd that the
+# command executes; unset, every scanned test file below cwd is a unit,
+# so set it where the scan also holds test files another target runs.
+# receives is "placeholder" (the command holds {selection}, replaced by
+# the selected test files) or "file" (the command reads
+# $ELSPAIS_SELECTION).
 # full_selection is what {selection} becomes on a run of every test file.
 # A test file the source leaves out of its answer executes on every run, and
 # the run states the reason the source gave.
@@ -464,6 +470,7 @@ coverage = "lcov.info"  # optional; relative to the target's
 # [scanning.test.targets.units]
 # dependencies   = { source = "declared" }
 # observes       = { file_patterns = ["*_test.dart"] }
+# tests          = { directories = ["test"], file_patterns = ["*_test.dart"] }
 # receives       = "placeholder"
 # full_selection = ""
 

@@ -182,12 +182,21 @@ def target_test_files(target, scanned: Iterable[str], repo_root: Path) -> frozen
     """The test files of *target*: those of *scanned* under its working directory.
 
     *scanned* holds repo-relative test files. A target whose working
-    directory lies outside the repository has none.
+    directory lies outside the repository has none. A target declaring
+    ``units.tests`` keeps only the files that selection reads, because the
+    scan below its directory can hold test files other targets run.
     """
     prefix = target_prefix(target, repo_root)
     if prefix is None:
         return frozenset()
-    return frozenset(f for f in scanned if not prefix or f.startswith(prefix))
+    files = frozenset(f for f in scanned if not prefix or f.startswith(prefix))
+    selection = getattr(getattr(target, "units", None), "tests", None)
+    if selection is None:
+        return files
+    # Implements: REQ-d00333-C+H
+    from elspais.utilities.retention import as_observation, observed_set
+
+    return observed_set(repo_root, as_observation(selection), files)
 
 
 # Implements: REQ-d00333-J+L, REQ-d00323-J+K+N
