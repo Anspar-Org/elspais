@@ -17,7 +17,12 @@ from elspais.config import find_git_root, get_config, validate_config
 
 
 def run(args: argparse.Namespace) -> int:
-    from elspais.utilities.fingerprint import RunNotStarted, finish_run, start_run
+    from elspais.utilities.fingerprint import (
+        RunNotStarted,
+        finish_run,
+        input_label,
+        start_run,
+    )
 
     action = getattr(args, "fingerprint_action", None)
     if action not in ("start", "finish"):
@@ -31,7 +36,7 @@ def run(args: argparse.Namespace) -> int:
             print(folder)
         else:
             fingerprint = finish_run(repo_root, config, args.target, exit_status=args.exit_status)
-            changed = fingerprint.get("changed_during_run") or []
+            changed = [input_label(e) for e in fingerprint.get("changed_during_run") or []]
             if changed:
                 print(
                     f"target {args.target}: inputs changed while it ran: "

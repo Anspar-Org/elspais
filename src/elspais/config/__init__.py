@@ -1455,6 +1455,22 @@ def empty_selection_refusal(config: Any, named: list[str] | None, *, executes: b
     )
 
 
+# Implements: REQ-d00333-I
+def full_refusal(stale_only: bool, full: bool) -> str | None:
+    """Return the reason to refuse a run asking for ``--full`` without ``--stale-only``, or None.
+
+    ``--full`` asks a stale-only run to retain no result. A run that is not
+    stale-only already executes every test, so the option would say nothing.
+    """
+    if not full or stale_only:
+        return None
+    return (
+        "--full asks a stale-only run to execute every test of each target whose "
+        "results are not fresh, and this run does not ask for --stale-only, so it "
+        "already executes every test. Add --stale-only, or drop --full."
+    )
+
+
 # Implements: REQ-d00283-H
 def unknown_target_refusal(
     config: Any, named: list[str] | None, *, flag: str = "--targets"

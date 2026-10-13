@@ -357,7 +357,7 @@ def create_app(state: AppState, mount_mcp: bool = True, base_path: str = "") -> 
         ),
         Middleware(NoCacheMiddleware),
         Middleware(APIErrorMiddleware, base_path=base_path),
-        Middleware(AutoRefreshMiddleware),
+        Middleware(AutoRefreshMiddleware, base_path=base_path),
         Middleware(DetachedGuardMiddleware, base_path=base_path),
     ]
 

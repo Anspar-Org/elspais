@@ -642,3 +642,39 @@ class TestTheTreeGoesOnBeingServedFromTheInstalledProgram:
         renew_for_installed_program(shared, lambda: shared["graph"], _ExecRecorder())
 
         assert _lock_is_held(shared) is False
+
+
+class TestDriftRefusalReachesTheClient:
+    # Verifies: REQ-o00077-F
+    def test_REQ_o00077_F_refusal_reaches_a_client_of_a_tool_answering_with_a_list(self, tmp_path):
+        """A stdio server whose program moved refuses ``search``, which answers
+        with a list, and the client receives the refusal rather than a report
+        that the tool's output failed validation."""
+        import asyncio
+        import json
+
+        from mcp import types
+
+        from elspais.graph.factory import build_graph
+        from elspais.mcp.server import create_server
+
+        root = tmp_path / "repo"
+        (root / "spec").mkdir(parents=True)
+        (root / ".elspais.toml").write_text(
+            'version = 5\n\n[project]\nname = "drift"\nnamespace = "REQ"\n',
+            encoding="utf-8",
+        )
+        server = create_server(build_graph(repo_root=root), working_dir=root)
+        w = ExecutableWatcher(read_hash=_reader("new"), baseline="base", settle_polls=1)
+        w.poll()
+        executable.install_watcher(w)
+
+        handler = server._mcp_server.request_handlers[types.CallToolRequest]
+        request = types.CallToolRequest(
+            method="tools/call",
+            params=types.CallToolRequestParams(name="search", arguments={"query": "x"}),
+        )
+        result = asyncio.run(handler(request)).root
+
+        assert result.isError is True
+        assert json.loads(result.content[0].text)["code"] == "executable_changed"

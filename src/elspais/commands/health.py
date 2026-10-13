@@ -3982,7 +3982,7 @@ def check_test_results_stale(
             "or that an Evidence Snapshot of another tree holds",
         )
 
-    from elspais.utilities.fingerprint import judge
+    from elspais.utilities.fingerprint import input_label, judge
 
     findings: list[HealthFinding] = []
     judged = 0
@@ -4014,7 +4014,7 @@ def check_test_results_stale(
                 HealthFinding(
                     message=_stale_message(verdict),
                     repo=entry.name,
-                    related=list(verdict.changed),
+                    related=[input_label(entry) for entry in verdict.changed],
                 )
             )
 
@@ -4034,6 +4034,117 @@ def check_test_results_stale(
         name="tests.results_stale",
         passed=False,
         message=f"Test results are stale: {len(findings)} finding(s)",
+        category="tests",
+        severity=severity,
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00323-M+P
+def check_retained_results(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """List each *Retained Result*, one finding per test target holding any.
+
+    Each finding names every Retained Result of its target and the run that
+    executed its test.
+    """
+    from elspais.graph.aggregation import results_by_target
+
+    description = REGISTRY["tests.retained_results"].description
+    severity = severity_for("tests.retained_results", config)
+    if severity == Severity.OFF:
+        return skipped_check("tests.retained_results", description)
+
+    names = {entry.namespace: entry.name for entry in graph.iter_repos()}
+    by_target: dict[tuple[str, str], list[str]] = {}
+    for key, (_executed, retained) in results_by_target(graph).items():
+        for node in retained:
+            where = node.get_field("source_file") or "?"
+            if node.get_field("line"):
+                where += f":{node.get_field('line')}"
+            by_target.setdefault(key, []).append(
+                f"{where} {node.get_field('name') or ''} ({node.get_field('status')}): "
+                f"retained from {node.get_field('retained_from')}"
+            )
+    if not by_target:
+        return HealthCheck(
+            name="tests.retained_results",
+            passed=True,
+            message="No result is retained from an earlier run",
+            category="tests",
+            severity="info",
+        )
+    findings = [
+        HealthFinding(
+            message=(
+                f"target {target}: {len(lines)} result(s) retained from earlier runs, "
+                f"whose tests this tree did not execute; `elspais test --targets {target}` "
+                f"executes them"
+            ),
+            repo=names.get(namespace),
+            related=sorted(lines),
+        )
+        for (namespace, target), lines in sorted(by_target.items())
+    ]
+    count = sum(len(lines) for lines in by_target.values())
+    return HealthCheck(
+        name="tests.retained_results",
+        passed=False,
+        message=f"{count} Retained Result(s) in {len(findings)} target(s)",
+        category="tests",
+        severity=severity,
+        findings=findings,
+    )
+
+
+# Implements: REQ-d00333-D
+def check_dependency_outside_inputs(
+    graph: FederatedGraph, config: dict[str, Any] | None = None
+) -> HealthCheck:
+    """Report each file a test depends on that is not an input of its target.
+
+    The Unit Ledger of each target's last run records the repository files
+    its dependency source reached that are not inputs. Such a file leaves the
+    target fresh after it changes, so the inputs need correcting.
+    """
+    from elspais.utilities.fingerprint import target_folder
+    from elspais.utilities.retention import outside_inputs_of
+
+    description = REGISTRY["tests.dependency_outside_inputs"].description
+    severity = severity_for("tests.dependency_outside_inputs", config)
+    if severity == Severity.OFF:
+        return skipped_check("tests.dependency_outside_inputs", description)
+    findings: list[HealthFinding] = []
+    for entry in graph.iter_repos():
+        member = _validate_config(entry.config)
+        for target in member.scanning.test.targets:
+            if target.units is None:
+                continue
+            folder = target_folder(entry.repo_root, member, target.name)
+            for path in outside_inputs_of(folder):
+                findings.append(
+                    HealthFinding(
+                        message=(
+                            f"target {target.name}: its tests depend on {path}, which is "
+                            f"not an input of the target; add it to the target's inputs"
+                        ),
+                        repo=entry.name,
+                        file_path=path,
+                    )
+                )
+    if not findings:
+        return HealthCheck(
+            name="tests.dependency_outside_inputs",
+            passed=True,
+            message="Every file the tests depend on is an input of their target",
+            category="tests",
+            severity="info",
+        )
+    return HealthCheck(
+        name="tests.dependency_outside_inputs",
+        passed=False,
+        message=f"{len(findings)} dependency file(s) outside their target's inputs",
         category="tests",
         severity=severity,
         findings=findings,
@@ -5400,6 +5511,8 @@ def run_test_checks(
         check_external_tests(graph, config),
         check_test_results(graph, config=config),
         check_test_results_stale(graph, config),
+        check_retained_results(graph, config),
+        check_dependency_outside_inputs(graph, config),
         check_unmatched_results(graph, config),
         check_file_bound_results(graph, config),
         check_ingestion_faults(graph, config, expected_targets),
@@ -5658,6 +5771,9 @@ def run(args: argparse.Namespace) -> int:
         # Implements: REQ-d00315-I
         if getattr(args, "stale_only", False):
             inert.append("--stale-only")
+        # Implements: REQ-d00333-I
+        if getattr(args, "full", False):
+            inert.append("--full")
         # Implements: REQ-d00314-O
         if getattr(args, "concurrency", None) is not None:
             inert.append("--concurrency")
@@ -5713,8 +5829,18 @@ def run(args: argparse.Namespace) -> int:
             describe_stale_only,
             not_fresh_targets,
             plan_target_runs,
+            settle_units,
             unrecorded_targets,
         )
+
+        stale_only = bool(getattr(args, "stale_only", False))
+        full = bool(getattr(args, "full", False))
+        from elspais.config import full_refusal
+
+        # Implements: REQ-d00333-I
+        if refusal := full_refusal(stale_only, full):
+            print(f"error: {refusal}", file=sys.stderr)
+            return 2
 
         # Implements: REQ-d00314-P
         concurrency = getattr(args, "concurrency", None)
@@ -5757,7 +5883,7 @@ def run(args: argparse.Namespace) -> int:
             # Implements: REQ-d00315-B+F+G+H
             # Every selected target stays expected; a stale-only run executes
             # the ones whose results are not fresh and carries the rest.
-            if getattr(args, "stale_only", False):
+            if stale_only:
                 execute, carry = not_fresh_targets(target_run.config, target_run.repo_root, only)
                 print(describe_stale_only(execute, carry), file=sys.stderr)
                 # The selection less what it carries, so a target with no
@@ -5772,7 +5898,11 @@ def run(args: argparse.Namespace) -> int:
                 fail_fast=fail_fast,
                 only=only,
                 concurrency=concurrency,
+                stale_only=stale_only,
+                full=full,
             )
+            # Implements: REQ-d00333-A+H
+            settle_units(target_run.config, target_run.repo_root, target_run.raw_config, results)
             runner_failed = runner_failed or any(r.returncode != 0 for r in results)
             # Implements: REQ-d00283-Q
             expected |= {

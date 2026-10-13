@@ -148,14 +148,14 @@ output_root = ".results"
 # the target reads the folder path from ELSPAIS_TARGET_OUTPUT. A run records a
 # fingerprint in that folder. `elspais checks` uses the fingerprint to judge
 # whether the results are fresh.
-# elspais's own suite (.githooks/pre-commit) runs pytest with
+# elspais's own full unit tier (.githooks/run-unit-tier) runs pytest with
 # `--cov-context=test` (pytest-cov's per-test dynamic context), which writes
 # coverage.py's native `.coverage` SQLite data file into the unit target's
 # folder (COVERAGE_FILE). Per-test line attribution (code_tested.direct,
 # CUR-1568) is read directly from that
 # database via coverage.py's public API (elspais[coverage] extra). Pass/fail
 # results come from the same run's JUnit XML (`junit_family=xunit1` keeps the
-# per-testcase file/line attributes the source matcher binds on); the hook
+# per-testcase file/line attributes the source matcher binds on); the runner
 # writes both artifacts, and `command` reproduces that run for
 # `elspais checks --run-tests`. `Verifies:` wiring for Python tests comes
 # from source-scanned `# Verifies:` comments, independent of this target.
@@ -170,7 +170,7 @@ output_root = ".results"
 # `elspais checks --run-tests` executes.
 
 [scanning.test.groups]
-commit = "Fast enough to gate a commit (~6m). What .githooks/pre-commit runs."
+commit = "Fast enough to gate a commit (~6m). .githooks/pre-commit runs it in full where Test Impact Analysis cannot narrow the run."
 push = "Subprocess and browser tiers, for before a push (~15m). Needs the browser extra."
 stress = "Concurrency battery racing live daemon surfaces. Run when mcp/, server/ or graph mutation code changes."
 

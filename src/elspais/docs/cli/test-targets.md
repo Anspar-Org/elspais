@@ -51,11 +51,14 @@ steps:
 1. It empties the target's folder. Consequently, elspais cannot read a file
    from an earlier run as the results of this run.
 2. It records a fingerprint of the target's inputs in the folder. The
-   fingerprint holds the path of every input file and a digest of its content.
+   fingerprint holds the path of every input file and a digest of its content,
+   a digest for each part of the environment the target declares, and a
+   digest of the target's configuration.
 3. It runs `command` with the absolute path of the folder in the
    `ELSPAIS_TARGET_OUTPUT` environment variable. The command reads that
    variable to find where to write.
-4. It notes any input that changed during the run.
+4. It notes any input that changed during the run, the environment and the
+   configuration included.
 
 `elspais checks` then judges the results of each target separately. The
 results are **fresh** while no input has changed since the run began. This
@@ -120,6 +123,70 @@ remove files. A removal wins over a choice. The example keeps every file
 except documentation. Edits to documentation cannot change what the tests
 report.
 
+### The environment and configuration of a target
+
+A run can change outcome without any file of the repository changing: another
+interpreter, another set of installed packages, another command. The
+environment and the configuration of a target are therefore inputs of it too,
+beside its files.
+
+A target declares the parts of its environment as **probes**. Each probe has a
+name and a command. The command runs in the target's `cwd`, and its exit
+status and standard output identify that part of the environment:
+
+```toml
+[[scanning.test.targets]]
+name     = "unit"
+command  = "pytest tests/ --junitxml=$ELSPAIS_TARGET_OUTPUT/junit.xml"
+reporter = "junit"
+results  = "junit.xml"
+environment_probes = [
+  { name = "python",   command = "python --version" },
+  { name = "packages", command = "python -m pip freeze" },
+]
+```
+
+A probe whose output or exit status differs from the one the run recorded
+makes the results stale, and the finding names the probe:
+`inputs changed since it ran: environment probe 'python'`. A probe that cannot
+start or fails is recorded as such, so a tool missing on one machine and
+present on another differs. A probe that runs for longer than a minute is
+recorded as timed out. Two probes of one target cannot share a name, and
+names differing only in case count as one.
+
+The **configuration** of a target is every setting of it except those that
+decide only which runs execute it or how its finished results are credited:
+`name`, `groups`, `resources`, `credit_coverage` and `min_coverage_fraction`.
+`inputs` is left out too, because the files it selects are inputs of their
+own. So are a probe's `affects_retention` and the `dependencies` and
+`observes` of `units`, which decide which tests a stale-only run retains and
+never what a run executes. `receives` and `full_selection` change the command
+a run spawns, and `tests` changes which test files a run requires results
+from, so they are part of the configuration (see
+[Running part of a target](#running-part-of-a-target)). A change to any other setting -- `command`, `cwd`, `reporter`, `results`,
+`environment_probes` and the rest -- makes the results stale, and the finding
+names `the target's configuration`.
+
+A run probes the environment when it starts and again when it ends, so a
+toolchain changed while the run was going makes its results stale. A report
+probes each command once per process, in each directory it runs in, because
+every build judges every target. A change to the environment touches no file,
+so a daemon cannot notice it by watching files. A daemon therefore probes
+the environment again for each request whose answer depends on the freshness
+of results -- a report (`checks`, `summary`, `trace`, `gaps`, `analysis`), an
+export and an MCP tool call -- from any client, and rebuilds where a probe's
+answer differs from the one its graph was built with, taking the answer it
+just measured rather than probing again. A burst of such requests probes once
+every few seconds; a request from the CLI probes every time. A daemon holding
+unsaved changes rebuilds nothing and names the probe beside its answer
+instead, for as long as the probe still answers differently. The viewer's
+own polling, its event stream and every other request never probe. Probes
+the build never ran -- those of a target with no results on disk -- are not
+probed again.
+
+Keep probes quick and their output stable. A probe printing a time or a
+process number makes every run stale.
+
 ### Recording a run elspais did not execute
 
 A git hook or a CI job that runs a target's tests itself brackets the run.
@@ -148,8 +215,10 @@ fingerprint in the same way. The fingerprint records what a run saw. It is
 not evidence of where results came from.
 
 Copy results from elsewhere with their folder, fingerprint included. An
-example is a baseline that another job produced. Such results read as fresh
-exactly while the inputs here match the inputs they ran against. The
+example is a baseline that another job produced; `elspais baseline` packs and
+adopts one (see `elspais docs baseline`). Such results read as fresh exactly
+while the inputs here -- files, environment and configuration -- match the
+inputs they ran against. The
 fingerprint records the root of the tree the run executed in, and elspais
 reads an absolute path a reporter wrote under that root relative to it.
 Consequently, results keep matching their tests after the tree moves or is
@@ -164,14 +233,19 @@ a bracketed run names the target with `--targets` rather than `last-run`.
 The fingerprint is the JSON file `.elspais-run.json` in the target's folder.
 Its `version` field states the format. Its `root` field names the directory
 the run executed in. Its `exit_status` field, where the run recorded one,
-holds the exit status of the target's command. Its `inputs` field lists one object for each input file,
-with a `path` field and a `digest` field. The digest is the
-SHA-256 of the file's content. No path is ever a JSON key. Consequently, a
+holds the exit status of the target's command. Its `commit` and `dirty`
+fields name the commit the tree was at and whether it held changes no commit
+holds when the run began. Its `inputs` field lists one object for each input,
+with a `path` field and a `digest` field. For a file the path is its path
+from the repository root and the digest is the SHA-256 of its content. A
+probe is listed as `/environment/<name>` and the configuration as
+`/configuration`; no path from the repository root begins with `/`, so
+neither can name a file. No path is ever a JSON key. Consequently, a
 secret scanner that looks for a secret-like key beside a long hex value finds
 nothing in the file. The file is safe to include in build output that a
 secret scan reads. elspais reads a fingerprint of another format version as
 no fingerprint. Consequently, its results read as stale until one fresh run
-rewrites the fingerprint.
+rewrites the fingerprint. The current format is version 3.
 
 ### A run in progress
 
@@ -263,6 +337,8 @@ later `summary` or `trace` names as fresh, with `--targets last-run`.
 | `credit_coverage` | string | `"off"` | `"off"`, `"tested"`, or `"verified"` -- lcov_tested credit |
 | `min_coverage_fraction` | float | `0.0` | Fraction of impl lines that must be covered (0.0-1.0) |
 | `file_results` | bool | `false` | The exit status of `command` is the result of each test file the target scans (see [file_results](#file_results)) |
+| `environment_probes` | list | `[]` | Parts of the environment the target's results depend on: tables of `name`, `command` and `affects_retention` (see [The environment and configuration of a target](#the-environment-and-configuration-of-a-target)) |
+| `units` | table | unset (one unit) | The target's test files as units a stale-only run can execute in part: `dependencies`, `observes`, `tests`, `receives`, `full_selection` (see [Running part of a target](#running-part-of-a-target)) |
 
 The target's folder is `<output_root>/<name>`, from the repository root.
 elspais reads `results` and `coverage` from that folder. Consequently, a
@@ -840,6 +916,19 @@ match = "source"
 # true: the command's exit status is the result of each test file the
 # target scans, for files whose runner writes no per-test record.
 # file_results = false
+
+# The parts of the environment the results depend on. A probe declared
+# affects_retention = false still makes the results stale when it changes,
+# but executes no test file a stale-only run could otherwise retain.
+# environment_probes = [{ name = "toolchain", command = "my-tool --version" }]
+
+# Units: a stale-only run executes only the test files whose dependencies
+# changed, and retains the earlier results of the rest. The command holds
+# {selection}, which the selected test files replace.
+# [scanning.test.targets.units]
+# dependencies   = { source = "declared" }   # or "imports:dart", or
+#                                            # { source = "command", command = "..." }
+# full_selection = ""                         # what {selection} becomes on a run of every test
 ```
 
 ## CI Usage
@@ -1372,6 +1461,322 @@ elspais checks --run-tests --targets unit --expect e2e lib:unit
 ```
 
 See also: `elspais docs checks`
+
+## Running part of a target
+
+A target that declares **units** is divided into its test files, and a
+stale-only run of it executes only the test files whose dependencies changed.
+For every other test file it takes the result of the earlier run that last
+executed it. Such a result is a **Retained Result**. A Retained Result is
+marked carried wherever it is counted, and it names the run that executed its
+test.
+
+```toml
+[[scanning.test.targets]]
+name     = "app"
+cwd      = "apps/app"
+command  = "flutter test --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.jsonl {selection}"
+reporter = "flutter-machine"
+results  = "machine.jsonl"
+inputs   = { skip_dirs = ["**/.dart_tool", "**/build"] }
+environment_probes = [
+  { name = "flutter",     command = "flutter --version --machine" },
+  { name = "dart-format", command = "dart format --version", affects_retention = false },
+]
+
+[scanning.test.targets.units]
+dependencies   = { source = "imports:dart" }
+full_selection = ""
+```
+
+Each unit is a test file the target scans: a file the `[scanning.test]`
+selection reads, below the target's `cwd`. A run of a target whose scan holds
+no test file below its `cwd` is refused before its output area is touched,
+naming the `cwd` and the `[scanning.test]` settings to change. A test file the
+command executes and the scan does not read is no unit, so a partial run never
+executes it: widen the scan to reach every test file the command runs.
+
+A scan below the `cwd` can also hold test files that another target runs, such
+as browser or device tests. `units.tests` selects, from the repository root,
+the scanned test files below the `cwd` that the command executes, in the form
+of `inputs`; unset, every scanned test file below the `cwd` is a unit. A test
+file the selection leaves out is no unit, so a run never requires its results.
+
+```toml
+[scanning.test.targets.units]
+dependencies   = { source = "imports:dart" }
+tests          = { directories = ["apps/app/test"], file_patterns = ["*_test.dart"] }
+full_selection = ""
+```
+
+### Which test files a run executes
+
+A unit is executed when any of these holds, and its earlier result is
+retained otherwise:
+
+- The earlier run never executed it: it is a new test file.
+- Its last execution failed, errored or produced no result, or produced a
+  result that binds to no single test of it, such as a failure in a
+  file-level setup step, or ran in a command that exited non-zero while no
+  result it wrote failed. Only a pass or a skip is retained.
+- The dependency source gave no evidence for it. The run states the reason
+  the source gave, one line per reason, on every run, because the next
+  stale-only run is decided by it:
+
+  ```text
+  units: app: no dependency evidence for 14 test files: apps/app/pubspec.yaml declares util at packages/util, which apps/app/.dart_tool/package_config.json does not list; run `dart pub get` or `flutter pub get` in apps/app
+  ```
+
+  Once the command has ended, the source is asked again about those test
+  files. Where the run itself removed the cause, such as a test runner that
+  resolved its packages again, the run records their dependencies, so the
+  next stale-only run can retain them.
+- A file its evidence reaches changed since the run that last executed it.
+- An input of the target that the dependency source does not observe changed.
+  Such an input is a dependency of every unit, so its change executes them
+  all.
+- The environment or the configuration of the target changed, unless the
+  probe that changed declares `affects_retention = false`.
+
+A target runs whole -- every unit executes and nothing is retained -- when the
+earlier run recorded no end, when inputs changed while it ran, when it left no
+readable *Unit Ledger* (below), when the `units` table or the dependency
+source changed since, or when the dependency source cannot answer or gives
+no evidence for any unit. The run states why on stderr, before the command
+starts:
+
+```text
+stale-only: executing app; carrying fresh results of none
+units: app: 3 of 212 test files; 209 retained
+```
+
+A stale target whose every unit is retained is recorded as a run without
+starting its command. Only a stale-only run retains. A run without
+`--stale-only` executes every test of every target it executes, and so does a
+stale-only run that also asks for `--full`:
+
+```bash
+elspais test --stale-only            # executes only the changed test files
+elspais test --stale-only --full     # executes every test of each stale target
+elspais test                         # executes every test of every selected target
+```
+
+`--full` without `--stale-only` is refused, because such a run already
+retains nothing.
+
+A run of a target that declares units fails when a test of a test file it
+executed produced no result, because a test the runner never reached has no
+verdict. The failure is recorded with the run, so the target's results read
+as stale naming the tests, and the next stale-only run executes the target
+again. A run that cannot check its results that way fails too. A command
+that executes a retained test file anyway replaces its Retained Results with
+the fresh ones; the run says so, and fails for each test of that file that
+produced no result.
+
+A target that declares no units executes every test on every run, and a
+scanned test its command does not execute reads as awaiting a result.
+
+### Dependency sources
+
+`dependencies.source` names where each unit's dependencies come from. Every
+language reaches elspais through this one setting.
+
+| Source | Each unit depends on | Observes, by default |
+|--------|----------------------|----------------------|
+| `declared` | its own test file | the test files the target scans |
+| `imports:dart` | the files its `import`, `export` and `part` directives reach | the Dart files a test loads only through an import, and the test files |
+| `command`  | what the project's command prints | nothing; declare `observes` |
+
+`declared` states that no test file depends on another test file. A change to
+a test file then executes that file alone, and a change to any other input
+executes every unit. It runs nothing, so it serves a target in any language.
+
+`imports:dart` reads a Dart or Flutter test file's dependencies from its
+source, and is described below.
+
+`command` runs a program of the project's own:
+
+```toml
+[scanning.test.targets.units]
+dependencies = { source = "command", command = "tools/test-deps" }
+observes     = { directories = ["lib", "test"] }
+```
+
+The command runs in the repository root, receives the repo-relative path of
+each unit on its standard input, one per line, and prints a JSON array:
+
+```json
+[{"unit": "test/a_test.dart", "files": ["test/a_test.dart", "lib/a.dart"]}]
+```
+
+A path may be repo-relative or absolute, through a symbolic link or not. A
+unit the output leaves out has no recorded dependencies, so every run
+executes it, whether or not anything changed. A command that
+exits non-zero or prints anything else makes every unit execute, and the run
+says why.
+
+`observes` selects the files the source can see, in the vocabulary of
+`inputs`, read from the repository root. A change to an input outside it
+executes every unit. Narrowing `observes` is therefore always safe: it can
+only execute more.
+
+A file a unit depends on that is not an input of its target is reported as
+`tests.dependency_outside_inputs`, because a change to it would leave the
+target fresh. Add it to the target's `inputs`.
+
+### The imports:dart source
+
+```toml
+[scanning.test.targets.units]
+dependencies = { source = "imports:dart" }
+```
+
+It takes no other setting. It reads `pubspec.yaml` files with PyYAML, which
+`pip install elspais[dart]` installs; where PyYAML is missing, the source
+gives no evidence and every unit executes, the run naming the extra to
+install. It reads files and runs nothing, so it needs no Dart toolchain. The
+target must declare an
+environment probe that affects retention, such as
+`flutter --version --machine` or `dart --version`: every Dart test loads the
+SDK, which lies outside the repository, so without a probe a change of SDK
+would go unseen. Where the target declares none, every unit executes and the
+run names the probe to add. Each unit depends on:
+
+- the files its `import`, `export` and `part` directives reach, and theirs in
+  turn, with every branch of a conditional import
+  (`import 'a.dart' if (dart.library.io) 'b.dart'`), because the branch the
+  compiler takes depends on the platform the test runs on;
+- the nearest `flutter_test_config.dart`, looked for from the test file's
+  directory up to its package root, which `flutter test` loads around the
+  test;
+- `hook/build.dart` and `hook/link.dart` of each package in the repository
+  that the test's program uses, which run when the program is built.
+
+A `package:` URI resolves as the compiler resolves it: through the package
+configuration of the test's program, the `.dart_tool/package_config.json`
+that lists the package holding the test file -- the package's own, or its
+pub workspace's. Directives in comments and strings are not read, and
+neither is anything after the file's first declaration, where Dart allows no
+directive.
+
+A package in the pub cache or in the Flutter SDK is part of the environment:
+`pubspec.lock` pins the first, and the environment probe covers the second.
+That holds wherever the pub cache lies, inside the repository as well. Such
+a package is still read, because one can import a package of the
+repository, where an override or a pub workspace places it there. A
+repository file reached through it is a dependency; the package's own files
+are not.
+
+Where it cannot be sure what a test file reaches, the source gives no
+evidence for it, so it executes, and the run states why:
+
+- No `pubspec.yaml` lies above the test file, or no package configuration
+  lists its package: run `dart pub get` or `flutter pub get` there.
+- The package holding the configuration has no `pubspec.lock`.
+- The configuration disagrees with the declarations of its program about
+  which repository packages the program loads. Its packages are the
+  configuration's own package, each pub workspace member its `pubspec.yaml`
+  names, and each package a `path:` dependency reaches from them, in turn:
+  the `dependencies`, `dev_dependencies` and `dependency_overrides` of the
+  root package, with `pubspec_overrides.yaml` beside it replacing the
+  overrides, the `dependencies` and `dev_dependencies` of a workspace member,
+  and the `dependencies` of any other package. The configuration disagrees
+  where it does not list one of those packages, places it elsewhere than its
+  declaration, or lists a repository package that no pubspec of the program
+  declares. A `pubspec.yaml` that does not read, or a form of declaration
+  the source does not read, such as a workspace member named by a pattern,
+  counts as a disagreement. A hosted, git or SDK package is environment, so
+  its version is not compared: `pubspec.lock` is an input of the target. A
+  command that runs `pub get` itself, as `flutter test` does unless given
+  `--no-pub`, removes the cause, and the source is asked again once it ends.
+  A command given `--no-pub` leaves the configuration as it is; run
+  `pub get` before it.
+- The configuration places a package outside the repository, the pub cache
+  and the Flutter SDK, such as a sibling checkout named in
+  `pubspec_overrides.yaml`. elspais does not see that checkout change, so
+  every test file of that program executes.
+- A file it reaches, in the repository or in the environment, cannot be read
+  or does not exist, such as generated code not built yet or a pub cache not
+  filled; a directive does not read, such as a URI that interpolates; or a
+  URI names a package the configuration does not list, or a scheme it does
+  not follow.
+
+Every other test file keeps its evidence.
+
+By default it observes, among the target's inputs, the Dart files a test
+loads only through an import: those under a `lib`, `hook` or
+`integration_test` directory, each `flutter_test_config.dart`, and the test
+files. A change to any other input executes every unit: `pubspec.yaml`,
+assets, golden images, `dart_test.yaml`, and the Dart files a test can run
+or read without importing them -- a program under `bin` or `tool`, a
+helper or fixture under `test`. An `observes` the project
+declares replaces the default. Declare one only for Dart files that no test
+loads except through an import, because a change to an observed file that
+no test's imports reach executes nothing:
+
+```toml
+[scanning.test.targets.units]
+dependencies = { source = "imports:dart" }
+observes     = { directories = ["."], file_patterns = ["lib/*.dart", "*_test.dart", "test/helpers/*.dart"] }
+```
+
+Put `**/.dart_tool` in the target's `inputs.skip_dirs`; a bare `.dart_tool`
+names only the one at the repository root. The package configuration holds
+paths of the machine that wrote it, so as an input it would differ on every
+machine and between a run and a *Baseline Run*. The source still reads it.
+
+### Giving the command its selection
+
+`units.receives` says how the command receives the test files a run selects.
+
+- `"placeholder"` (the default): the command holds `{selection}`, which a
+  partial run replaces with the selected test files, each relative to the
+  target's `cwd` and quoted for the shell. A run of every unit replaces it
+  with `units.full_selection`, which is empty by default.
+- `"file"`: the command reads the list itself from the file
+  `$ELSPAIS_SELECTION` names, one path per line, relative to the target's
+  `cwd`. The variable is set only on a partial run, so a command that finds
+  it unset runs everything.
+
+A command holding `{selection}` without units, a `"placeholder"` target whose
+command does not hold it, and a `"file"` target whose command does are each
+refused when the configuration loads. Units also need a `command` and a
+`results` pattern,
+because a run reads each unit's outcome from the results the command writes,
+and they cannot stand with `file_results = true`, because the exit status of
+a partial run speaks for the executed test files alone.
+
+### What a run writes beside its results
+
+| File in the output area | Holds |
+|-------------------------|-------|
+| `.elspais-units.json` | the *Unit Ledger*: per unit, the run that last executed it, its outcome, the digests of the files it reached, and its result lines |
+| `.elspais-retained.jsonl` | the Retained Results, in the result-line form of an Evidence Snapshot, each with the run that executed its test |
+| `.elspais-retained-coverage.json` | the line coverage the run kept from earlier runs |
+| `.elspais-selection` | the test files the run selected |
+
+Line coverage of a source file is kept from an earlier run only where the file
+still holds the content it held when that run measured it, with the test
+names of its per-test contexts made repo-relative. A file's figure is the
+current run's measurement merged with what was kept. Wherever kept coverage
+adds a line the current run did not measure executing, the report names the
+run that measured it; a file with no line the current run measured
+executing is carried. A partial run that started its command and wrote no
+coverage file is reported as missing its coverage, and one that wrote no
+results as missing its results. A *Baseline Run* carries all four
+files, so a baseline adopted from the parent branch serves retention too.
+
+### Reporting Retained Results
+
+- `tests.retained_results` lists, per target, every Retained Result and the
+  run that executed its test. It is `info` by default; set
+  `[rules.severity] "tests.retained_results"` to make it louder.
+- `summary` states, per target, how many results the run executed and how
+  many it retained.
+- A Retained Result counts as carried, so a figure it contributes to is
+  marked.
+- An Evidence Snapshot refuses a target holding Retained Results: run the
+  target whole first.
 
 ## Evidence Snapshot
 

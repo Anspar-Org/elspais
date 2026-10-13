@@ -237,7 +237,7 @@ class TestCitationsThatBindToNoTest:
 
         assert _verifiers(graph), "A citation that bound to a test still credits it"
 
-    # Verifies: REQ-d00254-T, REQ-d00274-G, REQ-d00274-H
+    # Verifies: REQ-d00332-G, REQ-d00274-G, REQ-d00274-H
     def test_REQ_d00254_T_a_citation_above_the_first_test_binds_to_no_test(
         self, tmp_path: Path
     ) -> None:

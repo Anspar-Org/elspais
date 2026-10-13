@@ -657,14 +657,16 @@ def canonicalize_node_terms(
     return True
 
 
-# Implements: REQ-d00132-L, REQ-d00237-G
+# Implements: REQ-d00132-L, REQ-d00237-G, REQ-d00239-E
 def mark_terms_in_hashed_text(graph, requirements) -> None:  # noqa: ANN001
     """Bring term forms into canonical form in the text each requirement's hash covers.
 
     A build leaves that text as written, because marking a term there moves
     the hash. A save calls this for the requirements its mutations changed,
     and the fix command for every requirement, so the change is only ever
-    made to a requirement somebody acted on.
+    made to a requirement somebody acted on. Each requirement is marked
+    against the terms its own repository reads, so a library's text is never
+    marked with a consumer's term.
 
     Args:
         graph: The federated graph holding the requirements and the terms.
@@ -672,14 +674,17 @@ def mark_terms_in_hashed_text(graph, requirements) -> None:  # noqa: ANN001
     """
     from elspais.graph.render import iter_hashed_parts
 
-    td = getattr(graph, "terms", None)
-    if td is None or len(td) == 0:
-        return
     for req in requirements:
         try:
-            config = graph.repo_for_node(req).config
-        except (KeyError, AttributeError):
-            config = getattr(graph, "root_config", None) or {}
+            repo = graph.repo_for_node(req)
+            namespace, config = repo.namespace, repo.config
+        except KeyError:
+            # A requirement no member holds yet is new content, which
+            # belongs to the invoking repository.
+            namespace, config = graph.root_repo_namespace, graph.root_config or {}
+        td = graph.terms_read_in(namespace)
+        if len(td) == 0:
+            continue
         terms_cfg = config.get("terms", {}) or {}
         if _is_excluded(req, terms_cfg.get("exclude_files") or []):
             continue

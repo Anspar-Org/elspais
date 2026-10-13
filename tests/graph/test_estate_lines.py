@@ -169,6 +169,9 @@ class TestEveryFigureOverOneSetOfFiles:
         assert analysed.unmeasured_files == 0
 
 
+# A project summary reads the committed tree's requirement locations, a whole
+# build of this repository; every test here reads the same tree.
+@pytest.mark.usefixtures("shared_committed_req_locations")
 class TestProjectSummaryPublishesTheEstate:
     """The MCP project summary publishes the estate figures."""
 

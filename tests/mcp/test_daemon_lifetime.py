@@ -2062,8 +2062,13 @@ class TestStoppingDaemonIsReplacedNotReused:
         )
 
     # Verifies: REQ-o00075-B
-    def test_REQ_o00075_B_command_does_not_reach_a_stopping_daemon(self, tmp_path):
+    def test_REQ_o00075_B_command_does_not_reach_a_stopping_daemon(self, tmp_path, monkeypatch):
         from elspais.commands import _engine
+        from elspais.graph.parsers import parse_cache
+
+        # A client asking for another parse-cache mode is never served by a
+        # daemon at all; this asks about one in the default mode.
+        monkeypatch.delenv(parse_cache.ENV_VAR, raising=False)
 
         info = {"pid": 999, "port": 4321, "stopping": True}
         reached: list[int] = []

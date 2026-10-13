@@ -18,20 +18,170 @@ on:
         description: 'Version to publish (without v prefix)'
         type: string
         required: true
+      sha:
+        description: 'Commit to publish'
+        type: string
+        required: true
       skip_pypi:
         description: 'Skip PyPI upload (just update Homebrew)'
         type: boolean
         default: false
 
 jobs:
+
+  # Implements: REQ-o00066-N
+  # Every channel publishes the commit this job resolves, and only once the
+  # full test suite on every supported Python has passed on exactly that
+  # commit: in CI's push run on main, or else in the `tests` job below. A
+  # release a person creates by hand meets the same gate as an automatic one.
+  gate:
+    name: Release Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+      version: ${{ steps.version.outputs.version }}
+      verdict: ${{ steps.verdict.outputs.verdict }}
+
+    steps:
+      - name: Resolve the commit being published
+        id: commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          INPUT_SHA: ${{ inputs.sha }}
+          INPUT_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          # A called run carries its caller's event and sha, so the caller
+          # names the commit; a release names its tag; a dispatch names its ref.
+          if [ -n "$INPUT_SHA" ]; then
+            SHA="$INPUT_SHA"
+            VERSION="$INPUT_VERSION"
+            SOURCE="the calling workflow"
+          elif [ "$EVENT" = "release" ]; then
+            SHA=$(gh api "repos/${REPOSITORY}/commits/${RELEASE_TAG}" --jq '.sha')
+            VERSION="${RELEASE_TAG#v}"
+            SOURCE="release tag ${RELEASE_TAG}"
+          else
+            SHA="$DISPATCH_SHA"
+            VERSION=""
+            SOURCE="the dispatched ref ${GITHUB_REF}"
+          fi
+          if [ -z "$SHA" ]; then
+            echo "::error::Could not resolve the commit to publish from ${SOURCE}"
+            exit 1
+          fi
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "pending_version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Publishing ${SHA}, resolved from ${SOURCE}"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.commit.outputs.sha }}
+
+      - name: Confirm the version the commit declares
+        id: version
+        env:
+          SHA: ${{ steps.commit.outputs.sha }}
+          EXPECTED: ${{ steps.commit.outputs.pending_version }}
+        run: |
+          DECLARED=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+          if [ -z "$DECLARED" ]; then
+            echo "::error::pyproject.toml at ${SHA} declares no version"
+            exit 1
+          fi
+          if [ -n "$EXPECTED" ] && [ "$EXPECTED" != "$DECLARED" ]; then
+            echo "::error::Refusing to publish ${SHA}: it declares version ${DECLARED}, but the release names ${EXPECTED}"
+            exit 1
+          fi
+          echo "version=${DECLARED}" >> "$GITHUB_OUTPUT"
+
+      # A completed push run whose every job passed is the verdict, and a
+      # failed job in one is a verdict too. Anything else -- no push run, one
+      # in progress, cancelled, or with a job that never ran -- is no verdict
+      # at all, so the release runs the suite itself.
+      - name: Read CI's verdict on this commit
+        id: verdict
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          RUNS=$(gh run list --repo "$REPOSITORY" --workflow ci.yml --commit "$SHA" \
+            --event push --limit 20 --json databaseId,status,conclusion)
+          PASSED_RUN=""
+          FAILED=""
+          FOUND=""
+          for ID in $(echo "$RUNS" | jq -r '.[].databaseId'); do
+            STATUS=$(echo "$RUNS" | jq -r --argjson id "$ID" '.[] | select(.databaseId == $id) | .status')
+            FOUND="${FOUND}${FOUND:+, }run ${ID} ${STATUS}"
+            if [ "$STATUS" != "completed" ]; then
+              continue
+            fi
+            # Impact selection runs on pull requests only, so it is skipped here.
+            JOBS=$(gh api --paginate "repos/${REPOSITORY}/actions/runs/${ID}/jobs?per_page=100" \
+              --jq '.jobs[] | select(.name | startswith("Test Impact") | not) | "\(.conclusion // "none")\t\(.name)"')
+            if [ -z "$JOBS" ]; then
+              continue
+            fi
+            FAILING=$(printf '%s\n' "$JOBS" | awk -F'\t' '$1 == "failure" || $1 == "timed_out" { print $2 }' | paste -sd ';' -)
+            NOT_PASSED=$(printf '%s\n' "$JOBS" | awk -F'\t' '$1 != "success" { print $2 ": " $1 }' | paste -sd ';' -)
+            if [ -n "$FAILING" ]; then
+              FAILED="${FAILED}${FAILED:+; }run ${ID} failed in ${FAILING}"
+            elif [ -z "$NOT_PASSED" ]; then
+              PASSED_RUN="$ID"
+            else
+              FOUND="${FOUND} (${NOT_PASSED})"
+            fi
+          done
+          if [ -n "$FAILED" ]; then
+            echo "::error::Refusing to publish ${SHA}: CI's push run failed on this commit (${FAILED}). Fix the failure and release a commit that passes."
+            exit 1
+          fi
+          if [ -n "$PASSED_RUN" ]; then
+            echo "CI push run ${PASSED_RUN} passed every job on ${SHA}; publishing without a further run"
+            echo "verdict=passed" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No CI push run has passed or failed on ${SHA} (found: ${FOUND:-no push run}); the release runs the full suite on it"
+            echo "verdict=untested" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Implements: REQ-o00066-N
+  # The full suite a push to main runs, on the commit being published, for a
+  # commit CI holds no verdict on. Every checkout in it is at that commit.
+  tests:
+    name: Release Tests
+    needs: [gate]
+    if: needs.gate.outputs.verdict == 'untested'
+    permissions:
+      contents: read
+      packages: write  # the suite builds its CI image when none exists yet
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.gate.outputs.sha }}
+
+  # Implements: REQ-o00066-N
+  # `tests` is skipped when CI already passed the commit, and a skipped need
+  # would skip this job, so the condition names both ways to proceed.
   publish:
     runs-on: ubuntu-latest
-    if: ${{ !inputs.skip_pypi }}
+    needs: [gate, tests]
+    if: >-
+      !cancelled() && !inputs.skip_pypi && needs.gate.result == 'success' &&
+      (needs.gate.outputs.verdict == 'passed' || needs.tests.result == 'success')
     permissions:
       id-token: write  # for trusted publishing
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -55,35 +205,26 @@ jobs:
 
   update-homebrew:
     runs-on: ubuntu-latest
-    needs: [publish]
-    if: always() && (needs.publish.result == 'success' || inputs.skip_pypi)
+    needs: [gate, tests, publish]
+    # A skip_pypi run skips `publish` and still reaches the tap, so the test
+    # verdict is required here as well.
+    if: >-
+      !cancelled() && needs.gate.result == 'success' &&
+      (needs.gate.outputs.verdict == 'passed' || needs.tests.result == 'success') &&
+      (needs.publish.result == 'success' || inputs.skip_pypi)
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Extract version
-        id: version
-        run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            # workflow_call: version passed explicitly
-            VERSION="${{ inputs.version }}"
-          elif [ "${{ github.event_name }}" = "release" ]; then
-            # release: strip 'v' prefix from tag
-            VERSION="${{ github.event.release.tag_name }}"
-            VERSION="${VERSION#v}"
-          else
-            # workflow_dispatch: read from pyproject.toml
-            VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
-          fi
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-
       - name: Find triggering PR author
         id: author
         env:
           GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ needs.gate.outputs.sha }}
         run: |
-          AUTHOR=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
-            --jq '.[0].user.login // empty' 2>/dev/null || echo "")
+          if ! AUTHOR=$(gh api "repos/${REPOSITORY}/commits/${SHA}/pulls" --jq '.[0].user.login // empty'); then
+            echo "::warning::Pull request lookup for ${SHA} failed (tolerated: the author falls back to the actor)"
+            AUTHOR=""
+          fi
           echo "login=${AUTHOR:-${{ github.actor }}}" >> "$GITHUB_OUTPUT"
 
       - name: Trigger Homebrew tap update
@@ -92,12 +233,12 @@ jobs:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           repository: Anspar-Org/homebrew-anspar
           event-type: update-formula
-          client-payload: '{"package": "elspais", "version": "${{ steps.version.outputs.version }}", "author": "${{ steps.author.outputs.login }}"}'
+          client-payload: '{"package": "elspais", "version": "${{ needs.gate.outputs.version }}", "author": "${{ steps.author.outputs.login }}"}'
 
   notify-success:
     name: Notify on Success
     runs-on: ubuntu-latest
-    needs: [publish, update-homebrew]
+    needs: [gate, publish, update-homebrew]
     # Fires whenever PyPI publish succeeded, regardless of the Homebrew
     # dispatch result. A Homebrew failure is reported separately via the
     # author DM in notify-failure; gating #dev on both would silence the
@@ -110,32 +251,25 @@ jobs:
       # Required for slack-notify (reads .github/slack-channels.yml).
       - uses: actions/checkout@v4
 
-      - name: Extract version
-        id: version
-        run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            VERSION="${{ inputs.version }}"
-          elif [ "${{ github.event_name }}" = "release" ]; then
-            VERSION="${{ github.event.release.tag_name }}"
-            VERSION="${VERSION#v}"
-          else
-            VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
-          fi
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-
       - name: Find triggering PR
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ needs.gate.outputs.sha }}
         run: |
-          PR_JSON=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
-            --jq '.[0] // empty' 2>/dev/null || echo "")
+          if ! PR_JSON=$(gh api "repos/${REPOSITORY}/commits/${SHA}/pulls" --jq '.[0] // empty'); then
+            echo "::warning::Pull request lookup for ${SHA} failed (tolerated: the message omits the pull request)"
+            PR_JSON=""
+          fi
 
           if [ -n "$PR_JSON" ]; then
-            echo "number=$(echo "$PR_JSON" | jq -r '.number')" >> "$GITHUB_OUTPUT"
-            echo "title=$(echo "$PR_JSON" | jq -r '.title')" >> "$GITHUB_OUTPUT"
-            echo "url=$(echo "$PR_JSON" | jq -r '.html_url')" >> "$GITHUB_OUTPUT"
-            echo "found=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "number=$(echo "$PR_JSON" | jq -r '.number')"
+              echo "title=$(echo "$PR_JSON" | jq -r '.title')"
+              echo "url=$(echo "$PR_JSON" | jq -r '.html_url')"
+              echo "found=true"
+            } >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
@@ -147,7 +281,7 @@ jobs:
           PR_NUM: ${{ steps.pr.outputs.number }}
           PR_TITLE: ${{ steps.pr.outputs.title }}
           PR_URL: ${{ steps.pr.outputs.url }}
-          VERSION: ${{ steps.version.outputs.version }}
+          VERSION: ${{ needs.gate.outputs.version }}
           SERVER_URL: ${{ github.server_url }}
           REPOSITORY: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
@@ -202,31 +336,43 @@ jobs:
   notify-failure:
     name: Notify on Failure
     runs-on: ubuntu-latest
-    needs: [publish, update-homebrew]
-    if: always() && (needs.publish.result == 'failure' || needs.update-homebrew.result == 'failure')
+    needs: [gate, tests, publish, update-homebrew]
+    if: >-
+      always() && (needs.gate.result == 'failure' || needs.tests.result == 'failure' ||
+      needs.publish.result == 'failure' || needs.update-homebrew.result == 'failure')
     permissions:
       contents: read
 
     steps:
+      # The gate can fail before it resolves a version or a commit, so each
+      # falls back to what the trigger named.
       - name: Extract version
         id: version
+        env:
+          GATE_VERSION: ${{ needs.gate.outputs.version }}
+          INPUT_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          GATE_SHA: ${{ needs.gate.outputs.sha }}
+          TRIGGER_SHA: ${{ github.sha }}
         run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            VERSION="${{ inputs.version }}"
-          elif [ "${{ github.event_name }}" = "release" ]; then
-            VERSION="${{ github.event.release.tag_name }}"
-            VERSION="${VERSION#v}"
-          else
-            VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
-          fi
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          VERSION="${GATE_VERSION:-${INPUT_VERSION:-${RELEASE_TAG#v}}}"
+          echo "version=${VERSION:-unknown}" >> "$GITHUB_OUTPUT"
+          echo "sha=${GATE_SHA:-${TRIGGER_SHA}}" >> "$GITHUB_OUTPUT"
 
       - name: Determine failed steps
         id: failures
         run: |
           FAILED=""
+          if [ "${{ needs.gate.result }}" = "failure" ]; then
+            FAILED="Release gate"
+          fi
+          if [ "${{ needs.tests.result }}" = "failure" ]; then
+            [ -n "$FAILED" ] && FAILED="$FAILED and "
+            FAILED="${FAILED}Release tests"
+          fi
           if [ "${{ needs.publish.result }}" = "failure" ]; then
-            FAILED="PyPI publish"
+            [ -n "$FAILED" ] && FAILED="$FAILED and "
+            FAILED="${FAILED}PyPI publish"
           fi
           if [ "${{ needs.update-homebrew.result }}" = "failure" ]; then
             [ -n "$FAILED" ] && FAILED="$FAILED and "
@@ -238,16 +384,22 @@ jobs:
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ steps.version.outputs.sha }}
         run: |
-          PR_JSON=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
-            --jq '.[0] // empty' 2>/dev/null || echo "")
+          if ! PR_JSON=$(gh api "repos/${REPOSITORY}/commits/${SHA}/pulls" --jq '.[0] // empty'); then
+            echo "::warning::Pull request lookup for ${SHA} failed (tolerated: the message omits the pull request)"
+            PR_JSON=""
+          fi
 
           if [ -n "$PR_JSON" ]; then
-            echo "number=$(echo "$PR_JSON" | jq -r '.number')" >> "$GITHUB_OUTPUT"
-            echo "title=$(echo "$PR_JSON" | jq -r '.title')" >> "$GITHUB_OUTPUT"
-            echo "url=$(echo "$PR_JSON" | jq -r '.html_url')" >> "$GITHUB_OUTPUT"
-            echo "author=$(echo "$PR_JSON" | jq -r '.user.login')" >> "$GITHUB_OUTPUT"
-            echo "found=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "number=$(echo "$PR_JSON" | jq -r '.number')"
+              echo "title=$(echo "$PR_JSON" | jq -r '.title')"
+              echo "url=$(echo "$PR_JSON" | jq -r '.html_url')"
+              echo "author=$(echo "$PR_JSON" | jq -r '.user.login')"
+              echo "found=true"
+            } >> "$GITHUB_OUTPUT"
           else
             echo "found=false" >> "$GITHUB_OUTPUT"
           fi
@@ -259,7 +411,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_FOUND: ${{ steps.pr.outputs.found }}
           PR_AUTHOR: ${{ steps.pr.outputs.author }}
-          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_SHA: ${{ steps.version.outputs.sha }}
           REPOSITORY: ${{ github.repository }}
           ACTOR: ${{ github.actor }}
         run: |

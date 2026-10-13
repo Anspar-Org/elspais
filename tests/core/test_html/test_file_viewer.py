@@ -18,17 +18,26 @@ from tests.embedded_page import embedded_data
 # Fixture root for hht-like tests
 _FIXTURE_ROOT = Path(__file__).parent.parent.parent / "fixtures" / "hht-like"
 
+# Generating a page reads the committed tree's requirement locations, a whole
+# build of this repository; every test here reads the same tree.
+pytestmark = pytest.mark.usefixtures("shared_committed_req_locations")
 
-@pytest.fixture
-def hht_graph():
-    """Build a real graph from the hht-like fixture."""
+
+@pytest.fixture(scope="module")
+def hht_graph(read_only_graph):
+    """Build a real graph from the hht-like fixture, once for the module.
+
+    Every test here only reads it; the guard fails teardown if one changed it.
+    """
     config_path = _FIXTURE_ROOT / ".elspais.toml"
-    return build_graph(
+    graph = build_graph(
         config_path=config_path,
         repo_root=_FIXTURE_ROOT,
         scan_code=False,
         scan_tests=False,
     )
+    with read_only_graph(graph, "hht_graph"):
+        yield graph
 
 
 @pytest.fixture

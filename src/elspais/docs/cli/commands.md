@@ -18,6 +18,7 @@ Complete reference for all elspais commands.
 | `test` | Reports | Execute test targets and record their results, evaluating no check |
 | `fingerprint` | Reports | Record the fingerprint of a test run elspais did not execute |
 | `evidence` | Reports | Write or verify the Evidence Snapshot: one test run's results, bound to the tree |
+| `baseline` | Reports | Carry recorded test-target runs between trees as a Baseline Run |
 | `gaps` | Gaps & Issues | List which requirements fall short of each coverage dimension |
 | `uncovered` | Gaps & Issues | List requirements without code coverage |
 | `untested` | Gaps & Issues | List requirements without test coverage |
@@ -144,6 +145,12 @@ To see malformed references, use: `elspais malformed`
                    selected target stays expected, and a carried failure
                    still fails. A selection that is all fresh executes nothing.
                    Requires `--run-tests`; refused without it (exit 2).
+  `--full`         With `--stale-only`, execute every test of each target
+                   whose results are not fresh and retain no result. Without
+                   it, a stale-only run of a target declaring units executes
+                   only the test files whose dependencies changed.
+                   Requires `--run-tests` and `--stale-only`; refused
+                   without them (exit 2).
   `--concurrency N` The most targets this run executes at the same time, in
                    place of `[scanning.test] concurrency`. 1 runs them one at
                    a time, in declaration order. Below 1 is refused (exit 2).
@@ -171,6 +178,7 @@ Execute test targets and record their results. Evaluate no check.
   $ elspais test                       # the `default` group
   $ elspais test --targets unit        # a target or a group
   $ elspais test --stale-only          # only targets whose results are not fresh
+  $ elspais test --stale-only --full   # ... and every test of each of them
   $ elspais checks --expect unit       # later, once: judge every result
 
 The exit code reflects only the targets: 1 if any target failed, 0 if all
@@ -189,6 +197,9 @@ passed. Each run empties the target's folder and records a fingerprint, as
                    finished) and leave the fresh results of the rest in
                    place. A selection that is all fresh executes nothing and
                    exits 0.
+  `--full`         With `--stale-only`, execute every test of each target
+                   whose results are not fresh and retain no result.
+                   Requires `--stale-only`; refused without it (exit 2).
   `--concurrency N` The most targets this run executes at the same time, in
                    place of `[scanning.test] concurrency`. 1 runs them one at
                    a time, in declaration order. Below 1 is refused (exit 2).
@@ -219,6 +230,24 @@ refuses a `finish` that no `start` began, with exit 1. The reason is that
 `start` empties the folder. Without `start`, the results that an earlier run
 left there would carry the fingerprint of this run. An unknown target name exits 2. See
 `elspais docs test-targets`, *Target Folders and Fresh Results*.
+
+## baseline
+
+Carry the recorded runs of test targets between trees as a *Baseline Run*.
+
+  $ elspais baseline pack --out baseline.tar.gz --targets all   # CI: pack the runs
+  $ elspais baseline fetch                                      # adopt where none is recorded
+
+`pack --out FILE [--targets ...]` writes the selected targets' folders into
+one archive. It refuses, naming the target and the reason (exit 1), a tree
+holding changes no commit holds, a run in progress or one that recorded no
+end, a run whose inputs changed while it ran, and a target with no results. A
+failing run is packed. `fetch [--replace]` runs
+`[scanning.test.baseline] fetch_command` to obtain an archive and adopts each
+packed run where this tree records none; `--replace` replaces a recorded run.
+It reports each target as adopted, skipped or refused, and exits 1 where the
+command fails, leaves nothing, or a target is refused. See
+`elspais docs baseline`.
 
 ## evidence
 
@@ -1020,6 +1049,7 @@ Read the user guide.
 | `checks` | CHECKS |
 | `pdf` | PDF COMPILATION |
 | `test-targets` | elspais test-targets |
+| `baseline` | BASELINE RUNS |
 | `doctor` | DOCTOR |
 | `analysis` | ANALYSIS |
 | `terms` | DEFINED TERMS |

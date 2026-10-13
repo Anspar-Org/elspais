@@ -2425,6 +2425,319 @@ class TestStaleResultsWarning:
 # ===================================================================
 
 
+class TestEnvironmentAndBaselineRuns:
+    """The environment of a target is an input, and a packed run is adopted by another tree.
+
+    Verifies: REQ-d00311-R, REQ-d00311-H, REQ-d00311-I, REQ-d00333-F
+    """
+
+    _PROBE = 'environment_probes = [{ name = "tool", command = "cat ../tool-version.txt" }]\n'
+
+    @classmethod
+    def _copy_with_probe(cls, scratch, project):
+        TestStaleResultsWarning._results_without_a_run(scratch, project)
+        toml = scratch / ".elspais.toml"
+        text = toml.read_text(encoding="utf-8")
+        marker = 'name = "stub"\n'
+        assert text.count(marker) == 1 and text.count("cli_ttl = 2\n") == 1
+        # These tests judge each invocation in a process of its own; a
+        # daemon's answer to a changed environment is tested below.
+        text = text.replace("cli_ttl = 2\n", "cli_ttl = 0\n")
+        toml.write_text(text.replace(marker, marker + cls._PROBE), encoding="utf-8")
+        (scratch.parent / "tool-version.txt").write_text("1.0\n", encoding="utf-8")
+
+    @staticmethod
+    def _record(scratch):
+        assert run_elspais("fingerprint", "start", "stub", cwd=scratch).returncode == 0
+        (scratch / ".results" / "stub" / "test-results.json").write_text(
+            json.dumps(
+                {
+                    "created_at": "fixture",
+                    "summary": {"passed": 1, "failed": 0, "total": 1},
+                    "tests": [
+                        {"nodeid": "test_stub::test_ok", "outcome": "passed", "duration": 0.001}
+                    ],
+                }
+            )
+        )
+        finished = run_elspais("fingerprint", "finish", "stub", cwd=scratch)
+        assert finished.returncode == 0, finished.stderr
+
+    @staticmethod
+    def _stale(scratch):
+        out = run_elspais("checks", "--tests", "--format", "json", "--lenient", cwd=scratch)
+        return TestStaleResultsWarning._stale_check(out)[1]
+
+    # Verifies: REQ-d00311-R, REQ-d00311-F
+    def test_a_changed_environment_makes_results_stale_naming_the_probe(self, tmp_path, project):
+        scratch = tmp_path / "probe" / "repo"
+        scratch.parent.mkdir()
+        self._copy_with_probe(scratch, project)
+        self._record(scratch)
+        assert self._stale(scratch).get("passed") is True
+
+        (scratch.parent / "tool-version.txt").write_text("2.0\n", encoding="utf-8")
+
+        stale = self._stale(scratch)
+        assert stale.get("passed") is False
+        (finding,) = stale.get("findings")
+        assert "environment probe 'tool'" in finding["message"]
+
+    # Verifies: REQ-d00333-F, REQ-d00311-H, REQ-d00311-I
+    def test_a_packed_run_is_adopted_by_a_clone_and_judged_fresh(self, tmp_path, project):
+        import os
+        import subprocess
+
+        scratch = tmp_path / "base" / "repo"
+        scratch.parent.mkdir()
+        self._copy_with_probe(scratch, project)
+        toml = scratch / ".elspais.toml"
+        toml.write_text(
+            toml.read_text(encoding="utf-8")
+            + '\n[scanning.test.baseline]\nfetch_command = "cp ../baseline.tar.gz {dest}"\n',
+            encoding="utf-8",
+        )
+        (scratch / ".gitignore").write_text(".results/\n.elspais/\n", encoding="utf-8")
+        env = {
+            **{k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
+            "GIT_AUTHOR_NAME": "t",
+            "GIT_AUTHOR_EMAIL": "t@example.com",
+            "GIT_COMMITTER_NAME": "t",
+            "GIT_COMMITTER_EMAIL": "t@example.com",
+        }
+
+        def git(cwd, *args):
+            subprocess.run(["git", *args], cwd=cwd, env=env, check=True, capture_output=True)
+
+        git(scratch, "init", "-q", "-b", "main")
+        git(scratch, "add", "-A")
+        git(scratch, "commit", "-q", "-m", "fixture")
+        archive = tmp_path / "base" / "baseline.tar.gz"
+        pack = ("baseline", "pack", "--out", str(archive), "--targets", "stub")
+
+        refused = run_elspais(*pack, cwd=scratch)
+        assert refused.returncode == 1
+        assert "target stub: no Result Fingerprint records a run of it" in refused.stderr
+
+        self._record(scratch)
+        packed = run_elspais(*pack, cwd=scratch)
+        assert packed.returncode == 0, packed.stderr
+
+        clone = tmp_path / "base" / "clone"
+        git(tmp_path, "clone", "-q", str(scratch), str(clone))
+        fetched = run_elspais("baseline", "fetch", cwd=clone)
+        assert fetched.returncode == 0, fetched.stderr
+        assert "stub: adopted" in fetched.stdout
+        assert self._stale(clone).get("passed") is True
+
+        again = run_elspais("baseline", "fetch", cwd=clone)
+        assert again.returncode == 0
+        assert "stub: skipped" in again.stdout
+
+
+class TestUnitsRetainResults:
+    """A target declaring units executes only the test files whose evidence changed.
+
+    Each test runs against a fresh copy of the fixture whose added target runs
+    a stand-in runner over the test files it is handed, writing one result
+    line per test.
+
+    Verifies: REQ-d00333-A+B+I, REQ-d00323-M+O+P, REQ-d00249-O
+    """
+
+    _RUNNER = (
+        "import json, os, pathlib, re, sys\n"
+        "out = pathlib.Path(os.environ['ELSPAIS_TARGET_OUTPUT'])\n"
+        "paths = []\n"
+        "for arg in sys.argv[1:]:\n"
+        "    p = pathlib.Path(arg)\n"
+        "    paths += sorted(p.rglob('test_*.py')) if p.is_dir() else [p]\n"
+        "lines = []\n"
+        "for p in paths:\n"
+        "    for n, text in enumerate(p.read_text().splitlines(), 1):\n"
+        "        m = re.match(r'def (test_\\w+)', text)\n"
+        "        if m:\n"
+        "            lines.append(json.dumps({'target': 'units', 'file': p.as_posix(),\n"
+        "                'line': n, 'name': m.group(1), 'outcome': 'passed'}))\n"
+        "(out / 'results.jsonl').write_text(''.join(l + '\\n' for l in lines))\n"
+        "print('ran', *[p.as_posix() for p in paths])\n"
+    )
+
+    @classmethod
+    def _copy(cls, tmp_path, *, cli_ttl: int = 0):
+        scratch = tmp_path / "repo"
+        scratch.mkdir()
+        load_fixture("e2e-standard", scratch)
+        runner = tmp_path / "runner.py"
+        runner.write_text(cls._RUNNER, encoding="utf-8")
+        toml = scratch / ".elspais.toml"
+        text = toml.read_text(encoding="utf-8").replace("cli_ttl = 2\n", f"cli_ttl = {cli_ttl}\n")
+        text += (
+            "\n[[scanning.test.targets]]\n"
+            'name = "units"\n'
+            'reporter = "evidence-snapshot"\n'
+            'results = "results.jsonl"\n'
+            f"command = 'python {runner} {{selection}}'\n"
+            "\n[scanning.test.targets.units]\n"
+            'dependencies = { source = "declared" }\n'
+            'full_selection = "tests"\n'
+        )
+        toml.write_text(text, encoding="utf-8")
+        return scratch
+
+    @staticmethod
+    def _test(scratch, *args):
+        return run_elspais(
+            "test", "--targets", "units", *args, cwd=scratch, env={"PYTHONDONTWRITEBYTECODE": "1"}
+        )
+
+    # Verifies: REQ-d00333-A+B, REQ-d00249-O, REQ-d00323-M+O+P
+    def test_a_changed_test_file_executes_alone_and_the_rest_are_retained(self, tmp_path):
+        scratch = self._copy(tmp_path)
+        first = self._test(scratch, "--stale-only")
+        assert first.returncode == 0, first.stderr
+        assert "ran tests/test_auth.py tests/test_notifications.py" in first.stderr + first.stdout
+
+        auth = scratch / "tests" / "test_auth.py"
+        auth.write_text(auth.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        second = self._test(scratch, "--stale-only")
+
+        assert second.returncode == 0, second.stderr
+        assert "units: units: 1 of 2 test files; 1 retained" in second.stderr
+        assert "ran tests/test_auth.py\n" in second.stderr + second.stdout
+
+        out = run_elspais("checks", "--tests", "--format", "json", "--lenient", cwd=scratch)
+        checks = {c["name"]: c for c in json.loads(out.stdout)["checks"]}
+        (finding,) = checks["tests.retained_results"]["findings"]
+        assert "target units: 1 result(s) retained" in finding["message"]
+        assert "tests/test_notifications.py" in finding["related"][0]
+        assert "retained from the run of" in finding["related"][0]
+
+        summary = run_elspais("summary", cwd=scratch)
+        assert "units (REQ): 1 result(s) executed, 1 retained" in summary.stdout
+
+    # Verifies: REQ-d00333-I
+    def test_a_full_stale_only_run_executes_every_test_and_full_alone_is_refused(self, tmp_path):
+        scratch = self._copy(tmp_path)
+        assert self._test(scratch, "--stale-only").returncode == 0
+        auth = scratch / "tests" / "test_auth.py"
+        auth.write_text(auth.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+
+        refused = self._test(scratch, "--full")
+        assert refused.returncode == 2
+        assert "Add --stale-only, or drop --full" in refused.stderr
+
+        full = self._test(scratch, "--stale-only", "--full")
+        assert full.returncode == 0, full.stderr
+        assert "every test file: the run asks to execute every test (--full)" in full.stderr
+        assert "ran tests/test_auth.py tests/test_notifications.py" in full.stderr + full.stdout
+
+    # Verifies: REQ-d00311-R
+    def test_a_daemon_answers_a_changed_environment_without_a_file_changing(self, tmp_path):
+        scratch = self._copy(tmp_path, cli_ttl=2)
+        version = tmp_path / "tool-version.txt"
+        version.write_text("1.0\n", encoding="utf-8")
+        toml = scratch / ".elspais.toml"
+        toml.write_text(
+            toml.read_text(encoding="utf-8").replace(
+                'name = "units"\n',
+                'name = "units"\n'
+                f'environment_probes = [{{ name = "tool", command = "cat {version}" }}]\n',
+            ),
+            encoding="utf-8",
+        )
+        assert self._test(scratch).returncode == 0
+
+        def stale():
+            out = run_elspais("checks", "--tests", "--format", "json", "--lenient", cwd=scratch)
+            data = json.loads(out.stdout)
+            return next(c for c in data["checks"] if c["name"] == "tests.results_stale")
+
+        assert stale()["passed"] is True
+        version.write_text("2.0\n", encoding="utf-8")
+
+        check = stale()
+        assert check["passed"] is False
+        assert any("environment probe 'tool'" in f["message"] for f in check["findings"])
+        served = run_elspais("checks", "--tests", "--lenient", cwd=scratch)
+        assert "via daemon" in served.stdout, "the answers did not come from a daemon"
+
+    _DART_RUNNER = (
+        "import json, os, pathlib, re, sys\n"
+        "out = pathlib.Path(os.environ['ELSPAIS_TARGET_OUTPUT'])\n"
+        "paths = []\n"
+        "for arg in sys.argv[1:]:\n"
+        "    p = pathlib.Path(arg)\n"
+        "    paths += sorted(p.rglob('*_test.dart')) if p.is_dir() else [p]\n"
+        "lines = []\n"
+        "for p in paths:\n"
+        "    for n, text in enumerate(p.read_text().splitlines(), 1):\n"
+        "        m = re.match(r\"\\s*test\\('(\\w+)'\", text)\n"
+        "        if m:\n"
+        "            lines.append(json.dumps({'target': 'units', 'file': p.as_posix(),\n"
+        "                'line': n, 'name': m.group(1), 'outcome': 'passed'}))\n"
+        "(out / 'results.jsonl').write_text(''.join(l + '\\n' for l in lines))\n"
+        "print('ran', *[p.as_posix() for p in paths])\n"
+    )
+
+    # Verifies: REQ-d00333-B+C
+    def test_a_dart_library_edit_executes_only_the_test_files_importing_it(self, tmp_path):
+        scratch = self._copy(tmp_path)
+        (tmp_path / "runner.py").write_text(self._DART_RUNNER, encoding="utf-8")
+        toml = scratch / ".elspais.toml"
+        text = toml.read_text(encoding="utf-8")
+        text = text.replace(
+            'directories = ["tests"]\nfile_patterns = ["test_*.py", "*_test.py"]\n',
+            'directories = ["dart/test"]\nfile_patterns = ["*_test.dart"]\n',
+        )
+        text = text.replace('source = "declared"', 'source = "imports:dart"')
+        text = text.replace('full_selection = "tests"', 'full_selection = "dart/test"')
+        # The SDK the tests load is environment, which a probe covers.
+        text = text.replace(
+            'name = "units"\n',
+            'name = "units"\nenvironment_probes = [{ name = "sdk", command = "echo 3" }]\n',
+        )
+        toml.write_text(text, encoding="utf-8")
+        # The package: two test files, each importing its own library file,
+        # and a package configuration agreeing with its pubspec.
+        files = {
+            "pubspec.yaml": "name: app\n",
+            "pubspec.lock": "packages: {}\n",
+            "lib/a.dart": "int a = 1;\n",
+            "lib/b.dart": "int b = 1;\n",
+            ".dart_tool/package_config.json": json.dumps(
+                {
+                    "configVersion": 2,
+                    "packages": [{"name": "app", "rootUri": "../", "packageUri": "lib/"}],
+                }
+            ),
+        }
+        for name in ("a", "b"):
+            files[f"test/{name}_test.dart"] = (
+                f"import 'package:app/{name}.dart';\n\n"
+                "void main() {\n"
+                "  // Verifies: REQ-d00001-A\n"
+                f"  test('{name}', () {{}});\n"
+                "}\n"
+            )
+        for rel, body in files.items():
+            path = scratch / "dart" / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(body, encoding="utf-8")
+
+        first = self._test(scratch, "--stale-only")
+        assert first.returncode == 0, first.stderr
+        assert "ran dart/test/a_test.dart dart/test/b_test.dart" in first.stderr + first.stdout
+        assert "no dependency evidence" not in first.stderr
+
+        (scratch / "dart" / "lib" / "a.dart").write_text("int a = 2;\n", encoding="utf-8")
+        second = self._test(scratch, "--stale-only")
+
+        assert second.returncode == 0, second.stderr
+        assert "units: units: 1 of 2 test files; 1 retained" in second.stderr
+        assert "ran dart/test/a_test.dart\n" in second.stderr + second.stdout
+
+
 class TestServedGraphReadsResultsWrittenWhileServing:
     """Results a run writes while the daemon serves the project reach the
     daemon's answers, without restarting it. Runs against the shared project

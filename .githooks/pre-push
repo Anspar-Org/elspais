@@ -6,13 +6,13 @@
 # Runs ONLY checks that pre-commit doesn't already cover:
 #   1. Branch freshness (must be rebased on origin/main)
 #   2. Version bump (auto-bumps if same as main)
-#   3. Unit tests (cached) for the pushed tree
-#   4. E2E tests (cached)
-#   5. Secret detection (gitleaks)
-#   6. Documentation sync tests
+#   3. E2E tests (cached) for the pushed tree
+#   4. Secret detection (gitleaks)
+#   5. Documentation sync tests
 #
 # Pre-commit already handles: lint, format, markdown, elspais fix, commit
-# message format, and unit tests except on a checkpoint commit.
+# message format, and the unit tests Test Impact Analysis selects. No unit
+# tests run here: CI's unit job runs the full unit tier on every pull request.
 #
 # PR-aware blocking:
 #   - PR/feature branch: failures BLOCK the push
@@ -62,7 +62,9 @@ fi
 # 1. Branch Freshness & Version Bump
 # =====================================================
 
-git fetch origin main --quiet 2>/dev/null || true
+if ! git fetch origin main --quiet 2>/dev/null; then
+    echo -e "${YELLOW}WARNING: could not fetch origin/main (tolerated: freshness is judged against the last fetched origin/main)${NC}"
+fi
 
 if git rev-parse origin/main >/dev/null 2>&1; then
     BEHIND_COUNT=$(git rev-list --count HEAD..origin/main)
@@ -164,28 +166,7 @@ VALIDATION_FAILED=false
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
 # =====================================================
-# 3. Unit Tests (cached) for the pushed tree
-# =====================================================
-
-# A checkpoint commit (ELSPAIS_CHECKPOINT=1) deferred the unit tier, so the
-# pushed tree may have no verdict. .githooks/unit-verdict keys its verdict on
-# the staged tree, so the staged tree must be the tree being pushed; then a
-# verdict any commit earned for this tree is honored, and a missing one is
-# earned here. Running .githooks/unit-verdict before the push keeps the tier
-# out of the push's connection window, as for e2e below.
-PUSH_TREE=$(git rev-parse 'HEAD^{tree}')
-STAGED_TREE=$(git write-tree)
-if [ "$PUSH_TREE" != "$STAGED_TREE" ]; then
-    echo -e "${RED}Staged changes are not committed; the unit verdict cannot describe the pushed tree.${NC}"
-    echo "Commit them (a checkpoint is fine) or unstage them, then push again."
-    VALIDATION_FAILED=true
-elif ! "$REPO_ROOT/.githooks/unit-verdict"; then
-    VALIDATION_FAILED=true
-fi
-echo ""
-
-# =====================================================
-# 4. E2E Tests (cached)
+# 3. E2E Tests (cached) for the pushed tree
 # =====================================================
 
 # Guard: a push that changes only prose cannot change e2e behaviour. The
@@ -213,17 +194,24 @@ if E2E_MERGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null); then
     fi
 fi
 
+# .githooks/e2e-verdict keys its verdict on the staged tree, so the staged
+# tree must be the tree being pushed; then a verdict recorded for this tree
+# is honored, and a missing one is earned here.
+PUSH_TREE=$(git rev-parse 'HEAD^{tree}')
+STAGED_TREE=$(git write-tree)
 if [ "$E2E_RELEVANT" = false ]; then
     echo -e "${GREEN}E2E tests skipped — this branch changes documentation only${NC}"
-else
-    if ! "$REPO_ROOT/.githooks/e2e-verdict"; then
-        VALIDATION_FAILED=true
-    fi
+elif [ "$PUSH_TREE" != "$STAGED_TREE" ]; then
+    echo -e "${RED}Staged changes are not committed; the e2e verdict cannot describe the pushed tree.${NC}"
+    echo "Commit them (a checkpoint is fine) or unstage them, then push again."
+    VALIDATION_FAILED=true
+elif ! "$REPO_ROOT/.githooks/e2e-verdict"; then
+    VALIDATION_FAILED=true
 fi
 echo ""
 
 # =====================================================
-# 5. Secret Detection
+# 4. Secret Detection
 # =====================================================
 
 echo -e "${BLUE}Running secret detection...${NC}"
@@ -252,7 +240,7 @@ fi
 echo ""
 
 # =====================================================
-# 6. Documentation Sync Tests
+# 5. Documentation Sync Tests
 # =====================================================
 
 echo -e "${BLUE}Running documentation sync tests...${NC}"
@@ -267,7 +255,7 @@ fi
 echo ""
 
 # =====================================================
-# 7. Results
+# 6. Results
 # =====================================================
 
 echo -e "${BLUE}======================================${NC}"

@@ -269,6 +269,11 @@ _FIELD_COMMENTS: dict[str, str] = {
         "Directory of the Evidence Snapshot that evidence write fills and builds read"
         " when a target has no results"
     ),
+    "scanning.test.baseline": ("Where `elspais baseline fetch` obtains a packed Baseline Run"),
+    "scanning.test.baseline.fetch_command": (
+        "Shell command that fills the empty directory {dest} with one archive"
+        " `elspais baseline pack` wrote (default: none)"
+    ),
     "scanning.test.targets": ("Per-package/suite test-ingestion targets (array of tables)"),
     "scanning.test.targets.name": "Unique label for this target (required)",
     "scanning.test.targets.cwd": (
@@ -333,6 +338,35 @@ _FIELD_COMMENTS: dict[str, str] = {
     "scanning.test.targets.file_results": (
         "true: the command's exit status is the result of each test file the"
         " target scans (default false)"
+    ),
+    "scanning.test.targets.environment_probes": (
+        "Tables of name, command and affects_retention; each command's output"
+        " identifies a part of the environment, and a change makes the results"
+        " stale (default: none)"
+    ),
+    "scanning.test.targets.units": (
+        "The target's test files as units a stale-only run executes in part:"
+        " dependencies, observes, tests, receives, full_selection (default: unset)"
+    ),
+    "scanning.test.targets.units.dependencies": (
+        '{ source = "declared" } | { source = "imports:dart" } |'
+        ' { source = "command", command = "..." } --'
+        " where each test file's dependencies come from"
+    ),
+    "scanning.test.targets.units.observes": (
+        "The files the dependency source sees: directories, file_patterns,"
+        " skip_dirs, skip_files (default: the source's own)"
+    ),
+    "scanning.test.targets.units.tests": (
+        "The scanned test files below cwd that the command executes:"
+        " directories, file_patterns, skip_dirs, skip_files (default: all of them)"
+    ),
+    "scanning.test.targets.units.receives": (
+        '"placeholder" (the command holds {selection}) | "file" (the command'
+        " reads $ELSPAIS_SELECTION) (default placeholder)"
+    ),
+    "scanning.test.targets.units.full_selection": (
+        "What {selection} becomes on a run of every test file (default empty)"
     ),
     "scanning.journey": "User journey file scanning",
     "scanning.journey.directories": "Directories to scan for journey files",
@@ -930,6 +964,14 @@ def generate_config(
         'coverage = "lcov.info"',
         'match   = "source"',
         'credit_coverage = "verified"',
+        "# Tip: write the machine output to a `results` file, put {selection}",
+        "#   where the test files go, skip **/.dart_tool in `inputs`, declare an",
+        '#   environment probe such as { name = "flutter", command =',
+        '#   "flutter --version --machine" }, and declare units, so a',
+        "#   stale-only run executes only the test files whose imports",
+        "#   changed: [scanning.test.targets.units]",
+        '#   dependencies = { source = "imports:dart" }',
+        "#   See: elspais docs test-targets (The imports:dart source)",
         "",
         "-- Package with a shared DB --",
         "--concurrency=1 serialises the test files inside this package.",
@@ -959,6 +1001,17 @@ def generate_config(
         ),
         'reporter = "pytest-json"',
         'results = "pytest.json"',
+        "# The toolchain and packages are inputs too: a change to what a probe",
+        "#   prints makes the results stale. Each probe runs in cwd.",
+        "environment_probes = [",
+        '  { name = "python", command = "python --version" },',
+        '  { name = "packages", command = "python -m pip freeze" },',
+        "]",
+        "# Tip: declare units, and put {selection} where the test files go, so",
+        "#   a stale-only run executes only the test files whose dependencies",
+        "#   changed: [scanning.test.targets.units]",
+        '#   dependencies = { source = "declared" }',
+        "#   See: elspais docs test-targets (Running part of a target)",
         "# Tip: a relative path in results is read from the repository root, and",
         "#   one in coverage from cwd. A target whose runner writes otherwise says",
         '#   so: results_origin = "working-directory" | coverage_origin =',

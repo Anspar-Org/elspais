@@ -848,7 +848,7 @@ D. Files matching any `exclude_files` glob pattern SHALL be skipped during scann
 
 ### Assertions
 
-A. The term scan SHALL run over every member of a federation against the one set of terms the federation holds, so that a reference made in one member to a term another member defines is recorded.
+A. <RETIRED> Superseded by REQ-d00239-E.
 
 B. Each member's text SHALL be scanned under that member's own term configuration.
 
@@ -856,18 +856,23 @@ C. When a federation scans, the scan SHALL establish each term's reference set a
 
 D. A term's reference set SHALL belong to the federation that scanned, so that a scan another federation performs over the same member leaves it unchanged.
 
+E. The set of terms read in a federation member's text SHALL be the terms defined in that member and in every member its associate declarations reach, directly or transitively.
+
 ### Rationale
 
-Where a term is used is a finding about a whole federation: a term defined in one repository may be referenced in another, and the defining repository cannot see that reference alone. The set is therefore the scanning federation's, never a member's, and C and D keep it a property of the tree rather than of how many scans have run or which federation ran them.
+A member's text means the words of the repositories it builds on, and no others. A term is read in text where an occurrence of it is recorded as a reference, reported as unmarked or in a non-canonical form, or marked by a rewrite. A consumer declares its libraries as associates and may use their vocabulary; a library declares nothing about its consumers and cannot mean theirs, so a word a library shares with a consumer's glossary is the library's own plain word (E).
+
+Where a term is used is still a finding about a whole federation: a term one member defines may be referenced in a member that declares it, and the defining member cannot see that reference alone. The set is therefore the scanning federation's, never a member's, and C and D keep it a property of the tree rather than of how many scans have run or which federation ran them.
 
 ### Changelog
 
+- 2026-10-13 | 0dc7a13a | - | Michael Lewis (<michael@anspar.org>) | E added: a member's text is read against its own terms and those of the members its associate declarations reach; A retired
 - 2026-10-01 | acd14bba | - | Michael Lewis (<michael@anspar.org>) | A and B restated by property; C and D added: a scan establishes the reference set, which belongs to the federation that scanned
 - 2026-07-31 | e27abfeb | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-05-11 | 7d9a30c4 | - | Developer (<dev@example.com>) | Auto-fix: canonicalize section header depth
 - 2026-04-23 | 7d9a30c4 | - | Developer (<dev@example.com>) | Auto-fix: add missing changelog section
 
-*End* *Federated Graph Term Scanner Pass* | **Hash**: acd14bba
+*End* *Federated Graph Term Scanner Pass* | **Hash**: 0dc7a13a
 
 ## REQ-d00240: New Term Health Checks
 

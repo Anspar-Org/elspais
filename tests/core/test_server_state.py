@@ -248,7 +248,7 @@ class TestEnsureFreshHonestRebuildReport:
     def _break_rebuild(self, state, monkeypatch):
         """Make _rebuild() raise with a distinctive, greppable cause."""
 
-        def _raise() -> None:
+        def _raise(probes=None) -> None:
             raise RuntimeError(self.REBUILD_CAUSE)
 
         monkeypatch.setattr(state, "_rebuild", _raise)

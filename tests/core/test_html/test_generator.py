@@ -17,6 +17,10 @@ from tests.core.graph_test_helpers import (
 )
 from tests.embedded_page import embedded_data
 
+# Generating a page reads the committed tree's requirement locations, a whole
+# build of this repository; every test here reads the same tree.
+pytestmark = pytest.mark.usefixtures("shared_committed_req_locations")
+
 
 @pytest.fixture
 def sample_graph():

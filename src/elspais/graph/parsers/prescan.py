@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import ast
 import re
-import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 # A comment carrying a citation sits above the declaration it describes, and the
@@ -130,9 +130,123 @@ def the_walk_decides(_line_number: int) -> bool:
     return False
 
 
+@dataclass(frozen=True)
+class PythonSyntax:
+    """Everything the Python pre-scans read from a source's syntax tree.
+
+    A file dispatch asks the parser several questions about one source --
+    which declaration encloses each line, where each declaration begins, which
+    tests it holds, which lines are interior to a string literal -- and each
+    answer is read off the same tree.  ``read_python`` is the ONE place that
+    tree is made: it parses the source once and walks it once, collecting all
+    of them, and every pre-scan below takes its answer from the result instead
+    of parsing again.
+
+    ``error`` is the exception the parser raised, ``None`` where the source
+    parsed; every collection is empty where it did not.
+    """
+
+    error: SyntaxError | ValueError | None
+    # (lineno, end_lineno, name) for every class, in pre-order.
+    class_ranges: tuple[tuple[int, int, str], ...] = ()
+    # (lineno, end_lineno, name, enclosing class) for every function, in pre-order.
+    func_ranges: tuple[tuple[int, int, str, str | None], ...] = ()
+    # The first line of every function declaration, its first decorator's
+    # where it has decorators; ascending, without repeats.
+    declaration_starts: tuple[int, ...] = ()
+    # (start, end_lineno, name, Test* class) for every ``test_*`` function
+    # inside a ``Test*`` class -- once per such class enclosing it, outermost
+    # first -- and for every ``test_*`` function declared at module level
+    # (class None).  Unsorted.
+    test_funcs: tuple[tuple[int, int, str, str | None], ...] = ()
+    # Every line interior to a string literal (see ``ast_string_literal_lines``).
+    string_literal_lines: frozenset[int] = frozenset()
+
+    @property
+    def parsed(self) -> bool:
+        return self.error is None
+
+
+# Implements: REQ-d00254-D, REQ-d00332-A, REQ-d00269-E
+def read_python(source: str) -> PythonSyntax:
+    """Parse *source* once and walk its tree once, for every Python pre-scan.
+
+    The walk is a pre-order traversal in the order ``ast.iter_child_nodes``
+    yields children, which is the order the per-line context resolves
+    overlapping extents by (the innermost declaration is met last).  It is
+    iterative, so a deeply nested expression costs no recursion depth.
+    """
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError) as exc:
+        return PythonSyntax(error=exc)
+
+    class_ranges: list[tuple[int, int, str]] = []
+    func_ranges: list[tuple[int, int, str, str | None]] = []
+    starts: set[int] = set()
+    test_funcs: list[tuple[int, int, str, str | None]] = []
+    literal_lines: set[int] = set()
+
+    # (node, enclosing class name, enclosing Test* class names outermost first,
+    #  whether the node is a direct child of the module)
+    stack: list[tuple[ast.AST, str | None, tuple[str, ...], bool]] = [
+        (child, None, (), True) for child in reversed(list(ast.iter_child_nodes(tree)))
+    ]
+    while stack:
+        node, class_name, test_classes, top_level = stack.pop()
+        if isinstance(node, ast.ClassDef):
+            class_ranges.append((node.lineno, node.end_lineno or node.lineno, node.name))
+            class_name = node.name
+            if node.name.startswith("Test"):
+                test_classes = (*test_classes, node.name)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            end = node.end_lineno or node.lineno
+            func_ranges.append((node.lineno, end, node.name, class_name))
+            starts.add(min([d.lineno for d in node.decorator_list] + [node.lineno]))
+            if node.name.startswith("test_"):
+                # Implements: REQ-d00254-O
+                # pytest reports a decorated test at its first decorator.
+                start = node.decorator_list[0].lineno if node.decorator_list else node.lineno
+                for test_class in test_classes:
+                    test_funcs.append((start, end, node.name, test_class))
+                if top_level:
+                    test_funcs.append((start, end, node.name, None))
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            literal_lines.update(range(node.lineno + 1, (node.end_lineno or node.lineno) + 1))
+        # Every node is descended into, a declaration's body and a compound
+        # statement alike: a declaration written under an ``if``, a ``try``,
+        # a ``with`` or a loop is a declaration like any other, and a walk
+        # that stopped at anything not itself a class or a function would
+        # leave it with no extent, so a citation written above it would bind
+        # to whatever merely encloses both -- ``_run_server``'s two hundred
+        # lines for a six-line signal handler.  The class name threads through
+        # unchanged, so a function declared under an ``if`` inside a class
+        # still reports that class, and a nested declaration -- met after the
+        # one enclosing it -- is the narrower answer for its own lines.
+        stack.extend(
+            (child, class_name, test_classes, False)
+            for child in reversed(list(ast.iter_child_nodes(node)))
+        )
+
+    return PythonSyntax(
+        error=None,
+        class_ranges=tuple(class_ranges),
+        func_ranges=tuple(func_ranges),
+        declaration_starts=tuple(sorted(starts)),
+        test_funcs=tuple(test_funcs),
+        string_literal_lines=frozenset(literal_lines),
+    )
+
+
+def _python_syntax(syntax: PythonSyntax | None, lines: list[tuple[int, str]]) -> PythonSyntax:
+    """The caller's reading of the source, or one made from *lines*."""
+    return syntax if syntax is not None else read_python("\n".join(text for _, text in lines))
+
+
 # Implements: REQ-d00254-D
 def python_line_context(
     lines: list[tuple[int, str]],
+    syntax: PythonSyntax | None = None,
 ) -> dict[int, tuple[str | None, str | None, int, int]] | None:
     """Per-line function/class context for a Python file, read from the AST.
 
@@ -154,41 +268,11 @@ def python_line_context(
     Returns None when the source does not parse, so the caller keeps the
     indentation reading rather than losing context altogether.
     """
-    try:
-        tree = ast.parse("\n".join(text for _, text in lines))
-    except (SyntaxError, ValueError):
+    syntax = _python_syntax(syntax, lines)
+    if not syntax.parsed:
         return None
-
-    class_ranges: list[tuple[int, int, str]] = []
-    func_ranges: list[tuple[int, int, str, str | None]] = []
-
-    def _collect(node, class_name: str | None) -> None:
-        for child in ast.iter_child_nodes(node):
-            if isinstance(child, ast.ClassDef):
-                class_ranges.append((child.lineno, child.end_lineno or child.lineno, child.name))
-                _collect(child, child.name)
-            elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                func_ranges.append(
-                    (child.lineno, child.end_lineno or child.lineno, child.name, class_name)
-                )
-                # A nested declaration is the narrower answer for its own lines.
-                _collect(child, class_name)
-            else:
-                # A declaration written under an ``if``, a ``try``, a ``with``
-                # or a loop is a declaration like any other, and the walk
-                # descends through the compound statement to reach it.
-                # Stopping at anything that is not itself a class or a
-                # function would leave such a declaration with no extent, so
-                # a citation written above it would bind to whatever merely
-                # encloses both -- ``_run_server``'s two hundred lines for a
-                # six-line signal handler.  ``declaration_starts`` already
-                # reads these declarations (it walks the whole tree), and the
-                # two must agree about what a declaration is.  The class name
-                # threads through unchanged, so a function declared under an
-                # ``if`` inside a class still reports that class.
-                _collect(child, class_name)
-
-    _collect(tree, None)
+    class_ranges = syntax.class_ranges
+    func_ranges = syntax.func_ranges
 
     context: dict[int, tuple[str | None, str | None, int, int]] = {}
     for ln, _text in lines:
@@ -475,7 +559,11 @@ def _patterns_for(language: str) -> tuple[list, list, str]:
 
 
 # Implements: REQ-d00254-D
-def declaration_starts(lines: list[tuple[int, str]], language: str) -> list[int]:
+def declaration_starts(
+    lines: list[tuple[int, str]],
+    language: str,
+    syntax: PythonSyntax | None = None,
+) -> list[int]:
     """The line each function declaration in a file BEGINS at, ascending.
 
     REQ-d00254-D bounds a citation that no function encloses at "the start of
@@ -500,16 +588,9 @@ def declaration_starts(lines: list[tuple[int, str]], language: str) -> list[int]
     bound rather than a wrong one.
     """
     if language == "python":
-        try:
-            tree = ast.parse("\n".join(text for _, text in lines))
-        except (SyntaxError, ValueError):
-            tree = None
-        if tree is not None:
-            starts: set[int] = set()
-            for node in ast.walk(tree):
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    starts.add(min([d.lineno for d in node.decorator_list] + [node.lineno]))
-            return sorted(starts)
+        syntax = _python_syntax(syntax, lines)
+        if syntax.parsed:
+            return list(syntax.declaration_starts)
 
     func_patterns, _class_patterns, _scope_mode = _patterns_for(language)
     found: set[int] = set()
@@ -533,6 +614,7 @@ def declaration_starts(lines: list[tuple[int, str]], language: str) -> list[int]
 def build_line_context(
     lines: list[tuple[int, str]],
     language: str,
+    syntax: PythonSyntax | None = None,
 ) -> dict[int, tuple[str | None, str | None, int, int]]:
     """Build function/class context map for each line.
 
@@ -553,6 +635,8 @@ def build_line_context(
     Args:
         lines: List of (line_number, content) tuples.
         language: Detected language key.
+        syntax: The source already read by ``read_python``, where the caller
+            holds it; read from *lines* otherwise.
 
     Returns:
         Dict mapping line_number to (function_name, class_name, function_line, function_end_line).
@@ -564,7 +648,7 @@ def build_line_context(
     # A citation's enclosing function bounds the lines it attributes, so the
     # precise reading is preferred wherever it is available.
     if language == "python":
-        ast_context = python_line_context(lines)
+        ast_context = python_line_context(lines, syntax)
         if ast_context is not None:
             return _bind_comments_to_declarations(lines, ast_context, func_patterns, class_patterns)
 
@@ -702,7 +786,7 @@ def build_line_context(
 
 
 # Implements: REQ-d00269-E
-def ast_string_literal_lines(source: str) -> set[int]:
+def ast_string_literal_lines(source: str, syntax: PythonSyntax | None = None) -> set[int]:
     """Every line genuinely interior to a Python string literal.
 
     A keyword written inside a literal names a keyword rather than invoking
@@ -719,23 +803,20 @@ def ast_string_literal_lines(source: str) -> set[int]:
 
     Returns an empty set when the source does not parse: a file the tool
     cannot read is not a file it may make claims about.
+
+    *syntax* is the source already read by ``read_python``, where the caller
+    holds it.
     """
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return set()
-    lines: set[int] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            end = node.end_lineno or node.lineno
-            lines.update(range(node.lineno + 1, end + 1))
-    return lines
+    if syntax is None:
+        syntax = read_python(source)
+    return set(syntax.string_literal_lines)
 
 
-# Implements: REQ-d00254-K
+# Implements: REQ-d00332-A
 def ast_prescan(
     source: str,
     lines: list[tuple[int, str]],
+    syntax: PythonSyntax | None = None,
 ) -> tuple[
     dict[int, tuple[str | None, str | None, int, int]],
     list[tuple[int, str, str | None]],
@@ -748,13 +829,18 @@ def ast_prescan(
     Args:
         source: Full source text of the file.
         lines: List of (line_number, content) tuples.
+        syntax: *source* already read by ``read_python``, where the caller
+            holds it.
 
     Returns:
         Tuple of (line_context, all_test_funcs):
         - line_context: Maps line_number -> (func_name, class_name, func_line, func_end_line)
         - all_test_funcs: List of (func_line, func_name, class_name)
     """
-    tree = ast.parse(source)
+    if syntax is None:
+        syntax = read_python(source)
+    if syntax.error is not None:
+        raise syntax.error
 
     # Implements: REQ-d00254-O
     # Where a test starts, in the same terms the runner uses. pytest reports a
@@ -762,34 +848,13 @@ def ast_prescan(
     # is reported at its first decorator, not at `def`. Reading `def` here
     # would disagree with every result pytest writes for a decorated test --
     # which is every parametrized one -- and the result would bind to the file
-    # instead of to the test that produced it.
-    def _start_line(item) -> int:
-        return item.decorator_list[0].lineno if item.decorator_list else item.lineno
-
-    # Collect all test functions with their enclosing class
-    # (lineno, end_lineno, func_name, class_name)
-    func_ranges: list[tuple[int, int, str, str | None]] = []
-    all_test_funcs: list[tuple[int, str, str | None]] = []
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef):
-            # Only process Test* classes
-            if node.name.startswith("Test"):
-                for item in ast.walk(node):
-                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        if item.name.startswith("test_"):
-                            end = item.end_lineno or item.lineno
-                            start = _start_line(item)
-                            func_ranges.append((start, end, item.name, node.name))
-                            all_test_funcs.append((start, item.name, node.name))
-
-    # Second pass: collect module-level test functions
-    for node in ast.iter_child_nodes(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name.startswith("test_"):
-                end = node.end_lineno or node.lineno
-                func_ranges.append((_start_line(node), end, node.name, None))
-                all_test_funcs.append((_start_line(node), node.name, None))
+    # instead of to the test that produced it.  ``read_python`` records each
+    # test that way.
+    #
+    # (start, end_lineno, func_name, class_name): every test_* function inside
+    # a Test* class, and every module-level test_* function.
+    func_ranges = list(syntax.test_funcs)
+    all_test_funcs = [(start, name, cname) for start, _end, name, cname in func_ranges]
 
     # Sort by line number for consistent ordering
     func_ranges.sort(key=lambda x: x[0])
@@ -909,73 +974,7 @@ def text_prescan(
     return line_context, all_test_funcs
 
 
-class _DartLineScanner:
-    """Cross-line bracket scanner for Dart.
-
-    Tracks multiline strings (''' / \"\"\"), raw strings (r-prefix: backslash
-    is literal, applies to both quote styles and to raw triple-quoted
-    strings), single-line strings (unterminated ones run to EOL, which is
-    intentional -- Dart single-line strings cannot legally span lines), //
-    line comments, and /* */ block comments that may span lines. Yields only
-    bracket characters that are real code."""
-
-    def __init__(self) -> None:
-        self.multiline_quote: str | None = None  # "'''" or '"""' while inside
-        self.in_block_comment = False
-
-    def brackets(self, code: str):
-        i = 0
-        n = len(code)
-        while i < n:
-            if self.multiline_quote:
-                end = code.find(self.multiline_quote, i)
-                if end < 0:
-                    return  # string continues past EOL
-                i = end + 3
-                self.multiline_quote = None
-                continue
-            if self.in_block_comment:
-                end = code.find("*/", i)
-                if end < 0:
-                    return
-                i = end + 2
-                self.in_block_comment = False
-                continue
-            c = code[i]
-            if c == "/" and i + 1 < n and code[i + 1] == "/":
-                return  # line comment: rest of line is not code
-            if c == "/" and i + 1 < n and code[i + 1] == "*":
-                self.in_block_comment = True
-                i += 2
-                continue
-            # r-prefix applies to both quote styles, including raw triple-
-            # quoted strings -- resolve it before the triple-quote check.
-            raw = c == "r" and i + 1 < n and code[i + 1] in "'\""
-            if raw:
-                i += 1
-                c = code[i]
-            if c == "'" or c == '"':
-                if code[i : i + 3] in ("'''", '"""'):
-                    self.multiline_quote = code[i : i + 3]
-                    i += 3
-                    continue
-                quote = c
-                i += 1
-                while i < n:
-                    if not raw and code[i] == "\\":
-                        i += 2
-                        continue
-                    if code[i] == quote:
-                        i += 1
-                        break
-                    i += 1
-                continue
-            if c in "([{)]}":
-                yield c
-            i += 1
-
-
-# Implements: REQ-d00254-K
+# Implements: REQ-d00332-A
 def _match_brace_end(
     lines: list[tuple[int, str]],
     start_idx: int,
@@ -987,32 +986,70 @@ def _match_brace_end(
     A clean close is accurate even if a bracket appeared inside a quoted string
     on the way (a slightly-wrong END is harmless; attachment uses the START line).
 
-    A single `_DartLineScanner` instance is threaded across all lines of the
-    span so multiline strings/comments that open on one line and close on a
-    later one are tracked correctly."""
+    The brackets are read from the span's lines joined into one text, so a
+    string or comment that opens on one line and closes on a later one is
+    followed across them. The span closes at the end of the first line where
+    the brackets have balanced.
+    """
+    from bisect import bisect_right
+
+    from elspais.graph.parsers.dart_lexer import code_brackets
+    from elspais.graph.parsers.patterns import comment_pattern_for_path
+
+    span = lines[start_idx:]
+    if stop_line is not None:
+        # The span never reads past the line it is clamped at.
+        bound = next((k for k, (ln, _t) in enumerate(span) if ln >= stop_line), len(span) - 1)
+        span = span[: bound + 1]
+    first = span[0][0]
+
+    def clamped() -> tuple[int, bool]:
+        # Clamped: never balanced before the next test. The clamp must never
+        # produce an end before the span's own start line.
+        return max(first, stop_line - 1), False  # type: ignore[operator]
+
+    if stop_line is not None and first >= stop_line:
+        return clamped()
+    starts: list[int] = []
+    offset = 0
+    for _ln, text in span:
+        starts.append(offset)
+        offset += len(text) + 1
+    joined = "\n".join(text for _ln, text in span)
+    pattern = comment_pattern_for_path(".dart")
+    assert pattern is not None
     depth = 0
     seen = False
-    last = lines[start_idx][0]
-    scanner = _DartLineScanner()
-    for ln, text in lines[start_idx:]:
-        if stop_line is not None and ln >= stop_line:
-            # clamped: never balanced before next test. Guard against
-            # inversion -- the clamp must never produce an end before the
-            # span's own start line.
-            return max(lines[start_idx][0], stop_line - 1), False
-        for ch in scanner.brackets(text):
-            if ch in "([{":
-                depth += 1
-                seen = True
-            elif ch in ")]}":
-                depth -= 1
-        last = ln
+    k = 0  # the line of the span being read
+
+    def finish_line() -> tuple[int, bool] | None:
+        """End line k; the span's end where it closes or is clamped, else None."""
+        nonlocal k
         if seen and depth <= 0:
-            return ln, True  # clean close
-    return last, False  # ran to EOF without closing
+            return span[k][0], True  # clean close
+        if k + 1 >= len(span):
+            return span[k][0], False  # ran to EOF without closing
+        k += 1
+        if stop_line is not None and span[k][0] >= stop_line:
+            return clamped()
+        return None
+
+    for at, bracket in code_brackets(joined, 0, pattern.marker):
+        line = bisect_right(starts, at) - 1
+        while k < line:
+            if (done := finish_line()) is not None:
+                return done
+        if bracket in "([{":
+            depth += 1
+            seen = True
+        else:
+            depth -= 1
+    while True:
+        if (done := finish_line()) is not None:
+            return done
 
 
-# Implements: REQ-d00254-K
+# Implements: REQ-d00332-A
 def dart_prescan(
     lines: list[tuple[int, str]],
 ) -> tuple[
@@ -1056,11 +1093,12 @@ def dart_prescan(
         spans.append((ln, end))
 
     if inaccurate:
-        print(
+        from elspais.graph.parsers.parse_cache import reading_warning
+
+        reading_warning(
             "Warning: dart_prescan could not balance a test() body before the "
             "next test or end-of-file; comment-inside-test span boundaries may "
-            "be inaccurate.",
-            file=sys.stderr,
+            "be inaccurate."
         )
 
     # 2) line_context: each line inside a span -> that test (innermost wins)
@@ -1074,7 +1112,7 @@ def dart_prescan(
                 best, owner_start, owner_end = s, s, e
         line_context[ln] = (None, None, owner_start, owner_end)
 
-    # Implements: REQ-d00254-S+T
+    # Implements: REQ-d00332-F+G
     # 3) This pass binds each unowned comment (a comment no test encloses) to
     #    the declaration below it.  A group start is a target, like a test
     #    start, only if the group holds a test.  The runner reports results for
@@ -1103,80 +1141,6 @@ def dart_prescan(
     return line_context, all_test_funcs
 
 
-# The escapes a Dart string literal resolves to one character.  ``\x``,
-# ``\u`` and ``\u{...}`` are read separately; any other escaped character
-# stands for itself.
-_DART_SIMPLE_ESCAPES = {"n": "\n", "r": "\r", "t": "\t", "b": "\b", "f": "\f", "v": "\v"}
-_DART_HEX = re.compile(r"[0-9A-Fa-f]+")
-
-
-def _dart_escape(text: str, i: int) -> tuple[str, int] | None:
-    """The character the escape at ``text[i]`` (just past the backslash) stands
-    for, and the index after it, or ``None`` for an escape that does not read."""
-    if i >= len(text):
-        return None
-    c = text[i]
-    if c in _DART_SIMPLE_ESCAPES:
-        return _DART_SIMPLE_ESCAPES[c], i + 1
-    if c == "x":
-        digits = text[i + 1 : i + 3]
-        if len(digits) == 2 and _DART_HEX.fullmatch(digits):
-            return chr(int(digits, 16)), i + 3
-        return None
-    if c == "u":
-        if text.startswith("{", i + 1):
-            close = text.find("}", i + 2)
-            digits = text[i + 2 : close] if close > 0 else ""
-            if digits and _DART_HEX.fullmatch(digits) and len(digits) <= 6:
-                return chr(int(digits, 16)), close + 1
-            return None
-        digits = text[i + 1 : i + 5]
-        if len(digits) == 4 and _DART_HEX.fullmatch(digits):
-            return chr(int(digits, 16)), i + 5
-        return None
-    return c, i + 1
-
-
-def _dart_literal(text: str, i: int) -> tuple[str, int] | None:
-    """Read one string literal starting at ``text[i]``.
-
-    Returns its value and the index after its closing quote, or ``None`` where
-    the literal interpolates a value, does not close, or does not start here.
-    """
-    raw = text.startswith("r", i)
-    if raw:
-        i += 1
-    quote = text[i : i + 3] if text[i : i + 3] in ("'''", '"""') else text[i : i + 1]
-    if quote not in ("'", '"', "'''", '"""'):
-        return None
-    i += len(quote)
-    if len(quote) == 3:
-        # A multi-line literal drops its first line where that line holds
-        # nothing but white space.
-        line_end = text.find("\n", i)
-        if line_end >= 0 and not text[i:line_end].strip(" \t\r"):
-            i = line_end + 1
-    value: list[str] = []
-    while i < len(text):
-        if text.startswith(quote, i):
-            return "".join(value), i + len(quote)
-        c = text[i]
-        if c == "\n" and len(quote) == 1:
-            return None
-        if not raw and c == "\\":
-            escaped = _dart_escape(text, i + 1)
-            if escaped is None:
-                return None
-            value.append(escaped[0])
-            i = escaped[1]
-            continue
-        if not raw and c == "$":
-            return None  # interpolation: the name is decided when the test runs
-        value.append(c)
-        i += 1
-    return None
-
-
 # Implements: REQ-d00284-H
 def _dart_description(text: str, i: int) -> str | None:
     """The description a ``test(`` / ``group(`` call's first argument writes.
@@ -1185,17 +1149,17 @@ def _dart_description(text: str, i: int) -> str | None:
     over many lines.  The description is known only where the argument is one
     or more adjacent string literals, which Dart joins into one string.
     """
-    parts: list[str] = []
-    while True:
-        while i < len(text) and text[i] in " \t\r\n":
-            i += 1
-        if i < len(text) and text[i] in ",)" and parts:
-            return "".join(parts)
-        literal = _dart_literal(text, i)
-        if literal is None:
-            return None
-        parts.append(literal[0])
-        i = literal[1]
+    from elspais.graph.parsers.dart_lexer import dart_string
+
+    while i < len(text) and text[i] in " \t\r\n":
+        i += 1
+    read = dart_string(text, i)
+    if read is None:
+        return None
+    value, i = read
+    while i < len(text) and text[i] in " \t\r\n":
+        i += 1
+    return value if i < len(text) and text[i] in ",)" else None
 
 
 # Implements: REQ-d00284-E
@@ -1256,7 +1220,7 @@ def dart_test_names(lines: list[tuple[int, str]]) -> dict[int, str]:
     return names
 
 
-# Implements: REQ-d00254-K, REQ-d00254-V
+# Implements: REQ-d00332-A, REQ-d00332-I
 def external_prescan(
     file_entries: list[dict],
     lines: list[tuple[int, str]],
@@ -1292,7 +1256,7 @@ def external_prescan(
         start = entry["line"]
         fname = entry["function"]
         cname = entry.get("class")
-        # Implements: REQ-d00254-K+M
+        # Implements: REQ-d00332-A+C
         # An attribution record names one test, so an attribution record IS a
         # test. Reading a naming convention here asked every framework to spell its tests the way
         # pytest does, and a test named otherwise reached no node at all --
@@ -1316,7 +1280,7 @@ def external_prescan(
                 line_context[ln] = (fname, cname, start, end)
                 break
 
-    # Implements: REQ-d00254-D+N+S
+    # Implements: REQ-d00254-D, REQ-d00332-D+F
     # A citation above a test belongs to that test.  Every built-in pre-scan
     # route reads a citation the same way.
     by_start = {start: (fname, cname, start, end) for start, end, fname, cname in func_ranges}

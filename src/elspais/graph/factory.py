@@ -13,7 +13,7 @@ import json
 import logging
 import os
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from glob import glob
 from pathlib import Path, PurePosixPath
@@ -60,35 +60,13 @@ from elspais.graph.parsers.patterns import (
     comment_markers_for_path,
 )
 from elspais.graph.parsers.remainder import RemainderParser
+from elspais.graph.parsers.results.placement import origin_dir, placed_in_repo
 from elspais.utilities.patterns import FederatedIdReader, IdResolver, build_resolver
 
 _log = logging.getLogger(__name__)
 
 
-# Implements: REQ-d00254-Y, REQ-d00327-C
-def _placed_in_repo(path: str, origin_dir: Path, repo_root: Path) -> str | None:
-    """*path* as a repo-relative POSIX path, read from *origin_dir*, or None.
-
-    A relative path is read from *origin_dir*, the origin that applies to the
-    data that recorded it. An absolute path is read as it stands. A path that
-    lands outside the repository has no repo-relative form.
-
-    The path is placed in the repository as written first, and through
-    symbolic links second: a tool may record either spelling.
-    """
-    root = Path(repo_root).absolute()
-    named = Path(os.path.normpath(Path(origin_dir).absolute() / path))
-    try:
-        rel = named.relative_to(Path(os.path.normpath(root)))
-    except ValueError:
-        try:
-            rel = named.resolve().relative_to(root.resolve())
-        except ValueError:
-            return None
-    return rel.as_posix()
-
-
-# Implements: REQ-d00254-Y, REQ-d00327-B+E
+# Implements: REQ-d00327-C, REQ-d00327-B+E
 def _resolve_coverage_file_node(graph, source_file, origin_dir, repo_root):
     """The FILE node a coverage artifact's source path names, or None.
 
@@ -96,28 +74,12 @@ def _resolve_coverage_file_node(graph, source_file, origin_dir, repo_root):
     applies to the artifact names. A path that names no scanned file of this
     repository resolves to nothing.
     """
-    rel = _placed_in_repo(source_file, origin_dir, repo_root)
+    rel = placed_in_repo(source_file, origin_dir, repo_root)
     if rel is None:
         return None
     # Coverage is ingested into the repository whose graph this is, so the
     # id is written in that repository's namespace.
     return graph.find_by_id(make_file_id(graph.namespace, rel))
-
-
-# Implements: REQ-d00327-A+B+F
-def _origin_dir(
-    spec, declared: str, working_dir: Path, repo_root: Path, *, foreign: bool
-) -> tuple[str, Path]:
-    """The origin that applies to a target's data, and the directory it names.
-
-    The target's declaration replaces the reporter's, except for data in a
-    format other than the target's own (an *Evidence Snapshot*), which is
-    read by that format's declaration alone.
-    """
-    from elspais.config.schema import PATH_ORIGIN_CWD
-
-    origin = spec.path_origin if foreign else (declared or spec.path_origin)
-    return origin, (working_dir if origin == PATH_ORIGIN_CWD else repo_root)
 
 
 # Implements: REQ-d00327-H
@@ -135,7 +97,16 @@ def _context_origin_dir(target, working_dir: Path, repo_root: Path) -> Path:
         from elspais.config.schema import PATH_ORIGIN_CWD
 
         return working_dir if target.results_origin == PATH_ORIGIN_CWD else repo_root
-    return _origin_dir(spec, target.results_origin, working_dir, repo_root, foreign=False)[1]
+    return origin_dir(spec, target.results_origin, working_dir, repo_root, foreign=False)[1]
+
+
+# Implements: REQ-d00327-H
+def context_placer(
+    target, working_dir: Path, repo_root: Path
+) -> Callable[[dict[int, list[str]]], dict[int, list[str]]]:
+    """The function that makes the test names in *target*'s coverage contexts repo-relative."""
+    origin = _context_origin_dir(target, working_dir, repo_root)
+    return lambda contexts: _placed_contexts(contexts, origin, repo_root)
 
 
 # Implements: REQ-d00327-H
@@ -160,7 +131,7 @@ def _placed_contexts(
         nodeid, sep, phase = ctx.rpartition("|")
         path, colons, rest = nodeid.partition("::")
         if sep and colons and path and not os.path.isabs(path):
-            rel = _placed_in_repo(path, origin_dir, repo_root)
+            rel = placed_in_repo(path, origin_dir, repo_root)
             if rel is not None:
                 result = f"{rel}::{rest}|{phase}"
         placed[ctx] = result
@@ -190,7 +161,7 @@ def _tests_named(name: str, scanned: frozenset[str]) -> list[str]:
 
 
 # Implements: REQ-d00284-B, REQ-d00329-A+C+D
-def _target_prefix(target, repo_root: Path) -> str | None:
+def target_prefix(target, repo_root: Path) -> str | None:
     """The repo-relative directory prefix of the test files *target* scans.
 
     ``""`` is the repository root, which holds every scanned test file.
@@ -204,6 +175,112 @@ def _target_prefix(target, repo_root: Path) -> str | None:
     except ValueError:
         return None
     return "" if cwd_rel in ("", ".") else cwd_rel.rstrip("/") + "/"
+
+
+# Implements: REQ-d00284-B, REQ-d00329-F, REQ-d00333-A
+def target_test_files(target, scanned: Iterable[str], repo_root: Path) -> frozenset[str]:
+    """The test files of *target*: those of *scanned* under its working directory.
+
+    *scanned* holds repo-relative test files. A target whose working
+    directory lies outside the repository has none. A target declaring
+    ``units.tests`` keeps only the files that selection reads, because the
+    scan below its directory can hold test files other targets run.
+    """
+    prefix = target_prefix(target, repo_root)
+    if prefix is None:
+        return frozenset()
+    files = frozenset(f for f in scanned if not prefix or f.startswith(prefix))
+    selection = getattr(getattr(target, "units", None), "tests", None)
+    if selection is None:
+        return files
+    # Implements: REQ-d00333-C+H
+    from elspais.utilities.retention import as_observation, observed_set
+
+    return observed_set(repo_root, as_observation(selection), files)
+
+
+# Implements: REQ-d00333-J+L, REQ-d00323-J+K+N
+def _attach_line_coverage(
+    graph,
+    fresh: dict[str, dict],
+    retained: dict[str, dict],
+    repo_root: Path,
+    stale: str,
+    place_contexts: Callable[[dict[int, list[str]]], dict[int, list[str]]],
+    origin: Path,
+) -> int:
+    """Attach a target's line coverage to the FILE nodes it measures.
+
+    Returns how many files the fresh measurement reached.
+
+    *fresh* is this run's measurement, keyed as recorded and read from
+    *origin*; *retained* is the measurement a run kept from earlier runs,
+    keyed repo-relative. A file's lines are the two merged by
+    :func:`merge_readings`. Where the retained measurement adds a line this
+    run did not measure executing, the file names the runs that measured it;
+    where no fresh executed line contributes, its coverage is carried.
+    *stale* says why the fresh measurement is stale, where it is.
+    """
+    from elspais.graph.parsers.results.coverage_json import merge_readings
+    from elspais.utilities.fingerprint import describe_run
+
+    attached = 0
+    readings: list[tuple[Any, dict | None, dict | None]] = []
+    for source_file, data in fresh.items():
+        node = _resolve_coverage_file_node(graph, source_file, origin, repo_root)
+        if node is None:
+            continue
+        readings.append((node, data, None))
+    by_node = {r[0].id: i for i, r in enumerate(readings)}
+    for rel, data in retained.items():
+        node = graph.find_by_id(make_file_id(graph.namespace, rel))
+        if node is None:
+            continue
+        if node.id in by_node:
+            n, f, _ = readings[by_node[node.id]]
+            readings[by_node[node.id]] = (n, f, data)
+        else:
+            readings.append((node, None, data))
+    for node, fresh_data, kept in readings:
+        attached += fresh_data is not None
+        placed = None
+        if fresh_data is not None:
+            placed = dict(fresh_data)
+            if fresh_data.get("contexts"):
+                placed["contexts"] = dict(place_contexts(fresh_data["contexts"]))
+        # Retained contexts were written repo-relative by elspais.
+        merged = merge_readings(placed, kept)
+        fresh_lines = (fresh_data or {}).get("line_coverage") or {}
+        fresh_hit = any(fresh_lines.values())
+        kept_lines = (kept or {}).get("line_coverage") or {}
+        reason = stale
+        # Implements: REQ-d00333-L
+        # Wherever an earlier run's coverage adds a line this run did not
+        # measure executing, or stands alone, the figure names that run.
+        if kept is not None and (
+            not fresh_hit or any(hit and not fresh_lines.get(n) for n, hit in kept_lines.items())
+        ):
+            runs = (kept.get("provenance") or {}).get("measured_in") or []
+            named = "; ".join(describe_run(r) for r in runs if isinstance(r, dict))
+            reason = f"line coverage retained from {named or 'an earlier run'}"
+            if stale:
+                reason = f"{reason}; {stale}"
+        node.set_field("line_coverage", merged.get("line_coverage") or {})
+        node.set_field("line_coverage_stale_reason", reason)
+        # Implements: REQ-d00323-I+J
+        # A file this run measured executing holds coverage the current tree
+        # produced, whatever an earlier run's coverage adds to it.
+        node.set_field("line_coverage_fresh", fresh_hit and not stale)
+        node.set_field("executable_lines", merged.get("executable_lines", 0))
+        # Implements: REQ-d00254-Q
+        # A file whose source could not be re-analysed has executed lines but
+        # no known total. Carry that, so a figure computed over this file can
+        # leave it out rather than treat its executed count as its size.
+        if fresh_data is not None and not fresh_data.get("source_analysed", True):
+            node.set_field("source_analysed", False)
+        if merged.get("contexts"):
+            node.set_field("line_contexts", merged["contexts"])
+    return attached
 
 
 # Implements: REQ-d00285-A
@@ -391,6 +468,7 @@ def _ingest_target_results(
     """
     from elspais.graph.parsers import ParsedContent
     from elspais.graph.parsers.results.registry import get_reporter
+    from elspais.utilities.fingerprint import describe_run
     from elspais.utilities.test_identity import test_id_path, with_test_id_path
 
     reporter_name = reporter or target.reporter
@@ -419,7 +497,7 @@ def _ingest_target_results(
         line_base = spec.line_base
     form = spec.classname if reporter else (target.classname or spec.classname)
     env_source = spec.environment if reporter else (target.environment or spec.environment)
-    path_origin, origin_dir = _origin_dir(
+    path_origin, results_origin_dir = origin_dir(
         spec,
         target.results_origin,
         (repo_root / target.cwd) if target.cwd else repo_root,
@@ -532,7 +610,7 @@ def _ingest_target_results(
         if not os.path.isabs(raw):
             if not recorded:
                 return raw
-            return _placed_in_repo(raw, origin_dir, repo_root) or raw
+            return placed_in_repo(raw, results_origin_dir, repo_root) or raw
         resolved = Path(raw).resolve(strict=False)
         for root in (repo_root_resolved, recorded_root):
             if root is None:
@@ -560,7 +638,7 @@ def _ingest_target_results(
         test_id = rec.get("test_id")
         id_path = test_id_path(test_id) if test_id else None
         if id_path and not os.path.isabs(id_path):
-            placed = _placed_in_repo(id_path, origin_dir, repo_root)
+            placed = placed_in_repo(id_path, results_origin_dir, repo_root)
             if placed is not None and placed != id_path:
                 test_id = with_test_id_path(test_id, placed)
                 id_path = placed
@@ -647,6 +725,12 @@ def _ingest_target_results(
         else:
             environment = None
 
+        # Implements: REQ-d00323-L+M
+        # A Retained Result is carried whatever its target's freshness, and
+        # names the run that executed its test.
+        executed_in = rec.get("executed_in")
+        retained_from = describe_run(executed_in) if isinstance(executed_in, dict) else None
+
         parsed_data = {
             "id": result_id,
             "status": rec.get("status"),
@@ -660,8 +744,10 @@ def _ingest_target_results(
             "source_path": raw_src,
             "source_file": source_file,
             "match": target.match,
-            "carried": carried,
+            "carried": carried or retained_from is not None,
             "stale_reason": stale_reason,
+            "retained_from": retained_from,
+            "retained_reason": rec.get("retained_reason") if retained_from else None,
             "target": target.name,
             "line": rec.get("line"),
             "root_line": rec.get("root_line"),
@@ -721,7 +807,7 @@ def _ingest_file_results(
         target_folder,
     )
 
-    prefix = _target_prefix(target, repo_root)
+    prefix = target_prefix(target, repo_root)
     if prefix is None:
         # The per-test pass reports a working directory outside the
         # repository for a target with a reporter.
@@ -740,7 +826,7 @@ def _ingest_file_results(
     # Implements: REQ-d00329-K
     # With no test file to stand for, the declaration can credit nothing,
     # whatever the command did.
-    files = sorted(f for f in scanned_test_files if not prefix or f.startswith(prefix))
+    files = sorted(target_test_files(target, scanned_test_files, repo_root))
     if not files:
         builder.record_ingestion_fault(
             path=str(target.cwd or "."),
@@ -990,7 +1076,7 @@ def line_convention(file_path: Path) -> dict[str, Any]:
     return {"line_ending": ending, "final_newline": not data or data.endswith(b"\n")}
 
 
-# Implements: REQ-d00254-L+M
+# Implements: REQ-d00332-B+C
 def _run_prescan_command(
     command: str,
     test_dirs: list[str],
@@ -1027,8 +1113,6 @@ def _run_prescan_command(
     Returns:
         Dict mapping file path -> list of function entries, or None on failure.
     """
-    import json
-    import subprocess
     import sys
 
     # Collect all test file paths
@@ -1065,44 +1149,24 @@ def _run_prescan_command(
     if not test_files:
         return None
 
-    stdin_data = "\n".join(test_files)
+    from elspais.utilities.commands import CommandFailed, run_json_command
+
     try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            input=stdin_data,
-            capture_output=True,
-            text=True,
-            cwd=repo_root,
-            timeout=60,
-        )
-        if result.returncode != 0:
-            print(
-                f"Warning: prescan_command failed (exit {result.returncode}): "
-                f"{result.stderr.strip()}",
-                file=sys.stderr,
-            )
-            return None
-
-        entries = json.loads(result.stdout)
-        if not isinstance(entries, list):
-            print("Warning: prescan_command output is not a JSON array", file=sys.stderr)
-            return None
-
-        # Group by file path, exactly as the command reported it
-        by_file: dict[str, list[dict]] = {}
-        for entry in entries:
-            file_path = entry.get("file", "")
-            if file_path:
-                by_file.setdefault(file_path, []).append(entry)
-        return by_file
-
-    except subprocess.TimeoutExpired:
-        print("Warning: prescan_command timed out after 60s", file=sys.stderr)
+        entries = run_json_command(command, test_files, repo_root)
+    except CommandFailed as exc:
+        print(f"Warning: prescan_command failed: {exc}", file=sys.stderr)
         return None
-    except (json.JSONDecodeError, OSError) as e:
-        print(f"Warning: prescan_command error: {e}", file=sys.stderr)
+    if not isinstance(entries, list):
+        print("Warning: prescan_command output is not a JSON array", file=sys.stderr)
         return None
+
+    # Group by file path, exactly as the command reported it
+    by_file: dict[str, list[dict]] = {}
+    for entry in entries:
+        file_path = entry.get("file", "")
+        if file_path:
+            by_file.setdefault(file_path, []).append(entry)
+    return by_file
 
 
 # The default pattern lists live with the schema that declares them
@@ -1396,6 +1460,30 @@ class KindScan:
     patterns: tuple[str, ...]
     skip_dirs: tuple[str, ...]
     skip_files: tuple[str, ...]
+
+
+# Implements: REQ-d00313-A
+def kind_files(repo_root: Path, kind: KindScan) -> set[Path]:
+    """The files one scanning kind selects, as absolute paths.
+
+    Each directory is framed as the build frames it: from the repository root
+    where the directory is inside it, and from the directory itself where it
+    is not.
+    """
+    from elspais.graph.file_selection import select_files
+
+    root = Path(repo_root)
+    selected: set[Path] = set()
+    for directory in kind.directories:
+        try:
+            frame, relative = root, directory.resolve().relative_to(root.resolve()).as_posix()
+        except ValueError:
+            frame, relative = directory, "."
+        selection = select_files(
+            frame, [relative], list(kind.skip_dirs), list(kind.skip_files), list(kind.patterns)
+        )
+        selected |= selection.selected
+    return selected
 
 
 # Implements: REQ-p00015-H, REQ-d00313-A
@@ -1851,7 +1939,7 @@ def _build_repository(
                 # Paths go out on stdin repo-relative, so a conforming command
                 # answers with those, while scanning dispatches absolute paths.
                 # Alias each relative key to its absolute form so attribution records govern
-                # either way (REQ-d00254-N).
+                # either way (REQ-d00332-D).
                 if prescan_data:
                     for reported in list(prescan_data):
                         if not Path(reported).is_absolute():
@@ -1873,7 +1961,7 @@ def _build_repository(
             file_result_prefixes = [
                 prefix
                 for target in testing_cfg.targets
-                if target.file_results and (prefix := _target_prefix(target, repo_root)) is not None
+                if target.file_results and (prefix := target_prefix(target, repo_root)) is not None
             ]
             for path in test_scan.directories:
                 # Implements: REQ-d00212-Q+W, REQ-d00241-G
@@ -1924,6 +2012,8 @@ def _build_repository(
             from elspais.graph.builder import UnreadArtifact
             from elspais.utilities.fingerprint import (
                 FINGERPRINT_NAME,
+                RETAINED_RESULTS_NAME,
+                command_spawned,
                 judge,
                 read_fingerprint,
                 run_in_progress,
@@ -2040,10 +2130,7 @@ def _build_repository(
                 # The candidates are the tests scanned under this target's own
                 # cwd: a name matching a file some other target scans says
                 # nothing about where this result came from.
-                prefix = _target_prefix(target, repo_root) or ""
-                target_tests = frozenset(
-                    f for f in scanned_test_files if not prefix or f.startswith(prefix)
-                )
+                target_tests = target_test_files(target, scanned_test_files, repo_root)
                 # Implements: REQ-d00322-J
                 # A build reading only the snapshot reads nothing from the
                 # target's output area, whatever is there or running.
@@ -2111,6 +2198,13 @@ def _build_repository(
                         carried = True
                         stale_reason_here = stale_reason(_verdict)
                     stale_by_target[target.name] = stale_reason_here
+                # Implements: REQ-d00333-A
+                # The Retained Results a run wrote beside its own results are
+                # results of the target, read after them.
+                _retained = (
+                    target_folder(repo_root, typed_config, target.name) / RETAINED_RESULTS_NAME
+                )
+                has_retained = _retained.is_file()
                 if target.name in _captured:
                     _ingest_target_results(
                         builder,
@@ -2154,11 +2248,17 @@ def _build_repository(
                                     results_base=area,
                                     recorded_root=recorded_root,
                                 )
+                    elif has_retained and not command_spawned(area):
+                        # Implements: REQ-d00333-A
+                        # A run that retained every result spawned no command,
+                        # so it wrote no results of its own.
+                        pass
                     elif target_spec.kind == "results":
                         # Implements: REQ-d00322-J
                         # A target with no results of its own reads the
-                        # project's Evidence Snapshot, tagged carried.
-                        if _read_evidence(target, target_tests):
+                        # project's Evidence Snapshot, tagged carried. One
+                        # holding Retained Results has results of its own.
+                        if not has_retained and _read_evidence(target, target_tests):
                             continue
                         # Implements: REQ-d00283-R+S+T
                         # The build records that no results are there. Whether
@@ -2188,6 +2288,21 @@ def _build_repository(
                         UnreadArtifact(
                             target=target.name, artifact="results", path="", reason="absent"
                         )
+                    )
+                if has_retained:
+                    _get_or_create_file_node(_retained, FileType.RESULT)
+                    _ingest_target_results(
+                        builder,
+                        target,
+                        _retained.read_text(encoding="utf-8", errors="replace"),
+                        repo_root,
+                        str(_retained),
+                        namespace=typed_config.project.namespace,
+                        carried=carried,
+                        stale_reason=stale_reason_here,
+                        scanned_tests=target_tests,
+                        reporter="evidence-snapshot",
+                        recorded_root=recorded_root,
                     )
 
             # Implements: REQ-d00329-A+C+D+E+I
@@ -2219,26 +2334,17 @@ def _build_repository(
         from elspais.graph.builder import UnreadArtifact
         from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
         from elspais.graph.parsers.results.coverage_sqlite import CoverageSqliteParser
-        from elspais.graph.parsers.results.lcov import LcovParser
+        from elspais.graph.parsers.results.registry import coverage_reader_for
         from elspais.graph.parsers.results.registry import get_reporter as _cov_spec
         from elspais.utilities.fingerprint import (
+            RETAINED_COVERAGE_NAME,
+            command_spawned,
             judge,
             run_in_progress,
             stale_reason,
             target_folder,
         )
 
-        lcov_parser = LcovParser()
-        cov_json_parser = CoverageJsonParser()
-        cov_sqlite_parser = CoverageSqliteParser()
-        # Each reader under the name of the reporter that declares it, in the
-        # order a file's format is tried, so the origin its reporter declares
-        # can be read once the format is known.
-        cov_parsers = (
-            ("lcov", lcov_parser),
-            ("coverage-json", cov_json_parser),
-            ("coverage-sqlite", cov_sqlite_parser),
-        )
         _resolved_root = repo_root.resolve()
         for target in typed_config.scanning.test.targets:
             if not target.coverage:
@@ -2285,6 +2391,42 @@ def _build_repository(
                     )
                 )
                 continue
+            # Implements: REQ-d00333-J
+            # The line coverage a run kept from earlier runs, beside its own.
+            retained_cov_path = cov_area / RETAINED_COVERAGE_NAME
+            retained_cov = (
+                CoverageJsonParser().parse(
+                    retained_cov_path.read_text(encoding="utf-8"), str(retained_cov_path)
+                )
+                if retained_cov_path.is_file()
+                else {}
+            )
+            if not cov_path.is_file() and retained_cov:
+                # Implements: REQ-d00283-V, REQ-d00333-J
+                # A run that retained every result spawned no command, so it
+                # measured nothing of its own. A run that spawned one and
+                # left no coverage file is missing its coverage, and the
+                # absence is recorded beside what it retained.
+                if command_spawned(cov_area):
+                    graph.record_unread_artifact(
+                        UnreadArtifact(
+                            target=target.name,
+                            artifact="coverage",
+                            path=_repo_relative(cov_path, repo_root),
+                            reason="absent",
+                        )
+                    )
+                if target.name in stale_by_target:
+                    kept_stale = stale_by_target[target.name]
+                else:
+                    _kept_verdict = judge(repo_root, typed_config, target.name)
+                    kept_stale = (
+                        stale_reason(_kept_verdict) if _kept_verdict.state == "stale" else ""
+                    )
+                _attach_line_coverage(
+                    graph, {}, retained_cov, repo_root, kept_stale, lambda c: c, repo_root
+                )
+                continue
             if not cov_path.is_file():
                 # Implements: REQ-d00283-V
                 # No coverage file and coverage measuring nothing are the same
@@ -2300,10 +2442,8 @@ def _build_repository(
                     )
                 )
                 continue
-            cov_reporter, cov_parser = next(
-                ((name, p) for name, p in cov_parsers if p.can_parse(cov_path)),
-                (None, None),
-            )
+            found_reader = coverage_reader_for(cov_path)
+            cov_reporter, cov_parser = found_reader if found_reader else (None, None)
             if cov_parser is None:
                 # Implements: REQ-d00285-G
                 _log.debug("target %r: unrecognised coverage format: %s", target.name, cov_path)
@@ -2317,11 +2457,11 @@ def _build_repository(
                     target=target.name,
                 )
                 continue
-            # Implements: REQ-d00327-B+E, REQ-d00254-Y
+            # Implements: REQ-d00327-B+E, REQ-d00327-C
             # A relative path in the coverage data is read from the origin the
             # target declares for its coverage, or else from the one the
             # reporter of the format declares.
-            cov_origin, cov_origin_dir = _origin_dir(
+            cov_origin, cov_origin_dir = origin_dir(
                 _cov_spec(cov_reporter),
                 target.coverage_origin,
                 cwd_path,
@@ -2332,7 +2472,7 @@ def _build_repository(
             # A per-test context names its test as the test runner wrote it,
             # so the path in that name is read from the origin of the target's
             # results, not from the origin of its coverage data.
-            ctx_origin_dir = _context_origin_dir(target, cwd_path, repo_root)
+            place_contexts = context_placer(target, cwd_path, repo_root)
             # Binary formats (e.g. the .coverage SQLite DB) can't be
             # text-decoded -- their parser ignores `content` and reopens
             # `source_path` directly (see CoverageSqliteParser.binary).
@@ -2340,7 +2480,7 @@ def _build_repository(
                 cov_content = ""
             else:
                 cov_content = cov_path.read_text(encoding="utf-8")
-            if cov_parser is cov_sqlite_parser:
+            if isinstance(cov_parser, CoverageSqliteParser):
                 # Contexts are the suite-scaled part of the data (every test
                 # context string per executed line). Only materialize them
                 # for measured files that actually resolve to a FILE node --
@@ -2369,29 +2509,15 @@ def _build_repository(
             else:
                 _cov_verdict = judge(repo_root, typed_config, target.name)
                 cov_stale = stale_reason(_cov_verdict) if _cov_verdict.state == "stale" else ""
-            attached = 0
-            for source_file, data in parsed_cov.items():
-                cov_node = _resolve_coverage_file_node(
-                    graph, source_file, cov_origin_dir, repo_root
-                )
-                if cov_node is None:
-                    continue
-                attached += 1
-                cov_node.set_field("line_coverage", data["line_coverage"])
-                cov_node.set_field("line_coverage_stale_reason", cov_stale)
-                cov_node.set_field("executable_lines", data["executable_lines"])
-                # Implements: REQ-d00254-Q
-                # A file whose source could not be re-analysed has executed
-                # lines but no known total. Carry that, so a figure computed
-                # over this file can leave it out rather than treat its
-                # executed count as its size.
-                if not data.get("source_analysed", True):
-                    cov_node.set_field("source_analysed", False)
-                if data.get("contexts"):
-                    cov_node.set_field(
-                        "line_contexts",
-                        _placed_contexts(data["contexts"], ctx_origin_dir, repo_root),
-                    )
+            attached = _attach_line_coverage(
+                graph,
+                parsed_cov,
+                retained_cov,
+                repo_root,
+                cov_stale,
+                place_contexts,
+                cov_origin_dir,
+            )
             # Implements: REQ-d00327-I
             # Coverage read from the wrong origin attaches to no file and
             # credits no lines, which reads as a run that exercised nothing.

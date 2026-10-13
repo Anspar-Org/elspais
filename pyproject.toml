@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "elspais"
-version = "0.126.6"
+version = "0.127.13"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -42,6 +42,9 @@ dev = [
     "ruff==0.16.6",
     "mypy>=1.0",
     "pyyaml>=6.0",
+    # `make lock` compiles requirements/dev.lock with it. The lock pins the
+    # exact release, because the compiled file's form depends on it.
+    "uv>=0.13",
 ]
 # The browser test tier (`pytest -m browser`). Kept out of `all`, which is the
 # feature set a user installs; playwright is a test dependency. `make setup`
@@ -68,6 +71,8 @@ trace-review = [
 # CUR-1568: per-test line attribution (code_tested.direct) from coverage.py's
 # native `.coverage` SQLite data file, via coverage.py's public API.
 coverage = ["coverage>=7.0"]
+# The imports:dart dependency source reads pubspec.yaml files.
+dart = ["pyyaml>=6.0"]
 # All optional features
 all = [
     "jinja2>=3.0",
@@ -76,6 +81,7 @@ all = [
     "uvicorn>=0.20",
     "mcp>=1.0,<2",
     "coverage>=7.0",
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]

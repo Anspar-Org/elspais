@@ -120,6 +120,19 @@
       "title": "AssociatedPatternConfig",
       "type": "object"
     },
+    "BaselineConfig": {
+      "additionalProperties": false,
+      "description": "Where a *Baseline Run* comes from.\n\n``fetch_command`` fills the directory that ``{dest}`` names with one archive\nthat ``elspais baseline pack`` wrote. The project's command decides which\nrun to fetch and how to reach it; elspais knows no host.",
+      "properties": {
+        "fetch_command": {
+          "default": "",
+          "title": "Fetch Command",
+          "type": "string"
+        }
+      },
+      "title": "BaselineConfig",
+      "type": "object"
+    },
     "ChangelogConfig": {
       "additionalProperties": false,
       "properties": {
@@ -411,6 +424,31 @@
         }
       },
       "title": "DocsScanningConfig",
+      "type": "object"
+    },
+    "EnvironmentProbeConfig": {
+      "additionalProperties": false,
+      "description": "One part of a test target's environment, identified by what a command prints.\n\nThe command runs in the target's ``cwd``. Its exit status and its standard\noutput identify that part of the environment, such as the version of a\ntoolchain or the packages installed for the target.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "command": {
+          "title": "Command",
+          "type": "string"
+        },
+        "affects_retention": {
+          "default": true,
+          "title": "Affects Retention",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "command"
+      ],
+      "title": "EnvironmentProbeConfig",
       "type": "object"
     },
     "FederationConfig": {
@@ -1273,6 +1311,9 @@
           "title": "Output Root",
           "type": "string"
         },
+        "baseline": {
+          "$ref": "#/$defs/BaselineConfig"
+        },
         "evidence": {
           "default": "",
           "title": "Evidence",
@@ -1383,12 +1424,78 @@
           "default": false,
           "title": "File Results",
           "type": "boolean"
+        },
+        "environment_probes": {
+          "items": {
+            "$ref": "#/$defs/EnvironmentProbeConfig"
+          },
+          "title": "Environment Probes",
+          "type": "array"
+        },
+        "units": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UnitsConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
         "name"
       ],
       "title": "TestTargetConfig",
+      "type": "object"
+    },
+    "UnitsConfig": {
+      "additionalProperties": false,
+      "description": "The units of a test target: its test files, which a run may execute in part.\n\n``dependencies`` names the source of each unit's *Dependency Evidence*\n(``source``) and holds the settings that source validates. ``observes``\nselects the files the source observes, read from the repository root;\nunset means the source's own default. ``tests`` selects, from the\nrepository root, the scanned test files below the target's working\ndirectory that its command executes; unset means all of them.\n``receives`` says how the command receives the selected units.\n``full_selection`` is what ``{selection}`` becomes on a run of every unit.",
+      "properties": {
+        "dependencies": {
+          "additionalProperties": true,
+          "title": "Dependencies",
+          "type": "object"
+        },
+        "observes": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScanningKindConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tests": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScanningKindConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "receives": {
+          "default": "placeholder",
+          "title": "Receives",
+          "type": "string"
+        },
+        "full_selection": {
+          "default": "",
+          "title": "Full Selection",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dependencies"
+      ],
+      "title": "UnitsConfig",
       "type": "object"
     },
     "ValidationConfig": {

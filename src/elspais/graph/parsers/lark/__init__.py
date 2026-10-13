@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 
 from lark import Lark
 
+from elspais.graph.parsers import parse_cache
 from elspais.graph.parsers.patterns import (
     METADATA_COMMENT_MARKERS,
     comment_markers_for_path,
@@ -33,6 +34,7 @@ from elspais.graph.parsers.patterns import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from elspais.graph.parsers.prescan import PythonSyntax
     from elspais.utilities.patterns import IdResolver
 
 # Directory containing .lark grammar files
@@ -240,6 +242,14 @@ class FileDispatcher:
         # dispatcher reads, so a single cached parser would serve one
         # language's grammar to every other language's files.
         self._ref_parsers: dict[tuple[str, ...], Lark] = {}
+        # Implements: REQ-d00331-B
+        # What every reading of this dispatcher depends on beyond its own
+        # arguments; None where that cannot be stated exactly, and then
+        # nothing this dispatcher reads is cached. A subclass may read
+        # something else, so only this class's readings are cached.
+        self._fingerprint = (
+            parse_cache.grammar_fingerprint(self._reader) if type(self) is FileDispatcher else None
+        )
 
     def _get_req_parser(self) -> Lark:
         if self._req_parser is None:
@@ -297,7 +307,9 @@ class FileDispatcher:
 
     # Implements: REQ-d00269-E
     @staticmethod
-    def _quoted_line_numbers(content: str, file_path: str) -> set[int]:
+    def _quoted_line_numbers(
+        content: str, file_path: str, syntax: PythonSyntax | None = None
+    ) -> set[int]:
         """Line numbers a *Traceability* keyword must not bind on (REQ-d00269-E).
 
         Markdown fences are recognised in every source; a Python string
@@ -305,21 +317,38 @@ class FileDispatcher:
         has a parser here to ask. Other languages keep fence-only
         behaviour -- guessing at string literals with a regex would be
         exactly the shape-based reasoning this design refuses elsewhere.
+        *syntax* is *content* already read by ``read_python``, where the
+        dispatch holds it.
         """
         quoted = FileDispatcher._fenced_line_numbers(content)
         if file_path.endswith(".py"):
             from elspais.graph.parsers.prescan import ast_string_literal_lines
 
-            quoted |= ast_string_literal_lines(content)
+            quoted |= ast_string_literal_lines(content, syntax)
         return quoted
 
-    # Implements: REQ-d00247-A
+    # Implements: REQ-d00247-A, REQ-d00331-A
     def dispatch_spec(
         self,
         content: str,
         file_path: str = "",
     ) -> list:
-        """Parse a spec file (SPEC or JOURNEY type) and return ParsedContent list."""
+        """Parse a spec file (SPEC or JOURNEY type) and return ParsedContent list.
+
+        A spec reading never consults its path, so it is cached without one
+        and a copy of a file read at another path is answered from the cache.
+        """
+        return parse_cache.cached_reading(
+            "spec",
+            self._fingerprint,
+            content,
+            None,
+            None,
+            lambda: self._read_spec(content),
+            reported_path=file_path,
+        )
+
+    def _read_spec(self, content: str) -> list:
         from elspais.graph.parsers.lark.transformers.requirement import RequirementTransformer
 
         if not content.endswith("\n"):
@@ -334,6 +363,7 @@ class FileDispatcher:
         transformer = RequirementTransformer(self._resolver, self._reader)
         return transformer.transform(tree, source=original_content)
 
+    # Implements: REQ-d00331-A
     def dispatch_code(
         self,
         content: str,
@@ -341,18 +371,38 @@ class FileDispatcher:
         line_context: dict[int, tuple[str | None, str | None, int, int]] | None = None,
     ) -> list:
         """Parse a code file and return ParsedContent list."""
+        return parse_cache.cached_reading(
+            "code",
+            self._fingerprint,
+            content,
+            file_path,
+            line_context,
+            lambda: self._read_code(content, file_path, line_context),
+        )
+
+    def _read_code(
+        self,
+        content: str,
+        file_path: str,
+        line_context: dict[int, tuple[str | None, str | None, int, int]] | None,
+    ) -> list:
         from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
+        from elspais.graph.parsers.prescan import build_line_context, detect_language, read_python
 
         if not content.endswith("\n"):
             content += "\n"
 
+        # Implements: REQ-d00254-D, REQ-d00269-E
+        # The content is parsed ONCE: the line context and the quoted lines are
+        # both read from this one reading, wherever either asks the parser.
+        language = detect_language(file_path)
+        reads_context = line_context is None and language == "python"
+        syntax = read_python(content) if reads_context or file_path.endswith(".py") else None
+
         # Build line context if not provided
         if line_context is None:
-            from elspais.graph.parsers.prescan import build_line_context, detect_language
-
-            language = detect_language(file_path)
             lines = [(i + 1, line) for i, line in enumerate(content.split("\n"))]
-            line_context = build_line_context(lines, language)
+            line_context = build_line_context(lines, language, syntax)
 
         parser = self._get_ref_parser(file_path)
         tree = parser.parse(content)
@@ -362,7 +412,7 @@ class FileDispatcher:
             line_context,
             source_id=file_path,
             reader=self._reader,
-            quoted_lines=self._quoted_line_numbers(content, file_path),
+            quoted_lines=self._quoted_line_numbers(content, file_path, syntax),
             comment_markers=comment_markers_for_path(file_path),
             line_count=content.count("\n"),
         )
@@ -370,7 +420,7 @@ class FileDispatcher:
         results.extend(_fault_and_style_content(transformer))
         return results
 
-    # Implements: REQ-d00254-K
+    # Implements: REQ-d00332-A, REQ-d00331-A
     def dispatch_test(
         self,
         content: str,
@@ -378,12 +428,30 @@ class FileDispatcher:
         prescan_data: dict[str, list[dict]] | None = None,
     ) -> list:
         """Parse a test file and return ParsedContent list."""
+        # Only this file's own pre-scan entry is read, so only it is keyed.
+        entry = prescan_data[file_path] if prescan_data and file_path in prescan_data else None
+        return parse_cache.cached_reading(
+            "test",
+            self._fingerprint,
+            content,
+            file_path,
+            entry,
+            lambda: self._read_test(content, file_path, prescan_data),
+        )
+
+    def _read_test(
+        self,
+        content: str,
+        file_path: str,
+        prescan_data: dict[str, list[dict]] | None,
+    ) -> list:
         from elspais.graph.parsers.lark.transformers.reference import ReferenceTransformer
         from elspais.graph.parsers.prescan import (
             ast_prescan,
             dart_prescan,
             dart_test_names,
             external_prescan,
+            read_python,
             reads_test_names,
             text_prescan,
         )
@@ -396,19 +464,23 @@ class FileDispatcher:
         # Pre-scan for function/class context
         is_python = file_path.endswith(".py")
         is_dart = file_path.endswith(".dart")
+        # Implements: REQ-d00332-A, REQ-d00269-E
+        # The content is parsed ONCE: the tests it holds and the quoted lines
+        # are both read from this one reading.
+        syntax = read_python(content) if is_python else None
 
         # Implements: REQ-d00284-E+G+H
         # The name each test is known by, where the scan can read one. Only a
         # Dart test needs it: its result may record no source line to bind by.
         test_names: dict[int, str] = dart_test_names(lines) if reads_test_names(file_path) else {}
 
-        # Implements: REQ-d00254-N
+        # Implements: REQ-d00332-D
         if prescan_data and file_path in prescan_data:
             line_context, all_test_funcs = external_prescan(prescan_data[file_path], lines)
         elif is_python:
             source = "\n".join(text for _, text in lines)
             try:
-                line_context, all_test_funcs = ast_prescan(source, lines)
+                line_context, all_test_funcs = ast_prescan(source, lines, syntax)
             except SyntaxError:
                 line_context, all_test_funcs = text_prescan(lines)
         elif is_dart:
@@ -427,7 +499,7 @@ class FileDispatcher:
             test_names=test_names,
             source_id=file_path,
             reader=self._reader,
-            quoted_lines=self._quoted_line_numbers(content, file_path),
+            quoted_lines=self._quoted_line_numbers(content, file_path, syntax),
             comment_markers=comment_markers_for_path(file_path),
             line_count=content.count("\n"),
         )

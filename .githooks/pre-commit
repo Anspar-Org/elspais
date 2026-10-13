@@ -9,8 +9,10 @@
 #   - Python code quality (ruff: lint + format)
 #   - Markdown linting (markdownlint)
 #   - elspais fix (regenerate INDEX.md, hashes, spec/_generated), staging what it wrote
-#   - Unit/integration tests with coverage (last — most expensive), through
-#     .githooks/unit-verdict. ELSPAIS_CHECKPOINT=1 defers them to pre-push.
+#   - Unit tests (last — most expensive): the ones Test Impact Analysis
+#     selects, or the full tier through .githooks/unit-verdict where it cannot
+#     narrow the run. ELSPAIS_UNIT_MODE=full forces the full tier;
+#     ELSPAIS_CHECKPOINT=1 runs none.
 #
 # To install this hook:
 #   make setup   (or: git config core.hooksPath .githooks)
@@ -159,8 +161,8 @@ PYTHON_FAILED=false
 
 # Run ruff if available
 if command -v ruff &> /dev/null; then
-    echo "  Running ruff check on src/ tests/..."
-    if ! ruff check src/ tests/ 2>&1; then
+    echo "  Running ruff check on src/ tests/ tools/..."
+    if ! ruff check src/ tests/ tools/ 2>&1; then
         PYTHON_FAILED=true
         echo -e "${RED}  ruff check failed${NC}"
     else
@@ -173,8 +175,8 @@ fi
 # Run the formatter. ruff is both the linter above and the formatter here;
 # there is no second formatter to disagree with it.
 if command -v ruff &> /dev/null; then
-    echo "  Running ruff format check on src/ tests/..."
-    if ! ruff format --check --quiet src/ tests/ 2>&1; then
+    echo "  Running ruff format check on src/ tests/ tools/..."
+    if ! ruff format --check --quiet src/ tests/ tools/ 2>&1; then
         # Auto-fix is offered only for files staged in this commit
         if [ -n "$STAGED_PYTHON_FILES" ]; then
             echo -e "${YELLOW}  Files need formatting. Applying fixes to staged files...${NC}"
@@ -183,10 +185,10 @@ if command -v ruff &> /dev/null; then
             echo -e "${GREEN}  Formatted files have been re-staged${NC}"
         fi
         # Anything still unformatted is drift outside this commit — fail loudly
-        if ! ruff format --check src/ tests/ 2>&1; then
+        if ! ruff format --check src/ tests/ tools/ 2>&1; then
             PYTHON_FAILED=true
             echo -e "${RED}  ruff format check failed on files outside this commit${NC}"
-            echo "  Run 'ruff format src/ tests/' and commit the result."
+            echo "  Run 'ruff format src/ tests/ tools/' and commit the result."
         else
             echo -e "${GREEN}  ruff format check passed after formatting staged files${NC}"
         fi
@@ -261,7 +263,7 @@ if command -v elspais &> /dev/null; then
         echo "this repo's spec estate. Refusing to run it."
         echo ""
         echo "To fix, create a venv for this worktree:"
-        echo "  python3 -m venv .venv && .venv/bin/pip install -e \".[all,mcp,dev]\""
+        echo "  make setup"
         echo "This hook prefers \$REPO_ROOT/.venv/bin automatically once it exists."
         exit 1
     fi
@@ -320,24 +322,64 @@ else
 fi
 
 # =====================================================
-# 6. Unit/Integration Tests with Coverage (cached)
+# 6. Unit Tests: impacted, or the full tier
 # =====================================================
 
-# .githooks/unit-verdict is the one authority for the unit verdict, and it
-# runs the tier through .githooks/run-unit-tier. A checkpoint commit
-# (ELSPAIS_CHECKPOINT=1) defers the tier: it records no verdict for its tree,
-# so pre-push runs the tier for the tree it pushes. Every gate above still ran.
+# The commit runs the unit tests Test Impact Analysis selects: those the
+# change since this worktree's baseline can affect (docs/test-impact-analysis.md).
+# A failing impacted run fails the commit. Where TIA cannot narrow the run --
+# no usable baseline, a changed environment, a broad-impact file -- it selects
+# the full suite, and the full tier runs through .githooks/unit-verdict, which
+# records the unit verdict for the tree and publishes a fresh baseline when it
+# passes. ELSPAIS_UNIT_MODE=full runs the full tier that way regardless.
+#
+# This is fast feedback, not the verdict a merge rests on: CI runs the full
+# unit tier on every pull request and on main.
+#
+# A checkpoint commit (ELSPAIS_CHECKPOINT=1) runs no unit tests. Every gate
+# above still ran.
 REPO_ROOT=$(git rev-parse --show-toplevel)
+UNIT_MODE="${ELSPAIS_UNIT_MODE:-impacted}"
+TIA_RUN_DIR="$REPO_ROOT/.results/tia/run"
 if [ "${ELSPAIS_CHECKPOINT:-}" = "1" ]; then
-    echo -e "${YELLOW}Checkpoint commit: unit tests deferred to pre-push${NC}"
+    echo -e "${YELLOW}Checkpoint commit: unit tests not run${NC}"
     echo ""
-elif ! "$REPO_ROOT/.githooks/unit-verdict"; then
-    echo ""
-    echo "Fix the errors above before committing, or commit a checkpoint"
-    echo "(ELSPAIS_CHECKPOINT=1 git commit ...) whose tests pre-push will run."
+elif [ "$UNIT_MODE" != "impacted" ] && [ "$UNIT_MODE" != "full" ]; then
+    echo -e "${RED}ERROR: ELSPAIS_UNIT_MODE is '$UNIT_MODE'; it must be 'impacted' (the default) or 'full'.${NC}"
     exit 1
 else
-    echo ""
+    RUN_FULL_TIER=true
+    if [ "$UNIT_MODE" = "impacted" ]; then
+        echo -e "${BLUE}Selecting the impacted unit tests (Test Impact Analysis)...${NC}"
+        TIA_MODE=""
+        if TIA_SUMMARY=$(cd "$REPO_ROOT" && python -m tools.tia select --out "$TIA_RUN_DIR" 2>&1); then
+            TIA_MODE=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["selection_mode"])' \
+                "$TIA_RUN_DIR/manifest.json") || TIA_MODE=""
+        fi
+        if [ "$TIA_MODE" = "test-impact" ]; then
+            RUN_FULL_TIER=false
+        else
+            printf '%s\n' "$TIA_SUMMARY"
+            echo -e "${YELLOW}Test Impact Analysis selected the full suite; running the full unit tier${NC}"
+            echo ""
+        fi
+    fi
+    if [ "$RUN_FULL_TIER" = false ]; then
+        if ! (cd "$REPO_ROOT" && python -m tools.tia run --out "$TIA_RUN_DIR"); then
+            echo ""
+            echo -e "${RED}Impacted unit tests failed!${NC}"
+            exit 1
+        fi
+        echo -e "${GREEN}Impacted unit tests passed${NC}"
+        echo ""
+    elif ! "$REPO_ROOT/.githooks/unit-verdict"; then
+        echo ""
+        echo "Fix the errors above before committing, or commit a checkpoint"
+        echo "(ELSPAIS_CHECKPOINT=1 git commit ...), which runs no unit tests."
+        exit 1
+    else
+        echo ""
+    fi
 fi
 
 # =====================================================

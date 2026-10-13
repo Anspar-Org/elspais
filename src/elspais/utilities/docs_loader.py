@@ -36,6 +36,7 @@ DOCS_TOPICS = Literal[
     "checks",
     "pdf",
     "test-targets",
+    "baseline",
     "doctor",
     "analysis",
     "terms",

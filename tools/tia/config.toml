@@ -1,0 +1,90 @@
+# Test Impact Analysis rules for the elspais unit tier.
+# See docs/test-impact-analysis.md. Read by tools/tia/config.py.
+#
+# Every path below is repository-relative and matched with fnmatch-style globs
+# where `**` spans directories.
+
+[suite]
+# The suite TIA selects from. Only the unit tier records per-test coverage
+# (`--cov-context=test`); the e2e/browser/stress tiers spawn processes whose
+# coverage is not attributed to a test, so TIA does not apply to them.
+name = "unit"
+# Where pytest test modules live, and which files under them are test modules.
+test_roots = ["tests"]
+test_file_patterns = ["test_*.py", "*_test.py"]
+# Python code measured by coverage (`--cov=src/elspais`).
+production_roots = ["src/elspais"]
+# Directories that are import roots: src/elspais/x.py is module `elspais.x`,
+# tests/x.py is module `tests.x`, tools/tia/x.py is `tools.tia.x`.
+import_roots = ["src", "."]
+
+[selection]
+# "test": run the selected node ids, widened to whole test classes, because
+# the suite declares ordering dependencies per class (`@pytest.mark.incremental`
+# chains a class's steps). "file": run every test in any test file holding a
+# selected test, which also protects undeclared dependencies between tests of
+# one module, at roughly 2.5x the tests for a typical change (measured; see
+# docs/test-impact-analysis.md).
+granularity = "test"
+# When the selection already holds at least this fraction of the suite, run
+# the full suite instead: nothing is gained by trimming the rest, and the
+# full suite is the authoritative answer. Recorded as a fallback.
+full_suite_threshold = 0.85
+# Node ids or test files always run, regardless of the change. Keep it small;
+# it is a smoke set, not a safety net.
+always_run = []
+# A test spawning one of these programs runs code whose coverage is not
+# attributed to it ("opaque"). It is selected whenever any non-test file
+# changes. Globs over the program's basename (and "python -m <module>").
+# Shells are included: a test running `sh -c ...` or a repository script can
+# reach anything, and in the baseline these tests cost ~25s of test time.
+opaque_programs = ["*python*", "elspais*", "sh", "bash", "dash", "zsh", "*.sh", "env"]
+# Changed production functions whose decorators match one of these names are
+# memoized: only the first caller in a process records their lines, so a
+# change to one is treated as a module-level change (importers included).
+memoizing_decorators = ["cache", "lru_cache", "cached_property", "cachedmethod"]
+# Baselines older than this are refused (full suite). Selection stays correct
+# for an old baseline -- the diff is always from the baseline -- but a very
+# old one selects broadly and describes a suite that has drifted.
+max_baseline_age_days = 30
+# What to do when the interpreter or the installed distributions differ from
+# the baseline run: "full" (run the full suite) or "warn".
+on_environment_change = "full"
+
+# Ordered path rules, first match wins. A path matching no rule is handled by
+# the built-in classification: test module, conftest/__init__ under a test
+# root (its directory subtree), test-support Python (its importers),
+# production Python (AST impact + coverage), anything else as data (tests
+# recorded reading it).
+#
+# action = "full"      run the full suite
+# action = "ignore"    no test can observe this file
+# action = "manifest"  a TOML manifest: if only `ignore_keys` differ, treat it
+#                      as data; any other difference runs the full suite
+
+[[rule]]
+paths = ["pyproject.toml"]
+action = "manifest"
+# The pre-push hook bumps the version on every branch; that alone does not
+# change what the tests run against (the installed metadata does not move).
+ignore_keys = ["project.version"]
+reason = "dependency manifest / pytest and coverage configuration"
+
+[[rule]]
+paths = [
+    "setup.py", "setup.cfg", "tox.ini", "pytest.ini", ".coveragerc", "conftest.py",
+    "requirements*.txt", "constraints*.txt", "uv.lock", "poetry.lock", "Pipfile*",
+    ".python-version", "MANIFEST.in",
+]
+action = "full"
+reason = "build, dependency or test-runner configuration"
+
+[[rule]]
+paths = ["tools/tia/**", "tools/__init__.py", ".githooks/run-unit-tier"]
+action = "full"
+reason = "the selector or the unit-tier runner itself changed; validate with the full suite"
+
+[[rule]]
+paths = ["tests/_obsolete/**"]
+action = "ignore"
+reason = "excluded from collection (--ignore=tests/_obsolete)"

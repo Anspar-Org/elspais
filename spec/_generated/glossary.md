@@ -16,6 +16,12 @@
 : A statement that the tool persisted held changes on its own initiative, which gives who persisted them, when, how many changes it persisted, and the condition that caused it.
 *Defined in: file:REQ:spec/glossary.md (REQ)*
 
+## B
+
+**Baseline Run**
+: A recorded run of a test target, made on another tree, that a run on the current tree takes as the earlier run of that target.
+*Defined in: file:REQ:spec/glossary.md (REQ)*
+
 ## D
 
 **Daemon Record**
@@ -24,6 +30,10 @@
 
 **Defined Term**
 : A domain-specific word or phrase whose meaning is formally declared in a definition block and tracked across the specification corpus.
+*Defined in: file:REQ:spec/glossary.md (REQ)*
+
+**Dependency Evidence**
+: For one test, the files of the repository that the source its test target declares records or computes as dependencies of that test, together with every input of that test target that the source does not observe. A source observes a file only where it records or computes that file as a dependency of every test that can load it, whether the test names that file or its test framework loads it unnamed. Where the source records dependencies while the test runs, only the record of the last execution of that test counts. A test for which the source holds no record depends on every input of its test target.
 *Defined in: file:REQ:spec/glossary.md (REQ)*
 
 ## E
@@ -54,6 +64,10 @@
 
 **Result Record**
 : One outcome of one test that a results producer wrote, such as one test case in a JUnit XML file or one test entry in a pytest JSON report.
+*Defined in: file:REQ:spec/glossary.md (REQ)*
+
+**Retained Result**
+: A result that a run of a test target takes from an earlier run of that target for a test that the run did not select for execution. The test is one that the tree of that run holds, and the run produced no result for it.
 *Defined in: file:REQ:spec/glossary.md (REQ)*
 
 ## S

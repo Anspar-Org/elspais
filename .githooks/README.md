@@ -42,13 +42,22 @@ be decided from the tree alone happens here, once per commit.
 | Python quality | `ruff check` and `ruff format --check` on `src/ tests/` | `ruff` |
 | Markdown linting | markdownlint on changed `.md` files | `markdownlint` |
 | Index regeneration | `elspais fix`, staging every file it wrote; a file that already held unstaged edits is named and left unstaged | `elspais` |
-| Unit tests | `unit-verdict`, running `run-unit-tier` in parallel with per-test coverage, cached by tree hash; deferred on a checkpoint commit | `pytest`, `pytest-cov`, `pytest-xdist` |
+| Unit tests | The tests Test Impact Analysis selects (`python -m tools.tia run`); where it cannot narrow the run, or with `ELSPAIS_UNIT_MODE=full`, the full tier through `unit-verdict`, cached by tree hash; none on a checkpoint commit | `pytest`, `pytest-cov`, `pytest-xdist` |
 
 The index step resolves this tree's `elspais` rather than whichever one is on
 `PATH`: a different version rewrites hashes across spec files the commit never
 touched, and reports success while doing it.
 
-The unit tier runs through `run-unit-tier`, which `make test`, the
+The unit stage runs the unit tests the change since the worktree's Test Impact
+Analysis baseline can affect, and a failure among them fails the commit. Where
+TIA cannot narrow the run -- no usable baseline, a changed environment, a
+change to a file with broad impact -- it selects the full suite, and the hook
+prints why before running the full tier through `unit-verdict`.
+`ELSPAIS_UNIT_MODE=full` runs the full tier that way regardless. This is fast
+feedback: CI's unit job runs the full tier on every pull request and on main,
+and that run is the one a merge rests on.
+
+The full unit tier runs through `run-unit-tier`, which `make test`, the
 `elspais-unit` target in `.elspais.toml` and CI's unit job also call. It runs
 the tier with `pytest-xdist` and `--dist loadfile`, so each test file stays on
 one worker in order, and records which test ran each line
@@ -67,11 +76,14 @@ tree they ran against, so `elspais checks` reads them as fresh until an input
 changes -- including after a later commit skips the run because the tree is
 unchanged. The e2e tier does the same for `elspais-e2e`.
 
+Every full run `unit-verdict` makes also records a TIA baseline, and publishes
+it when the run passes (see Test Impact Analysis below), so the next commit in
+that worktree selects from it.
+
 A checkpoint commit, `ELSPAIS_CHECKPOINT=1 git commit ...`, runs every gate in
-this table except the unit tier. It records no unit verdict for its tree.
-Consequently, pre-push runs the tier for the tree it pushes. Use a checkpoint
-as a safety net for an intermediate commit on a branch that is squash-merged:
-only the pushed tree reaches review, so only the pushed tree needs a verdict.
+this table except the unit tests. Use a checkpoint as a safety net for an
+intermediate commit on a branch that is squash-merged: CI runs the full unit
+tier on the pushed tree.
 
 ### pre-push
 
@@ -84,8 +96,7 @@ Runs before pushing, with PR-aware blocking behavior:
 | --- | --- | --- |
 | Branch freshness | Fetches `origin/main`; auto-bumps the version if it matches main's | - |
 | PR detection | Decides whether failures block or warn | `gh` (optional) |
-| Unit tests | `unit-verdict` for the pushed tree; runs the tier where no commit earned a verdict for that tree | `pytest`, `pytest-cov`, `pytest-xdist` |
-| E2E tests | `e2e-verdict`, running `run-e2e-tier`; cached by tree hash and CLI environment | `pytest`, `pytest-xdist` |
+| E2E tests | `e2e-verdict`, running `run-e2e-tier`; cached by tree hash and CLI environment; refused while staged changes are uncommitted, since the verdict is keyed on the staged tree | `pytest`, `pytest-xdist` |
 | Secret detection | Scans for leaked secrets | `gitleaks` |
 | Doc sync tests | `pytest tests/test_doc_sync.py` | `pytest` |
 
@@ -95,7 +106,7 @@ when the tier passes, and honours that record for the same tree and
 environment. A failed run records nothing and removes any earlier record, so
 the next invocation runs the tier again: a failure caused by the environment
 is never reported again for a run that did not happen. `unit-verdict` keeps
-its cache the same way. Running `e2e-verdict` before `git push` moves the run
+its cache the same way for a full unit run. Running `e2e-verdict` before `git push` moves the run
 out of the push.
 
 `e2e-verdict` runs the tier through `run-e2e-tier`, which `make test-e2e` and
@@ -120,13 +131,14 @@ count comes from `test-workers`. CI's `e2e-test` job runs `run-e2e-tier` too.
 
 **Why this list is short.** Nothing that pre-commit already gates is repeated
 here. You cannot push what you have not committed, so every commit in a push
-has already passed lint, formatting, markdown, index regeneration and the unit
-tier, except a checkpoint commit, which deferred the unit tier. Pre-push runs
-only what pre-commit cannot or did not: the unit tier for a pushed tree that no
-commit verified, checks that are too expensive to pay per commit (the e2e
-tier), and checks whose answer is not knowable at commit time because it
-depends on the remote (branch freshness, PR state). A pushed tree that a full
-commit already verified is a cache hit, so the unit stage then costs nothing.
+has already passed lint, formatting, markdown, index regeneration and its
+impacted unit tests, except a checkpoint commit, which ran none. No unit tests
+run here: CI's unit job runs the full unit tier on every pull request, and
+publishing a release requires the full suite to have passed on the published
+commit. Pre-push runs only what pre-commit cannot: checks that are too
+expensive to pay per commit (the e2e tier), and checks whose answer is not
+knowable at commit time because it depends on the remote (branch freshness,
+PR state).
 
 Re-running the rest would cost minutes per push to re-derive answers already
 in hand. If you are tempted to add a check here, first ask whether it belongs
@@ -159,7 +171,7 @@ changed while it ran.
 
 | Tier | Target | Run by | Writes into its output area |
 | --- | --- | --- | --- |
-| unit | `elspais-unit` | `unit-verdict` (pre-commit, pre-push), `make test`, CI's unit job | `junit.xml`, `.coverage` (per-test contexts), `coverage.json`, `.elspais-run.json` |
+| unit | `elspais-unit` | `unit-verdict` (pre-commit, for a full run), `make test`, CI's unit job | `junit.xml`, `.coverage` (per-test contexts), `coverage.json`, `.elspais-run.json` |
 | e2e | `elspais-e2e` | `e2e-verdict` (pre-push), `make test-e2e`, CI's e2e job | `junit-parallel.xml`, `junit-serial.xml`, the merged `junit.xml`, `.elspais-run.json` |
 | browser | `elspais-browser` | `make test-browser`, CI's browser job | `junit.xml`, `.elspais-run.json` |
 | stress | `elspais-stress` | `make test-stress`, CI's stress job | `junit.xml`, `.elspais-run.json` |
@@ -219,11 +231,29 @@ the same key and runs the tier otherwise. Nothing in elspais reads them, and
 | The venv first on `PATH` | e2e | Kept: a fixture's target shells out to a bare `python` | The hooks and `run-target` put `.venv/bin` first on `PATH`. A session selecting e2e tests where no `python` is on `PATH` stops with a usage error saying so; the program the tests spawn is found in this checkout's venv whatever `PATH` says |
 | The `mcp` extra | all | Kept | A session without it stops with a usage error naming `make setup`, unless `ELSPAIS_TEST_WITHOUT` names `mcp` |
 | The `browser` extra and chromium | e2e, browser | Kept | A session whose marker expression selects browser tests stops with a usage error naming `make setup`, unless `ELSPAIS_TEST_WITHOUT` names `browser`; `pytest -m browser` without playwright stops whatever that variable says |
+| The installed versions of every dependency | all | Kept, pinned: `make setup` and CI install from `requirements/dev.lock` | A venv built otherwise, or not rebuilt after the lock moves, differs from the environment a TIA baseline was recorded in, and `pre-commit` runs the full tier instead of a selection; `make setup` rebuilds it |
 | `ELSPAIS_TEST_WORKERS` | unit, e2e | Kept, as an override of half the available processors | A value that is not a positive whole number stops the tier with a message naming the variable |
 | Git's hook environment (`GIT_DIR` and the rest) | all | Removed: `tests/conftest.py` and `unit-verdict` clear it | Never |
 | The developer's daemon, home and Claude configuration | e2e | Removed: each e2e test that runs elspais works in its own copy with its own daemon, on a port its viewer bound, with a private home for the claude CLI | Never |
 | `pandoc`, `xelatex`, the `claude` CLI | e2e | Kept, as optional tools | The tests needing them skip, and the skip reason names the missing tool; the claude CLI test also skips inside a Claude Code session |
 | `tail`, to relay a detached run's log | all | Kept -- `lib-tier-run.sh` has no other way to show a growing file as it is written | `tier_require` stops the tier before it starts, naming `tail`, on a machine that has none. `bash`, `ps` and `/proc` are the rest of the runner's platform surface: `bash` is assumed throughout, and `ps -ww -o args= -p` (BSD and GNU alike) is the fallback `tier_pid_args` uses where `/proc` is absent |
+
+## Test Impact Analysis
+
+`docs/test-impact-analysis.md` describes the whole mechanism. It touches the
+hooks in two places:
+
+- `ELSPAIS_TIA_RECORD=1` makes `run-unit-tier` also record a TIA baseline. It
+  runs the same tests and gives the same verdict, and publishes the baseline
+  only when the run passes, so a failing run never replaces a good one.
+  `unit-verdict` sets it for every run it makes, and `make tia-baseline` sets
+  it for one run. Each worktree records its own baseline from its own passing
+  full unit run, in `.results/tia/baseline` at its root
+  (`python -m tools.tia baseline path` prints it), so a new worktree's first
+  commit runs the full tier. `$ELSPAIS_TIA_BASELINE` names another directory.
+- `pre-commit` runs only the impacted unit tests (`python -m tools.tia run`)
+  by default, and the full tier through `unit-verdict` when TIA cannot
+  determine impact. `ELSPAIS_UNIT_MODE=full` asks for the full tier.
 
 ## Required Tools
 
@@ -232,7 +262,8 @@ Install these tools for full hook functionality:
 ```bash
 # This tree's venv, its editable elspais and the Python test tools -- ruff,
 # pytest, pytest-cov, pytest-xdist and the rest of the `dev` extra -- plus
-# the browser extra and chromium for the browser tests the e2e tier runs.
+# the browser extra and chromium for the browser tests the e2e tier runs,
+# each at the version requirements/dev.lock pins.
 # The hooks prefer .venv/bin, and the e2e tier refuses to run against an
 # elspais that does not import from this checkout.
 make setup

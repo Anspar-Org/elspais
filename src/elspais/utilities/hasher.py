@@ -115,6 +115,16 @@ def calculate_hash(
     return _select_hasher(algorithm)(cleaned.encode("utf-8")).hexdigest()[:length]
 
 
+# Implements: REQ-d00331-B
+def content_digest(content: str) -> str:
+    """The full SHA-256 hex digest of *content*, exactly as given.
+
+    Nothing is cleaned or normalised: two texts share a digest only when they
+    are the same text, which is what a cache keyed on content requires.
+    """
+    return _select_hasher("sha256")(content.encode("utf-8")).hexdigest()
+
+
 # Implements: REQ-d00131-L
 def compute_version_hash(content: str, length: int = 16) -> str:
     """Digest a node's canonical serialization into a concurrency version.

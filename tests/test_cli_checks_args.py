@@ -36,7 +36,7 @@ def test_fail_fast_flag_parses():
     assert args.fail_fast is True
 
 
-# Verifies: REQ-d00315-A
+# Verifies: REQ-d00315-B
 def test_stale_only_flag_defaults_false_and_parses():
     assert tyro.cli(ChecksArgs, args=[]).stale_only is False
     assert tyro.cli(ChecksArgs, args=["--run-tests", "--stale-only"]).stale_only is True

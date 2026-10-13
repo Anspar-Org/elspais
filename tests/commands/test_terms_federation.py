@@ -84,9 +84,9 @@ def test_select_terms_primary_only_returns_root_terms_with_federated_references(
 #
 # Federation membership is transitive, so a repository reached through an
 # associate's own [associates] table is a member the root's table never names.
-# Its term references must be dropped from a primary-only term index just as a
-# directly declared associate's are, or the artifact claims to be primary-only
-# while carrying a foreign namespace section.
+# A primary-only term index carries no section for it, just as it carries none
+# for a directly declared associate, or the artifact would claim to be
+# primary-only while carrying a foreign namespace section.
 # ─────────────────────────────────────────────────────────────────────────────
 
 _MIN_TOML = """version = 5
@@ -168,11 +168,11 @@ def _make_repo(
 
 # Verifies: REQ-d00253-C, REQ-d00202-D
 def test_primary_term_index_drops_transitive_member_namespace(tmp_path, monkeypatch):
-    """A transitively federated repo's references stay out of the primary index.
+    """A transitively federated repo's namespace stays out of the primary index.
 
-    root -> mid -> leaf, each repo referencing a term the root defines. With
-    ``federation.index_associates`` left false, the generated term index must
-    list the root's own namespace and neither member's.
+    root -> mid -> leaf, each repo's text using the word the root defines as a
+    term. With ``federation.index_associates`` left false, the generated term
+    index must list the root's own namespace and neither member's.
     """
     _make_repo(tmp_path, "leaf", "LEAF", "LEAF-d00001")
     _make_repo(tmp_path, "mid", "MID", "MID-d00001", associates={"leaf": ("../leaf", "LEAF")})
@@ -196,10 +196,12 @@ def test_primary_term_index_drops_transitive_member_namespace(tmp_path, monkeypa
     assert "LEAF-d00001" not in index
 
 
-# Verifies: REQ-d00253-C, REQ-d00200-I, REQ-d00239-A
-def test_REQ_d00253_C_primary_only_carries_references_from_other_members(tmp_path):
+# Verifies: REQ-d00253-C, REQ-d00200-I, REQ-d00239-E
+def test_REQ_d00253_C_primary_only_carries_the_federations_references(tmp_path):
     """The primary-only dictionary holds the terms the root defines, each with
-    the references every member made to it, and no term another member defines.
+    the references the federation recorded for it, and no term another member
+    defines. The associate declares nothing about the root, so its text
+    references none of the root's terms.
     """
     from elspais.config import get_config
     from elspais.graph.factory import build_graph
@@ -227,5 +229,5 @@ def test_REQ_d00253_C_primary_only_carries_references_from_other_members(tmp_pat
     primary = _select_terms_dictionary(fed, include_associates=False)
     assert {e.term.lower() for e in primary.iter_all()} == {"widget"}
     widget = primary.lookup("widget")
-    assert {r.namespace for r in widget.references} == {"REQ", "ASC"}
+    assert {r.namespace for r in widget.references} == {"REQ"}
     assert len(widget.references) == len(federated.lookup("widget").references)

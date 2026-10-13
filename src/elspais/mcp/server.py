@@ -209,6 +209,12 @@ def _serialize_result_entry(result_node: Any, graph: FederatedGraph) -> dict[str
     stale = result_node.get_field("stale_reason")
     if stale:
         entry["stale_reason"] = stale
+    # Implements: REQ-d00323-M
+    # A Retained Result names the run that executed its test.
+    retained_from = result_node.get_field("retained_from")
+    if retained_from:
+        entry["retained_from"] = retained_from
+        entry["retained_reason"] = result_node.get_field("retained_reason") or ""
     return entry
 
 
@@ -582,6 +588,9 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             "runner_file",
             "carried",
             "stale_reason",
+            # Implements: REQ-d00323-M
+            "retained_from",
+            "retained_reason",
         ):
             value = node.get_field(field_name)
             if value:
@@ -626,10 +635,23 @@ def _serialize_node_generic(node: Any, graph: FederatedGraph | None = None) -> d
             "text": node.get_field("text"),
         }
 
+    # Implements: REQ-d00239-E
+    # The member holding the node is what decides which terms its text reads.
+    namespace = None
+    if isinstance(graph, FederatedGraph):
+        try:
+            namespace = graph.repo_for_node(node).namespace
+        except KeyError:
+            namespace = None
+    elif graph is not None:
+        # A lone member's graph holds its own nodes only.
+        namespace = graph.namespace
+
     return {
         "id": node.id,
         "kind": kind.value,
         "title": node.get_label(),
+        "namespace": namespace,
         "source": {
             "path": (
                 _relative_source_path(node, graph)
@@ -3033,6 +3055,26 @@ def _guard_undeclared_arguments(
             "Nothing was done; call it again with only those arguments."
         ),
     }
+
+
+# Implements: REQ-o00077-F, REQ-p00060-F
+def _refusal_result(refusal: dict[str, Any]) -> Any:
+    """Deliver a guard's refusal as the tool call's error result.
+
+    A refusal is not the tool's answer, so it cannot be held to the tool's
+    output schema: a tool answering with a list publishes a schema no
+    refusal fits, and the transport would replace the refusal with a report
+    that the output failed validation. An error result is passed through
+    unvalidated, carrying the refusal as its text.
+    """
+    import json
+
+    from mcp import types
+
+    return types.CallToolResult(
+        content=[types.TextContent(type="text", text=json.dumps(refusal, indent=2))],
+        isError=True,
+    )
 
 
 # Implements: REQ-o00077-A, REQ-o00077-F
@@ -6742,11 +6784,10 @@ def create_server(
     class _ExecutableGuardedMCP(FastMCP):
         async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
             blocked = _guard_executable_drift(_state, name)
+            if blocked is None:
+                blocked = _guard_undeclared_arguments(self._tool_manager.get_tool(name), arguments)
             if blocked is not None:
-                return blocked
-            undeclared = _guard_undeclared_arguments(self._tool_manager.get_tool(name), arguments)
-            if undeclared is not None:
-                return undeclared
+                return _refusal_result(blocked)
             return await super().call_tool(name, arguments)
 
     # Create server with instructions for AI agents (REQ-d00065)

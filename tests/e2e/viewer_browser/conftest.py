@@ -24,6 +24,7 @@ if importlib.util.find_spec("playwright") is not None:
         page_journey,
         page_prefixed,
         page_refused_save,
+        page_retained,
         page_save_disclosure,
         page_step_binding,
         page_tables,
@@ -36,5 +37,6 @@ if importlib.util.find_spec("playwright") is not None:
         step_binding_viewer_url,
         viewer_url,
         viewer_url_environments,
+        viewer_url_retained,
         viewer_url_tables,
     )

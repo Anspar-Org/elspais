@@ -39,6 +39,9 @@ from elspais.commands import (
 from elspais.commands.args import (
     AnalysisArgs,
     AssociateArgs,
+    BaselineArgs,
+    BaselineFetchArgs,
+    BaselinePackArgs,
     ChangedArgs,
     ChecksArgs,
     CommentsArgs,
@@ -168,6 +171,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         TestArgs: "test",
         FingerprintArgs: "fingerprint",
         EvidenceArgs: "evidence",
+        BaselineArgs: "baseline",
         LinkArgs: "link",
         CompletionArgs: "completion",
         GlossaryArgs: "glossary",
@@ -230,6 +234,12 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
     elif isinstance(cmd, EvidenceArgs):
         _EVIDENCE_MAP = {EvidenceWriteArgs: "write", EvidenceVerifyArgs: "verify"}
         ns.evidence_action = _EVIDENCE_MAP.get(type(cmd.action), None)
+        if hasattr(cmd.action, "__dataclass_fields__"):
+            for field in dataclasses.fields(cmd.action):
+                setattr(ns, field.name, getattr(cmd.action, field.name))
+    elif isinstance(cmd, BaselineArgs):
+        _BASELINE_MAP = {BaselinePackArgs: "pack", BaselineFetchArgs: "fetch"}
+        ns.baseline_action = _BASELINE_MAP.get(type(cmd.action), None)
         if hasattr(cmd.action, "__dataclass_fields__"):
             for field in dataclasses.fields(cmd.action):
                 setattr(ns, field.name, getattr(cmd.action, field.name))
@@ -502,6 +512,10 @@ def main(argv: list[str] | None = None) -> int:
             from elspais.commands import fingerprint_cmd
 
             return fingerprint_cmd.run(args)
+        elif args.command == "baseline":
+            from elspais.commands import baseline_cmd
+
+            return baseline_cmd.run(args)
         elif args.command == "evidence":
             from elspais.commands import evidence_cmd
 
@@ -819,7 +833,7 @@ def _http_registration_url() -> str:
     return _ADDRESS_VARIABLE
 
 
-# Implements: REQ-o00076-K
+# Implements: REQ-o00076-K, REQ-o00076-P
 def _mcp_install(global_scope: bool = False, transport: str = "http") -> int:
     """Register elspais MCP server with Claude Code.
 
@@ -917,9 +931,11 @@ def _mcp_install(global_scope: bool = False, transport: str = "http") -> int:
         # A shell that never sets the variable launches a client that
         # cannot connect. Say what sets it, here, rather than leaving it
         # to be discovered from a failure.
+        from elspais.mcp.daemon import env_instruction
+
         print("The registration names ELSPAIS_MCP_URL, which each shell supplies:")
-        print('  eval "$(elspais mcp env)"')
-        print("Run that before launching the client, in whichever tree you are in.")
+        print(f"  {env_instruction()}")
+        print("Run that before launching the client. Another working tree uses its own elspais.")
     if not global_scope:
         print("Tip: Use --global to make elspais MCP available in all projects.")
     return 0

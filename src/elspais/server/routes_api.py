@@ -784,6 +784,23 @@ async def api_tree_data(request: Request) -> JSONResponse:
     return JSONResponse(build_tree_rows(state.graph, state.config))
 
 
+# Implements: REQ-d00239-E
+def _member_holding_path(graph: Any, abs_path: Path) -> str | None:
+    """The namespace of the member whose working tree holds *abs_path*.
+
+    A member may sit inside another's directory, so the deepest root holding
+    the path names the member. None where no member's tree holds it.
+    """
+    best: tuple[int, str] | None = None
+    for entry in graph.iter_repos():
+        root = Path(entry.repo_root).resolve()
+        if abs_path.is_relative_to(root):
+            depth = len(root.parts)
+            if best is None or depth > best[0]:
+                best = (depth, entry.namespace)
+    return best[1] if best else None
+
+
 # Implements: REQ-p00006-C
 async def api_file_content(request: Request) -> JSONResponse:
     """GET /api/file-content?path=<path>&node_id=<id>&repo_name=<name>.
@@ -889,6 +906,9 @@ async def api_file_content(request: Request) -> JSONResponse:
             "pending_mutation_count": len(affected_node_ids),
             "affected_nodes": sorted(affected_node_ids),
             "mtime": os.path.getmtime(abs_path),
+            # Implements: REQ-d00239-E
+            # The member holding the file decides which terms its text reads.
+            "namespace": _member_holding_path(state.graph, abs_path),
             # Absolute resolved path so the file viewer's `vscode://` link
             # can target the actual on-disk file (including in associate
             # repos) without re-deriving the path from a single
@@ -2759,6 +2779,8 @@ async def api_terms(request: Request) -> JSONResponse:
                 "defined_in": entry.defined_in,
                 "namespace": entry.namespace,
                 "repo_name": entry.repo_name,
+                # Implements: REQ-d00239-E
+                "read_in": state.graph.members_reading(entry.term),
                 "collection": entry.collection,
                 "indexed": entry.indexed,
                 "ref_count": len(entry.references),

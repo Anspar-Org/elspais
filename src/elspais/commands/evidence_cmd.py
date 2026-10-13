@@ -27,7 +27,7 @@ def _freshness_refusals(
     repo_root: Path, config: Any, selected: list[str], spell: Callable[[str], str]
 ) -> list[str]:
     """Each selected target whose results cannot be held, with the reason."""
-    from elspais.utilities.fingerprint import judge
+    from elspais.utilities.fingerprint import input_label, judge
 
     refusals = []
     for name in selected:
@@ -35,7 +35,8 @@ def _freshness_refusals(
         if verdict.state == "fresh":
             continue
         reason = f" ({verdict.reason})" if verdict.reason else ""
-        changed = f": {', '.join(verdict.changed[:5])}" if verdict.changed else ""
+        shown = ", ".join(input_label(entry) for entry in verdict.changed[:5])
+        changed = f": {shown}" if verdict.changed else ""
         refusals.append(f"target {spell(name)} results are {verdict.state}{reason}{changed}")
     return refusals
 
@@ -148,6 +149,7 @@ def run(args: argparse.Namespace) -> int:
         SelectionRefused,
         plan_target_runs,
         run_configured_targets,
+        settle_units,
         unrecorded_targets,
     )
     from elspais.utilities.evidence import (
@@ -242,6 +244,8 @@ def run(args: argparse.Namespace) -> int:
             )
             return 2
         results, _captured = run_configured_targets(config, repo_root, only=set(selected))
+        # Implements: REQ-d00333-H
+        settle_units(config, repo_root, raw_config, results)
         failed = [chosen.spell(r.name) for r in results if not r.succeeded]
         if failed:
             print(

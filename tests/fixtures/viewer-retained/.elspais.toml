@@ -1,0 +1,52 @@
+# Fixture for the viewer's Retained Result tag.
+#
+# The target's output area holds the results of its last run: one test it
+# executed, and a Retained Result for the other, which an earlier run
+# executed. The card's Tested panel names that earlier run beside the
+# retained row.
+
+version = 5
+
+[project]
+name = "viewer-retained-fixture"
+namespace = "REQ"
+
+[levels.dev]
+rank = 1
+letter = "d"
+implements = ["dev"]
+
+[id-patterns]
+canonical = "{namespace}-{level.letter}{component}"
+
+[id-patterns.component]
+style = "numeric"
+digits = 5
+leading_zeros = true
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
+
+[scanning.test]
+enabled = true
+directories = ["tests"]
+file_patterns = ["test_*.py"]
+output_root = "results"
+
+[[scanning.test.targets]]
+name = "unit"
+command = "pytest {selection}"
+reporter = "evidence-snapshot"
+results = "results.jsonl"
+units = { dependencies = { source = "declared" }, full_selection = "tests" }
+
+[rules.hierarchy]
+allow_structural_orphans = true
+
+[rules.format]
+require_hash = false
+require_assertions = false
+require_status = true

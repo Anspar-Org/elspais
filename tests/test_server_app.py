@@ -3775,7 +3775,7 @@ class TestSaveLeavesServedGraphAgreeingWithDisk:
         # follows its throttle, so left in place it could bring the served
         # graph into agreement with disk by timing alone. Only the save
         # itself may do so here.
-        monkeypatch.setattr(state, "ensure_fresh", lambda: False)
+        monkeypatch.setattr(state, "ensure_fresh", lambda probed=None: False)
         client = TestClient(create_app(state, mount_mcp=False))
 
         self._retitle_and_save(client, "First title", "first reason")
@@ -3815,7 +3815,7 @@ class TestSaveReportsAFailedRebuildBesideTheWrite:
         # Only the save may rebuild here: the freshness middleware would
         # otherwise reach the failing build on whichever request first
         # follows its throttle.
-        monkeypatch.setattr(state, "ensure_fresh", lambda: False)
+        monkeypatch.setattr(state, "ensure_fresh", lambda probed=None: False)
         graph_before = state.graph
         client = TestClient(create_app(state, mount_mcp=False))
 
