@@ -15,7 +15,7 @@ test's ``testStart`` and ``testDone`` events.
 scenario declared in a shared file and executed through a runner file. The
 test's citations sit at the declaration. Consequently, a ``file:`` URL naming
 a Dart source file in ``test.url`` gives ``source_path`` and ``line``, and
-``suite.path`` gives ``runner_path`` (REQ-d00254-Z).
+``suite.path`` gives ``runner_path`` (REQ-d00254-G).
 
 Any other URL names no Dart source line (REQ-d00284-D). For ``testWidgets(...)``,
 ``test.url`` names a frame inside ``package:flutter_test``; for a test run in a
@@ -113,7 +113,7 @@ class FlutterMachineParser(DiagnosticRecorder):
                 suites[s.get("id")] = s.get("path", "")
             elif etype == "testStart":
                 t = ev.get("test", {})
-                # Implements: REQ-d00254-Z, REQ-d00284-D
+                # Implements: REQ-d00254-G, REQ-d00284-D
                 # A URL that names no Dart source file -- a framework frame,
                 # or the compiled script a browser ran -- has a line of no
                 # source, so the record keeps no line from it. A stream

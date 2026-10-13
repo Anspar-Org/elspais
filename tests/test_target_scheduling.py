@@ -540,7 +540,7 @@ def test_only_fresh_results_are_carried(tmp_path, monkeypatch, stub):
     assert carry == {"fresh"}
 
 
-# Verifies: REQ-d00315-A+B+F+H
+# Verifies: REQ-d00315-B+F+H
 def test_a_stale_only_run_executes_exactly_the_targets_not_fresh(
     tmp_path, monkeypatch, stub, capsys
 ):
@@ -617,7 +617,7 @@ def test_naming_a_fresh_target_without_stale_only_executes_it(tmp_path, monkeypa
     assert log.read_text().splitlines() == ["fresh"]
 
 
-# Verifies: REQ-d00315-A+B
+# Verifies: REQ-d00315-B
 def test_stale_only_narrows_within_the_named_targets(tmp_path, monkeypatch, stub, capsys):
     from elspais.cli import main
 

@@ -16,6 +16,12 @@
 : A statement that the tool persisted held changes on its own initiative, which gives who persisted them, when, how many changes it persisted, and the condition that caused it.
 *Defined in: file:REQ:spec/glossary.md (REQ)*
 
+## B
+
+**Baseline Run**
+: A recorded run of a test target, made on another tree, that a run on the current tree takes as the earlier run of that target.
+*Defined in: file:REQ:spec/glossary.md (REQ)*
+
 ## D
 
 **Daemon Record**
@@ -24,6 +30,10 @@
 
 **Defined Term**
 : A domain-specific word or phrase whose meaning is formally declared in a definition block and tracked across the specification corpus.
+*Defined in: file:REQ:spec/glossary.md (REQ)*
+
+**Dependency Evidence**
+: For one test, the files of the repository that the source its test target declares recorded that test as depending on, together with every input of that test target that the source does not observe. For a test with no recorded evidence, it is every input of its test target.
 *Defined in: file:REQ:spec/glossary.md (REQ)*
 
 ## E

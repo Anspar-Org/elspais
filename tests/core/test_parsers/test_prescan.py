@@ -4,7 +4,7 @@ Exercises the standalone prescan module extracted from CodeParser and
 TestParser.
 
 The tests that bind a scanned test to its identity within its file and to
-that test's line extent name REQ-d00254-K, which obliges exactly that, on
+that test's line extent name REQ-d00332-A, which obliges exactly that, on
 both the built-in and the external-record routes.
 
 The tests at the foot of the file name REQ-d00254-D instead: what a citation
@@ -128,7 +128,7 @@ class TestBuildLineContext:
 class TestTextPrescan:
     """Tests for text_prescan utility."""
 
-    # Verifies: REQ-d00254-K
+    # Verifies: REQ-d00332-A
     def test_REQ_d00254_K_finds_test_functions(self):
         """Text prescan identifies test_ functions."""
         lines = [
@@ -145,7 +145,7 @@ class TestTextPrescan:
         assert all_test_funcs[0] == (3, "test_something", None)
         assert all_test_funcs[1] == (6, "test_another", None)
 
-    # Verifies: REQ-d00254-K
+    # Verifies: REQ-d00332-A
     def test_REQ_d00254_K_finds_test_class(self):
         """Text prescan identifies Test classes."""
         lines = [
@@ -157,7 +157,7 @@ class TestTextPrescan:
         assert len(all_test_funcs) == 1
         assert all_test_funcs[0] == (2, "test_bar", "TestFoo")
 
-    # Verifies: REQ-d00254-K
+    # Verifies: REQ-d00332-A
     def test_REQ_d00254_K_line_context_maps_correctly(self):
         """Line context maps each line to its enclosing function."""
         lines = [
@@ -174,7 +174,7 @@ class TestTextPrescan:
 class TestAstPrescan:
     """Tests for ast_prescan utility."""
 
-    # Verifies: REQ-d00254-K
+    # Verifies: REQ-d00332-A
     def test_REQ_d00254_K_finds_module_level_test(self):
         """AST prescan finds module-level test functions."""
         source = "def test_foo():\n    assert True\n"
@@ -184,7 +184,7 @@ class TestAstPrescan:
         assert all_test_funcs[0][1] == "test_foo"
         assert all_test_funcs[0][2] is None  # no class
 
-    # Verifies: REQ-d00254-K
+    # Verifies: REQ-d00332-A
     def test_REQ_d00254_K_finds_class_test(self):
         """AST prescan finds test functions inside Test classes."""
         source = "class TestBar:\n    def test_baz(self):\n        pass\n"
@@ -202,7 +202,7 @@ class TestAstPrescan:
 class TestExternalPrescan:
     """Tests for external_prescan utility."""
 
-    # Verifies: REQ-d00254-K
+    # Verifies: REQ-d00332-A
     def test_REQ_d00254_K_builds_context_from_entries(self):
         """External prescan builds line context from provided entries."""
         entries = [
@@ -218,7 +218,7 @@ class TestExternalPrescan:
         assert line_context[15][0] == "test_beta"
         assert line_context[15][1] == "TestSuite"
 
-    # Verifies: REQ-d00254-K, REQ-d00254-M
+    # Verifies: REQ-d00332-A, REQ-d00332-C
     def test_REQ_d00254_K_a_record_is_a_test_whatever_it_is_named(self):
         """A record names one test, so its spelling decides nothing.
 
@@ -239,7 +239,7 @@ class TestExternalPrescan:
             "shouldRejectAnExpiredCard",
         ]
 
-    # Verifies: REQ-d00254-D, REQ-d00254-N
+    # Verifies: REQ-d00254-D, REQ-d00332-D
     def test_REQ_d00254_D_a_citation_above_a_test_belongs_to_it(self):
         """A citation written above a test binds to the test below it.
 
@@ -289,7 +289,7 @@ class TestExternalPrescan:
 class TestPrescanFuncEndLine:
     """Tests that prescan functions return 4-tuples with func_end_line."""
 
-    # Verifies: REQ-d00254-K
+    # Verifies: REQ-d00332-A
     def test_REQ_d00254_K_ast_prescan_returns_4_tuples(self):
         """ast_prescan line_context values are 4-tuples with func_end_line."""
         source = "def test_foo():\n    assert True\n\ndef test_bar():\n    x = 1\n    assert x\n"
@@ -312,7 +312,7 @@ class TestPrescanFuncEndLine:
         # Line 3 is outside any function
         assert line_context[3] == (None, None, 0, 0)
 
-    # Verifies: REQ-d00254-K
+    # Verifies: REQ-d00332-A
     def test_REQ_d00254_K_ast_prescan_class_method_end_line(self):
         """ast_prescan returns correct func_end_line for class methods."""
         source = "class TestBar:\n    def test_baz(self):\n        pass\n"
@@ -339,7 +339,7 @@ class TestPrescanFuncEndLine:
         assert line_context[1][3] == 0
         assert line_context[2][3] == 0
 
-    # Verifies: REQ-d00254-K
+    # Verifies: REQ-d00332-A
     def test_REQ_d00254_K_external_prescan_returns_4_tuples(self):
         """external_prescan returns 4-tuples with func_end_line."""
         entries = [
@@ -355,7 +355,7 @@ class TestPrescanFuncEndLine:
         # test_beta spans lines 15-20 (end of file)
         assert line_context[15][3] == 20  # func_end_line
 
-    # Verifies: REQ-d00254-K
+    # Verifies: REQ-d00332-A
     def test_REQ_d00254_K_external_prescan_with_explicit_end_line(self):
         """external_prescan uses end_line from JSON entries when present."""
         entries = [
@@ -368,7 +368,7 @@ class TestPrescanFuncEndLine:
         assert line_context[5][3] == 10
         assert line_context[15][3] == 18
 
-    # Verifies: REQ-d00254-K
+    # Verifies: REQ-d00332-A
     def test_REQ_d00254_K_ast_prescan_forward_fixup_4_tuple(self):
         """Forward-looking fixup in ast_prescan produces 4-tuples."""
         source = "# Implements: REQ-p00001\ndef test_foo():\n    assert True\n"
@@ -395,7 +395,7 @@ class TestPrescanFuncEndLine:
 # of the comment block is not a bound on the search; the first line that is
 # neither a comment nor a declaration is.
 #
-# These name REQ-d00254-K.  Binding a citation to the test it was written above
+# These name REQ-d00332-A.  Binding a citation to the test it was written above
 # is how that test's evidence reaches that test's identity and extent, and
 # binding one to a declaration it was not written above would attribute
 # evidence to a test it says nothing about.
@@ -482,7 +482,7 @@ def test_alpha():
 """
 
 
-# Verifies: REQ-d00254-K
+# Verifies: REQ-d00332-A
 @pytest.mark.parametrize("route", ROUTES)
 @pytest.mark.parametrize(
     ("source", "comment_line", "declaration_line"),
@@ -503,7 +503,7 @@ def test_REQ_d00254_K_comment_binds_to_first_declaration_below(
     assert func_line == declaration_line
 
 
-# Verifies: REQ-d00254-K
+# Verifies: REQ-d00332-A
 @pytest.mark.parametrize("route", ROUTES)
 @pytest.mark.parametrize(
     "comment_line",

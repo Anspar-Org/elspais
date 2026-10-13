@@ -178,7 +178,7 @@ class ChecksArgs:
     With `concurrency` above 1, no further target starts and the targets
     already running finish."""
 
-    # Implements: REQ-d00315-A
+    # Implements: REQ-d00315-B
     stale_only: bool = False
     """Execute only the selected targets whose results are not fresh -- stale,
     missing, or left by a run that never finished -- and carry the fresh
@@ -1227,7 +1227,7 @@ class TestArgs:
     """Stop at the first target that fails. With `concurrency` above 1, no
     further target starts and the targets already running finish."""
 
-    # Implements: REQ-d00315-A
+    # Implements: REQ-d00315-B
     stale_only: bool = False
     """Execute only the selected targets whose results are not fresh -- stale,
     missing, or left by a run that never finished -- and leave the fresh

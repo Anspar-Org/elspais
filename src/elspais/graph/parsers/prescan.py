@@ -167,7 +167,7 @@ class PythonSyntax:
         return self.error is None
 
 
-# Implements: REQ-d00254-D, REQ-d00254-K, REQ-d00269-E
+# Implements: REQ-d00254-D, REQ-d00332-A, REQ-d00269-E
 def read_python(source: str) -> PythonSyntax:
     """Parse *source* once and walk its tree once, for every Python pre-scan.
 
@@ -812,7 +812,7 @@ def ast_string_literal_lines(source: str, syntax: PythonSyntax | None = None) ->
     return set(syntax.string_literal_lines)
 
 
-# Implements: REQ-d00254-K
+# Implements: REQ-d00332-A
 def ast_prescan(
     source: str,
     lines: list[tuple[int, str]],
@@ -1040,7 +1040,7 @@ class _DartLineScanner:
             i += 1
 
 
-# Implements: REQ-d00254-K
+# Implements: REQ-d00332-A
 def _match_brace_end(
     lines: list[tuple[int, str]],
     start_idx: int,
@@ -1077,7 +1077,7 @@ def _match_brace_end(
     return last, False  # ran to EOF without closing
 
 
-# Implements: REQ-d00254-K
+# Implements: REQ-d00332-A
 def dart_prescan(
     lines: list[tuple[int, str]],
 ) -> tuple[
@@ -1140,7 +1140,7 @@ def dart_prescan(
                 best, owner_start, owner_end = s, s, e
         line_context[ln] = (None, None, owner_start, owner_end)
 
-    # Implements: REQ-d00254-S+T
+    # Implements: REQ-d00332-F+G
     # 3) This pass binds each unowned comment (a comment no test encloses) to
     #    the declaration below it.  A group start is a target, like a test
     #    start, only if the group holds a test.  The runner reports results for
@@ -1322,7 +1322,7 @@ def dart_test_names(lines: list[tuple[int, str]]) -> dict[int, str]:
     return names
 
 
-# Implements: REQ-d00254-K, REQ-d00254-V
+# Implements: REQ-d00332-A, REQ-d00332-I
 def external_prescan(
     file_entries: list[dict],
     lines: list[tuple[int, str]],
@@ -1358,7 +1358,7 @@ def external_prescan(
         start = entry["line"]
         fname = entry["function"]
         cname = entry.get("class")
-        # Implements: REQ-d00254-K+M
+        # Implements: REQ-d00332-A+C
         # An attribution record names one test, so an attribution record IS a
         # test. Reading a naming convention here asked every framework to spell its tests the way
         # pytest does, and a test named otherwise reached no node at all --
@@ -1382,7 +1382,7 @@ def external_prescan(
                 line_context[ln] = (fname, cname, start, end)
                 break
 
-    # Implements: REQ-d00254-D+N+S
+    # Implements: REQ-d00254-D, REQ-d00332-D+F
     # A citation above a test belongs to that test.  Every built-in pre-scan
     # route reads a citation the same way.
     by_start = {start: (fname, cname, start, end) for start, end, fname, cname in func_ranges}

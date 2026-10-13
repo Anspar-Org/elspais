@@ -1,5 +1,5 @@
 # tests/core/test_prescan_attribution.py
-# Verifies: REQ-d00254-K, REQ-d00254-L, REQ-d00254-M, REQ-d00254-N
+# Verifies: REQ-d00332-A, REQ-d00332-B, REQ-d00332-C, REQ-d00332-D
 """Per-test attribution: built-in prescan per language, and the external
 test-prescan command (transport, capability, and per-file precedence).
 
@@ -162,7 +162,7 @@ FRAMEWORKS = [
 ]
 
 
-# Verifies: REQ-d00254-K
+# Verifies: REQ-d00332-A
 @pytest.mark.parametrize("path,src,_prescan,ref_to_test,_extents", FRAMEWORKS)
 def test_each_scanned_test_gets_its_own_identity(
     dispatcher, path, src, _prescan, ref_to_test, _extents
@@ -187,7 +187,7 @@ def test_each_scanned_test_gets_its_own_identity(
     assert len(set(identities)) == 2, f"tests share one identity: {identities}"
 
 
-# Verifies: REQ-d00254-K
+# Verifies: REQ-d00332-A
 @pytest.mark.parametrize("_path,src,prescan,_ref_to_test,extents", FRAMEWORKS)
 def test_each_scanned_test_gets_its_own_line_extent(_path, src, prescan, _ref_to_test, extents):
     """The prescan behind each framework yields a per-test line extent: every
@@ -275,7 +275,7 @@ def _make_project(tmp_path: Path, *, emit_absolute: bool = False) -> tuple[Path,
     return project, command, capture
 
 
-# Verifies: REQ-d00254-M
+# Verifies: REQ-d00332-C
 def test_prescan_command_receives_candidate_paths_on_stdin(tmp_path):
     """The candidate test file paths -- and only those -- are written to the
     command's stdin, one per line, relative to the repo root."""
@@ -289,7 +289,7 @@ def test_prescan_command_receives_candidate_paths_on_stdin(tmp_path):
     assert sorted(received) == [FILE_ONE, FILE_TWO], f"stdin carried {received}"
 
 
-# Verifies: REQ-d00254-M
+# Verifies: REQ-d00332-C
 def test_prescan_command_stdout_records_govern_attribution(tmp_path, dispatcher):
     """Records read from the command's stdout bind one test each to its file,
     its identity in that file, and its starting line -- and those records are
@@ -316,7 +316,7 @@ def test_prescan_command_stdout_records_govern_attribution(tmp_path, dispatcher)
     ], "attribution did not follow the records emitted on stdout"
 
 
-# Verifies: REQ-d00254-M
+# Verifies: REQ-d00332-C
 def test_prescan_command_failure_yields_no_attribution(tmp_path, capsys):
     """A command that exits non-zero produces no attribution (the built-in
     route stays in charge) rather than a partial or crashing read."""
@@ -329,7 +329,7 @@ def test_prescan_command_failure_yields_no_attribution(tmp_path, capsys):
     assert "prescan_command failed" in capsys.readouterr().err
 
 
-# Verifies: REQ-d00254-L
+# Verifies: REQ-d00332-B
 def test_external_command_supplies_per_test_attribution(tmp_path, dispatcher):
     """With a command configured, the file's tests are attributed per the
     command's records -- identities the built-in scan would never produce."""
@@ -358,7 +358,7 @@ def test_external_command_supplies_per_test_attribution(tmp_path, dispatcher):
 # ---------------------------------------------------------------------------
 
 
-# Verifies: REQ-d00254-N
+# Verifies: REQ-d00332-D
 def test_external_records_take_precedence_per_file(tmp_path, dispatcher):
     """One prescan run, two scanned files: the file the command reported on is
     attributed from its records; the file it said nothing about keeps built-in
@@ -416,7 +416,7 @@ def _built_test_node_ids(project: Path, command: str) -> set[str]:
     return {n.id for n in graph.iter_by_kind(NodeKind.TEST)}
 
 
-# Verifies: REQ-d00254-L+N
+# Verifies: REQ-d00332-B+D
 def test_external_records_take_precedence_end_to_end(tmp_path):
     """Full build with a prescan command configured: the reported file's TEST
     nodes carry the command's identities, the unreported file's carry the
@@ -430,7 +430,7 @@ def test_external_records_take_precedence_end_to_end(tmp_path):
     }
 
 
-# Verifies: REQ-d00254-N
+# Verifies: REQ-d00332-D
 def test_external_records_take_precedence_end_to_end_absolute_paths(tmp_path):
     """Same build, with the command echoing absolute paths instead of the
     repo-relative ones it was handed: either form is accepted, and precedence

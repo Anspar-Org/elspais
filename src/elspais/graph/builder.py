@@ -7167,7 +7167,7 @@ class GraphBuilder:
             # Implements: REQ-d00131-G
             # Store raw comment text for render protocol
             node.set_field("raw_text", content.raw_text)
-            # Implements: REQ-d00254-U
+            # Implements: REQ-d00332-H
             # function_end_line records the last line of the declaration. A
             # group of tests is one such declaration. If a result binds to a
             # test inside the group, then the result also reaches the group.
@@ -8066,7 +8066,7 @@ class GraphBuilder:
                 if target is not None:
                     target.link(result_node, EdgeKind.YIELDS)
                     result_node.set_field("match_scope", "test")
-                    # Implements: REQ-d00254-U
+                    # Implements: REQ-d00332-H
                     # A runner reports the tests inside a group. It never
                     # reports the group itself. Consequently, a citation on
                     # the group takes its verdict from the results of its tests.

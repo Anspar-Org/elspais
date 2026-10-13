@@ -531,7 +531,7 @@ def shared_scenario(request, tmp_path_factory):
     return request.param, graph, config
 
 
-# Verifies: REQ-d00254-G, REQ-d00254-Z
+# Verifies: REQ-d00254-G
 def test_each_run_binds_to_the_scenario_where_it_is_declared(shared_scenario):
     from elspais.graph.relations import EdgeKind
 
@@ -552,7 +552,7 @@ def test_each_run_binds_to_the_scenario_where_it_is_declared(shared_scenario):
         assert result.get_field("root_line") is None
 
 
-# Verifies: REQ-d00254-Z
+# Verifies: REQ-d00254-G
 def test_no_run_binds_to_a_runner_test_on_the_same_line(shared_scenario):
     _outcome, graph, _config = shared_scenario
     decoy = _test_at(graph, _RUNNER_B)

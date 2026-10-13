@@ -314,7 +314,7 @@ class TestTestRefParsing:
         )
         assert not tx.faults, "nothing about those lines is malformed"
 
-    # Verifies: REQ-d00254-T, REQ-d00269-G
+    # Verifies: REQ-d00332-G, REQ-d00269-G
     def test_a_citation_above_the_first_test_reaches_no_test(self, resolver):
         """A citation above a file's first test, with code between them, binds
         to no test.  The test below inherits nothing from the citation.  The

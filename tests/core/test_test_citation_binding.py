@@ -163,7 +163,7 @@ ROUTES = [
 ]
 
 
-# Verifies: REQ-d00254-S, REQ-d00254-V, REQ-d00269-M
+# Verifies: REQ-d00332-F, REQ-d00332-I, REQ-d00269-M
 @pytest.mark.parametrize("form", sorted(CITATION_FORMS))
 @pytest.mark.parametrize(("language", "external", "with_end"), ROUTES)
 def test_a_citation_above_the_second_test_binds_to_the_second(
@@ -216,7 +216,7 @@ HEADERS = [
 ]
 
 
-# Verifies: REQ-d00254-T, REQ-d00274-G
+# Verifies: REQ-d00332-G, REQ-d00274-G
 @pytest.mark.parametrize(("path", "source", "prescan_data"), HEADERS)
 def test_a_citation_above_the_first_test_binds_to_no_test(resolver, path, source, prescan_data):
     items = FileDispatcher(resolver).dispatch_test(
@@ -273,7 +273,7 @@ void main() {
 """
 
 
-# Verifies: REQ-d00254-T
+# Verifies: REQ-d00332-G
 @pytest.mark.parametrize(
     "source",
     [
@@ -311,7 +311,7 @@ def _group_graph(resolver, statuses):
     return graph
 
 
-# Verifies: REQ-d00254-S, REQ-d00254-U
+# Verifies: REQ-d00332-F, REQ-d00332-H
 @pytest.mark.parametrize(
     ("statuses", "passing", "failing"),
     [
@@ -354,7 +354,7 @@ def test_one():
 """
 
 
-# Verifies: REQ-d00269-D, REQ-d00254-T
+# Verifies: REQ-d00269-D, REQ-d00332-G
 def test_an_unbound_citation_still_reports_the_references_that_resolve_to_nothing(resolver):
     path = "tests/test_unbound_refs.py"
     items = FileDispatcher(resolver).dispatch_test(UNBOUND_BAD_REF, file_path=path)

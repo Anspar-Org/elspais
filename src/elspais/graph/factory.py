@@ -65,7 +65,7 @@ from elspais.utilities.patterns import FederatedIdReader, IdResolver, build_reso
 _log = logging.getLogger(__name__)
 
 
-# Implements: REQ-d00254-Y, REQ-d00327-C
+# Implements: REQ-d00327-C
 def _placed_in_repo(path: str, origin_dir: Path, repo_root: Path) -> str | None:
     """*path* as a repo-relative POSIX path, read from *origin_dir*, or None.
 
@@ -88,7 +88,7 @@ def _placed_in_repo(path: str, origin_dir: Path, repo_root: Path) -> str | None:
     return rel.as_posix()
 
 
-# Implements: REQ-d00254-Y, REQ-d00327-B+E
+# Implements: REQ-d00327-C, REQ-d00327-B+E
 def _resolve_coverage_file_node(graph, source_file, origin_dir, repo_root):
     """The FILE node a coverage artifact's source path names, or None.
 
@@ -990,7 +990,7 @@ def line_convention(file_path: Path) -> dict[str, Any]:
     return {"line_ending": ending, "final_newline": not data or data.endswith(b"\n")}
 
 
-# Implements: REQ-d00254-L+M
+# Implements: REQ-d00332-B+C
 def _run_prescan_command(
     command: str,
     test_dirs: list[str],
@@ -1851,7 +1851,7 @@ def _build_repository(
                 # Paths go out on stdin repo-relative, so a conforming command
                 # answers with those, while scanning dispatches absolute paths.
                 # Alias each relative key to its absolute form so attribution records govern
-                # either way (REQ-d00254-N).
+                # either way (REQ-d00332-D).
                 if prescan_data:
                     for reported in list(prescan_data):
                         if not Path(reported).is_absolute():
@@ -2317,7 +2317,7 @@ def _build_repository(
                     target=target.name,
                 )
                 continue
-            # Implements: REQ-d00327-B+E, REQ-d00254-Y
+            # Implements: REQ-d00327-B+E, REQ-d00327-C
             # A relative path in the coverage data is read from the origin the
             # target declares for its coverage, or else from the one the
             # reporter of the format declares.

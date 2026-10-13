@@ -174,7 +174,7 @@
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | b49bd5ee |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 3b102d6f |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | 8360f2f4 |
-| REQ-d00254 | Test Evidence: Attribution, Ingestion, and Coverage Crediting | dev-graph-core.md       | 06c0380b |
+| REQ-d00254 | Test Evidence: Ingestion and Coverage Crediting               | dev-graph-core.md       | 812dcbf7 |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 1ea68210 |
@@ -220,24 +220,26 @@
 | REQ-d00298 | Report Export                                                 | dev-cli.md              | 8c1b78eb |
 | REQ-d00299 | Configuration as Graph Content                                | dev-graph-config.md     | 0577c0a5 |
 | REQ-d00300 | Viewer Remembered State                                       | dev-traceview-review.md | f794104b |
-| REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | 0e15379c |
+| REQ-d00311 | Test Result Freshness                                         | dev-graph-core.md       | d61efc8a |
 | REQ-d00312 | Test Target Output Areas                                      | dev-graph-core.md       | a0788b2a |
 | REQ-d00313 | Served Graph Currency                                         | dev-traceview-review.md | 8822f2a7 |
 | REQ-d00314 | Concurrent Test Target Runs                                   | dev-graph-core.md       | 228b3b98 |
-| REQ-d00315 | Stale-Only Test Target Runs                                   | dev-graph-core.md       | 890ea4b2 |
+| REQ-d00315 | Stale-Only Test Target Runs                                   | dev-graph-core.md       | f5931d33 |
 | REQ-d00316 | Record of the Test Targets a Run Executed                     | dev-graph-core.md       | c5639977 |
 | REQ-d00320 | Viewer Edit Controls State What They Do                       | dev-traceview-review.md | e8010396 |
 | REQ-d00321 | Static View Embedded Content                                  | dev-traceview-review.md | 736babc4 |
-| REQ-d00322 | Evidence Snapshot                                             | dev-graph-core.md       | 13a665c5 |
-| REQ-d00323 | Carried Result Provenance                                     | dev-graph-core.md       | 6c0eeda0 |
+| REQ-d00322 | Evidence Snapshot                                             | dev-graph-core.md       | 71339a95 |
+| REQ-d00323 | Carried Result Provenance                                     | dev-graph-core.md       | 58fde1fb |
 | REQ-d00324 | Refusal of a Retired Configuration Value                      | dev-graph-config.md     | 530fb06a |
 | REQ-d00325 | Changelog Reason for a Saved Change                           | dev-graph-file-nodes.md | 4ebffc32 |
 | REQ-d00326 | Path-Shaped Skip Patterns                                     | dev-graph-config.md     | 797c3fe4 |
-| REQ-d00327 | Origin of a Recorded Source Path                              | dev-graph-core.md       | 0faeeab4 |
+| REQ-d00327 | Origin of a Recorded Source Path                              | dev-graph-core.md       | 35dcf9d4 |
 | REQ-d00328 | Satisfying Named Assertions                                   | dev-graph-core.md       | 6e65b3ba |
 | REQ-d00329 | Test File Results From a Command's Exit Status                | dev-graph-core.md       | 113d1a8d |
 | REQ-d00330 | What a Fix Run Changes                                        | prd-core.md             | 9365d280 |
 | REQ-d00331 | Reuse of File Readings Between Builds                         | dev-graph-core.md       | 53734f81 |
+| REQ-d00332 | Per-Test Attribution                                          | dev-graph-core.md       | a5224a66 |
+| REQ-d00333 | Per-Test Result Retention                                     | dev-graph-core.md       | 2daa6310 |
 
 ## User Journeys
 

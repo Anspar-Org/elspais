@@ -619,7 +619,7 @@ H holds for every copy a `Satisfies:` declaration makes, whether the declaration
 
 *End* *Satisfying Named Assertions* | **Hash**: 6e65b3ba
 
-## REQ-d00254: Test Evidence: Attribution, Ingestion, and Coverage Crediting
+## REQ-d00254: Test Evidence: Ingestion and Coverage Crediting
 
 **Level**: dev | **Status**: Active | **Implements**: REQ-o00051
 
@@ -647,13 +647,13 @@ I. A configured target a run did not execute, whose results are ingested from di
 
 J. In a selective run (a run that did not execute every configured target), a requirement with test references but zero *Result Records* SHALL render as not-run (`—`), distinct from a run-but-uncovered `0%`; in a full run zero results SHALL keep the existing rendering. Which of the two a run is SHALL follow from the targets it executed and not from how its selection was expressed.
 
-K. For every configured test framework, the system SHALL bind each scanned test to its own identity within its source file and to that test's line extent, regardless of the framework's implementation language.
+K. <RETIRED> Superseded by REQ-d00332-A.
 
-L. Where an external test-prescan command is configured, the system SHALL obtain per-test attribution for the candidate test files from that command.
+L. <RETIRED> Superseded by REQ-d00332-B.
 
-M. The system SHALL exchange prescan data with a configured external test-prescan command by writing the candidate test file paths to the command's standard input and reading *Attribution Records* from its standard output, each binding one test to its source file, its identity within that file, and its starting line.
+M. <RETIRED> Superseded by REQ-d00332-C.
 
-N. Where an external test-prescan command returns *Attribution Records* for a scanned test file, the system SHALL bind that file's tests from those *Attribution Records* in preference to the system's built-in attribution.
+N. <RETIRED> Superseded by REQ-d00332-D.
 
 O. A line number a reporter records SHALL be read in the origin that reporter counts from. That origin SHALL be declared with the reporter and SHALL be overridable per target, and a recorded line SHALL be normalised to the numbering the tool uses for source lines before it is matched against a test or shown to a reader.
 
@@ -661,23 +661,23 @@ P. A file the tool cannot read in full SHALL still yield the results it could re
 
 Q. A result derived from a partial read SHALL be distinguishable from one derived from a complete read.
 
-R. When a citation in a test file is inside a test, the system SHALL bind the citation to that test.
+R. <RETIRED> Superseded by REQ-d00332-E.
 
-S. When a citation in a test file is written directly above a test or a group that holds a test, with only comment lines, blank lines and declaration header lines between them, the system SHALL bind the citation to that test or group.
+S. <RETIRED> Superseded by REQ-d00332-F.
 
-T. If a citation in a test file is neither inside a test nor written directly above a test or a group that holds a test, then the system SHALL bind the citation to no test.
+T. <RETIRED> Superseded by REQ-d00332-G.
 
-U. When a citation is bound to a group of tests, the system SHALL credit the citation with the results of the tests that the group holds.
+U. <RETIRED> Superseded by REQ-d00332-H.
 
-V. The system SHALL end the extent of each test before the comment lines written directly above the next test.
+V. <RETIRED> Superseded by REQ-d00332-I.
 
 W. An estate-wide figure of executed implementation lines that belong to a requirement SHALL count each line once, however many requirements that line serves.
 
 X. Line figures that a surface states beside each other SHALL each be taken over the same set of files.
 
-Y. When a coverage artifact of a test target records a relative source path, the system SHALL resolve that path from the origin that applies to that coverage artifact.
+Y. <RETIRED> Superseded by REQ-d00327-C.
 
-Z. When a result records that its test is declared in a file other than the file that executed it, the system SHALL bind that result to the test at the file and line where the test is declared.
+Z. <RETIRED> Superseded by REQ-d00254-G.
 
 ### Rationale
 
@@ -687,28 +687,17 @@ A test that returned no result is awaiting one, and nothing else is known about 
 
 I weighs a carried result as it weighs a fresh one, because a reporting command executes nothing and reads whatever is on disk: a carried result is still its target's latest artifact, and its verdict stands until a run replaces it. Both stand as results of the test they name, and both are weighed alike. Whether the current tree produced a result is stated beside its verdict (REQ-d00323-F) and never changes it.
 
-K states the outcome the scanning side owes the crediting side: without per-test identity and extent, the line-level dimensions computed here have nothing to intersect implementation ranges against, and a framework's tests can only ever be credited at file granularity. The obligation is deliberately language-neutral — it fixes what attribution must yield, not whether a given language earns built-in support or is served through an external command.
-
-L, M and N cut the external route into a capability, a mechanism, and a precedence rule so each can change independently. L and M differ in kind: L survives a reimplementation that swaps the transport, while M memorializes the transport itself — file paths on standard input, *Attribution Records* on standard output. M is frozen not because it is an invariant but because it is a published integration point that third-party prescan scripts already implement, so breaking it breaks consumers outside this repository. Recording it as its own letter keeps that compatibility obligation targeted: a future transport change, or an added record field, edits M and leaves the capability and precedence untouched, and M can be retired without withdrawing either.
-
-M binds each *Attribution Record* to a starting line. An *Attribution Record* may also carry the test's end line, and that line then ends the test's extent; otherwise the extent is derived from the surrounding *Attribution Records*, V bounds the derivation, and K's extent obligation holds for tests attributed either way.
-
-N resolves per file, not per configuration, because both routes are routinely live in a single run: a project may configure a command that returns *Attribution Records* for one file type while every other scanned test file falls to built-in attribution.
-
 P and Q are about what a partial read produces, not about how it is announced. A file that will not parse in full is common and usually benign -- a coverage tool that cannot re-analyse a template still knows which of its lines ran -- and discarding what was read would lose evidence over a defect in a part of it.
 
 Q is the half that bites. Evidence read in part yields a figure whose basis is not the one a reader assumes: lines that never ran are absent from the denominator, so a file reads as fully covered on the strength of a failure. Stating the distinction against a COMPLETE read rather than against no read at all is deliberate -- nobody acts differently on "could not read" versus "read in part", but a reader comparing a partial figure with a whole one acts on it constantly.
 
-R, S and T give a citation in a test file one place to bind. A test's extent is where a runner's verdict lands, so a citation that reaches no test binds to none: it is not a default for every test in its file, and D's reading of the lines that follow a citation does not reach a test. U exists because a runner reports results for the tests in a group and never for the group itself, and V keeps a comment written above one test out of the extent derived for the test before it.
-
 W and X keep the difference between two line figures a count of lines. A line that two requirements implement is one line that ran, so a figure counting it once per requirement is in a different unit from a figure counting lines in files, and subtracting one from the other gives a number that looks like a count and is not one. The same holds for figures taken over different files: a file left out of one figure and kept in another moves the difference by exactly the lines nobody could measure.
 
-Y anchors a relative path to the origin its producer wrote it from, which REQ-d00327 has each reporter declare and lets a target replace. For coverage that origin is normally the place the measuring tool ran: Flutter writes a path relative to its package, and coverage.py writes one relative to its working directory when it records relative files. Where an artifact is stored says nothing about where it was measured. A target that declares no working directory runs in the repository root, and a member of a federation resolves the working directory of its own targets against its own root. A path that names no scanned file under its origin credits nothing.
-
-Z places a result where its citations are. A project that runs one scenario against several backends declares the test once, in a shared file, and executes it through a small runner file for each backend. The test's `Verifies:` citations live at the declaration, so a result bound to the runner file reaches no test, and a result bound to the runner file at the declared line reaches the wrong one. Where the producer records the declaring location, that location is the test's identity.
+G places a result where its citations are: at the file and line where its test is declared. A project that runs one scenario against several backends declares the test once, in a shared file, and executes it through a small runner file for each backend. The test's `Verifies:` citations live at the declaration, so a result bound to the runner file reaches no test, and a result bound to the runner file at the declared line reaches the wrong one. Where the producer records the declaring location, that location is the test's identity.
 
 ### Changelog
 
+- 2026-10-12 | 812dcbf7 | - | Michael Lewis (<michael@anspar.org>) | TOOL-157: per-test attribution (K-N, R-V) moves to REQ-d00332; a coverage artifact's relative path is read as REQ-d00327-C states (Y); a result binds where its test is declared under G (Z)
 - 2026-10-05 | 06c0380b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-05 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-141: the aggregate signal is named per target working directory (G)
 - 2026-10-05 | 3c5b3090 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -757,7 +746,7 @@ Z places a result where its citations are. A project that runs one scenario agai
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Attribution, Ingestion, and Coverage Crediting* | **Hash**: 06c0380b
+*End* *Test Evidence: Ingestion and Coverage Crediting* | **Hash**: 812dcbf7
 
 ---
 
@@ -1449,7 +1438,7 @@ A project stores the results of its test suites with each change, and a reader v
 
 A. The system SHALL write an *Evidence Snapshot* from the results of a selection of test targets.
 
-B. The system SHALL refuse to write an *Evidence Snapshot* while a selected target's results are absent, stale or in progress, and SHALL name each such target.
+B. When a completed run of the current tree did not execute a selected target in full, the system SHALL refuse to write the *Evidence Snapshot* with a message that names that target.
 
 C. An *Evidence Snapshot* SHALL hold, for each result, the target, the file and line that declare the test, the test name, the file that executed it where that file differs, the outcome, and the skip reason where one is given.
 
@@ -1481,6 +1470,8 @@ O. A target whose results are carried SHALL owe no coverage file in the build th
 
 An *Evidence Snapshot* lets a reader cite a commit's test results without running the suites, and lets CI confirm that the results committed with a change describe that change. H is the primary use: a new run is compared with the committed snapshot, test by test.
 
+B refuses evidence that does not describe the tree the snapshot is bound to. A *Retained Result* describes the tree of an earlier run, so a snapshot holding one would state an outcome that the tree it is bound to never produced.
+
 C excludes durations, timestamps, absolute paths, invocation identifiers and failure messages because each varies between runs of an unchanged tree. E depends on that exclusion. M keeps the measurements a timing guard prints, so they are not lost, and keeps them out of the comparison, so a measurement never fails a verification.
 
 D binds the results to a tree. The digest covers every file git tracks or has staged, apart from the snapshot itself, so a snapshot written over uncommitted work does not match the commit CI checks out. A target's digest covers the same files, because a file git ignores exists only where the run executed, and E would fail between a working tree and a clone.
@@ -1493,7 +1484,7 @@ N follows the rule the *Result Fingerprint* follows: a secret scanner reads a se
 
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: an Evidence Snapshot records a tree's test results and is verified against a new run
 
-*End* *Evidence Snapshot* | **Hash**: 13a665c5
+*End* *Evidence Snapshot* | **Hash**: 71339a95
 
 ## REQ-d00281: Level Vocabulary of a Reported Graph
 
@@ -1573,7 +1564,7 @@ O. When the system reports a run of a test target as in progress, the system SHA
 
 P. A result SHALL keep binding to the test it names after the tree its run executed in moves to another directory.
 
-Q. The system SHALL read the *Retained Results* of a recorded run as results of its test target.
+Q. The system SHALL report as a finding each tracked file of the repository that no test target declares as an input or excludes.
 
 ### Rationale
 
@@ -1583,7 +1574,7 @@ A run empties its output area when it starts and writes its results while it run
 
 A tree that moves after its tests ran keeps its results. A reporter often records absolute paths, and reading such a path against the new root alone matches no test, so the results read as fresh while crediting nothing. P states that property. The *Result Fingerprint* records where its run executed, so a recorded path can be read against that place.
 
-A run need not execute every test of its target. A runner that can tell which tests a change can affect executes those and keeps the earlier run's results for the others. Q reads those *Retained Results* with the run's own results, so the target holds a result for every test. The run's own *Result Fingerprint* decides whether the target is fresh or stale (B, C).
+Q restores a safety that a declared include set gives up. Where every file is an input, a change anywhere stales every target; once targets declare their inputs, a tracked file that no target takes and none excludes is a change that executes nothing, so the project is told to place it. A file excluded from the inputs of every target, such as one the global skip list names, is placed already.
 
 ### Changelog
 
@@ -1592,7 +1583,7 @@ A run need not execute every test of its target. A runner that can tell which te
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the run fingerprint with the Defined Term Result Fingerprint (D)
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: the Evidence Snapshot directory is never an input of a test target (M)
 
-*End* *Test Result Freshness* | **Hash**: 0e15379c
+*End* *Test Result Freshness* | **Hash**: d61efc8a
 
 ## REQ-d00312: Test Target Output Areas
 
@@ -1682,7 +1673,7 @@ A run can execute only the test targets whose results the current tree has made 
 
 ### Assertions
 
-A. A run that executes test targets SHALL be able to ask to execute only the selected test targets whose results are not fresh.
+A. <RETIRED> Superseded by REQ-d00315-B.
 
 B. A run that asks to execute only the targets whose results are not fresh SHALL execute exactly the selected test targets whose results are not fresh.
 
@@ -1704,7 +1695,7 @@ I. If a run that does not execute test targets asks to execute only the targets 
 
 The fingerprint of a target records the inputs its results were produced from, and the tool already judges from those inputs whether the results are stale. A project that wants to execute only what a change affects would otherwise write its own classifier of changes, which duplicates knowledge the tool holds and drifts from it. The project, or its continuous integration, decides when to ask for such a run; the tool supplies the decision.
 
-A narrows the selection a run already makes rather than adding a second way to select targets. The selection still says which targets the run is about, and every target it reaches is expected (REQ-d00283-Q); freshness then decides only which of them need executing. A run that names its targets and does not ask for this executes every target it names (REQ-d00283-I).
+B narrows the selection a run already makes rather than adding a second way to select targets. The selection still says which targets the run is about, and every target it reaches is expected (REQ-d00283-Q); freshness then decides only which of them need executing. A run that names its targets and does not ask for this executes every target it names (REQ-d00283-I).
 
 C keeps one judgement. A target that a report calls stale is a target this run executes, and a target that a report calls fresh is one it carries. D and E answer the cases the judgement leaves open. A target with no results has nothing to carry, and a run that started and recorded no end left results that are partial or missing, so both are executed.
 
@@ -1712,7 +1703,7 @@ F makes the carried results read as they read after a selective run: they are ho
 
 I applies the discipline of REQ-d00283-Y: a request read only by a run that executes targets is refused by a run that executes none, rather than accepted and ignored.
 
-*End* *Stale-Only Test Target Runs* | **Hash**: 890ea4b2
+*End* *Stale-Only Test Target Runs* | **Hash**: f5931d33
 
 ## REQ-d00316: Record of the Test Targets a Run Executed
 
@@ -1785,13 +1776,13 @@ K. When the system reports a figure that carried line coverage contributes to, t
 
 L. The system SHALL treat every *Retained Result* as carried.
 
-M. When the system reports a *Retained Result*, the system SHALL name the earlier run that it was taken from.
+M. When the system reports a *Retained Result*, the system SHALL name the earlier run that executed its test.
 
-N. When the system reports a *Retained Result*, the system SHALL state the reason that the runner recorded for retaining it.
+N. The system SHALL treat as carried the line coverage that a run takes from an earlier run of its test target.
 
 O. When a run holds *Retained Results*, the system SHALL state how many *Retained Results* the run holds.
 
-P. The system SHALL treat as carried the line coverage that a run takes from an earlier run of its test target.
+P. When the results of a test target include a *Retained Result*, the system SHALL report a finding that lists each *Retained Result* of that target.
 
 ### Rationale
 
@@ -1803,14 +1794,16 @@ A result whose fingerprint judgement is stale was produced by a tree other than 
 
 A test target's line coverage is measured by the same run as its results, so it is stale exactly when they are. I, J and K apply the rule for results to the figures line coverage makes -- the executed lines, and the *Assertion* credit taken from them: a figure built only from line coverage the current tree did not produce is marked, and a report of it says why the coverage is stale.
 
-A *Retained Result* describes a tree other than the one being reported on, whatever reason the runner gives for keeping it, so L carries it. M and N let a reader judge whether to trust it. M names the run that produced it, by the tree that run executed in and the time it started. N gives the reason the runner recorded, such as a test impact analysis that found the change cannot affect the test. O states the count, so a reader can tell a target that ran a few tests from one that ran them all. P applies the same rule to line coverage, because the earlier run measured that coverage on another tree.
+A *Retained Result* describes a tree other than the one being reported on, whatever reason the runner gives for keeping it, so L carries it. M lets a reader judge whether to trust it. It names the run that executed the test, by the tree that run executed in and the time it started, however many later runs retained the result in turn. O states the count, so a reader can tell a target that ran a few tests from one that ran them all. N applies the same rule to line coverage, because the earlier run measured that coverage on another tree.
 
-*End* *Carried Result Provenance* | **Hash**: 6c0eeda0
+P lets a project decide how much a *Retained Result* matters to it. Retaining is legitimate in a quick local run, while a release may require evidence from the current tree alone, and the severity of the finding is the project's to set.
+
+*End* *Carried Result Provenance* | **Hash**: 58fde1fb
 
 ## REQ-d00327: Origin of a Recorded Source Path
 
 **Level**: dev | **Status**: Draft | **Implements**: -
-**Refines**: REQ-d00254-F+Y, REQ-d00284-C
+**Refines**: REQ-d00254-F, REQ-d00284-C
 
 A relative source path in a result or in coverage data is read from an origin that is declared, so a result binds to the test it names whichever convention its producer follows.
 
@@ -1820,7 +1813,7 @@ A. Each reporter SHALL declare the origin from which the relative source paths i
 
 B. Where a test target declares an origin for its results or for its coverage data, the system SHALL read that data from the origin the test target declares in place of the origin of the reporter.
 
-C. Before the system matches a result against a test, the system SHALL read each relative source path that the result records from the origin that applies to that result, whether the result records that path as a location or within the name of its test.
+C. The system SHALL read each relative source path that a result or coverage data records from the origin declared for that data.
 
 D. Each results reporter that the tool provides SHALL declare the repository root as its origin.
 
@@ -1840,7 +1833,7 @@ Producers disagree about where a relative path starts. One runner writes a path 
 
 D and E fix the built-in declarations to the origins the tool has always read from, so a project that declares nothing binds as before. B speaks of results and coverage data apart because a target's results and its coverage are usually written by different tools, each with its own convention. In a federation, the repository root is the root of the member that owns the test target.
 
-C reaches every path a result records: the file that declares its test, the file that executed it, and a path that the name of its test carries, as the name form declared under REQ-d00284 reads it. F holds because an *Evidence Snapshot* stores paths already made relative to the repository root, so a target's own declaration would read them a second time.
+C reaches every path a result records: the file that declares its test, the file that executed it, and a path that the name of its test carries, as the name form declared under REQ-d00284 reads it. It reaches each source file that coverage data measures as well. For coverage the origin is normally the place the measuring tool ran: Flutter writes a path relative to its package, and coverage.py writes one relative to its working directory when it records relative files. Where an artifact is stored says nothing about where it was measured. A target that declares no working directory runs in the repository root, and a member of a federation resolves the working directory of its own targets against its own root. A path that names no scanned file under its origin credits nothing. F holds because an *Evidence Snapshot* stores paths already made relative to the repository root, so a target's own declaration would read them a second time.
 
 G extends the report REQ-d00284-C makes of a result matched to no test. A path read from the wrong origin is the commonest cause of such a result, and naming the path and its origin tells an author which declaration to change.
 
@@ -1852,12 +1845,12 @@ I is the counterpart of G for coverage data. Coverage read from the wrong origin
 
 - 2026-10-05 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | Initial authoring: a relative source path in results and coverage data is read from an origin declared per reporter and replaceable per test target
 
-*End* *Origin of a Recorded Source Path* | **Hash**: 0faeeab4
+*End* *Origin of a Recorded Source Path* | **Hash**: 35dcf9d4
 
 ## REQ-d00329: Test File Results From a Command's Exit Status
 
 **Level**: dev | **Status**: Draft | **Implements**: -
-**Refines**: REQ-d00254-A+E+T, REQ-d00274-G+H+I, REQ-d00277-C
+**Refines**: REQ-d00254-A+E, REQ-d00274-G+H+I, REQ-d00277-C, REQ-d00332-G
 
 Some test files report only through the exit status of the command that runs them. This requirement credits such a file at the granularity it can honestly offer: the file.
 
@@ -1895,7 +1888,7 @@ B records the exit status where the target's results already live, so a run that
 
 E identifies a file-level result as REQ-d00294-B identifies a result read from a command's output: by the target, with the file standing in for a position because there is exactly one such result for each file.
 
-F gives a citation in such a file a place to bind. A module-level assertion is inside no test and above none, so under REQ-d00254-T it binds to no test; F binds it to its file instead, and REQ-d00274-G and H report and withhold only a citation that binds to neither. G and H let one target mix both kinds of evidence: where a runner wrote a result naming a test, that result is the more precise one and decides its test; the file-level result binds only to what no such result reaches. Because a file-level result binds to the tests it decides, REQ-d00254-A's condition of a test with no *Result Record* does not hold for them. A test file that a file-level target scans is a file a configured target can execute, so REQ-d00276-E does not report it.
+F gives a citation in such a file a place to bind. A module-level assertion is inside no test and above none, so under REQ-d00332-G it binds to no test; F binds it to its file instead, and REQ-d00274-G and H report and withhold only a citation that binds to neither. G and H let one target mix both kinds of evidence: where a runner wrote a result naming a test, that result is the more precise one and decides its test; the file-level result binds only to what no such result reaches. Because a file-level result binds to the tests it decides, REQ-d00254-A's condition of a test with no *Result Record* does not hold for them. A test file that a file-level target scans is a file a configured target can execute, so REQ-d00276-E does not report it.
 
 J makes a citation bound to a file count wherever a citation bound to a test counts: the file stands as the test REQ-d00277-C asks for, so Passing follows the file's verdict. REQ-d00274-I reports a result that should have named a test and fell back to its file; a file-level *Result Record* is the file's own declared result, so that report does not include it.
 
@@ -1946,3 +1939,104 @@ G protects test impact analysis. A reused reading runs none of the reader's code
 - 2026-10-12 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-000: reuse a file's reading between builds when nothing it depends on changed
 
 *End* *Reuse of File Readings Between Builds* | **Hash**: 53734f81
+
+## REQ-d00332: Per-Test Attribution
+
+**Level**: dev | **Status**: Active | **Implements**: -
+**Refines**: REQ-d00254
+
+A result reaches a requirement through the test it binds to and the citations bound to that test. This requirement states how each scanned test gets its identity and line extent within its file, and where a citation in a test file binds.
+
+### Assertions
+
+A. For every configured test framework, the system SHALL bind each scanned test to its own identity within its source file and to that test's line extent, regardless of the framework's implementation language.
+
+B. Where an external test-prescan command is configured, the system SHALL obtain per-test attribution for the candidate test files from that command.
+
+C. The system SHALL exchange prescan data with a configured external test-prescan command by writing the candidate test file paths to the command's standard input and reading *Attribution Records* from its standard output, each binding one test to its source file, its identity within that file, and its starting line.
+
+D. Where an external test-prescan command returns *Attribution Records* for a scanned test file, the system SHALL bind that file's tests from those *Attribution Records* in preference to the system's built-in attribution.
+
+E. When a citation in a test file is inside a test, the system SHALL bind the citation to that test.
+
+F. When a citation in a test file is written directly above a test or a group that holds a test, with only comment lines, blank lines and declaration header lines between them, the system SHALL bind the citation to that test or group.
+
+G. If a citation in a test file is neither inside a test nor written directly above a test or a group that holds a test, then the system SHALL bind the citation to no test.
+
+H. When a citation is bound to a group of tests, the system SHALL credit the citation with the results of the tests that the group holds.
+
+I. The system SHALL end the extent of each test before the comment lines written directly above the next test.
+
+### Rationale
+
+A states the outcome the scanning side owes the crediting side: without per-test identity and extent, the line-level dimensions of REQ-d00254 have nothing to intersect implementation ranges against, and a framework's tests can only ever be credited at file granularity. The obligation is deliberately language-neutral — it fixes what attribution must yield, not whether a given language earns built-in support or is served through an external command.
+
+B, C and D cut the external route into a capability, a mechanism, and a precedence rule so each can change independently. B and C differ in kind: B survives a reimplementation that swaps the transport, while C memorializes the transport itself — file paths on standard input, *Attribution Records* on standard output. C is frozen not because it is an invariant but because it is a published integration point that third-party prescan scripts already implement, so breaking it breaks consumers outside this repository. Recording it as its own letter keeps that compatibility obligation targeted: a future transport change, or an added record field, edits C and leaves the capability and precedence untouched, and C can be retired without withdrawing either.
+
+C binds each *Attribution Record* to a starting line. An *Attribution Record* may also carry the test's end line, and that line then ends the test's extent; otherwise the extent is derived from the surrounding *Attribution Records*, I bounds the derivation, and A's extent obligation holds for tests attributed either way.
+
+D resolves per file, not per configuration, because both routes are routinely live in a single run: a project may configure a command that returns *Attribution Records* for one file type while every other scanned test file falls to built-in attribution.
+
+E, F and G give a citation in a test file one place to bind. A test's extent is where a runner's verdict lands, so a citation that reaches no test binds to none: it is not a default for every test in its file, and the reading of the lines that follow a citation under REQ-d00254-D does not reach a test. H exists because a runner reports results for the tests in a group and never for the group itself, and I keeps a comment written above one test out of the extent derived for the test before it.
+
+### Changelog
+
+- 2026-10-12 | a5224a66 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-12 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-157: how a scanned test gets its identity and extent, and where a citation in a test file binds, stated apart from ingestion and crediting
+
+*End* *Per-Test Attribution* | **Hash**: a5224a66
+
+## REQ-d00333: Per-Test Result Retention
+
+**Level**: dev | **Status**: Draft | **Implements**: -
+**Refines**: REQ-d00311-B+C, REQ-d00315-B
+
+A run need not execute every test of its test target. This requirement states when a run may take the result of a test from an earlier run instead of executing that test, and what every run owes for the tests it does not retain.
+
+### Assertions
+
+A. The system SHALL read the *Retained Results* of a recorded run as results of its test target.
+
+B. A run SHALL take a *Retained Result* for a test only where every file of the *Dependency Evidence* of that test holds the content it held when the run that last executed that test began.
+
+C. A test target SHALL be able to declare the source of the *Dependency Evidence* of its tests.
+
+D. If the *Dependency Evidence* of a test holds a file of the repository that is not an input of its test target, then the system SHALL report that file as a finding.
+
+E. A run SHALL take a *Retained Result* only from an earlier run that recorded the same environment and configuration of its test target as the current run.
+
+F. A run SHALL take a *Retained Result* only from a run that recorded its end.
+
+G. A run SHALL take as a *Baseline Run* only a recorded run of a tree identical to a commit.
+
+H. A run SHALL take a *Retained Result* only for a test whose last execution passed or was skipped.
+
+I. A run of a test target SHALL fail when a test of the current tree has neither a result from that run nor a *Retained Result*.
+
+J. When a run asks to execute every test of its test targets, that run SHALL take no *Retained Result*.
+
+K. The system SHALL take line coverage of a source file from an earlier run only where that file holds the content it held in the run that measured that coverage.
+
+### Rationale
+
+A runner that can tell which tests a change can affect executes those and keeps the earlier run's results for the others. A reads those *Retained Results* with the run's own results, so the target holds a result for every test. The run's own *Result Fingerprint* decides whether the target is fresh or stale (REQ-d00311-B and C).
+
+B decides which results a run may retain. A *Retained Result* is honest only while nothing that test depends on differs from what it was when the test last executed, and the *Dependency Evidence* errs toward holding too much: what its source cannot see counts as a dependency, so an unobserved change makes the test execute rather than vanish. B compares content rather than times, because a *Baseline Run* was made on another tree, and it compares against the last execution of the test, so a chain of partial runs never judges a test against an intermediate run that only retained it.
+
+C lets a project name where its evidence comes from: imports, per-test coverage, or tooling of its own. A source the project declares serves tests in every language alike.
+
+D reports a dependency that the declared inputs of its target miss. Such a file would leave the target fresh after it changed, so the declaration needs correcting, and naming the file says where. A file that the project excluded is reported too, because the exclusion claims that the file cannot change the results and the evidence shows that it can. Files outside the repository, such as an interpreter or an installed package, are the concern of E.
+
+E and F cover what the evidence cannot see. The environment of a test target is what the project declares can change its outcomes without changing a file of the repository, such as the versions of its toolchain and the packages installed for it. A different environment or target configuration can change every outcome, and a run that recorded no end may hold results that are partial or that describe a run that crashed.
+
+G keeps a *Baseline Run* trustworthy for every tree that adopts it, whatever carried it there. A tree identical to a commit is one that a later tree can descend from, and B then compares that later tree with it file by file.
+
+H leaves only passes and skips to be retained. A test whose last result was a failure, an error or nothing, and a test that has never executed, is executed on every run until it passes or is skipped, so every result a run retains is a pass or a skip and the exit status of the run is the verdict of the whole target.
+
+I closes the run. A test that the run neither retained nor got a result for might have crashed the runner, never started, or been missed by the runner's selection, and an earlier result does not stand in for it. I speaks of tests of the current tree, because a test that the tree no longer holds has no result by being gone.
+
+J is the run for a project that wants evidence from the current tree alone, such as a release. It composes with a stale-only run (REQ-d00315-B): a run that asks for both executes every test of each target whose results are not fresh.
+
+K keeps line coverage attached to the lines that ran. It compares against the run that measured the coverage, so a chain of runs that each carried it forward never hides a change. Once a source file changes, the lines an earlier run covered no longer correspond to the lines of the file, and every test that reaches the file executes again, so only the current run's measurement describes it.
+
+*End* *Per-Test Result Retention* | **Hash**: 2daa6310

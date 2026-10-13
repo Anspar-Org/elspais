@@ -590,7 +590,7 @@ class TestCoveragePathsResolveAgainstTargetWorkingDirectory:
     """A coverage artifact's relative source paths are read from the
     directory its target ran in, not from where the artifact is stored."""
 
-    # Verifies: REQ-d00254-Y
+    # Verifies: REQ-d00327-C
     @pytest.mark.parametrize(
         "cwd,code_file,recorded",
         [
@@ -614,7 +614,7 @@ class TestCoveragePathsResolveAgainstTargetWorkingDirectory:
         assert node is not None
         assert node.get_field("executable_lines") == 2
 
-    # Verifies: REQ-d00254-Y
+    # Verifies: REQ-d00327-C
     def test_relative_coverage_json_path_credits_file_under_working_dir(
         self, tmp_path: Path
     ) -> None:
@@ -640,7 +640,7 @@ class TestCoveragePathsResolveAgainstTargetWorkingDirectory:
 
         assert _credited(graph) == {"app/lib/x.py": {1: 1, 2: 1, 3: 0}}
 
-    # Verifies: REQ-d00254-Y
+    # Verifies: REQ-d00327-C
     def test_absolute_path_is_read_as_it_stands(self, tmp_path: Path) -> None:
         config_file = _write_cwd_project(tmp_path, ["app/lib/x.py"], cwd="app")
         _write_lcov(_unit_folder(tmp_path) / "lcov.info", str(tmp_path / "app" / "lib" / "x.py"))
@@ -649,7 +649,7 @@ class TestCoveragePathsResolveAgainstTargetWorkingDirectory:
 
         assert _credited(graph) == {"app/lib/x.py": {1: 1, 2: 1}}
 
-    # Verifies: REQ-d00254-Y
+    # Verifies: REQ-d00327-C
     @pytest.mark.parametrize(
         "recorded",
         [
@@ -671,7 +671,7 @@ class TestCoveragePathsResolveAgainstTargetWorkingDirectory:
 
         assert _credited(graph) == {}
 
-    # Verifies: REQ-d00254-Y
+    # Verifies: REQ-d00327-C
     def test_relative_path_is_not_also_read_from_repo_root(self, tmp_path: Path) -> None:
         """With a scanned file at the same path from the root, the working
         directory alone decides which file is credited."""
@@ -688,7 +688,7 @@ class TestCoveragePathsResolveAgainstTargetWorkingDirectory:
         assert graph.find_by_id(make_file_id("REQ", "lib/x.py")) is not None
         assert _credited(graph) == {"app/lib/x.py": {1: 1, 2: 1}}
 
-    # Verifies: REQ-d00254-Y
+    # Verifies: REQ-d00327-C
     def test_federation_member_reads_from_its_own_target_working_dir(self, tmp_path: Path) -> None:
         from tests.federation_repos import _git, make_repo
 
@@ -770,7 +770,7 @@ class TestCoveragePathsFollowTheDeclaredOrigin:
     """A coverage artifact's relative paths are read from the origin its
     reporter declares, or from the one its target declares in its place."""
 
-    # Verifies: REQ-d00327-B, REQ-d00254-Y
+    # Verifies: REQ-d00327-B, REQ-d00327-C
     @pytest.mark.parametrize("fmt", ["lcov", "coverage-json"])
     def test_a_target_declaring_the_root_reads_repo_relative_coverage(
         self, tmp_path: Path, fmt: str
@@ -790,7 +790,7 @@ class TestCoveragePathsFollowTheDeclaredOrigin:
 
         assert _credited(graph) == {"app/lib/x.py": {1: 1, 2: 1}}
 
-    # Verifies: REQ-d00327-B, REQ-d00254-Y
+    # Verifies: REQ-d00327-B, REQ-d00327-C
     @pytest.mark.parametrize(
         "declared,credited",
         [

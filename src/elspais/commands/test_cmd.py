@@ -1,4 +1,4 @@
-# Implements: REQ-d00249-H+I+J+K, REQ-d00315-A+G+H
+# Implements: REQ-d00249-H+I+J+K, REQ-d00315-B+G+H
 """``elspais test``: execute test targets and record their results, evaluating no check.
 
 A project that splits its suite across parallel jobs runs ``elspais test``

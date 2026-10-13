@@ -107,7 +107,7 @@ def _one_test_stream(test_fields: dict) -> str:
     )
 
 
-# Verifies: REQ-d00254-E, REQ-d00254-Z, REQ-d00294-G
+# Verifies: REQ-d00254-E, REQ-d00254-G, REQ-d00294-G
 @pytest.mark.parametrize(
     "test_fields,source_path,line,root_path,root_line",
     [
