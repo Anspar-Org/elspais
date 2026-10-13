@@ -925,7 +925,8 @@ match = "source"
 # changed, and retains the earlier results of the rest. The command holds
 # {selection}, which the selected test files replace.
 # [scanning.test.targets.units]
-# dependencies   = { source = "declared" }   # or { source = "command", command = "..." }
+# dependencies   = { source = "declared" }   # or "imports:dart", or
+#                                            # { source = "command", command = "..." }
 # full_selection = ""                         # what {selection} becomes on a run of every test
 ```
 
@@ -1476,13 +1477,14 @@ cwd      = "apps/app"
 command  = "flutter test --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.jsonl {selection}"
 reporter = "flutter-machine"
 results  = "machine.jsonl"
+inputs   = { skip_dirs = [".dart_tool", "build"] }
 environment_probes = [
   { name = "flutter",     command = "flutter --version --machine" },
   { name = "dart-format", command = "dart format --version", affects_retention = false },
 ]
 
 [scanning.test.targets.units]
-dependencies   = { source = "declared" }
+dependencies   = { source = "imports:dart" }
 full_selection = ""
 ```
 
@@ -1503,7 +1505,18 @@ retained otherwise:
   result that binds to no single test of it, such as a failure in a
   file-level setup step, or ran in a command that exited non-zero while no
   result it wrote failed. Only a pass or a skip is retained.
-- The dependency source gave no evidence for it.
+- The dependency source gave no evidence for it. The run states the reason
+  the source gave, one line per reason, on every run, because the next
+  stale-only run is decided by it:
+
+  ```text
+  units: app: no dependency evidence for 14 test files: apps/app/.dart_tool/package_config.json is older than apps/app/pubspec.yaml; run `dart pub get` or `flutter pub get` in apps/app
+  ```
+
+  Once the command has ended, the source is asked again about those test
+  files. Where the run itself removed the cause, such as a test runner that
+  resolved its packages again, the run records their dependencies, so the
+  next stale-only run can retain them.
 - A file its evidence reaches changed since the run that last executed it.
 - An input of the target that the dependency source does not observe changed.
   Such an input is a dependency of every unit, so its change executes them
@@ -1514,8 +1527,9 @@ retained otherwise:
 A target runs whole -- every unit executes and nothing is retained -- when the
 earlier run recorded no end, when inputs changed while it ran, when it left no
 readable *Unit Ledger* (below), when the `units` table or the dependency
-source changed since, or when the dependency source cannot answer. The run
-states why on stderr, before the command starts:
+source changed since, or when the dependency source cannot answer or gives
+no evidence for any unit. The run states why on stderr, before the command
+starts:
 
 ```text
 stale-only: executing app; carrying fresh results of none
@@ -1556,11 +1570,15 @@ language reaches elspais through this one setting.
 | Source | Each unit depends on | Observes, by default |
 |--------|----------------------|----------------------|
 | `declared` | its own test file | the test files the target scans |
+| `imports:dart` | the files its `import`, `export` and `part` directives reach | the Dart files a test loads only through an import, and the test files |
 | `command`  | what the project's command prints | nothing; declare `observes` |
 
 `declared` states that no test file depends on another test file. A change to
 a test file then executes that file alone, and a change to any other input
 executes every unit. It runs nothing, so it serves a target in any language.
+
+`imports:dart` reads a Dart or Flutter test file's dependencies from its
+source, and is described below.
 
 `command` runs a program of the project's own:
 
@@ -1591,6 +1609,94 @@ only execute more.
 A file a unit depends on that is not an input of its target is reported as
 `tests.dependency_outside_inputs`, because a change to it would leave the
 target fresh. Add it to the target's `inputs`.
+
+### The imports:dart source
+
+```toml
+[scanning.test.targets.units]
+dependencies = { source = "imports:dart" }
+```
+
+It takes no other setting and needs no extra. It reads files and runs
+nothing, so it needs no Dart toolchain. The target must declare an
+environment probe that affects retention, such as
+`flutter --version --machine` or `dart --version`: every Dart test loads the
+SDK, which lies outside the repository, so without a probe a change of SDK
+would go unseen. Where the target declares none, every unit executes and the
+run names the probe to add. Each unit depends on:
+
+- the files its `import`, `export` and `part` directives reach, and theirs in
+  turn, with every branch of a conditional import
+  (`import 'a.dart' if (dart.library.io) 'b.dart'`), because the branch the
+  compiler takes depends on the platform the test runs on;
+- the nearest `flutter_test_config.dart`, looked for from the test file's
+  directory up to its package root, which `flutter test` loads around the
+  test;
+- `hook/build.dart` and `hook/link.dart` of each package in the repository
+  that the test's program uses, which run when the program is built.
+
+A `package:` URI resolves as the compiler resolves it: through the package
+configuration of the test's program, the `.dart_tool/package_config.json`
+that lists the package holding the test file -- the package's own, or its
+pub workspace's. Directives in comments and strings are not read, and
+neither is anything after the file's first declaration, where Dart allows no
+directive.
+
+A package in the pub cache or in the Flutter SDK is part of the environment:
+`pubspec.lock` pins the first, and the environment probe covers the second.
+That holds wherever the pub cache lies, inside the repository as well. Such
+a package is still read, because one can import a package of the
+repository, where an override or a pub workspace places it there. A
+repository file reached through it is a dependency; the package's own files
+are not.
+
+Where it cannot be sure what a test file reaches, the source gives no
+evidence for it, so it executes, and the run states why:
+
+- No `pubspec.yaml` lies above the test file, or no package configuration
+  lists its package: run `dart pub get` or `flutter pub get` there.
+- The package configuration is older than a `pubspec.yaml`, `pubspec.lock`
+  or `pubspec_overrides.yaml` beside it, or than the `pubspec.yaml` of a
+  repository package it lists. The test runner would resolve the packages
+  again, so what the configuration says may not be what the run uses. A
+  command that runs `pub get` itself, as `flutter test` does unless given
+  `--no-pub`, removes the cause, and the source is asked again once it ends.
+  A command given `--no-pub` leaves the configuration stale; run `pub get`
+  before it. The comparison is wider than `flutter test`'s own, so a package
+  can execute in full once where `flutter test` saw no need to resolve.
+- The configuration places a package outside the repository, the pub cache
+  and the Flutter SDK, such as a sibling checkout named in
+  `pubspec_overrides.yaml`. elspais does not see that checkout change, so
+  every test file of that program executes.
+- A file it reaches, in the repository or in the environment, cannot be read
+  or does not exist, such as generated code not built yet or a pub cache not
+  filled; a directive does not read, such as a URI that interpolates; or a
+  URI names a package the configuration does not list, or a scheme it does
+  not follow.
+
+Every other test file keeps its evidence.
+
+By default it observes, among the target's inputs, the Dart files a test
+loads only through an import: those under a `lib`, `hook` or
+`integration_test` directory, each `flutter_test_config.dart`, and the test
+files. A change to any other input executes every unit: `pubspec.yaml`,
+assets, golden images, `dart_test.yaml`, and the Dart files a test can run
+or read without importing them -- a program under `bin` or `tool`, a
+helper or fixture under `test`. An `observes` the project
+declares replaces the default. Declare one only for Dart files that no test
+loads except through an import, because a change to an observed file that
+no test's imports reach executes nothing:
+
+```toml
+[scanning.test.targets.units]
+dependencies = { source = "imports:dart" }
+observes     = { directories = ["."], file_patterns = ["lib/*.dart", "*_test.dart", "test/helpers/*.dart"] }
+```
+
+Put `.dart_tool` in the target's `inputs.skip_dirs`. The package
+configuration holds paths of the machine that wrote it, so as an input it
+would differ on every machine and between a run and a *Baseline Run*. The
+source still reads it.
 
 ### Giving the command its selection
 

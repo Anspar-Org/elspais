@@ -349,7 +349,8 @@ _FIELD_COMMENTS: dict[str, str] = {
         " dependencies, observes, receives, full_selection (default: unset)"
     ),
     "scanning.test.targets.units.dependencies": (
-        '{ source = "declared" } | { source = "command", command = "..." } --'
+        '{ source = "declared" } | { source = "imports:dart" } |'
+        ' { source = "command", command = "..." } --'
         " where each test file's dependencies come from"
     ),
     "scanning.test.targets.units.observes": (
@@ -959,6 +960,14 @@ def generate_config(
         'coverage = "lcov.info"',
         'match   = "source"',
         'credit_coverage = "verified"',
+        "# Tip: write the machine output to a `results` file, put {selection}",
+        "#   where the test files go, skip .dart_tool in `inputs`, declare an",
+        '#   environment probe such as { name = "flutter", command =',
+        '#   "flutter --version --machine" }, and declare units, so a',
+        "#   stale-only run executes only the test files whose imports",
+        "#   changed: [scanning.test.targets.units]",
+        '#   dependencies = { source = "imports:dart" }',
+        "#   See: elspais docs test-targets (The imports:dart source)",
         "",
         "-- Package with a shared DB --",
         "--concurrency=1 serialises the test files inside this package.",

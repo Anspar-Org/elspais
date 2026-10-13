@@ -38,7 +38,7 @@ def _request(root: Path, units: tuple[str, ...], settings=None) -> SourceRequest
 
 # Verifies: REQ-d00333-C
 def test_every_registered_source_is_found_by_its_name():
-    assert set(source_names()) >= {"declared", "command"}
+    assert set(source_names()) >= {"declared", "command", "imports:dart"}
     for name in source_names():
         assert get_source(name).name == name
 

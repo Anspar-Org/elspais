@@ -2662,6 +2662,86 @@ class TestUnitsRetainResults:
         served = run_elspais("checks", "--tests", "--lenient", cwd=scratch)
         assert "via daemon" in served.stdout, "the answers did not come from a daemon"
 
+    _DART_RUNNER = (
+        "import json, os, pathlib, re, sys\n"
+        "out = pathlib.Path(os.environ['ELSPAIS_TARGET_OUTPUT'])\n"
+        "paths = []\n"
+        "for arg in sys.argv[1:]:\n"
+        "    p = pathlib.Path(arg)\n"
+        "    paths += sorted(p.rglob('*_test.dart')) if p.is_dir() else [p]\n"
+        "lines = []\n"
+        "for p in paths:\n"
+        "    for n, text in enumerate(p.read_text().splitlines(), 1):\n"
+        "        m = re.match(r\"\\s*test\\('(\\w+)'\", text)\n"
+        "        if m:\n"
+        "            lines.append(json.dumps({'target': 'units', 'file': p.as_posix(),\n"
+        "                'line': n, 'name': m.group(1), 'outcome': 'passed'}))\n"
+        "(out / 'results.jsonl').write_text(''.join(l + '\\n' for l in lines))\n"
+        "print('ran', *[p.as_posix() for p in paths])\n"
+    )
+
+    # Verifies: REQ-d00333-B+C
+    def test_a_dart_library_edit_executes_only_the_test_files_importing_it(self, tmp_path):
+        import os
+
+        scratch = self._copy(tmp_path)
+        (tmp_path / "runner.py").write_text(self._DART_RUNNER, encoding="utf-8")
+        toml = scratch / ".elspais.toml"
+        text = toml.read_text(encoding="utf-8")
+        text = text.replace(
+            'directories = ["tests"]\nfile_patterns = ["test_*.py", "*_test.py"]\n',
+            'directories = ["dart/test"]\nfile_patterns = ["*_test.dart"]\n',
+        )
+        text = text.replace('source = "declared"', 'source = "imports:dart"')
+        text = text.replace('full_selection = "tests"', 'full_selection = "dart/test"')
+        # The SDK the tests load is environment, which a probe covers.
+        text = text.replace(
+            'name = "units"\n',
+            'name = "units"\nenvironment_probes = [{ name = "sdk", command = "echo 3" }]\n',
+        )
+        toml.write_text(text, encoding="utf-8")
+        # The package: two test files, each importing its own library file,
+        # and a package configuration newer than its pubspec files.
+        files = {
+            "pubspec.yaml": "name: app\n",
+            "pubspec.lock": "packages: {}\n",
+            "lib/a.dart": "int a = 1;\n",
+            "lib/b.dart": "int b = 1;\n",
+            ".dart_tool/package_config.json": json.dumps(
+                {
+                    "configVersion": 2,
+                    "packages": [{"name": "app", "rootUri": "../", "packageUri": "lib/"}],
+                }
+            ),
+        }
+        for name in ("a", "b"):
+            files[f"test/{name}_test.dart"] = (
+                f"import 'package:app/{name}.dart';\n\n"
+                "void main() {\n"
+                "  // Verifies: REQ-d00001-A\n"
+                f"  test('{name}', () {{}});\n"
+                "}\n"
+            )
+        t0 = 1_700_000_000
+        for rel, body in files.items():
+            path = scratch / "dart" / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(body, encoding="utf-8")
+            later = 100 if rel.endswith("package_config.json") else 0
+            os.utime(path, (t0, t0 + later))
+
+        first = self._test(scratch, "--stale-only")
+        assert first.returncode == 0, first.stderr
+        assert "ran dart/test/a_test.dart dart/test/b_test.dart" in first.stderr + first.stdout
+        assert "no dependency evidence" not in first.stderr
+
+        (scratch / "dart" / "lib" / "a.dart").write_text("int a = 2;\n", encoding="utf-8")
+        second = self._test(scratch, "--stale-only")
+
+        assert second.returncode == 0, second.stderr
+        assert "units: units: 1 of 2 test files; 1 retained" in second.stderr
+        assert "ran dart/test/a_test.dart\n" in second.stderr + second.stdout
+
 
 class TestServedGraphReadsResultsWrittenWhileServing:
     """Results a run writes while the daemon serves the project reach the

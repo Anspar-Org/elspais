@@ -192,13 +192,13 @@ def test_a_windows_file_url_keeps_its_drive_letter(monkeypatch):
     the Windows behaviour is exercised on any platform."""
     import warnings
 
-    from elspais.graph.parsers.results import flutter_machine
+    from elspais.graph.parsers.results import placement
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         import nturl2path
 
-    monkeypatch.setattr(flutter_machine, "url2pathname", nturl2path.url2pathname)
+    monkeypatch.setattr(placement, "url2pathname", nturl2path.url2pathname)
 
     (record,) = FlutterMachineParser().parse(
         _one_test_stream({"line": 3, "url": "file:///C:/proj/my%20app/test/a_test.dart"})
@@ -215,9 +215,9 @@ def test_a_windows_file_url_keeps_its_drive_letter(monkeypatch):
     ids=["package", "dart"],
 )
 def test_a_url_that_is_not_a_file_url_names_no_path(url):
-    from elspais.graph.parsers.results.flutter_machine import _file_url_path
+    from elspais.graph.parsers.results.placement import file_url_path
 
-    assert _file_url_path(url) is None
+    assert file_url_path(url) is None
 
 
 # ---------------------------------------------------------------------------

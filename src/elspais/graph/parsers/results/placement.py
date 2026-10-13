@@ -11,6 +11,23 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from urllib.parse import urlparse
+from urllib.request import url2pathname
+
+
+# Implements: REQ-d00284-D, REQ-d00333-C
+def file_url_path(url: object) -> str | None:
+    """The local path a ``file:`` URL names, or ``None`` for any other value.
+
+    The Dart toolchain writes ``file:///abs/path``, and ``file:///C:/abs/path``
+    on Windows. The platform's own conversion turns the URL path into a local
+    path, so a Windows drive letter is kept. A ``package:`` or ``dart:`` URL
+    names no file.
+    """
+    if not isinstance(url, str):
+        return None
+    parsed = urlparse(url)
+    return url2pathname(parsed.path) if parsed.scheme == "file" else None
 
 
 # Implements: REQ-d00327-C

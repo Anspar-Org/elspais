@@ -733,3 +733,181 @@ def test_a_command_that_failed_with_no_failing_result_leaves_nothing_retainable(
     (root / "tests" / "test_a.py").write_text(_test_file("a", "assert 1"), encoding="utf-8")
     second, _ = _run(root, config)
     assert second.plan.retained == {}
+
+
+# A stand-in Dart test runner: each `test('name', ...)` line of each Dart test
+# file it is handed (or finds under a directory it is handed) passes.
+# RUNNER_PUB_GET names a package configuration it brings up to date first, as
+# `flutter test` resolves packages before it tests.
+_DART_RUNNER = """
+import json, os, pathlib, re, sys, time
+out = pathlib.Path(os.environ["ELSPAIS_TARGET_OUTPUT"])
+if os.environ.get("RUNNER_PUB_GET"):
+    later = time.time() + 1000
+    os.utime(os.environ["RUNNER_PUB_GET"], (later, later))
+paths = []
+for arg in sys.argv[1:]:
+    p = pathlib.Path(arg)
+    paths += sorted(p.rglob("*_test.dart")) if p.is_dir() else [p]
+log = pathlib.Path(os.environ["RUNNER_LOG"])
+log.write_text((log.read_text() if log.exists() else "") + " ".join(map(str, paths)) + "\\n")
+lines = []
+for p in paths:
+    for n, line in enumerate(p.read_text().splitlines(), 1):
+        m = re.match(r"\\s*test\\('(\\w+)'", line)
+        if m:
+            lines.append(json.dumps({"target": "unit", "file": p.as_posix(), "line": n,
+                                     "name": m.group(1), "outcome": "passed"}))
+(out / "results.jsonl").write_text("".join(l + "\\n" for l in lines))
+"""
+
+_DART_T0 = 1_700_000_000
+
+
+def _dart_test(lib: str) -> str:
+    return (
+        f"import '../lib/{lib}';\n\n"
+        "void main() {\n"
+        "  // Verifies: REQ-d00001-A\n"
+        f"  test('{lib.removesuffix('.dart')}', () {{}});\n"
+        "}\n"
+    )
+
+
+def _dart_project(tmp_path: Path) -> tuple[Path, dict]:
+    """A Dart package whose two test files each import their own library file."""
+    import os
+
+    root = tmp_path / "repo"
+    files = {
+        "spec/dev.md": _SPEC,
+        "app/pubspec.yaml": "name: app\n",
+        "app/pubspec.lock": "packages: {}\n",
+        "app/lib/a.dart": "int a = 1;\n",
+        "app/lib/b.dart": "int b = 1;\n",
+        "app/test/a_test.dart": _dart_test("a.dart"),
+        "app/test/b_test.dart": _dart_test("b.dart"),
+        "assets/data.txt": "one\n",
+        "app/.dart_tool/package_config.json": json.dumps(
+            {"configVersion": 2, "packages": [{"name": "app", "rootUri": "../"}]}
+        ),
+    }
+    for rel, text in files.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text, encoding="utf-8")
+        later = 100 if rel.endswith("package_config.json") else 0
+        os.utime(root / rel, (_DART_T0, _DART_T0 + later))
+    runner = tmp_path / "dart_runner.py"
+    runner.write_text(textwrap.dedent(_DART_RUNNER), encoding="utf-8")
+    target = {
+        "name": "unit",
+        "reporter": "evidence-snapshot",
+        "results": "results.jsonl",
+        "command": f"{sys.executable} {runner} {{selection}}",
+        "inputs": {"skip_dirs": [".dart_tool"]},
+        "units": {"dependencies": {"source": "imports:dart"}, "full_selection": "app/test"},
+        "environment_probes": [
+            {"name": "sdk", "command": "echo 3"},
+            {"name": "tool", "command": "printenv TOOL_VERSION", "affects_retention": False},
+        ],
+    }
+    config = {
+        "version": 5,
+        "project": {"name": "dart", "namespace": "REQ"},
+        "scanning": {
+            "spec": {"directories": ["spec"]},
+            "code": {"directories": ["app/lib"]},
+            "test": {
+                "enabled": True,
+                "directories": ["app/test"],
+                "file_patterns": ["*_test.dart"],
+                "targets": [target],
+            },
+        },
+    }
+    _write_config(root, config)
+    return root, config
+
+
+# Verifies: REQ-d00333-B+C
+def test_a_dart_library_edit_executes_only_the_test_files_importing_it(tmp_path):
+    root, config = _dart_project(tmp_path)
+    first, failures = _run(root, config)
+    assert failures == []
+    assert first.plan.whole
+    assert first.plan.evidence.files["app/test/a_test.dart"] == {
+        "app/test/a_test.dart",
+        "app/lib/a.dart",
+    }
+    (root / "app/lib/a.dart").write_text("int a = 2;\n", encoding="utf-8")
+
+    second, failures = _run(root, config)
+
+    assert failures == []
+    assert sorted(second.plan.selected) == ["app/test/a_test.dart"]
+    assert "app/lib/a.dart changed" in second.plan.selected["app/test/a_test.dart"]
+    assert sorted(second.plan.retained) == ["app/test/b_test.dart"]
+    assert _executed(tmp_path)[-1] == "app/test/a_test.dart"
+
+
+# Verifies: REQ-d00333-B+C
+def test_an_input_the_dart_source_does_not_observe_executes_every_test_file(tmp_path):
+    root, config = _dart_project(tmp_path)
+    _run(root, config)
+    (root / "assets/data.txt").write_text("two\n", encoding="utf-8")
+
+    second, _ = _run(root, config)
+
+    assert sorted(second.plan.selected) == ["app/test/a_test.dart", "app/test/b_test.dart"]
+    assert second.plan.whole
+    assert _executed(tmp_path)[-1] == "app/test/a_test.dart app/test/b_test.dart"
+
+
+# Verifies: REQ-d00311-E, REQ-d00333-B
+@pytest.mark.parametrize("pub_get", [True, False])
+def test_a_run_whose_source_holds_no_evidence_states_why_and_asks_again_once_it_ends(
+    tmp_path, monkeypatch, capsys, pub_get
+):
+    import os
+
+    root, config = _dart_project(tmp_path)
+    resolved = root / "app/.dart_tool/package_config.json"
+    os.utime(root / "app/pubspec.yaml", (_DART_T0, _DART_T0 + 200))
+    if pub_get:
+        monkeypatch.setenv("RUNNER_PUB_GET", str(resolved))
+    why = (
+        "app/.dart_tool/package_config.json is older than app/pubspec.yaml; "
+        "run `dart pub get` or `flutter pub get` in app"
+    )
+
+    first, failures = _run(root, config)
+
+    assert failures == []
+    assert first.plan.whole
+    assert first.plan.whole_reason == (
+        f"the dependency source gave no evidence for any test file: {why}"
+    )
+    err = capsys.readouterr().err
+    assert f"units: unit: no dependency evidence for 2 test files: {why}\n" in err
+    ledger = read_ledger(_area(root, config))
+    # The source answered, so the ledger records no failure of it.
+    assert first.plan.source_failed == ""
+    assert ledger.source_failed == ""
+    observed = ledger.units["app/test/a_test.dart"].observed
+    if pub_get:
+        # Asked again after the run, the source answers: the digests are
+        # those of the tree the run started from.
+        assert set(observed) == {"app/test/a_test.dart", "app/lib/a.dart"}
+    else:
+        assert observed == {}
+    # Stale through a probe that leaves retention unaffected.
+    monkeypatch.setenv("TOOL_VERSION", "2")
+    monkeypatch.delenv("RUNNER_PUB_GET", raising=False)
+
+    second, _ = _run(root, config)
+
+    if pub_get:
+        assert sorted(second.plan.retained) == ["app/test/a_test.dart", "app/test/b_test.dart"]
+    else:
+        assert second.plan.whole
+        assert second.plan.whole_reason.endswith(why)

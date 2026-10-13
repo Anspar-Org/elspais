@@ -38,23 +38,9 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from urllib.parse import urlparse
-from urllib.request import url2pathname
 
 from elspais.graph.parsers.results.diagnostics import DiagnosticRecorder
-
-
-def _file_url_path(url: Any) -> str | None:
-    """The path a ``file:`` URL names, or ``None`` for any other URL.
-
-    Dart writes ``file:///abs/path``, and ``file:///C:/abs/path`` on Windows.
-    The platform's own conversion turns the URL path into a local path, so a
-    Windows drive letter is kept. A ``package:`` or ``dart:`` URL names no
-    file of the project.
-    """
-    if isinstance(url, str) and url.startswith("file://"):
-        return url2pathname(urlparse(url).path)
-    return None
+from elspais.graph.parsers.results.placement import file_url_path
 
 
 # Implements: REQ-d00284-D
@@ -64,7 +50,7 @@ def _dart_source_path(url: Any) -> str | None:
     Only such a file holds the line a test is declared on. A compiled
     ``.dart.js`` file, which a browser run reports, holds lines of no source.
     """
-    path = _file_url_path(url)
+    path = file_url_path(url)
     return path if path is not None and path.endswith(".dart") else None
 
 

@@ -594,6 +594,11 @@ def _begin_target(
     if plan is not None:
         # Implements: REQ-d00315-H, REQ-d00323-O
         emit(f"units: {target.name}: {plan.describe()}\n")
+        # Implements: REQ-d00311-E, REQ-d00333-B
+        # Why the source holds no evidence for a test file decides the next
+        # stale-only run too, so it is stated on every planned run.
+        for line in plan.describe_no_evidence():
+            emit(f"units: {target.name}: {line}\n")
     if plan is not None and not plan.whole and not plan.selected:
         emit(f"\n>>> '{target.name}' target: every test retained; the command does not run\n")
     else:

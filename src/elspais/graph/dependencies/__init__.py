@@ -28,7 +28,11 @@ declares. Every other reason a source cannot answer raises
 
 A unit that the evidence omits has no recorded evidence. The retention
 judgement executes such a unit, whatever the source, because what a source
-cannot see counts as a dependency.
+cannot see counts as a dependency. A source that knows why it holds no
+evidence for a unit says so in ``Evidence.no_evidence``, and the run states
+it, so a project can see what would end the re-execution. A source prefers
+leaving out the units an uncertainty reaches to raising
+:class:`SourceFailed`, where the uncertainty reaches only some of them.
 
 This package reads no configuration. A caller hands a source what it needs.
 """
@@ -75,6 +79,9 @@ class SourceRequest:
     ``units`` are repo-relative test files. ``inputs`` are the target's file
     inputs, repo-relative. ``observed`` are the inputs the source observes.
     ``settings`` is the source's own validated settings model.
+    ``environment_probes`` names the target's environment probes whose change
+    makes its results stale, so a source whose tests load something outside
+    the repository can tell whether a change to it would be seen.
     """
 
     repo_root: Path
@@ -84,18 +91,23 @@ class SourceRequest:
     inputs: frozenset[str]
     observed: frozenset[str]
     settings: BaseModel
+    environment_probes: tuple[str, ...] = ()
 
 
+# Implements: REQ-d00311-E, REQ-d00333-B+C
 @dataclass(frozen=True)
 class Evidence:
-    """The files each unit reaches, repo-relative.
+    """The files each unit reaches, repo-relative, and why a unit has none.
 
-    A unit the mapping omits has no recorded evidence, so it executes. A path
-    may lie outside the target's inputs; the judgement reports it and counts
-    it as changed.
+    A unit ``files`` omits has no recorded evidence, so it executes.
+    ``no_evidence`` gives, for such a unit, the reason the source holds none,
+    worded by its cause so that units sharing a cause share the words; the
+    run states it. A path may lie outside the target's inputs; the judgement
+    reports it and counts it as changed.
     """
 
     files: Mapping[str, frozenset[str]] = field(default_factory=dict)
+    no_evidence: Mapping[str, str] = field(default_factory=dict)
 
 
 class SourceFailed(Exception):
@@ -140,6 +152,7 @@ class DependencySource(Protocol):
 #: only when its source is asked for.
 _SOURCES: dict[str, str] = {
     "declared": "elspais.graph.dependencies.declared:DeclaredSource",
+    "imports:dart": "elspais.graph.dependencies.dart_imports:DartImportsSource",
     "command": "elspais.graph.dependencies.command:CommandSource",
 }
 

@@ -42,7 +42,7 @@ import hashlib
 import json
 import os
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -364,7 +364,8 @@ def judge_units(
     *current* is the manifest of the tree now. A path a unit's ledger entry
     recorded as observed counts as observed, so an observed file deleted
     since is judged by the units that reached it. A unit the evidence omits
-    has no recorded evidence, so its evidence is every input: it executes.
+    has no recorded evidence, so its evidence is every input: it executes,
+    and the reason the source gave for it is stated.
     """
     recorded_observed = set().union(*(e.observed for e in ledger.units.values()))
     observed_all = set(observed) | recorded_observed
@@ -387,7 +388,8 @@ def judge_units(
             selected[unit] = f"{describe_inputs(unobserved_changed)} changed"
             continue
         if unit not in evidence.files:
-            selected[unit] = NO_EVIDENCE_REASON
+            why = evidence.no_evidence.get(unit)
+            selected[unit] = f"{NO_EVIDENCE_REASON}: {why}" if why else NO_EVIDENCE_REASON
             continue
         reached = {unit} | set(entry.observed) | set(evidence.files[unit])
         changed = _changed_for(reached, entry, current, observed_all)
@@ -460,7 +462,8 @@ class UnitPlan:
 
     ``whole_reason`` is set where every unit executes, and says why.
     ``evidence`` is the source's answer on the current tree, or ``None`` where
-    it failed; ``source_failed`` then says why.
+    it failed; ``source_failed`` then says why. ``request`` is what the
+    source was asked, so it can be asked again about some of the units.
     """
 
     target: str
@@ -478,10 +481,34 @@ class UnitPlan:
     receives: str = "placeholder"
     full_selection: str = ""
     cwd_rel: str = ""
+    request: SourceRequest | None = None
 
     @property
     def whole(self) -> bool:
         return not self.retained
+
+    def without_evidence(self) -> tuple[str, ...]:
+        """The units the source answered for and gave no evidence for."""
+        if self.evidence is None:
+            return ()
+        return tuple(u for u in self.units if u not in self.evidence.files)
+
+    # Implements: REQ-d00311-E, REQ-d00333-B+C
+    def describe_no_evidence(self) -> list[str]:
+        """One line per reason the source gave for holding no evidence, with its units' count.
+
+        A unit the source left out without a reason is counted under none.
+        """
+        by_reason: dict[str, int] = {}
+        for unit in self.without_evidence():
+            why = self.evidence.no_evidence.get(unit, "") if self.evidence else ""
+            by_reason[why] = by_reason.get(why, 0) + 1
+        lines = []
+        for why, count in sorted(by_reason.items()):
+            files = "test file" if count == 1 else "test files"
+            words = f"no dependency evidence for {count} {files}"
+            lines.append(f"{words}: {why}" if why else words)
+        return lines
 
     def describe(self) -> str:
         """The words a stale-only run states for this target (REQ-d00315-H, REQ-d00323-O)."""
@@ -492,15 +519,15 @@ class UnitPlan:
         )
 
 
-def _evidence_of(
+def _source_request(
     repo_root: Path,
     target: Any,
     units: tuple[str, ...],
     inputs: frozenset[str],
     observed: frozenset[str],
-) -> tuple[Evidence | None, str]:
-    source = get_source(target.units.source_name())
-    request = SourceRequest(
+) -> SourceRequest:
+    """What *target*'s dependency source is asked about *units* on the current tree."""
+    return SourceRequest(
         repo_root=Path(repo_root).resolve(),
         cwd=(Path(repo_root) / target.cwd).resolve(),
         target_name=target.name,
@@ -508,7 +535,14 @@ def _evidence_of(
         inputs=inputs,
         observed=observed,
         settings=target.units.source_settings(),
+        environment_probes=tuple(
+            probe.name for probe in target.environment_probes if probe.affects_retention
+        ),
     )
+
+
+def _evidence_of(source_name: str, request: SourceRequest) -> tuple[Evidence | None, str]:
+    source = get_source(source_name)
     try:
         return gather_evidence(source, request), ""
     except SourceFailed as exc:
@@ -556,7 +590,17 @@ def plan_run(
     units = unit_inventory(root, config, target)
     inputs = frozenset(p.relative_to(root).as_posix() for p in input_files(root, typed, target))
     observed = observed_set(root, observation_of(root, config, target), inputs)
-    evidence, failed = _evidence_of(root, target, units, inputs, observed)
+    request = _source_request(root, target, units, inputs, observed)
+    evidence, failed = _evidence_of(target.units.source_name(), request)
+    none_held = ""
+    if evidence is not None and units and not evidence.files:
+        # The source answered, so this is no failure: the evidence is kept,
+        # the run states each reason, and settling asks the source again
+        # once the command has ended.
+        reasons = sorted(set(evidence.no_evidence.values()))
+        none_held = "the dependency source gave no evidence for any test file" + (
+            f": {'; '.join(reasons)}" if reasons else ""
+        )
     common = {
         "target": target.name,
         "units": units,
@@ -569,6 +613,7 @@ def plan_run(
         "receives": target.units.receives,
         "full_selection": target.units.full_selection,
         "cwd_rel": _cwd_rel(root, target),
+        "request": request,
     }
 
     def whole(reason: str) -> UnitPlan:
@@ -582,6 +627,8 @@ def plan_run(
         return whole("a run that is not stale-only executes every test")
     if evidence is None:
         return whole(failed)
+    if none_held:
+        return whole(none_held)
     verdict = judge(root, typed, target.name, digest_cache=digest_cache)
     folder = target_folder(root, typed, target.name)
     ledger = read_ledger(folder)
@@ -820,6 +867,7 @@ def settle(
         )
         start_manifest: dict[str, str] = fingerprint.get("manifest") or {}
         executed_in = run_reference(fingerprint)
+        later, outside = _evidence_after_run(root, plan)
         entries: dict[str, UnitEntry] = {}
         retained = dict(plan.retained)
         for unit in plan.units:
@@ -856,9 +904,12 @@ def settle(
             else:
                 outcome = "passed"
             reached: set[str] = {unit}
-            no_evidence = plan.evidence is None or unit not in plan.evidence.files
-            if not no_evidence:
-                reached |= set(plan.evidence.files[unit])
+            evidence = plan.evidence.files.get(unit) if plan.evidence is not None else None
+            if evidence is None:
+                evidence = later.get(unit)
+            no_evidence = evidence is None
+            if evidence is not None:
+                reached |= set(evidence)
             # A unit's own file is judged like an observed one wherever it
             # lies, so its digest is recorded whether or not it is observed.
             observed = {
@@ -886,11 +937,38 @@ def settle(
                 written_by=executed_in,
                 units=entries,
                 source_failed=plan.source_failed,
-                outside_inputs=plan.outside_inputs,
+                outside_inputs=outside,
             ),
         )
         settled.ledger_written = True
     return out
+
+
+# Implements: REQ-d00333-B
+def _evidence_after_run(
+    root: Path, plan: UnitPlan
+) -> tuple[dict[str, frozenset[str]], tuple[str, ...]]:
+    """Ask the source again, after the command, about the units it gave no evidence for.
+
+    A cause the run itself removes -- a package configuration the test runner
+    resolved again -- then costs those units one execution rather than two.
+    The units executed on the tree the run started from, so what the answer
+    reaches is recorded with the digests of the run's start; an input that
+    changed while the run went on makes the next run refuse the ledger. A
+    source that failed when the run was planned is not asked again. Returns
+    the evidence found and the repository files reached that are not inputs.
+    """
+    asked = plan.without_evidence()
+    if not asked or plan.request is None:
+        return {}, plan.outside_inputs
+    answer, _failed = _evidence_of(plan.source, replace(plan.request, units=asked))
+    if answer is None:
+        return {}, plan.outside_inputs
+    later = {u: frozenset(answer.files[u]) for u in asked if u in answer.files}
+    outside = set(plan.outside_inputs) | set(
+        _outside_inputs(root, Evidence(files=later), plan.request.inputs)
+    )
+    return later, tuple(sorted(outside))
 
 
 def write_retained(folder: Path, retained: dict[str, UnitEntry]) -> None:

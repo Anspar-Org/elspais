@@ -446,14 +446,18 @@ coverage = "lcov.info"  # optional; relative to the target's
 # units divides the target into its test files, so a stale-only run executes
 # only those whose dependencies changed and retains the earlier results of
 # the rest. dependencies names the source of each test file's dependencies:
-# "declared" (each test file depends on itself alone) or "command" (a
-# program of the project's prints them; it needs `command` and `observes`).
+# "declared" (each test file depends on itself alone), "imports:dart" (the
+# files a Dart test file's imports, exports and parts reach; it observes the
+# Dart files under lib, hook and integration_test, and the test files, and
+# needs an environment probe covering the SDK), or "command" (a program of the project's prints them;
+# it needs `command` and `observes`).
 # observes selects the files the source sees, read from the repository root;
 # a change to any other input executes every test file. receives is
 # "placeholder" (the command holds {selection}, replaced by the selected
 # test files) or "file" (the command reads $ELSPAIS_SELECTION).
 # full_selection is what {selection} becomes on a run of every test file.
-# A test file the source leaves out of its answer executes on every run.
+# A test file the source leaves out of its answer executes on every run, and
+# the run states the reason the source gave.
 # units need a command, a results pattern and at least one scanned test file
 # under cwd, and cannot stand with file_results = true.
 # See: elspais docs test-targets, "Running part of a target".
