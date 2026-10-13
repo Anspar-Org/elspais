@@ -11,5 +11,5 @@ namespace = "APP"
 markup_styles = ["*", "**"]
 
 [associates.lib]
-path = "../lib"
+path = "../library"
 namespace = "LIB"

@@ -22,7 +22,7 @@ def client(tmp_path: Path) -> TestClient:
     from elspais.server.app import create_app
     from elspais.server.state import AppState
 
-    for member in ("app", "lib"):
+    for member in ("app", "library"):
         shutil.copytree(_FIXTURE / member, tmp_path / member)
     root = tmp_path / "app"
     config = get_config(None, root)

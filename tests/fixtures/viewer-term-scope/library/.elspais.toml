@@ -1,0 +1,11 @@
+# A member of the viewer term-scope fixture. APP declares LIB as an
+# associate; each defines one term and its assertion uses both words.
+
+version = 5
+
+[project]
+name = "lib"
+namespace = "LIB"
+
+[terms]
+markup_styles = ["*", "**"]

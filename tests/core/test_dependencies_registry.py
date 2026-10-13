@@ -58,6 +58,8 @@ def test_importing_a_source_module_loads_no_library_beyond_the_core_dependencies
     script = textwrap.dedent(
         """
         import json, sys
+        # The package is imported first because what it loads itself is not a source module's doing.
+        import elspais
         before = set(sys.modules)
         from elspais.graph.dependencies import get_source, source_names
         for name in source_names():

@@ -40,7 +40,7 @@ def term_scope_viewer(tmp_path_factory):
         "GIT_COMMITTER_NAME": "test",
         "GIT_COMMITTER_EMAIL": "t@t",
     }
-    for member in ("app", "lib"):
+    for member in ("app", "library"):
         shutil.copytree(_FIXTURE / member, dest / member)
         for argv in (["git", "init"], ["git", "add", "."], ["git", "commit", "-m", "init"]):
             subprocess.run(argv, cwd=dest / member, capture_output=True, env=git_env, check=True)
