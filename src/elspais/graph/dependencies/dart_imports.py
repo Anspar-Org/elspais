@@ -454,15 +454,23 @@ class _Reading:
     def staleness(self, config: _Config) -> str:
         """Why the test runner would resolve *config*'s packages again, or ``""``.
 
-        The configuration is current only where it is newer than every file
-        package resolution reads: the ``pubspec.yaml``, ``pubspec.lock`` and
-        ``pubspec_overrides.yaml`` beside its ``.dart_tool``, and the
-        ``pubspec.yaml`` of every package it places in the repository.
+        The configuration is current only where the last resolution is newer
+        than every file package resolution reads: the ``pubspec.yaml``,
+        ``pubspec.lock`` and ``pubspec_overrides.yaml`` beside its
+        ``.dart_tool``, and the ``pubspec.yaml`` of every package it places in
+        the repository. A resolution that changes nothing rewrites
+        ``package_graph.json`` beside the configuration and leaves the
+        configuration's own bytes and time alone, so the later of the two
+        files dates the last resolution.
         """
         directory = config.directory
         if not (directory / "pubspec.lock").is_file():
             return f"{self.rel(directory)} holds no pubspec.lock; {_PUB_GET} there"
         resolved = config.path.stat().st_mtime
+        try:
+            resolved = max(resolved, (config.path.parent / "package_graph.json").stat().st_mtime)
+        except OSError:
+            pass
         compared = [directory / "pubspec.lock", directory / "pubspec_overrides.yaml"]
         compared += sorted(
             {root / "pubspec.yaml" for root in self.repository_packages(config)}

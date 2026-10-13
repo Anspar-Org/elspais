@@ -524,6 +524,43 @@ def test_a_configuration_older_than_a_file_resolution_reads_leaves_its_units_unc
     )
 
 
+def _graph_at(root: Path, rel: str, offset: int) -> None:
+    """A ``package_graph.json`` beside *rel*'s configuration, modified at ``_T0 + offset``."""
+    path = _write(root, f"{rel}/.dart_tool/package_graph.json", "{}")
+    os.utime(path, (_T0, _T0 + offset))
+
+
+# Verifies: REQ-d00333-B
+def test_a_package_graph_newer_than_the_pubspec_dates_the_resolution(tmp_path):
+    _app(tmp_path)
+    _write(tmp_path, "app/test/a_test.dart", "")
+    _settle_times(tmp_path)
+    _touch(tmp_path / "app/pubspec.yaml")
+    _graph_at(tmp_path, "app", 300)
+
+    evidence = _timed_evidence(tmp_path, "app/test/a_test.dart")
+
+    assert "app/test/a_test.dart" not in evidence.no_evidence
+    assert "app/test/a_test.dart" in evidence.files
+
+
+# Verifies: REQ-d00333-B
+def test_a_pubspec_newer_than_the_configuration_and_the_package_graph_is_uncertain(tmp_path):
+    _app(tmp_path)
+    _write(tmp_path, "app/test/a_test.dart", "")
+    _settle_times(tmp_path)
+    _graph_at(tmp_path, "app", 150)
+    _touch(tmp_path / "app/pubspec.yaml")
+
+    evidence = _timed_evidence(tmp_path, "app/test/a_test.dart")
+
+    assert evidence.files == {}
+    assert evidence.no_evidence["app/test/a_test.dart"] == (
+        "app/.dart_tool/package_config.json is older than app/pubspec.yaml; "
+        "run `dart pub get` or `flutter pub get` in app"
+    )
+
+
 # Verifies: REQ-d00333-B
 def test_a_package_with_no_pubspec_lock_is_uncertain(tmp_path):
     _app(tmp_path)

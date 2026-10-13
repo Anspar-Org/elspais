@@ -1655,9 +1655,12 @@ evidence for it, so it executes, and the run states why:
 
 - No `pubspec.yaml` lies above the test file, or no package configuration
   lists its package: run `dart pub get` or `flutter pub get` there.
-- The package configuration is older than a `pubspec.yaml`, `pubspec.lock`
+- The last resolution is older than a `pubspec.yaml`, `pubspec.lock`
   or `pubspec_overrides.yaml` beside it, or than the `pubspec.yaml` of a
-  repository package it lists. The test runner would resolve the packages
+  repository package it lists. The later of `package_config.json` and
+  `package_graph.json` in `.dart_tool` dates the last resolution: a
+  resolution that changes nothing, such as one after a version bump in
+  `pubspec.yaml`, rewrites only the second. The test runner would resolve the packages
   again, so what the configuration says may not be what the run uses. A
   command that runs `pub get` itself, as `flutter test` does unless given
   `--no-pub`, removes the cause, and the source is asked again once it ends.
