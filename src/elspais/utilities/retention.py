@@ -650,6 +650,11 @@ def plan_run(
         unaffecting_entries(target),
     )
     if not judgement.retained:
+        # One cause selecting every unit, such as a changed input the source
+        # does not observe, is named rather than summarised.
+        causes = set(judgement.selected.values())
+        if len(causes) == 1:
+            return whole(causes.pop())
         return whole("the evidence of every test file changed")
     coverage = retained_coverage(root, typed, target, verdict.fingerprint, current)
     return UnitPlan(

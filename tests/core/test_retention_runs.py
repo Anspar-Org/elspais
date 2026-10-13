@@ -911,3 +911,39 @@ def test_a_run_whose_source_holds_no_evidence_states_why_and_asks_again_once_it_
     else:
         assert second.plan.whole
         assert second.plan.whole_reason.endswith(why)
+
+
+# Verifies: REQ-d00333-B
+def test_one_cause_selecting_every_test_file_is_named_as_the_reason_for_the_whole_run(
+    tmp_path,
+):
+    root, config = _dart_project(tmp_path)
+    _run(root, config)
+    (root / "assets/data.txt").write_text("two\n", encoding="utf-8")
+
+    second, _ = _run(root, config)
+
+    assert second.plan.whole
+    assert second.plan.whole_reason == "assets/data.txt changed"
+    assert second.plan.selected == {
+        "app/test/a_test.dart": "assets/data.txt changed",
+        "app/test/b_test.dart": "assets/data.txt changed",
+    }
+    assert second.plan.retained == {}
+
+
+# Verifies: REQ-d00333-B
+def test_different_causes_selecting_every_test_file_are_summarised_for_the_whole_run(
+    tmp_path,
+):
+    root, config = _dart_project(tmp_path)
+    _run(root, config)
+    (root / "app/lib/a.dart").write_text("int a = 2;\n", encoding="utf-8")
+    (root / "app/lib/b.dart").write_text("int b = 2;\n", encoding="utf-8")
+
+    second, _ = _run(root, config)
+
+    assert second.plan.whole
+    assert second.plan.whole_reason == "the evidence of every test file changed"
+    assert sorted(second.plan.selected) == ["app/test/a_test.dart", "app/test/b_test.dart"]
+    assert second.plan.retained == {}
