@@ -332,6 +332,28 @@ def get_modified_files(repo_root: Path) -> tuple[set[str], set[str]]:
 
 
 # Implements: REQ-d00322-D
+# Implements: REQ-d00311-S
+def ignored_untracked(repo_root: Path) -> tuple[frozenset[str], tuple[str, ...]]:
+    """The untracked paths git ignores: files, and directories ignored whole.
+
+    Directories end in ``/``. Outside a git repository, or where git cannot
+    answer, nothing is ignored.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory"],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError, OSError:
+        return frozenset(), ()
+    entries = [e for e in result.stdout.decode("utf-8", "surrogateescape").split("\0") if e]
+    directories = tuple(e for e in entries if e.endswith("/"))
+    return frozenset(e for e in entries if not e.endswith("/")), directories
+
+
 def list_index_files(repo_root: Path) -> list[str]:
     """Return the repo-relative path of every file the index holds.
 

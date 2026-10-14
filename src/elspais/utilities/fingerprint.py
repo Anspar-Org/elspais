@@ -50,7 +50,7 @@ from glob import glob
 from pathlib import Path
 from typing import Any
 
-from elspais.utilities.git import commit_state
+from elspais.utilities.git import commit_state, ignored_untracked
 
 #: The name of the fingerprint file in the output area.
 FINGERPRINT_NAME = ".elspais-run.json"
@@ -193,7 +193,17 @@ def input_files(repo_root: Path, config: Any, target: Any) -> list[Path]:
         [*inputs.skip_files, *everywhere],
         list(inputs.file_patterns) or ["*"],
     )
-    return sorted(selection.selected)
+    # Implements: REQ-d00311-S
+    # A file version control ignores, and its own directory, which it never
+    # tracks, are generated or local to a tree, so neither is an input.
+    ignored, ignored_dirs = ignored_untracked(root)
+    skipped_dirs = (*ignored_dirs, ".git/")
+
+    def kept(path: Path) -> bool:
+        rel = path.relative_to(root).as_posix()
+        return rel not in ignored and not rel.startswith(skipped_dirs)
+
+    return sorted(p for p in selection.selected if kept(p))
 
 
 def file_digest(path: Path) -> str:

@@ -87,15 +87,19 @@ way -- `(baseline)` in a `trace` cell, `*` in a `summary` cell with a footnote
 -- and `code.code_tested` states why the coverage is stale. So does the
 `lcov_tested` credit taken from it.
 
-A target's **inputs** are every file in the repository by default, whether or
-not git tracks it. Three sets of paths are never inputs: the output root, the
-*Evidence Snapshot* directory that `[scanning.test] evidence` names, and the
-paths that the global `[scanning] skip` list names. The per-kind
-`skip_dirs`/`skip_files` of `[scanning.spec]`, `[scanning.code]` and the rest
-do not apply here. Put anything that changes during every run in that global
-list. Examples are `.git`, `.elspais/`, and caches that a test tool writes
-while it runs, such as `**/.pytest_cache` and `.coverage`. `elspais init`
-writes the common ones.
+A target's **inputs** are every file in the repository by default, except the
+files git ignores: a file git tracks is an input even where a tool generates
+it, and an untracked file that git does not ignore is an input too. Git's own
+`.git` directory is never an input, and neither are three further sets of
+paths: the output root, the *Evidence Snapshot* directory that
+`[scanning.test] evidence` names, and the paths that the global
+`[scanning] skip` list names. The per-kind `skip_dirs`/`skip_files` of
+`[scanning.spec]`, `[scanning.code]` and the rest do not apply here. A file a
+package manager or a test tool writes and git ignores, such as an ignored
+`pubspec.lock`, `.dart_tool/` or `.pytest_cache`, therefore needs no skip
+entry. Put anything else that changes during every run in the global list.
+A value that reaches the tests through an ignored file, such as a loaded
+`.env`, belongs in the target's environment probes instead.
 
 Write a skip entry so that it reaches every place the file or directory can
 appear. An entry holding a `/` is a path from the repository root, for a file

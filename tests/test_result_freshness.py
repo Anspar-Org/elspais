@@ -7,6 +7,7 @@ test then changes the project. Then the test reads the freshness verdict.
 from __future__ import annotations
 
 import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -709,3 +710,135 @@ def test_a_fingerprint_of_the_previous_format_reads_as_none(tmp_path):
 
     assert read_fingerprint(folder) is None
     assert judge(root, config, "unit").reason == "no-fingerprint"
+
+
+_HOOK_GIT_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")
+_GIT_ENV = {
+    **{k: v for k, v in os.environ.items() if k not in _HOOK_GIT_VARS},
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_AUTHOR_NAME": "Test",
+    "GIT_AUTHOR_EMAIL": "test@example.com",
+    "GIT_COMMITTER_NAME": "Test",
+    "GIT_COMMITTER_EMAIL": "test@example.com",
+}
+
+
+def _git(root: Path, *args: str) -> str:
+    done = subprocess.run(
+        ["git", *args], cwd=root, check=True, capture_output=True, text=True, env=_GIT_ENV
+    )
+    return done.stdout.strip()
+
+
+def _ignoring_repo(tmp_path: Path) -> Path:
+    """A committed repository whose .gitignore ignores ``*.log`` and ``build/``.
+
+    ``forced.log`` matches an ignore pattern and is tracked all the same.
+    """
+    root = _project(tmp_path)
+    (root / ".gitignore").write_text("*.log\nbuild/\n", encoding="utf-8")
+    (root / "forced.log").write_text("tracked despite the pattern\n", encoding="utf-8")
+    _git(root, "init", "-q", "-b", "main")
+    _git(root, "add", "-A")
+    _git(root, "add", "-f", "forced.log")
+    _git(root, "commit", "-q", "-m", "first")
+    return root
+
+
+def _input_names(root: Path, config: dict) -> set[str]:
+    return {p.relative_to(root).as_posix() for p in input_files(root, config, _unit(config))}
+
+
+# Verifies: REQ-d00311-S
+def test_git_names_the_ignored_untracked_files_and_whole_directories(tmp_path):
+    from elspais.utilities.git import ignored_untracked
+
+    root = _ignoring_repo(tmp_path)
+    (root / "debug.log").write_text("noise\n", encoding="utf-8")
+    (root / "build").mkdir()
+    (root / "build" / "out.bin").write_text("artefact\n", encoding="utf-8")
+    (root / "notes.txt").write_text("untracked, not ignored\n", encoding="utf-8")
+
+    files, directories = ignored_untracked(root)
+
+    assert "debug.log" in files
+    assert "build/" in directories
+    assert "forced.log" not in files
+    assert "notes.txt" not in files
+    assert "src/a.py" not in files
+
+
+# Verifies: REQ-d00311-S
+def test_outside_a_git_repository_git_names_nothing_ignored(tmp_path):
+    from elspais.utilities.git import ignored_untracked
+
+    root = _project(tmp_path)
+    (root / ".gitignore").write_text("*.md\n", encoding="utf-8")
+
+    assert ignored_untracked(root) == (frozenset(), ())
+
+
+# Verifies: REQ-d00311-S
+@pytest.mark.parametrize(
+    "path",
+    ["debug.log", "src/trace.log", "build/out.bin", "build/deep/nested.o"],
+    ids=["ignored-file", "ignored-file-in-subdir", "in-ignored-dir", "deep-in-ignored-dir"],
+)
+def test_a_file_version_control_ignores_is_not_an_input(tmp_path, path):
+    root = _ignoring_repo(tmp_path)
+    config = _config([_target()])
+    (root / path).parent.mkdir(parents=True, exist_ok=True)
+    (root / path).write_text("ignored\n", encoding="utf-8")
+
+    names = _input_names(root, config)
+
+    assert path not in names
+    assert "src/a.py" in names
+
+
+# Verifies: REQ-d00311-S
+@pytest.mark.parametrize(
+    "path",
+    ["forced.log", "notes.txt"],
+    ids=["tracked-despite-ignore-pattern", "untracked-not-ignored"],
+)
+def test_a_file_version_control_does_not_ignore_stays_an_input(tmp_path, path):
+    root = _ignoring_repo(tmp_path)
+    config = _config([_target()])
+    if not (root / path).exists():
+        (root / path).write_text("not ignored\n", encoding="utf-8")
+
+    assert path in _input_names(root, config)
+
+
+# Verifies: REQ-d00311-S
+def test_outside_a_git_repository_an_ignore_file_removes_no_input(tmp_path):
+    root = _project(tmp_path)
+    (root / ".gitignore").write_text("*.log\nbuild/\n", encoding="utf-8")
+    (root / "debug.log").write_text("noise\n", encoding="utf-8")
+    (root / "build").mkdir()
+    (root / "build" / "out.bin").write_text("artefact\n", encoding="utf-8")
+    config = _config([_target()])
+
+    names = _input_names(root, config)
+
+    assert {"debug.log", "build/out.bin", ".gitignore", "src/a.py"} <= names
+
+
+# Verifies: REQ-d00311-S, REQ-d00311-B
+@pytest.mark.parametrize("path", ["debug.log", "build/out.bin"], ids=["file", "in-dir"])
+def test_results_stay_fresh_while_an_ignored_file_comes_changes_and_goes(tmp_path, path):
+    root = _ignoring_repo(tmp_path)
+    config = _config([_target()])
+    _run(root, config)
+    target = root / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    target.write_text("added\n", encoding="utf-8")
+    assert judge(root, config, "unit").state == "fresh"
+
+    target.write_text("changed\n", encoding="utf-8")
+    assert judge(root, config, "unit").state == "fresh"
+
+    target.unlink()
+    assert judge(root, config, "unit").state == "fresh"

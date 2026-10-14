@@ -10,6 +10,8 @@ All notable changes to elspais will be documented in this file.
 
 ### TOOL-157
 
+- **A file git ignores is no test target input (REQ-d00311-S)** -- generated files a package manager or test tool writes and git ignores, such as an ignored lockfile or `.dart_tool/`, no longer make a target's results stale, so a CI run that resolved fewer packages than its baseline does not read as changed. Tracked files stay inputs, even generated ones, and git's own `.git` directory is never an input. Skip lists written only to keep ignored files out of the inputs can be deleted.
+
 - **Line coverage is read from its record alone (REQ-d00334-A, REQ-d00323-Q)** -- the graph build reads each target's coverage record and no longer parses the tool's coverage file or `.elspais-retained-coverage.json`, which is gone. An output area holding a coverage file but no record, written by an earlier elspais, is reported as an ingestion fault: run the target again. Line coverage of a target the reported run did not execute now reads as carried, as its results do, and hit counts reach the graph unreduced. The served graph rebuilds when a coverage record changes.
 
 - **A finished run writes its coverage record and LCOV reports (REQ-d00334-A+B)** -- when a run of a target that declares `coverage` finishes, through `elspais test`, `checks --run-tests` or `elspais fingerprint finish`, elspais records the run's line coverage, with what a run that retained tests carried from earlier runs, and writes the target's current coverage as `.elspais-coverage.info` in its output area and the repository's as `.elspais-coverage.info` at the output root. A coverage file that cannot be read fails the run. Run start times are recorded to the microsecond.
