@@ -199,7 +199,8 @@ def input_files(repo_root: Path, config: Any, target: Any) -> list[Path]:
     return sorted(selection.selected)
 
 
-def _digest_file(path: Path) -> str:
+def file_digest(path: Path) -> str:
+    """The content digest of the file at *path*, as a manifest records it."""
     h = hashlib.sha256()
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1 << 16), b""):
@@ -225,9 +226,9 @@ def file_manifest(
     for path in input_files(root, config, target):
         try:
             if digest_cache is None:
-                digest = _digest_file(path)
+                digest = file_digest(path)
             elif (digest := digest_cache.get(path)) is None:
-                digest = digest_cache[path] = _digest_file(path)
+                digest = digest_cache[path] = file_digest(path)
             manifest[path.relative_to(root).as_posix()] = digest
         except OSError:
             # A file that disappears after the walk is not an input.
