@@ -133,7 +133,7 @@ def _lookup_raw(id_source: str) -> tuple[str, str]:
                 data = _json.loads(result.stdout)
                 name = name or data.get("name") or ""
                 ident = ident or data.get("email") or ""
-            except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
+            except subprocess.CalledProcessError, FileNotFoundError, ValueError:
                 pass
 
     if not name:
@@ -153,5 +153,5 @@ def _git_config(key: str) -> str:
             check=True,
         )
         return result.stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         return ""

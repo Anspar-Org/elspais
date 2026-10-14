@@ -31,8 +31,8 @@ jobs:
 
   # Implements: REQ-o00066-N
   # Every channel publishes the commit this job resolves, and only once the
-  # full test suite on every supported Python has passed on exactly that
-  # commit: in CI's push run on main, or else in the `tests` job below. A
+  # full test suite has passed on exactly that commit: in a full CI push run
+  # on main, or else in the `tests` job below. A
   # release a person creates by hand meets the same gate as an automatic one.
   gate:
     name: Release Gate
@@ -102,10 +102,11 @@ jobs:
           fi
           echo "version=${DECLARED}" >> "$GITHUB_OUTPUT"
 
-      # A completed push run whose every job passed is the verdict, and a
-      # failed job in one is a verdict too. Anything else -- no push run, one
-      # in progress, cancelled, or with a job that never ran -- is no verdict
-      # at all, so the release runs the suite itself.
+      # A completed push run whose every job passed, `Full Suite` among
+      # them, is the verdict, and a failed job in one is a verdict too.
+      # Anything else -- no push run, one in progress, cancelled, or one that
+      # ran only the impacted unit tests and so skipped `Full Suite` -- is no
+      # verdict at all, so the release runs the suite itself.
       - name: Read CI's verdict on this commit
         id: verdict
         env:
@@ -124,9 +125,8 @@ jobs:
             if [ "$STATUS" != "completed" ]; then
               continue
             fi
-            # Impact selection runs on pull requests only, so it is skipped here.
             JOBS=$(gh api --paginate "repos/${REPOSITORY}/actions/runs/${ID}/jobs?per_page=100" \
-              --jq '.jobs[] | select(.name | startswith("Test Impact") | not) | "\(.conclusion // "none")\t\(.name)"')
+              --jq '.jobs[] | "\(.conclusion // "none")\t\(.name)"')
             if [ -z "$JOBS" ]; then
               continue
             fi
@@ -134,7 +134,7 @@ jobs:
             NOT_PASSED=$(printf '%s\n' "$JOBS" | awk -F'\t' '$1 != "success" { print $2 ": " $1 }' | paste -sd ';' -)
             if [ -n "$FAILING" ]; then
               FAILED="${FAILED}${FAILED:+; }run ${ID} failed in ${FAILING}"
-            elif [ -z "$NOT_PASSED" ]; then
+            elif [ -z "$NOT_PASSED" ] && printf '%s\n' "$JOBS" | grep -qx "$(printf 'success\tFull Suite')"; then
               PASSED_RUN="$ID"
             else
               FOUND="${FOUND} (${NOT_PASSED})"
@@ -153,8 +153,9 @@ jobs:
           fi
 
   # Implements: REQ-o00066-N
-  # The full suite a push to main runs, on the commit being published, for a
-  # commit CI holds no verdict on. Every checkout in it is at that commit.
+  # The full suite a full push run executes, on the commit being published,
+  # for a commit CI holds no verdict on. Every checkout in it is at that
+  # commit.
   tests:
     name: Release Tests
     needs: [gate]
@@ -162,6 +163,7 @@ jobs:
     permissions:
       contents: read
       packages: write  # the suite builds its CI image when none exists yet
+      pull-requests: read  # CI's plan job reads labels; a called run ignores them
     uses: ./.github/workflows/ci.yml
     with:
       ref: ${{ needs.gate.outputs.sha }}
@@ -186,7 +188,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.14'
 
       - name: Install build tools
         run: pip install build twine

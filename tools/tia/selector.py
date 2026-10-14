@@ -236,7 +236,7 @@ class Selector:
                     try:
                         with open(os.path.join(self.root, path), "rb") as fh:
                             names |= string_literals(ast.parse(fh.read(), path))
-                    except (OSError, SyntaxError, ValueError):
+                    except OSError, SyntaxError, ValueError:
                         pass
             self._referenced = {n for n in names if n.isidentifier()}
         return self._referenced
@@ -368,7 +368,7 @@ class Selector:
             try:
                 with open(os.path.join(self.root, path), "rb") as fh:
                     lits = string_literals(ast.parse(fh.read(), path))
-            except (OSError, SyntaxError, ValueError):
+            except OSError, SyntaxError, ValueError:
                 continue
             if any(name in s or (parent and s.rstrip("/").endswith(parent)) for s in lits):
                 rep.regions.append(f"loaded by {path}")

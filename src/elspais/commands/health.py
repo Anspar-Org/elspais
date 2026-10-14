@@ -1384,7 +1384,7 @@ def _stale_hash_remedy(
             continue
         try:
             name = graph.repo_for_node(holder).name
-        except (KeyError, AttributeError):
+        except KeyError, AttributeError:
             name = holder.get_field("repo") or "an associate repository"
         outside.setdefault(name, None)
     return remedy_outside_write_scope("spec.hash_integrity", list(outside), in_scope=in_scope)

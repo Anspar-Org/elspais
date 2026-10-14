@@ -189,7 +189,7 @@ def read_ledger(folder: Path) -> Ledger | None:
     """Return the Unit Ledger in the output area *folder*, or ``None`` where none is readable."""
     try:
         data = json.loads((folder / UNIT_LEDGER_NAME).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
     if not isinstance(data, dict) or data.get("version") != LEDGER_VERSION:
         return None

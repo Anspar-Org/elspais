@@ -1,7 +1,7 @@
 name: Auto Release
 
-# A release starts from CI's verdict, not from the merge: the push run on main
-# is the one that runs the full test suite on every supported Python, so the
+# A release starts from CI's verdict, not from the merge: a pull request
+# carrying the `publish` label makes the push run on main a full run, so the
 # release waits for it and publishes the commit it tested. Merging the next
 # pull request while that run is in progress does not change what is
 # released.

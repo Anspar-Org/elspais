@@ -62,5 +62,5 @@ def _try_server(
 
         with urlopen(req, timeout=10) as resp:
             return json.loads(resp.read())
-    except (URLError, OSError, json.JSONDecodeError, ValueError):
+    except URLError, OSError, json.JSONDecodeError, ValueError:
         return None

@@ -12,7 +12,7 @@
 #
 # Pre-commit already handles: lint, format, markdown, elspais fix, commit
 # message format, and the unit tests Test Impact Analysis selects. No unit
-# tests run here: CI's unit job runs the full unit tier on every pull request.
+# tests run here: CI runs the impacted unit tests on every pull request.
 #
 # PR-aware blocking:
 #   - PR/feature branch: failures BLOCK the push

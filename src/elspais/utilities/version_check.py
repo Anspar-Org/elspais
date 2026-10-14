@@ -29,7 +29,7 @@ def fetch_latest_version() -> str | None:
         with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
             data = json.loads(resp.read())
             return data["info"]["version"]
-    except (urllib.error.URLError, OSError, KeyError, json.JSONDecodeError):
+    except urllib.error.URLError, OSError, KeyError, json.JSONDecodeError:
         return None
 
 
@@ -63,7 +63,7 @@ def detect_install_method() -> str:
         import elspais
 
         install_path = Path(elspais.__file__).resolve()
-    except (ImportError, AttributeError, TypeError):
+    except ImportError, AttributeError, TypeError:
         return "unknown"
 
     path_str = str(install_path)

@@ -136,5 +136,5 @@ def read_current(root: str, path: str) -> bytes | None:
     try:
         with open(os.path.join(root, path), "rb") as fh:
             return fh.read()
-    except (FileNotFoundError, IsADirectoryError):
+    except FileNotFoundError, IsADirectoryError:
         return None

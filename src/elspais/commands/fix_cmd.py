@@ -667,7 +667,7 @@ def _file_path_of(graph, node, repo_root: Path) -> str | None:  # noqa: ANN001
     if not path.is_absolute():
         try:
             root = graph.repo_for_node(fn).repo_root
-        except (KeyError, AttributeError):
+        except KeyError, AttributeError:
             root = repo_root
         path = Path(root) / rel
     return str(path)
@@ -898,7 +898,7 @@ def _fix_index_rows(args: argparse.Namespace, graph, node, hash_value: str, dry_
     if _is_associate_owned(graph, node):
         try:
             entry = graph.repo_for_node(node.file_node() or node)
-        except (KeyError, AttributeError):
+        except KeyError, AttributeError:
             entry = None
         member = (
             _member_graph(entry.repo_root, entry.config)

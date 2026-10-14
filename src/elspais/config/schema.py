@@ -258,11 +258,7 @@ def _legal_chars(pattern: str) -> set[str]:
     would be missed and wrongly offered as a separator.
     """
     import re as _re
-
-    try:  # Python 3.11+
-        from re import _parser as _regex_parser
-    except ImportError:  # pragma: no cover - Python 3.10
-        import sre_parse as _regex_parser  # type: ignore[no-redef]
+    from re import _parser as _regex_parser
 
     _re.compile(pattern)  # reject a malformed pattern here, as before
     legal: set[str] = set()

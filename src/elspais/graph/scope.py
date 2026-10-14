@@ -308,7 +308,7 @@ def _config_for_node(graph: Any, node: Any, fallback: dict[str, Any] | None) -> 
         return "", fallback
     try:
         entry = repo_for_node(node)
-    except (KeyError, AttributeError):
+    except KeyError, AttributeError:
         return "", fallback
     return getattr(entry, "name", ""), (getattr(entry, "config", None) or fallback)
 

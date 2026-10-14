@@ -1,17 +1,19 @@
 # Test Impact Analysis (TIA)
 
 Test Impact Analysis runs only the unit tests that the change since a
-recorded baseline could have affected. It is fast development feedback, and
-the verdict a merge rests on comes from elsewhere:
+recorded baseline could have affected. The spec calls each such test an
+*Impacted Test* (REQ-o00066-I+O). TIA decides the unit tests of a commit, a
+pull request and a push to main; the full suite runs before a release:
 
 - The pre-commit hook runs the impacted unit tests by default, and a failure
   among them fails the commit. Where TIA selects the full suite, the hook runs
   the full unit tier through `.githooks/unit-verdict`, which also records a
   fresh baseline. `ELSPAIS_UNIT_MODE=full` asks for that full run.
-- CI runs the full unit tier on every pull request and on main, and
-  publishing a release requires the full suite to have passed on the
-  published commit. TIA is also an advisory CI job and a `make` target
-  (`make test-impacted`).
+- CI runs the impacted unit tests on a pull request and a push to main. It
+  runs the full suite where a pull request carries the label `publish` or
+  `baseline`, once a day where main changed, and before a release publishes a
+  commit no full run passed (REQ-o00066-N). See [CI](#ci).
+- `make test-impacted` runs the impacted unit tests by hand.
 - When TIA cannot determine impact, it falls back to running more tests,
   up to the complete suite. It never treats missing, corrupt, stale or
   ambiguous data as "no tests need to run".
@@ -86,8 +88,14 @@ The baseline holds two files:
 The baseline directory is `.results/tia/baseline` in the worktree's own root.
 Each worktree records its own baseline from its own passing full unit run:
 every worktree runs a different version of elspais, and a worktree's own last
-full run is the baseline closest to its code. A new worktree has none, so its
-first commit runs the full tier. `python -m tools.tia baseline path` prints
+full run is the baseline closest to its code. A worktree that holds no usable
+baseline takes the one a full CI run of main published:
+`python -m tools.tia baseline fetch` finds the newest one recorded for a
+commit of main that HEAD descends from, checks that it fits this worktree's
+environment, and installs it. It keeps a usable local baseline unless given
+`--force`. It needs `gh`, authenticated for the repository. The pre-commit
+hook runs it before every selection, so a new worktree selects on its first
+commit. `python -m tools.tia baseline path` prints
 the directory. `$ELSPAIS_TIA_BASELINE` names another directory, and
 `--baseline DIR` on any command wins over both. Every command and every hook
 resolves the location the same way.
@@ -321,14 +329,29 @@ cache steps save and restore.
 
 `.github/workflows/ci.yml`:
 
-- `test` (unchanged) runs the full unit tier on every supported Python. On a
-  push to `main`, the Python 3.13 leg also records a baseline and, when the
-  run passed outright, saves it to the Actions cache under the key
-  `tia-baseline-v2-py3.13-<sha>`.
-- `test-impact` (pull requests, advisory) restores the newest baseline from
-  `main`, runs `python -m tools.tia run`, and uploads the manifest as the
-  `tia-manifest` artifact. It does not replace the full unit job.
-- `.github/workflows/tia-calibration.yml` (nightly and on demand) records a
+Every job runs on the one Python the project supports. The `plan` job
+decides whether a run is full:
+
+- A pull request, a merge-queue candidate and a push to main are full where
+  the pull request carries the label `publish` or `baseline`. For a push, the
+  label is read from the pull request that was merged. Labels are read when
+  the run starts, so a label added later takes effect on a re-run.
+- The daily schedule is full where no full run of main's newest commit is
+  recorded, and does nothing otherwise.
+- A dispatched run, and the run a release makes of the commit it publishes,
+  are always full.
+
+`test` runs the full unit tier in a full run. Any other run restores the
+newest baseline from `main`, runs `python -m tools.tia run`, and uploads the
+manifest as the `tia-manifest` artifact. A full run of `main` also records a
+baseline and, when the run passed outright, saves it to the Actions cache
+under the key `tia-baseline-v2-py3.14-<sha>` and uploads it as the artifact
+`tia-baseline-<sha>`, which `baseline fetch` downloads. A push to main that
+is not full runs no e2e, stress or browser tier. The `Full Suite` job passes
+only in a full run whose every tier passed, and the release gate accepts a
+push run as its verdict only where that job passed.
+
+- `.github/workflows/tia-calibration.yml` (weekly and on demand) records a
   fresh baseline and runs `calibrate` with mutant probes. It uploads the
   report and fails when a failure was missed. It builds the fresh baseline
   even from a run with failing tests, because it measures the revision as it
@@ -340,9 +363,9 @@ A baseline is accepted only by an environment whose fingerprint matches the
 one it was recorded in. `make setup` and every CI job that records or reads a
 baseline install the same extras (`dev`, `all` and `browser`) under the same
 constraints file, `requirements/dev.lock`. The lock is one universal
-resolution covering every supported Python and platform, so a venv and the
-CI image on one Python minor version hold the same distributions at the same
-versions. The fingerprint leaves out what legitimately differs between them:
+resolution covering every platform on the supported Python, so a venv and the
+CI image hold the same distributions at the same versions. `make setup`
+builds the venv with that Python (`python3.14`). The fingerprint leaves out what legitimately differs between them:
 the Python patch release, and the installers `pip`, `setuptools` and `wheel`,
 which a venv and the `python:<version>-slim` image each seed with their own
 releases. The lock pins none of those three, and no test imports them.

@@ -678,7 +678,7 @@ def _main_repo_root(git_root: Path) -> Path | None:
             text=True,
             timeout=10,
         )
-    except (OSError, subprocess.SubprocessError):
+    except OSError, subprocess.SubprocessError:
         return None
     if out.returncode != 0 or not out.stdout.strip():
         return None
@@ -733,7 +733,7 @@ def _registration_sources(
             continue
         try:
             data = json.loads(path.read_text())
-        except (OSError, json.JSONDecodeError):
+        except OSError, json.JSONDecodeError:
             unread.append(path.name)
             continue
         if not isinstance(data, dict):
@@ -928,7 +928,7 @@ def _daemon_pending_count(info: dict) -> int:
     try:
         with urllib.request.urlopen(daemon_url(info, "/api/dirty"), timeout=2) as response:
             count = json.loads(response.read()).get("mutation_count")
-    except (urllib.error.URLError, OSError, json.JSONDecodeError, ValueError):
+    except urllib.error.URLError, OSError, json.JSONDecodeError, ValueError:
         return 0
     return count if isinstance(count, int) and count > 0 else 0
 
@@ -940,7 +940,7 @@ def _automatic_save_record(git_root: Path) -> dict | None:
 
     try:
         automatic_save = json.loads((git_root / ".elspais" / "automatic-save.json").read_text())
-    except (OSError, json.JSONDecodeError):
+    except OSError, json.JSONDecodeError:
         return None
     return automatic_save if isinstance(automatic_save, dict) else None
 

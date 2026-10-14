@@ -1289,7 +1289,7 @@ class TestExcludedContentIsNotRead:
         def record_scandir(path=".", *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
             try:
                 listed.add(str(Path(path).resolve()))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 pass
             return real_scandir(path, *args, **kwargs)
 

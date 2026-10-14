@@ -325,7 +325,7 @@ class AppState:
         with self.shared.write_lock:
             try:
                 has_pending = len(self.graph.mutation_log) > 0
-            except (AttributeError, TypeError):
+            except AttributeError, TypeError:
                 has_pending = False
             if has_pending:
                 return False

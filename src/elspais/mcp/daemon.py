@@ -56,7 +56,7 @@ def _iter_proc_ancestors(pid: int | None = None):
             # comm may contain spaces/parens; fields after the last ')'
             # are position-stable.
             ppid = int(stat.rsplit(")", 1)[1].split()[1])
-        except (OSError, ValueError, IndexError):
+        except OSError, ValueError, IndexError:
             return
         if ppid <= 1:
             return
@@ -78,7 +78,7 @@ def _session_leader_has_tty(sid: int) -> bool:
         stat = Path(f"/proc/{sid}/stat").read_text()
         tty_nr = int(stat.rsplit(")", 1)[1].split()[4])
         return tty_nr != 0
-    except (OSError, ValueError, IndexError):
+    except OSError, ValueError, IndexError:
         return False
 
 
@@ -120,7 +120,7 @@ def _reap_if_our_child(pid: int) -> bool:
     try:
         collected_pid, _status = os.waitpid(pid, os.WNOHANG)
         return collected_pid == pid
-    except (ChildProcessError, OSError):
+    except ChildProcessError, OSError:
         return False
 
 
@@ -138,7 +138,7 @@ def _proc_is_zombie(pid: int) -> bool:
         # position-stable. State is the first field after that.
         state = stat.rsplit(")", 1)[1].split()[0]
         return state == "Z"
-    except (OSError, ValueError, IndexError):
+    except OSError, ValueError, IndexError:
         return False
 
 
@@ -226,7 +226,7 @@ def resolve_client_pid() -> int | None:
 
     try:
         sid = os.getsid(0)
-    except (OSError, AttributeError):
+    except OSError, AttributeError:
         # No session concept on this platform: no identity to record.
         return None
     if sid > 1 and sid != os.getpid() and _session_leader_has_tty(sid):
@@ -440,7 +440,7 @@ def refresh_daemon_config_hash(repo_root: Path) -> None:
         return
     try:
         info = json.loads(path.read_text())
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError, OSError:
         return
     config_path = repo_root / ".elspais.toml"
     info["config_hash"] = compute_config_hash(config_path) if config_path.is_file() else ""
@@ -489,7 +489,7 @@ def reserved_port(repo_root: Path) -> int | None:
     """
     try:
         port = json.loads(_port_reservation_path(repo_root).read_text()).get("port")
-    except (OSError, json.JSONDecodeError, AttributeError):
+    except OSError, json.JSONDecodeError, AttributeError:
         return None
     return port if isinstance(port, int) and 0 < port < 65536 else None
 
@@ -834,7 +834,7 @@ def read_automatic_save(repo_root: Path) -> dict | None:
         return None
     try:
         automatic_save = json.loads(path.read_text())
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError, OSError:
         return None
     return automatic_save if isinstance(automatic_save, dict) else None
 
@@ -993,7 +993,7 @@ def get_daemon_info(repo_root: Path) -> dict | None:
         if not pid_alive(info["pid"]):
             raise ProcessLookupError(info["pid"])
         return info
-    except (json.JSONDecodeError, KeyError, TypeError, OSError):
+    except json.JSONDecodeError, KeyError, TypeError, OSError:
         path.unlink(missing_ok=True)
         return None
 
@@ -1115,7 +1115,7 @@ def start_daemon(
                 if reserved_port(repo_root) != port:
                     reserve_port(repo_root, port)
                 return port
-        except (URLError, OSError):
+        except URLError, OSError:
             time.sleep(0.2)
 
     raise RuntimeError("Daemon started but not responding to HTTP")
@@ -1350,7 +1350,7 @@ def get_daemon_mutation_count(info: dict) -> int | None:
             count = data.get("mutation_count")
             if isinstance(count, int):
                 return count
-    except (URLError, OSError, ValueError):
+    except URLError, OSError, ValueError:
         return None
     return None
 
@@ -1393,7 +1393,7 @@ def attach_client(info: dict, pid: int | None) -> bool:
     try:
         with urlopen(req, timeout=3) as resp:
             return bool(_json.loads(resp.read().decode()).get("attached"))
-    except (URLError, OSError, ValueError):
+    except URLError, OSError, ValueError:
         return False
 
 
@@ -1457,7 +1457,7 @@ def save_daemon_mutations(info: dict, message: str | None = None) -> dict:
     try:
         with urlopen(daemon_url(info, "/api/dirty"), timeout=5) as resp:
             tip = _json.loads(resp.read().decode()).get("tip") or ""
-    except (URLError, OSError, ValueError):
+    except URLError, OSError, ValueError:
         pass  # "" means "nothing pending"; the guard rejects it if not true
     payload: dict = {"if_tip_mutation_id": tip}
     if message:
@@ -1489,7 +1489,7 @@ def _rejection_body(exc: HTTPError) -> dict:
 
     try:
         body = _json.loads(exc.read().decode())
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return {"success": False, "error": f"server refused the request: HTTP {exc.code}"}
     if not isinstance(body, dict):
         return {"success": False, "error": f"server refused the request: HTTP {exc.code}"}
@@ -1524,7 +1524,7 @@ def request_daemon_stop(info: dict, discard_changes: bool = False) -> dict:
         try:
             with urlopen(daemon_url(info, "/api/dirty"), timeout=5) as resp:
                 tip = _json.loads(resp.read().decode()).get("tip") or ""
-        except (URLError, OSError, ValueError):
+        except URLError, OSError, ValueError:
             pass  # "" means "nothing pending"; the guard rejects it if not true
         body = {"discard_changes": True, "if_tip_mutation_id": tip}
 

@@ -563,7 +563,7 @@ def _print_associate_resolution(config_path: str | None, root: Path) -> None:
 
     try:
         config = get_config(Path(config_path) if config_path else None, root, quiet=True)
-    except (OSError, ValueError):
+    except OSError, ValueError:
         # The command run next reads the same configuration and reports this
         # fault in full; the verbose line only says why nothing follows.
         print("Associates: not resolved (the configuration could not be read)", file=sys.stderr)

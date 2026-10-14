@@ -850,7 +850,7 @@ class HTMLGenerator:
                 base = Path(self.base_path).resolve()
                 if not str(source_path).startswith(str(base)):
                     return True
-            except (ValueError, OSError):
+            except ValueError, OSError:
                 pass
 
         # Check if node has associated field set
@@ -1446,7 +1446,7 @@ class HTMLGenerator:
 
                 raw_content = file_path.read_text(encoding="utf-8", errors="replace")
                 result[path] = highlight_file_content(path, raw_content)
-            except (OSError, UnicodeDecodeError):
+            except OSError, UnicodeDecodeError:
                 continue
 
         return result

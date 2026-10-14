@@ -4,10 +4,10 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "elspais"
-version = "0.128.2"
+version = "0.129.0"
 description = "Requirements validation and traceability tools - L-Space connects all libraries"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 authors = [{ name = "Anspar", email = "dev@anspar.io" }]
 keywords = ["requirements", "traceability", "validation", "documentation", "specifications"]
 classifiers = [
@@ -17,10 +17,7 @@ classifiers = [
     "License :: OSI Approved :: GNU Affero General Public License v3",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Quality Assurance",
     "Topic :: Software Development :: Documentation",
     "Typing :: Typed",
@@ -152,6 +149,11 @@ markers = [
 # per-test contexts these files carried; that attribution was real in kind but
 # recorded against unusable line numbers.
 omit = ["*.j2"]
+# The C tracer, because per-test contexts need it. On Python 3.14 coverage.py
+# otherwise measures through sys.monitoring, which records no dynamic context,
+# and every per-test attribution -- Code Tested and the TIA baseline alike --
+# comes out incomplete.
+core = "ctrace"
 
 [tool.coverage.json]
 # CUR-1568: per-test line attribution (code_tested.direct) is fed by
@@ -177,7 +179,7 @@ omit = ["*.j2"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = [
@@ -189,9 +191,12 @@ select = [
     "C4",  # flake8-comprehensions
     "UP",  # pyupgrade
 ]
+# UP042 would make each str-valued enum a StrEnum. That changes what str() and
+# format() of a member produce, which output and messages depend on.
+ignore = ["UP042"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.14"
 warn_return_any = true
 warn_unused_ignores = true
 disallow_untyped_defs = true

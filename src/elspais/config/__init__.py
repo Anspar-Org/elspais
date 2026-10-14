@@ -508,7 +508,7 @@ def _declared_version_of(config: dict[str, Any], source: Path) -> int | None:
         return None
     try:
         return int(raw)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         raise ValueError(
             f"{source}: version = {raw!r} is not a version number. Write "
             f"`version = {CURRENT_CONFIG_VERSION}`."

@@ -78,6 +78,14 @@
 - REQ-d00311:section:1
 - REQ-d00327:section:1
 
+## Impacted Test
+
+**REQ:**
+
+- REQ-o00066-I
+- REQ-o00066-O
+- REQ-o00066:section:0
+
 ## Project State
 
 **REQ:**

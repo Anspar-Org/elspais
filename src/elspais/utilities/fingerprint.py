@@ -45,7 +45,7 @@ import json
 import shutil
 import subprocess
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from glob import glob
 from pathlib import Path
 from typing import Any
@@ -390,7 +390,7 @@ def differences(recorded: dict[str, str], current: dict[str, str]) -> list[str]:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def read_fingerprint(folder: Path) -> dict[str, Any] | None:
@@ -400,7 +400,7 @@ def read_fingerprint(folder: Path) -> dict[str, Any] | None:
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
     # A fingerprint of another format version reads as no fingerprint. Consequently,
     # its results read as stale, never as fresh.
@@ -759,7 +759,7 @@ def read_last_run(repo_root: Path, config: Any) -> list[str] | None:
     path = last_run_path(repo_root, config)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
     if not isinstance(data, dict) or data.get("version") != _LAST_RUN_VERSION:
         return None

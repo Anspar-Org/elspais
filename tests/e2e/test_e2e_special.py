@@ -787,7 +787,7 @@ class TestDaemonClientLiveness:
             if daemon_json.exists():
                 try:
                     os.kill(json.loads(daemon_json.read_text())["pid"], 15)
-                except (OSError, ValueError, KeyError):
+                except OSError, ValueError, KeyError:
                     pass
 
     # Verifies: REQ-o00074-F
@@ -854,7 +854,7 @@ class TestDaemonClientLiveness:
                 # alive: read traffic is not evidence a writer is present.
                 try:
                     urllib.request.urlopen(dirty_url, timeout=2).read()
-                except (urllib.error.URLError, OSError):
+                except urllib.error.URLError, OSError:
                     pass  # daemon shutting down mid-poll is the expected end
                 time.sleep(0.3)
             else:
@@ -1517,7 +1517,7 @@ def _wait_for_viewer(proc: subprocess.Popen, root: Path, log_path: Path) -> str:
             pytest.fail(f"viewer exited before serving:\n{log_path.read_text(errors='replace')}")
         try:
             info = json.loads(record.read_text())
-        except (OSError, ValueError):
+        except OSError, ValueError:
             info = None
         if isinstance(info, dict) and info.get("pid") == proc.pid:
             base_url = f"http://127.0.0.1:{info['port']}"

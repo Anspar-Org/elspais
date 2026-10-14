@@ -82,7 +82,7 @@ class FlutterMachineParser(DiagnosticRecorder):
                 continue
             try:
                 ev = json.loads(line)
-            except (ValueError, json.JSONDecodeError):
+            except ValueError, json.JSONDecodeError:
                 # Suppressed deliberately: this reporter reads a runner's live
                 # stdout, where a build banner, a warning, or a plugin's own
                 # print sits between events. A line that is not JSON is

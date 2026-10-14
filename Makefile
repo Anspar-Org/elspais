@@ -5,6 +5,11 @@
 # makes that one place.
 VENV := .venv
 PY := $(CURDIR)/$(VENV)/bin/python
+# The one Python the project supports. CI tests on it and records the TIA
+# baseline on it, and a baseline selects only in a venv on the same minor
+# version. `uv python install 3.14` provides it where the system has another.
+PYTHON_VERSION := 3.14
+PYTHON := python$(PYTHON_VERSION)
 VENV_PATH := PATH="$(CURDIR)/$(VENV)/bin:$$PATH"
 
 # The test environment: these extras, at the versions requirements/dev.lock
@@ -18,7 +23,10 @@ space := $(empty) $(empty)
 
 setup: ## Set up development environment
 	git config core.hooksPath .githooks
-	python3 -m venv $(VENV)
+	@command -v $(PYTHON) >/dev/null 2>&1 || { \
+		echo "$(PYTHON) is not on PATH. Install it with: uv python install $(PYTHON_VERSION)"; \
+		exit 1; }
+	$(PYTHON) -m venv $(VENV)
 # Install through the venv's own interpreter, never the ambient `pip`.
 # An install into whatever Python happens to be active lands in a user
 # site-packages, binds this worktree there for every other repository, and
@@ -44,12 +52,12 @@ setup: ## Set up development environment
 
 # Regenerates the lock from pyproject.toml, keeping every pin that still
 # satisfies it; `make lock ARGS=--upgrade` moves them. One universal
-# resolution covers every supported Python and platform, through environment
+# resolution covers every platform on the supported Python, through environment
 # markers. uv is a dev dependency, so the lock pins the release that compiles
 # it. CI runs this target with PY=python and fails when the lock changes.
 lock: ## Regenerate requirements/dev.lock from pyproject.toml
 	$(PY) -m pip install -c $(LOCK) uv
-	$(PY) -m uv pip compile pyproject.toml --universal --python-version 3.10 \
+	$(PY) -m uv pip compile pyproject.toml --universal --python-version $(PYTHON_VERSION) \
 		$(foreach extra,$(TEST_EXTRAS),--extra $(extra)) \
 		--custom-compile-command "make lock" --quiet -o $(LOCK) $(ARGS)
 

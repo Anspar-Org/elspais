@@ -20,10 +20,8 @@ def _resolve_version() -> str:
     # Check for pyproject.toml relative to this package (editable install)
     pyproject = Path(__file__).resolve().parent.parent.parent / "pyproject.toml"
     if pyproject.is_file():
-        try:
-            import tomllib
-        except ModuleNotFoundError:
-            import tomli as tomllib  # type: ignore[no-redef]
+        import tomllib
+
         try:
             data = tomllib.loads(pyproject.read_text())
             v = data.get("project", {}).get("version")
