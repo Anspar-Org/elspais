@@ -324,7 +324,8 @@ later `summary` or `trace` names as fresh, with `--targets last-run`.
 | `command` | string | (omit in CI) | Shell command to execute when `--run-tests` is passed |
 | `reporter` | string | (required with `results`, or with `command` unless `file_results`) | Parser format -- one of the names in the reporters table below |
 | `results` | string | `""` | Glob pattern for result files, relative to the target's folder; required for a results-kind reporter whose target has a `command` |
-| `coverage` | string | `""` | Path to an lcov.info, coverage.py JSON or `.coverage` file (format auto-detected), relative to the target's folder |
+| `coverage` | string | `""` | Path to an lcov.info, coverage.py JSON or `.coverage` file, relative to the target's folder |
+| `coverage_format` | string | `""` | The format of the `coverage` file: `lcov`, `coverage-json` or `coverage-sqlite`. Required where `coverage` is set |
 | `inputs` | table | every file | The files whose change makes this target's results stale: `directories`, `file_patterns`, `skip_dirs`, `skip_files` |
 | `match` | string | `"source"` | `"source"` or `"aggregate"` -- matching strategy |
 | `classname` | string | `""` (the reporter's own) | `"python-module"` or `"source-file"` -- how this target's results name the test that produced them |
@@ -435,8 +436,8 @@ this table does not name.
 Every reporter reads files from disk -- those matched by the `results` glob
 for a results-kind reporter, and the `coverage` path for a coverage-kind one.
 Nothing reads a command's output as results.  Those files can be pre-produced
-by CI.  A coverage-kind reporter is chosen by sniffing the file at `coverage`,
-so a coverage-only target need not name one.
+by CI.  A coverage-kind reporter is named by the target's `coverage_format`,
+so a coverage-only target needs no `reporter`.
 
 A command writes its results into the target's folder, which it finds in
 `$ELSPAIS_TARGET_OUTPUT`, and the target's `results` glob names them.  A run

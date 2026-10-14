@@ -89,6 +89,7 @@ directories = ["src"]
 [[scanning.test.targets]]
 name = "unit"
 coverage = "lcov.info"
+coverage_format = "lcov"
 """,
             encoding="utf-8",
         )
@@ -173,6 +174,7 @@ directories = ["src"]
 [[scanning.test.targets]]
 name = "unit"
 coverage = "lcov.info"
+coverage_format = "lcov"
 """,
             encoding="utf-8",
         )
@@ -218,6 +220,7 @@ directories = ["src"]
 [[scanning.test.targets]]
 name = "unit"
 coverage = "coverage.json"
+coverage_format = "coverage-json"
 """,
             encoding="utf-8",
         )
@@ -281,6 +284,7 @@ directories = ["src"]
 [[scanning.test.targets]]
 name = "unit"
 coverage = "coverage.json"
+coverage_format = "coverage-json"
 """,
             encoding="utf-8",
         )
@@ -348,6 +352,7 @@ directories = ["src"]
 [[scanning.test.targets]]
 name = "unit"
 coverage = "coverage.json"
+coverage_format = "coverage-json"
 """,
             encoding="utf-8",
         )
@@ -406,6 +411,7 @@ directories = ["src"]
 [[scanning.test.targets]]
 name = "unit"
 coverage = ".coverage"
+coverage_format = "coverage-sqlite"
 """,
             encoding="utf-8",
         )
@@ -479,6 +485,7 @@ directories = ["src"]
 [[scanning.test.targets]]
 name = "unit"
 coverage = ".coverage"
+coverage_format = "coverage-sqlite"
 """,
             encoding="utf-8",
         )
@@ -550,6 +557,7 @@ def _write_cwd_project(
     import json
 
     dirs = code_dirs or sorted({Path(p).parent.as_posix() for p in code_files})
+    coverage_format = "coverage-json" if coverage.endswith(".json") else "lcov"
     cwd_line = f'cwd = "{cwd}"\n' if cwd is not None else ""
     config_file = root / ".elspais.toml"
     config_file.write_text(
@@ -567,6 +575,7 @@ directories = {json.dumps(dirs)}
 [[scanning.test.targets]]
 name = "unit"
 coverage = "{coverage}"
+coverage_format = "{coverage_format}"
 {cwd_line}{extra}""",
         encoding="utf-8",
     )
@@ -712,6 +721,7 @@ directories = ["pkg/lib"]
 [[scanning.test.targets]]
 name = "unit"
 coverage = "lcov.info"
+coverage_format = "lcov"
 cwd = "pkg"
 """
         root_toml = """version = 5

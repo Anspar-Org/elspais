@@ -733,7 +733,7 @@ def retained_coverage(
     from elspais.graph.factory import context_placer
     from elspais.graph.parsers.results.coverage_json import CoverageJsonParser, merge_readings
     from elspais.graph.parsers.results.placement import origin_dir, placed_in_repo
-    from elspais.graph.parsers.results.registry import coverage_reader_for, get_reporter
+    from elspais.graph.parsers.results.registry import get_reporter
 
     folder = target_folder(repo_root, config, target.name)
     root = Path(repo_root).resolve()
@@ -742,9 +742,10 @@ def retained_coverage(
     last_manifest = last_fingerprint.get("manifest") or {}
     if target.coverage:
         path = folder / target.coverage
-        found = coverage_reader_for(path) if path.is_file() else None
-        if found is not None:
-            name, reader = found
+        found = path.is_file()
+        if found:
+            name = target.coverage_format
+            reader = get_reporter(name).parser_factory()
             content = "" if getattr(reader, "binary", False) else path.read_text(encoding="utf-8")
             measured = reader.parse(content, str(path))
             cwd = (root / target.cwd) if target.cwd else root

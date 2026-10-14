@@ -2337,7 +2337,6 @@ def _build_repository(
         from elspais.graph.builder import UnreadArtifact
         from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
         from elspais.graph.parsers.results.coverage_sqlite import CoverageSqliteParser
-        from elspais.graph.parsers.results.registry import coverage_reader_for
         from elspais.graph.parsers.results.registry import get_reporter as _cov_spec
         from elspais.utilities.fingerprint import (
             RETAINED_COVERAGE_NAME,
@@ -2445,21 +2444,10 @@ def _build_repository(
                     )
                 )
                 continue
-            found_reader = coverage_reader_for(cov_path)
-            cov_reporter, cov_parser = found_reader if found_reader else (None, None)
-            if cov_parser is None:
-                # Implements: REQ-d00285-G
-                _log.debug("target %r: unrecognised coverage format: %s", target.name, cov_path)
-                graph.record_ingestion_fault(
-                    path=_repo_relative(cov_path, repo_root),
-                    stage="coverage",
-                    cause=(
-                        "no coverage reader recognises this file's format, so the "
-                        "measurement it holds was not read"
-                    ),
-                    target=target.name,
-                )
-                continue
+            # Implements: REQ-d00254-C
+            # The coverage file is read in the format the target declares.
+            cov_reporter = target.coverage_format
+            cov_parser = _cov_spec(cov_reporter).parser_factory()
             # Implements: REQ-d00327-B+E, REQ-d00327-C
             # A relative path in the coverage data is read from the origin the
             # target declares for its coverage, or else from the one the

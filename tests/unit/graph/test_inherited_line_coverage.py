@@ -39,6 +39,7 @@ directories = ["tests"]
 name = "unit"
 reporter = "lcov"
 coverage = "lcov.info"
+coverage_format = "lcov"
 credit_coverage = "tested"
 """
 

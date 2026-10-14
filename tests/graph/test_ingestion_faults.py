@@ -320,6 +320,7 @@ def test_a_coverage_file_that_is_not_there_is_recorded(tmp_path):
 name = "unit"
 reporter = "lcov"
 coverage = "lcov.info"
+coverage_format = "lcov"
 """,
     )
 
@@ -330,24 +331,6 @@ coverage = "lcov.info"
             target="unit", artifact="coverage", path=".results/unit/lcov.info", reason="absent"
         )
     ]
-
-
-# Verifies: REQ-d00285-G
-def test_a_coverage_file_no_reader_recognises_is_recorded(tmp_path):
-    project = _project(
-        tmp_path,
-        """
-[[scanning.test.targets]]
-name = "unit"
-reporter = "lcov"
-coverage = "report.txt"
-""",
-        {".results/unit/report.txt": "some other format\n"},
-    )
-
-    (fault,) = _build(project).ingestion_faults()
-    assert fault.stage == "coverage"
-    assert "format" in fault.cause
 
 
 # Verifies: REQ-d00285-G
@@ -364,6 +347,7 @@ def test_a_coverage_report_the_reader_declined_reaches_the_graph(tmp_path):
 name = "unit"
 reporter = "lcov"
 coverage = "lcov.info"
+coverage_format = "lcov"
 """,
         {
             "src/a.py": "def a():\n    return 1\n",
@@ -585,6 +569,7 @@ results = "TEST-*.xml"
 name = "cover"
 reporter = "lcov"
 coverage = "lcov.info"
+coverage_format = "lcov"
 """,
     )
 
@@ -798,6 +783,7 @@ name = "unit"
 reporter = "junit"
 results = "junit.xml"
 coverage = "coverage.json"
+coverage_format = "coverage-json"
 """
 
 

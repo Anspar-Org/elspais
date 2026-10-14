@@ -1,8 +1,6 @@
 # Verifies: REQ-d00254-E
 """Tests for LCOV coverage report parser."""
 
-from pathlib import Path
-
 from elspais.graph.parsers.results.lcov import LcovParser
 
 
@@ -164,26 +162,6 @@ end_of_record
         assert len(result) == 2
         assert "lib/src/a.dart" in result
         assert "lib/src/b.dart" in result
-
-
-class TestLcovParserCanParse:
-    """Tests for can_parse file detection."""
-
-    def test_info_extension(self):
-        parser = LcovParser()
-        assert parser.can_parse(Path("coverage/lcov.info")) is True
-
-    def test_lcov_in_filename(self):
-        parser = LcovParser()
-        assert parser.can_parse(Path("lcov-report.txt")) is True
-
-    def test_unrelated_file(self):
-        parser = LcovParser()
-        assert parser.can_parse(Path("test_results.xml")) is False
-
-    def test_lcov_dat_file(self):
-        parser = LcovParser()
-        assert parser.can_parse(Path("lcov.dat")) is True
 
 
 class TestLcovParserFactory:

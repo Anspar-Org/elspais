@@ -825,6 +825,10 @@ class TestTargetConfig(_StrictModel):
     results: str = ""
     # lcov/coverage file relative to the target's output folder; empty = no coverage.
     coverage: str = ""
+    # Implements: REQ-d00254-C
+    # The format of the file `coverage` names: the name of a coverage reporter.
+    # Required wherever `coverage` is set.
+    coverage_format: str = ""
 
     # Implements: REQ-d00312-A
     # A file whose name begins `.elspais-` in an output area is written by
@@ -1029,6 +1033,21 @@ class TestTargetConfig(_StrictModel):
         # reporter must read.
         if self.results and not self.reporter:
             raise ValueError("reporter is required when results is set")
+        # Implements: REQ-d00254-C
+        # A coverage file is read in the format the project names for it.
+        from elspais.graph.parsers.results.registry import REPORTER_REGISTRY
+
+        formats = sorted(n for n, s in REPORTER_REGISTRY.items() if s.kind == "coverage")
+        if self.coverage and not self.coverage_format:
+            raise ValueError(
+                f"coverage = {self.coverage!r} is set without coverage_format; set "
+                f"coverage_format to the format of that file: {', '.join(formats)}"
+            )
+        if self.coverage_format and self.coverage_format not in formats:
+            raise ValueError(
+                f"coverage_format {self.coverage_format!r} is not a coverage format; "
+                f"use one of {', '.join(formats)}"
+            )
         if self.command and not self.reporter and not self.file_results:
             raise ValueError(
                 "reporter is required when command is set, unless file_results = true "

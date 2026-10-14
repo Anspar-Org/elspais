@@ -1217,6 +1217,7 @@ file_patterns = ["test_*.py"]
 [[scanning.test.targets]]
 name = "a"
 coverage = "lcov.info"
+coverage_format = "lcov"
 credit_coverage = "verified"
 
 [rules.hierarchy]
@@ -1292,7 +1293,9 @@ def code_tested_context_carrying_project(tmp_path):
     )
 
     (project / ".elspais.toml").write_text(
-        _CODE_TESTED_CONFIG.replace('"lcov.info"', '"coverage.json"'),
+        _CODE_TESTED_CONFIG.replace('"lcov.info"', '"coverage.json"').replace(
+            'coverage_format = "lcov"', 'coverage_format = "coverage-json"'
+        ),
         encoding="utf-8",
     )
     # The coverage comes from a run of this tree, so it is fresh.

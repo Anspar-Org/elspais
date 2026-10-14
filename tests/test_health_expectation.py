@@ -132,7 +132,7 @@ def test_expecting_one_target_leaves_the_others_not_run():
 def test_coverage_absent_beside_results_present_is_missing_whatever_was_expected():
     """Results are there, so the target ran; coverage it declares and did not
     leave is missing even though the run neither executed nor expected it."""
-    target = {**_FILE_TARGET, "coverage": "coverage.json"}
+    target = {**_FILE_TARGET, "coverage": "coverage.json", "coverage_format": "coverage-json"}
     graph = _single(target, _absent("unit", "coverage", ".results/unit/coverage.json"))
 
     faults = check_ingestion_faults(graph, {})
@@ -147,7 +147,12 @@ def test_coverage_absent_beside_results_present_is_missing_whatever_was_expected
 # Verifies: REQ-d00283-S+V
 def test_coverage_only_target_absent_and_unexpected_is_not_run():
     """A target that reads only coverage has no results to show it ran."""
-    target = {"name": "cover", "reporter": "lcov", "coverage": "lcov.info"}
+    target = {
+        "name": "cover",
+        "reporter": "lcov",
+        "coverage": "lcov.info",
+        "coverage_format": "lcov",
+    }
     graph = _single(target, _absent("cover", "coverage", ".results/cover/lcov.info"))
 
     assert check_ingestion_faults(graph, {}).passed is True
@@ -160,7 +165,7 @@ def test_coverage_only_target_absent_and_unexpected_is_not_run():
 
 # Verifies: REQ-d00283-R+S+V
 def test_a_target_leaving_neither_results_nor_coverage_is_reported_once_per_question():
-    target = {**_FILE_TARGET, "coverage": "coverage.json"}
+    target = {**_FILE_TARGET, "coverage": "coverage.json", "coverage_format": "coverage-json"}
     artifacts = (_absent("unit"), _absent("unit", "coverage", ".results/unit/coverage.json"))
 
     graph = _single(target, *artifacts)
@@ -303,6 +308,7 @@ name = "journeys"
 reporter = "junit"
 results = "junit.xml"
 coverage = "coverage.json"
+coverage_format = "coverage-json"
 groups = ["uat"]
 """
 
@@ -438,7 +444,7 @@ def test_an_expected_target_whose_run_is_in_progress_has_missing_results(tmp_pat
     ids=["results", "coverage-only", "both"],
 )
 def test_an_expected_run_in_progress_is_reported_once_as_missing_results(artifacts):
-    target = {**_FILE_TARGET, "coverage": "coverage.json"}
+    target = {**_FILE_TARGET, "coverage": "coverage.json", "coverage_format": "coverage-json"}
     running = [
         UnreadArtifact(
             target="unit",

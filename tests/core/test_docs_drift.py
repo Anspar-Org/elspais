@@ -281,6 +281,7 @@ class TestDocsDriftExcludesConditional:
             [[scanning.test.targets]]
             name     = "elspais-unit"
             coverage = ".results/coverage.json"
+            coverage_format = "coverage-json"
             ```
             """
         )

@@ -1356,6 +1356,11 @@
           "title": "Coverage",
           "type": "string"
         },
+        "coverage_format": {
+          "default": "",
+          "title": "Coverage Format",
+          "type": "string"
+        },
         "match": {
           "default": "source",
           "title": "Match",

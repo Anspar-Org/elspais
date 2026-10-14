@@ -180,6 +180,7 @@ command = ".githooks/run-unit-tier"
 reporter = "junit"
 results = "junit.xml"
 coverage = ".coverage"
+coverage_format = "coverage-sqlite"
 groups = ["commit", "default"]
 
 # The slower tiers, so their PASS/FAIL reaches a coverage figure. Their

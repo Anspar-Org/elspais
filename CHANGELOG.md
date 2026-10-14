@@ -10,6 +10,8 @@ All notable changes to elspais will be documented in this file.
 
 ### TOOL-157
 
+- **A test target names the format of its coverage file (REQ-d00254-C)** -- `coverage_format` (`lcov`, `coverage-json` or `coverage-sqlite`) is required wherever `coverage` is set, and a configuration without it is refused naming the key and the formats. elspais no longer guesses the format from the file's name.
+
 - **Line coverage reports, carried coverage and ignored inputs are specified (REQ-d00334, REQ-d00333-J, REQ-d00323-Q, REQ-d00311-S)** -- the system keeps a *Line Coverage Report* of the line coverage it uses for each test target and for the repository; a coverage measurement is used only while its source file holds the content it was measured on; line coverage of a target a run did not execute is carried, as its results are; and a file version control ignores is no input of a test target.
 
 - **The `ast` warning names only test files nothing else reads (REQ-d00332-A+D)** -- a build without the `ast` extra warned about every scanned test file in a tree-sitter language, including those whose tests the configured `prescan_command` already returns. It now leaves those files out, and prints no warning where the prescan reads them all.

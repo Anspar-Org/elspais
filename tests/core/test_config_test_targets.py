@@ -23,6 +23,7 @@ def test_target_full():
         command="flutter test --machine --coverage",
         reporter="flutter-machine",
         coverage="coverage/lcov.info",
+        coverage_format="lcov",
         match="source",
         credit_coverage="verified",
         min_coverage_fraction=0.0,
@@ -81,10 +82,11 @@ def test_target_with_results_but_no_reporter_raises():
 def test_target_with_coverage_only_no_reporter_is_valid():
     """A target with only coverage (no command/results) is valid without a reporter.
 
-    Coverage ingestion uses format auto-detection, not the reporter registry.
+    The coverage file is read in the format its `coverage_format` declares.
     """
-    t = TestTargetConfig(name="x", coverage="coverage/lcov.info")
+    t = TestTargetConfig(name="x", coverage="coverage/lcov.info", coverage_format="lcov")
     assert t.coverage == "coverage/lcov.info"
+    assert t.coverage_format == "lcov"
     assert t.reporter == ""
 
 
@@ -158,3 +160,44 @@ def test_a_fetch_command_without_its_placeholder_is_refused_naming_it():
 def test_an_unknown_baseline_setting_is_refused():
     with pytest.raises(ValidationError):
         TestScanningConfig(baseline={"fetch": "tools/fetch.sh {dest}"})
+
+
+# ---------------------------------------------------------------------------
+# coverage_format names the coverage reporter that reads `coverage`
+# ---------------------------------------------------------------------------
+
+COVERAGE_FORMATS = ("lcov", "coverage-json", "coverage-sqlite")
+
+
+# Verifies: REQ-d00254-C
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"coverage": "lcov.info"},
+        {"coverage": "lcov.info", "coverage_format": "junit"},
+    ],
+    ids=["coverage-without-format", "results-reporter-as-format"],
+)
+def test_a_coverage_file_without_a_coverage_reporter_is_refused_naming_the_formats(
+    settings,
+):
+    with pytest.raises(ValidationError) as exc:
+        TestTargetConfig(name="x", **settings)
+    message = str(exc.value)
+    assert "coverage_format" in message
+    for fmt in COVERAGE_FORMATS:
+        assert fmt in message
+
+
+# Verifies: REQ-d00254-C
+def test_a_coverage_file_with_its_coverage_reporter_validates():
+    t = TestTargetConfig(name="x", coverage="lcov.info", coverage_format="lcov")
+    assert t.coverage == "lcov.info"
+    assert t.coverage_format == "lcov"
+
+
+# Verifies: REQ-d00254-C
+def test_a_target_without_coverage_needs_no_coverage_format():
+    t = TestTargetConfig(name="x")
+    assert t.coverage == ""
+    assert t.coverage_format == ""

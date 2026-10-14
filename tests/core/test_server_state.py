@@ -949,6 +949,7 @@ name = "unit"
 reporter = "junit"
 results = "junit.xml"
 coverage = "coverage.json"
+coverage_format = "coverage-json"
 """
 )
 

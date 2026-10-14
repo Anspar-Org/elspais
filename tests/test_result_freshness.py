@@ -414,9 +414,9 @@ def test_each_target_has_a_folder_under_the_configured_root(tmp_path):
     [
         {"name": "unit", "reporter": "junit", "results": "../junit.xml"},
         {"name": "unit", "reporter": "junit", "results": "../e2e/junit.xml"},
-        {"name": "unit", "coverage": "nested/../../lcov.info"},
+        {"name": "unit", "coverage": "nested/../../lcov.info", "coverage_format": "lcov"},
         {"name": "unit", "reporter": "junit", "results": "/abs/.results/unit/junit.xml"},
-        {"name": "app", "cwd": "app", "coverage": ".."},
+        {"name": "app", "cwd": "app", "coverage": "..", "coverage_format": "lcov"},
     ],
     ids=["above-folder", "another-targets-folder", "climbs-after-descending", "absolute", "cwd"],
 )

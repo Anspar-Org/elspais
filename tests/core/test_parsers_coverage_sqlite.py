@@ -65,19 +65,7 @@ def cov_fixture(tmp_path: Path) -> tuple[Path, Path]:
     return mod_path, cov_path
 
 
-class TestCanParse:
-    def test_sniffs_sqlite_magic_bytes(self, cov_fixture: tuple[Path, Path]) -> None:
-        _, cov_path = cov_fixture
-        assert CoverageSqliteParser().can_parse(cov_path) is True
-
-    def test_rejects_non_sqlite_file(self, tmp_path: Path) -> None:
-        text_file = tmp_path / ".coverage"
-        text_file.write_text("not a database", encoding="utf-8")
-        assert CoverageSqliteParser().can_parse(text_file) is False
-
-    def test_rejects_missing_file(self, tmp_path: Path) -> None:
-        assert CoverageSqliteParser().can_parse(tmp_path / "nope") is False
-
+class TestParserIdentity:
     def test_create_parser_returns_instance(self) -> None:
         assert isinstance(create_parser(), CoverageSqliteParser)
 

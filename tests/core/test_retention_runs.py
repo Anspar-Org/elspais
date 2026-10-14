@@ -382,6 +382,7 @@ def _coverage_project(tmp_path: Path, monkeypatch) -> tuple[Path, dict]:
     monkeypatch.setenv("RUNNER_COVERAGE", "1")
     root, config = _project(tmp_path)
     config["scanning"]["test"]["targets"][0]["coverage"] = "coverage.json"
+    config["scanning"]["test"]["targets"][0]["coverage_format"] = "coverage-json"
     return root, config
 
 
@@ -701,6 +702,7 @@ def test_retained_coverage_holds_its_test_names_repo_relative(tmp_path):
         {
             "cwd": "tests",
             "coverage": "coverage.json",
+            "coverage_format": "coverage-json",
             "results_origin": "working-directory",
             "coverage_origin": "repository-root",
         }

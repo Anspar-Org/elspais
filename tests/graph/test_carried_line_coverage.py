@@ -71,6 +71,7 @@ reporter = "junit"
 results = "results.xml"
 match = "source"
 coverage = "lcov.info"
+coverage_format = "lcov"
 credit_coverage = "tested"
 
 [rules.hierarchy]
@@ -121,6 +122,7 @@ reporter = "junit"
 results = "results.xml"
 match = "source"
 coverage = "lcov.info"
+coverage_format = "lcov"
 credit_coverage = "tested"
 """
 

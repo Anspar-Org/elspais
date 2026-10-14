@@ -9,7 +9,6 @@ nodes; the factory uses parsed data to annotate existing FILE nodes.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from elspais.graph.parsers.results.diagnostics import DiagnosticRecorder
 
@@ -99,20 +98,6 @@ class CoverageJsonParser(DiagnosticRecorder):
                 results[file_path]["provenance"] = provenance
 
         return results
-
-    def can_parse(self, file_path: Path) -> bool:
-        """Check if this parser can handle the given file.
-
-        Returns True for ``.json`` files with ``coverage`` in the filename.
-
-        Args:
-            file_path: Path to the file.
-
-        Returns:
-            True if the file looks like a Python coverage JSON report.
-        """
-        name = file_path.name.lower()
-        return file_path.suffix.lower() == ".json" and "coverage" in name
 
 
 # Implements: REQ-d00333-J

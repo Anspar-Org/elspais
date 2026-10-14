@@ -418,6 +418,7 @@ results  = "machine.jsonl"          # glob relative to the target's folder;
                                     # a run refuses a results reporter
                                     # whose target declares none
 match    = "source"                 # "source" (default) | "aggregate"
+coverage_format = "lcov"  # required with coverage: lcov | coverage-json | coverage-sqlite
 coverage = "lcov.info"  # optional; relative to the target's
                         # folder .results/app, for every cwd. A relative
                         # source path inside the report is read from the
@@ -1169,6 +1170,7 @@ command  = "COVERAGE_FILE=$ELSPAIS_TARGET_OUTPUT/.coverage pytest tests/ -q --ju
 reporter = "junit"
 results  = "junit.xml"
 coverage = ".coverage"
+coverage_format = "coverage-sqlite"
 ```
 
 Reading contexts from `.coverage` requires the `coverage` package (the
@@ -1197,8 +1199,8 @@ alternative for suites too small to worry about the JSON-report size cost.
 
 A `[[scanning.test.targets]]` entry names the format its results arrive in
 through `reporter`. A results-kind reporter produces pass/fail result records; a
-coverage-kind one annotates files with line coverage and is chosen by sniffing
-the file at `coverage`, so a coverage-only target need not name one.
+coverage-kind one annotates files with line coverage and is named by the
+target's `coverage_format`, so a coverage-only target needs no `reporter`.
 
 <!-- generated: reporters -->
 <!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
