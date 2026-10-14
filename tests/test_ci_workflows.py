@@ -92,9 +92,10 @@ def _context(event: str, filter_output: str = "", **plan) -> dict:
 
     A run its own trigger started holds no inputs, and GitHub reads a property
     of the empty `inputs` object as null. A skipped step reports no outputs:
-    GitHub reads them as the empty string.
+    GitHub reads them as the empty string. The run is not cancelled.
     """
     return {
+        "run.cancelled": False,
         "github.event_name": event,
         "github.ref": _REFS[event],
         "inputs.ref": None,
@@ -110,14 +111,18 @@ def _triggers(config: dict) -> dict:
 
 
 _STATUS_FUNCTION = re.compile(r"\b(always|cancelled|success|failure)\(")
+_UNMODELLED_STATUS_FUNCTION = re.compile(r"\b(success|failure)\(")
 
 
 def _jobs_that_run(config: dict, context: dict) -> set[str]:
     """The jobs a run executes, every job that runs succeeding.
 
     A job whose condition calls no status function is skipped where any job it
-    needs did not run (GitHub's implicit `success()`), so a job runs only when
-    its own condition holds and every job it needs ran.
+    needs did not run (GitHub's implicit `success()`), so it runs only when its
+    own condition holds and every job it needs ran. A job whose condition calls
+    `always()` or `cancelled()` loses that implicit check and runs exactly when
+    its condition holds; it reads each job it needs as `success` where that job
+    ran and `skipped` where it did not.
     """
     jobs = config["jobs"]
     decided: dict[str, bool] = {}
@@ -125,12 +130,18 @@ def _jobs_that_run(config: dict, context: dict) -> set[str]:
     def decide(name: str) -> bool:
         if name not in decided:
             job = jobs[name]
-            assert not _STATUS_FUNCTION.search(str(job.get("if", ""))), (
-                f"{name}: a status function in a job condition is not modelled here"
+            condition = str(job.get("if", ""))
+            assert not _UNMODELLED_STATUS_FUNCTION.search(condition), (
+                f"{name}: success() or failure() in a job condition is not modelled here"
             )
             needs = job.get("needs", [])
             needs = [needs] if isinstance(needs, str) else needs
-            decided[name] = all(decide(n) for n in needs) and _runs(job, context)
+            results = {f"needs.{n}.result": "success" if decide(n) else "skipped" for n in needs}
+            holds = _runs(job, {**context, **results})
+            if _STATUS_FUNCTION.search(condition):
+                decided[name] = holds
+            else:
+                decided[name] = all(r == "success" for r in results.values()) and holds
         return decided[name]
 
     return {name for name in jobs if decide(name)}
@@ -191,20 +202,20 @@ class TestWhichJobsRun:
             pytest.param(
                 "push",
                 {"full": True, "record": True},
-                _PREPARE | _TIERS | _CHECKS | {"full-suite", "promote-image"},
+                _PREPARE | _TIERS | _CHECKS | {"full-suite", "promote-image", "save-baseline"},
                 id="push-labelled-full",
             ),
             pytest.param("schedule", {"skip": True}, {"plan"}, id="schedule-already-recorded"),
             pytest.param(
                 "schedule",
                 {"full": True, "record": True},
-                _PREPARE | _TIERS | {"full-suite", "promote-image"},
+                _PREPARE | _TIERS | {"full-suite", "promote-image", "save-baseline"},
                 id="schedule-unrecorded",
             ),
             pytest.param(
                 "workflow_dispatch",
                 {"full": True, "record": True},
-                _PREPARE | _TIERS | _CHECKS | {"full-suite"},
+                _PREPARE | _TIERS | _CHECKS | {"full-suite", "save-baseline"},
                 id="dispatch",
             ),
         ],
@@ -215,7 +226,7 @@ class TestWhichJobsRun:
         """A push to main runs the unit tier and none of the slower tiers
         unless the run is full; a scheduled run that finds its commit already
         recorded runs nothing but the plan; only a full run of main promotes
-        the image it tested."""
+        the image it tested; only a recording run saves a baseline."""
         assert _jobs_that_run(ci_config, _context(event, **plan)) == expected
 
     # Verifies: REQ-o00066-N
@@ -289,28 +300,57 @@ class TestCITestSuite:
 
     # Verifies: REQ-o00066-I+O
     def test_REQ_o00066_O_baseline_is_saved_where_runs_look_for_it(self, ci_config):
-        """A recording run saves the baseline under the key the scheduled
-        plan looks for and the impacted runs restore from, and publishes the
-        artifact a developer's hook fetches."""
+        """A recording run publishes the baseline as the artifact a
+        developer's hook fetches; `save-baseline` downloads that artifact and
+        saves it under the key the scheduled plan looks for and the impacted
+        runs restore from."""
         jobs = ci_config["jobs"]
         test = jobs["test"]
-        (save,) = [s for s in test["steps"] if s.get("uses", "").startswith("actions/cache/save")]
-        (restore,) = [
-            s for s in test["steps"] if s.get("uses", "").startswith("actions/cache/restore")
-        ]
-        recorded = _step_with_id(jobs["plan"], "recorded")
-        assert save["with"]["key"] == recorded["with"]["key"]
-        assert save["with"]["key"] == restore["with"]["restore-keys"] + "${{ github.sha }}"
-        assert restore["with"]["key"].startswith(restore["with"]["restore-keys"])
-        assert "needs.plan.outputs.record == 'true'" in save["if"]
+        saver = jobs["save-baseline"]
         (publish,) = [
             s
             for s in test["steps"]
             if s.get("uses", "").startswith("actions/upload-artifact")
             and "record" in str(s.get("if", ""))
         ]
+        (download,) = [
+            s for s in saver["steps"] if s.get("uses", "").startswith("actions/download-artifact")
+        ]
+        (save,) = [s for s in saver["steps"] if s.get("uses", "").startswith("actions/cache/save")]
+        (restore,) = [
+            s for s in test["steps"] if s.get("uses", "").startswith("actions/cache/restore")
+        ]
+        recorded = _step_with_id(jobs["plan"], "recorded")
         assert publish["with"]["name"] == "tia-baseline-${{ github.sha }}"
         assert "needs.plan.outputs.record == 'true'" in publish["if"]
+        assert download["with"]["name"] == publish["with"]["name"]
+        assert download["with"]["path"] == save["with"]["path"]
+        assert save["with"]["key"] == recorded["with"]["key"]
+        assert save["with"]["key"] == restore["with"]["restore-keys"] + "${{ github.sha }}"
+        assert restore["with"]["key"].startswith(restore["with"]["restore-keys"])
+        assert "test" in saver["needs"]
+        assert "needs.plan.outputs.record == 'true'" in saver["if"]
+        assert "needs.test.result == 'success'" in saver["if"]
+        assert not any(s.get("uses", "").startswith("actions/cache/save") for s in test["steps"])
+
+    # Verifies: REQ-o00066-O
+    def test_REQ_o00066_O_no_job_writing_the_cache_runs_repository_code(self, ci_config):
+        """The cache is shared with every later run on main, so a job that
+        saves to it checks out nothing: what it saves can only be files an
+        earlier job published, never the output of code the run checked out."""
+        savers = {
+            name: job
+            for name, job in ci_config["jobs"].items()
+            if any(
+                str(s.get("uses", "")).startswith("actions/cache/save@")
+                for s in job.get("steps", [])
+            )
+        }
+        assert savers, "no job saves to the cache"
+        for name, job in savers.items():
+            assert not any(
+                str(s.get("uses", "")).startswith("actions/checkout@") for s in job["steps"]
+            ), name
 
 
 # --- One supported Python version ---
@@ -675,8 +715,11 @@ class TestTriggers:
         reports success, so it never holds the queue)."""
         jobs = _load(workflow)["jobs"]
         for name, job in jobs.items():
-            assert _runs(job, _context("merge_group", full=full)) == _runs(
-                job, _context("pull_request", full=full)
+            needs = job.get("needs", [])
+            needs = [needs] if isinstance(needs, str) else needs
+            results = {f"needs.{n}.result": "success" for n in needs}
+            assert _runs(job, {**_context("merge_group", full=full), **results}) == _runs(
+                job, {**_context("pull_request", full=full), **results}
             ), name
 
 
@@ -701,6 +744,7 @@ def _called_context(caller_event: str) -> dict:
     plan job reads a called run as full and records nothing. A path filter
     step that does not run reports an empty output."""
     return {
+        "run.cancelled": False,
         "github.event_name": caller_event,
         "github.ref": _CALLER_EVENTS[caller_event],
         "github.sha": "fedcba9876543210fedcba9876543210fedcba98",
@@ -728,11 +772,13 @@ class TestReleaseRunsTheFullSuite:
         self, ci_config, caller_event
     ):
         """A called run runs each tier on every supported Python and reaches
-        `Full Suite`, whatever event started its caller, and promotes no image."""
+        `Full Suite`, whatever event started its caller, promotes no image and
+        saves no baseline."""
         context = _called_context(caller_event)
         ran = _jobs_that_run(ci_config, context)
         assert _TIERS | {"full-suite"} <= ran
         assert "promote-image" not in ran
+        assert "save-baseline" not in ran
         for job_name in _TIERS:
             assert _matrix_versions(ci_config, job_name, context) == _supported_python()
 

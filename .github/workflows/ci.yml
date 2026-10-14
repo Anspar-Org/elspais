@@ -254,16 +254,10 @@ jobs:
           ELSPAIS_TIA_RECORD: ${{ needs.plan.outputs.record == 'true' && '1' || '' }}
         run: .githooks/run-unit-tier .results/elspais-unit
 
-      - name: Save the baseline for later runs
-        if: ${{ !cancelled() && needs.plan.outputs.record == 'true' && hashFiles('.results/tia/baseline/baseline.json') != '' }}
-        uses: actions/cache/save@v4
-        with:
-          path: .results/tia/baseline
-          key: tia-baseline-v2-py3.14-${{ github.sha }}
-
       # `python -m tools.tia baseline fetch` downloads this artifact into a
-      # developer's worktree. The cache above is out of reach outside Actions.
-      - name: Publish the baseline for developers
+      # developer's worktree, and `save-baseline` copies it into the cache
+      # later runs restore from.
+      - name: Publish the baseline
         if: ${{ !cancelled() && needs.plan.outputs.record == 'true' && hashFiles('.results/tia/baseline/baseline.json') != '' }}
         uses: actions/upload-artifact@v4
         with:
@@ -271,6 +265,28 @@ jobs:
           path: .results/tia/baseline
           retention-days: 30
           if-no-files-found: error
+
+  save-baseline:
+    # Copies the published baseline into the Actions cache that later runs
+    # restore from. The job checks out no code: the cache is shared with
+    # every run on main, so only files the recording run published reach it.
+    name: Save Baseline
+    needs: [plan, test]
+    if: ${{ !cancelled() && needs.plan.outputs.record == 'true' && needs.test.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Download the published baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: tia-baseline-${{ github.sha }}
+          path: .results/tia/baseline
+
+      - name: Save the baseline for later runs
+        uses: actions/cache/save@v4
+        with:
+          path: .results/tia/baseline
+          key: tia-baseline-v2-py3.14-${{ github.sha }}
 
   e2e-test:
     # The e2e tier, run the way the pre-push hook runs it: through
@@ -427,6 +443,7 @@ jobs:
     needs: [plan, test, e2e-test, stress-test, browser-test]
     if: needs.plan.outputs.full == 'true'
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
       - run: echo "Every tier ran in full and passed."
 
