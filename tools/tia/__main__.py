@@ -143,6 +143,7 @@ def cmd_baseline(args) -> int:
     except BaselineError as exc:
         print(f"tia: baseline unusable -> {exc.kind}: {exc.detail}")
         return 1
+    b.close()
     m = b.manifest
     print(
         json.dumps(

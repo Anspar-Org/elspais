@@ -186,6 +186,7 @@ def run_mutants(
 
     base = load_baseline(baseline_path, root, on_environment_change="warn")
     cands = mutant_candidates(root, cfg, base.coverage)
+    base.close()
     rng = random.Random(seed)
     picks = rng.sample(cands, min(n, len(cands)))
     results = []

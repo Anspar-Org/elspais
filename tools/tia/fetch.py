@@ -72,7 +72,7 @@ def fetch_baseline(
             current_env=current_env,
             on_environment_change="full",
             max_age_days=max_age_days,
-        )
+        ).close()
 
     if not force:
         try:
