@@ -2942,7 +2942,7 @@ def _guard_associate_write(graph: Any, config: Any, *node_ids: str) -> dict[str,
             continue
         try:
             owner = graph.repo_for(nid).name
-        except (KeyError, AttributeError):
+        except KeyError, AttributeError:
             continue  # unknown/new/structural node — not an associate
         if root is not None and owner != root:
             return {
@@ -3234,7 +3234,7 @@ def _attach_version(result: dict[str, Any], node: Any) -> dict[str, Any]:
         return result
     try:
         result["version"] = node_version(node)
-    except (AttributeError, KeyError, ValueError):
+    except AttributeError, KeyError, ValueError:
         # Deleted nodes have no meaningful resulting version.
         pass
     return result

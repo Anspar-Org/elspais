@@ -4,26 +4,15 @@ from __future__ import annotations
 
 import fnmatch
 import re
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-
-try:  # Python 3.11+
-    import tomllib as _toml
-
-    def _loads(text: str) -> dict:
-        return _toml.loads(text)
-except ModuleNotFoundError:  # pragma: no cover - Python 3.10: elspais depends on tomlkit
-    import tomlkit
-
-    def _loads(text: str) -> dict:
-        return tomlkit.parse(text).unwrap()
-
 
 DEFAULT_CONFIG = Path(__file__).with_name("config.toml")
 
 
 def loads_toml(text: str) -> dict:
-    return _loads(text)
+    return tomllib.loads(text)
 
 
 def glob_to_regex(pattern: str) -> re.Pattern:
@@ -119,7 +108,7 @@ class Config:
 
 def load_config(path: str | Path | None = None) -> Config:
     path = Path(path) if path else DEFAULT_CONFIG
-    data = _loads(path.read_text(encoding="utf-8"))
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
     suite = data.get("suite", {})
     sel = data.get("selection", {})
     cfg = Config(

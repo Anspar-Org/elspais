@@ -42,6 +42,12 @@
 : The normalized results of one test run of one tree, bound to that tree by its digest and stored in the repository with the traceability report derived from them.
 *Defined in: file:REQ:spec/glossary.md (REQ)*
 
+## I
+
+**Impacted Test**
+: For one change, a unit test that executed a file the change modifies, in the newest passing full unit run recorded for an ancestor of the change. Where no such run exists, or the change modifies the environment the tests run in, every unit test is an Impacted Test.
+*Defined in: file:REQ:spec/glossary.md (REQ)*
+
 ## P
 
 **Project State**

@@ -310,6 +310,10 @@ class Baseline:
     def identity(self) -> dict:
         return self.manifest["identity"]
 
+    def close(self) -> None:
+        if self.coverage is not None:
+            self.coverage.close()
+
 
 def load_baseline(
     path: str,
@@ -438,6 +442,21 @@ class CoverageIndex:
         self._to_bits = nums_to_numbits
         try:
             self.con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        except sqlite3.Error as exc:
+            raise BaselineError("coverage-corrupt", f"not a coverage data file: {exc}") from exc
+        try:
+            self._load(recorded_root, known_tests)
+        except BaseException:
+            self.con.close()
+            raise
+
+    def close(self) -> None:
+        self.con.close()
+
+    def _load(self, recorded_root: str, known_tests: set[str]) -> None:
+        import sqlite3
+
+        try:
             version = self.con.execute("select version from coverage_schema").fetchone()[0]
         except sqlite3.Error as exc:
             raise BaselineError("coverage-corrupt", f"not a coverage data file: {exc}") from exc

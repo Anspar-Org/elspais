@@ -43,7 +43,7 @@ def _baseline_failing(m: dict) -> set[str]:
     try:
         with open(path, encoding="utf-8") as fh:
             tests = json.load(fh)["tests"]
-    except (OSError, ValueError, KeyError):
+    except OSError, ValueError, KeyError:
         return set()
     return {
         nodeid_to_junit_key(n) for n, t in tests.items() if t.get("outcome") in ("failed", "error")
@@ -138,7 +138,7 @@ def mutant_candidates(root: str, cfg, cov) -> list[tuple[str, int, str, int, int
             try:
                 src = open(os.path.join(root, rel), encoding="utf-8").read()
                 tree = ast.parse(src)
-            except (OSError, SyntaxError):
+            except OSError, SyntaxError:
                 continue
 
             def visit(body, prefix, rel=rel):
@@ -186,6 +186,7 @@ def run_mutants(
 
     base = load_baseline(baseline_path, root, on_environment_change="warn")
     cands = mutant_candidates(root, cfg, base.coverage)
+    base.close()
     rng = random.Random(seed)
     picks = rng.sample(cands, min(n, len(cands)))
     results = []

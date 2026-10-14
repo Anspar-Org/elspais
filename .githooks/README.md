@@ -53,9 +53,11 @@ Analysis baseline can affect, and a failure among them fails the commit. Where
 TIA cannot narrow the run -- no usable baseline, a changed environment, a
 change to a file with broad impact -- it selects the full suite, and the hook
 prints why before running the full tier through `unit-verdict`.
-`ELSPAIS_UNIT_MODE=full` runs the full tier that way regardless. This is fast
-feedback: CI's unit job runs the full tier on every pull request and on main,
-and that run is the one a merge rests on.
+`ELSPAIS_UNIT_MODE=full` runs the full tier that way regardless. Where the
+worktree holds no usable baseline, the stage first fetches the one a full CI
+run of main published (`python -m tools.tia baseline fetch`), so a new
+worktree selects on its first commit. CI selects the same way on a pull
+request, and runs the full suite before a release.
 
 The full unit tier runs through `run-unit-tier`, which `make test`, the
 `elspais-unit` target in `.elspais.toml` and CI's unit job also call. It runs
@@ -133,7 +135,7 @@ count comes from `test-workers`. CI's `e2e-test` job runs `run-e2e-tier` too.
 here. You cannot push what you have not committed, so every commit in a push
 has already passed lint, formatting, markdown, index regeneration and its
 impacted unit tests, except a checkpoint commit, which ran none. No unit tests
-run here: CI's unit job runs the full unit tier on every pull request, and
+run here: CI runs the impacted unit tests on every pull request, and
 publishing a release requires the full suite to have passed on the published
 commit. Pre-push runs only what pre-commit cannot: checks that are too
 expensive to pay per commit (the e2e tier), and checks whose answer is not

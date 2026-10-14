@@ -3467,6 +3467,6 @@ def is_associate_owned(graph: Any, node: Any) -> bool:
         return False
     try:
         owner = graph.repo_for_node(node).name
-    except (KeyError, AttributeError):
+    except KeyError, AttributeError:
         return node.get_field("repo") is not None
     return is_associate_member(graph, owner)

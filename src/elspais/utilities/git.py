@@ -17,6 +17,7 @@ import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import UTC
 from pathlib import Path
 from typing import Any
 
@@ -280,7 +281,7 @@ def get_repo_root(start_path: Path | None = None) -> Path | None:
             check=True,
         )
         return Path(result.stdout.strip())
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         return None
 
 
@@ -326,7 +327,7 @@ def get_modified_files(repo_root: Path) -> tuple[set[str], set[str]]:
                         modified_files.add(file_path)
 
         return modified_files, untracked_files
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         return set(), set()
 
 
@@ -371,7 +372,7 @@ def commit_state(repo_root: Path) -> tuple[str, bool | None]:
     commit = head.stdout.strip() if head.returncode == 0 else ""
     try:
         dirty: bool | None = bool(list_uncommitted_files(repo_root))
-    except (subprocess.CalledProcessError, OSError):
+    except subprocess.CalledProcessError, OSError:
         dirty = None
     return commit, dirty
 
@@ -586,7 +587,7 @@ def get_git_changes(
     try:
         with temporary_worktree(repo_root, base_ref) as worktree_path:
             committed_locations = get_req_locations_from_graph(worktree_path)
-    except (subprocess.CalledProcessError, ValueError):
+    except subprocess.CalledProcessError, ValueError:
         # Worktree creation failed (e.g., no commits yet) or config parse
         # error (e.g., committed config uses old schema version), fall back
         # to empty
@@ -641,7 +642,7 @@ def get_current_branch(repo_root: Path) -> str | None:
         )
         branch = result.stdout.strip()
         return branch if branch != "HEAD" else None
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         return None
 
 
@@ -665,7 +666,7 @@ def get_current_commit(repo_root: Path) -> str | None:
             check=True,
         )
         return result.stdout.strip() or None
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         return None
 
 
@@ -805,7 +806,7 @@ def list_branches(repo_root: Path) -> dict[str, Any]:
             text=True,
             check=True,
         ).stdout
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         return {"local": [], "remote": [], "current": None}
 
     local_names: list[str] = []
@@ -832,7 +833,7 @@ def list_branches(repo_root: Path) -> dict[str, Any]:
             text=True,
             check=True,
         ).stdout
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         return {"local": local_names, "remote": [], "current": current}
 
     remote_names: list[str] = []
@@ -1161,7 +1162,7 @@ def sync_branch(
                             ),
                             "actions": actions,
                         }
-    except (subprocess.CalledProcessError, ValueError):
+    except subprocess.CalledProcessError, ValueError:
         pass  # No remote tracking branch — nothing to fast-forward from
 
     if not actions:
@@ -1236,7 +1237,7 @@ def list_safety_branches(repo_root: Path) -> list[str]:
                 if branch:
                     branches.append(branch)
         return branches
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         return []
 
 
@@ -1372,7 +1373,7 @@ def get_author_info(id_source: str = "gh") -> dict[str, str]:
             email = data.get("email") or ""
             if name and email:
                 return {"name": name, "id": email}
-        except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
+        except subprocess.CalledProcessError, FileNotFoundError, ValueError:
             pass
         # Fall through to git fallback
 
@@ -1398,7 +1399,7 @@ def _git_config(key: str) -> str:
             check=True,
         )
         return result.stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         return ""
 
 
@@ -1617,7 +1618,7 @@ def count_commits_between(
             capture_output=True,
             text=True,
         )
-    except (FileNotFoundError, OSError):
+    except FileNotFoundError, OSError:
         return 0
 
     if result.returncode != 0:
@@ -1770,7 +1771,7 @@ def generate_checkpoint_message(repo_root: Path, spec_dir: str = "spec") -> str:
                 capture_output=True,
                 text=True,
             )
-        except (FileNotFoundError, subprocess.CalledProcessError):
+        except FileNotFoundError, subprocess.CalledProcessError:
             continue
 
         # Parse @@ hunks to get changed line numbers in the new file
@@ -1845,7 +1846,7 @@ def generate_checkpoint_message(repo_root: Path, spec_dir: str = "spec") -> str:
             if last_msg.startswith("[") and bracket_end > 0:
                 prefix = last_msg[: bracket_end + 1]
                 return f"{prefix} checkpoint: {body}"
-    except (FileNotFoundError, subprocess.CalledProcessError):
+    except FileNotFoundError, subprocess.CalledProcessError:
         pass
 
     return body
@@ -2052,11 +2053,11 @@ def create_sync_commit(
     Returns:
         dict with 'success' bool and optional 'error' string.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     env = _clean_git_env()
     sync_path = repo_root / spec_dir / ".elspais-sync"
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(UTC).isoformat()
     sync_path.write_text(f"sync: {timestamp} aligned with {aligned_with}\n")
     subprocess.run(["git", "add", str(sync_path)], cwd=repo_root, env=env, capture_output=True)
     rv = subprocess.run(

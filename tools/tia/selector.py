@@ -236,7 +236,7 @@ class Selector:
                     try:
                         with open(os.path.join(self.root, path), "rb") as fh:
                             names |= string_literals(ast.parse(fh.read(), path))
-                    except (OSError, SyntaxError, ValueError):
+                    except OSError, SyntaxError, ValueError:
                         pass
             self._referenced = {n for n in names if n.isidentifier()}
         return self._referenced
@@ -368,7 +368,7 @@ class Selector:
             try:
                 with open(os.path.join(self.root, path), "rb") as fh:
                     lits = string_literals(ast.parse(fh.read(), path))
-            except (OSError, SyntaxError, ValueError):
+            except OSError, SyntaxError, ValueError:
                 continue
             if any(name in s or (parent and s.rstrip("/").endswith(parent)) for s in lits):
                 rep.regions.append(f"loaded by {path}")
@@ -720,75 +720,79 @@ def select(
             time.time() - t0,
         )
 
-    sel = Selector(root, config, base)
     try:
-        changes = changed_files(sel.tree)
-        sel.run(changes)
-    except Exception as exc:  # noqa: BLE001 - the selector fails open, always
-        import traceback
+        sel = Selector(root, config, base)
+        try:
+            changes = changed_files(sel.tree)
+            sel.run(changes)
+        except Exception as exc:  # noqa: BLE001 - the selector fails open, always
+            import traceback
 
-        sel.fallbacks.append(Fallback("selector-error", f"{type(exc).__name__}: {exc}"))
-        warnings.append(traceback.format_exc(limit=5))
-    fallbacks += sel.fallbacks
+            sel.fallbacks.append(Fallback("selector-error", f"{type(exc).__name__}: {exc}"))
+            warnings.append(traceback.format_exc(limit=5))
+        fallbacks += sel.fallbacks
 
-    tests = sel.out.tests
-    # A test whose file no longer exists cannot be run (its deletion is the
-    # change); handing its path to pytest would stop the run.
-    selected_files = {base.tests[n]["file"] for n in tests}
-    gone = sorted(f for f in selected_files if not os.path.isfile(os.path.join(root, f)))
-    for n in [n for n in tests if base.tests[n]["file"] in gone]:
-        del tests[n]
-    if gone:
-        warnings.append(
-            f"{len(gone)} selected test file(s) no longer exist: " + ", ".join(gone[:5])
-        )
-    # granularity expansion
-    if config.granularity == "file":
-        files = sorted({base.tests[n]["file"] for n in tests} | sel.new_test_files)
-        for f in files:
-            for nodeid in sel.by_file.get(f, ()):
-                if nodeid not in tests:
-                    sel.out.add(nodeid, "same test file as a selected test (file granularity)")
-        run_files, run_nodeids = files, []
-    else:
-        # whole classes, so incremental classes keep their steps together
-        classes = {
-            (base.tests[n]["file"], base.tests[n]["cls"]) for n in tests if base.tests[n]["cls"]
-        }
-        for n, t in base.tests.items():
-            if (t["file"], t["cls"]) in classes and n not in tests:
-                sel.out.add(n, "same test class as a selected test")
-        run_nodeids = sorted(tests) + sorted(sel.new_test_files)
-        run_files = sorted({base.tests[n]["file"] for n in tests} | sel.new_test_files)
-
-    total = len(base.tests)
-    mode = "test-impact"
-    if fallbacks:
-        mode = "full"
-    elif total and len(tests) / total >= config.full_suite_threshold:
-        fallbacks.append(
-            Fallback(
-                "selection-near-full",
-                f"{len(tests)}/{total} tests selected (>= {config.full_suite_threshold:.0%}); "
-                "running the full suite instead",
+        tests = sel.out.tests
+        # A test whose file no longer exists cannot be run (its deletion is the
+        # change); handing its path to pytest would stop the run.
+        selected_files = {base.tests[n]["file"] for n in tests}
+        gone = sorted(f for f in selected_files if not os.path.isfile(os.path.join(root, f)))
+        for n in [n for n in tests if base.tests[n]["file"] in gone]:
+            del tests[n]
+        if gone:
+            warnings.append(
+                f"{len(gone)} selected test file(s) no longer exist: " + ", ".join(gone[:5])
             )
+        # granularity expansion
+        if config.granularity == "file":
+            files = sorted({base.tests[n]["file"] for n in tests} | sel.new_test_files)
+            for f in files:
+                for nodeid in sel.by_file.get(f, ()):
+                    if nodeid not in tests:
+                        sel.out.add(nodeid, "same test file as a selected test (file granularity)")
+            run_files, run_nodeids = files, []
+        else:
+            # whole classes, so incremental classes keep their steps together
+            classes = {
+                (base.tests[n]["file"], base.tests[n]["cls"]) for n in tests if base.tests[n]["cls"]
+            }
+            for n, t in base.tests.items():
+                if (t["file"], t["cls"]) in classes and n not in tests:
+                    sel.out.add(n, "same test class as a selected test")
+            run_nodeids = sorted(tests) + sorted(sel.new_test_files)
+            run_files = sorted({base.tests[n]["file"] for n in tests} | sel.new_test_files)
+
+        total = len(base.tests)
+        mode = "test-impact"
+        if fallbacks:
+            mode = "full"
+        elif total and len(tests) / total >= config.full_suite_threshold:
+            fallbacks.append(
+                Fallback(
+                    "selection-near-full",
+                    f"{len(tests)}/{total} tests selected (>= {config.full_suite_threshold:.0%}); "
+                    "running the full suite instead",
+                )
+            )
+            mode = "full"
+        for rep in sel.reports:
+            rep.regions = sorted(set(rep.regions), key=rep.regions.index)
+        whole = sorted(f for f in sel.whole_test_files if os.path.isfile(os.path.join(root, f)))
+        return Selection(
+            mode,
+            baseline_summary(base, baseline_path),
+            total,
+            dict(sorted(tests.items())),
+            run_files,
+            run_nodeids,
+            sorted(sel.new_test_files),
+            sel.reports,
+            fallbacks,
+            warnings,
+            config.granularity,
+            time.time() - t0,
+            whole,
         )
-        mode = "full"
-    for rep in sel.reports:
-        rep.regions = sorted(set(rep.regions), key=rep.regions.index)
-    whole = sorted(f for f in sel.whole_test_files if os.path.isfile(os.path.join(root, f)))
-    return Selection(
-        mode,
-        baseline_summary(base, baseline_path),
-        total,
-        dict(sorted(tests.items())),
-        run_files,
-        run_nodeids,
-        sorted(sel.new_test_files),
-        sel.reports,
-        fallbacks,
-        warnings,
-        config.granularity,
-        time.time() - t0,
-        whole,
-    )
+    finally:
+        # The coverage index holds the baseline's database open.
+        base.close()

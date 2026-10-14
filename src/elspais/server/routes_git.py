@@ -494,7 +494,7 @@ def _resolve_git_credential(request: Request) -> str | None:
             text=True,
             timeout=15,
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except FileNotFoundError, subprocess.TimeoutExpired:
         return None
     if result.returncode != 0:
         return None

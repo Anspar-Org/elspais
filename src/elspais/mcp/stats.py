@@ -12,7 +12,7 @@ from __future__ import annotations
 import atexit
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import wraps
 from pathlib import Path
 from typing import Any
@@ -26,7 +26,7 @@ class ToolStats:
 
     def __init__(self, path: str | Path) -> None:
         self._path = Path(path)
-        self._started = datetime.now(timezone.utc).isoformat()
+        self._started = datetime.now(UTC).isoformat()
         self._tools: dict[str, dict[str, int]] = {}
         self._total_calls = 0
         self._unflushed = 0
@@ -38,7 +38,7 @@ class ToolStats:
                 self._tools = existing.get("tools", {})
                 self._total_calls = existing.get("total_calls", 0)
                 self._started = existing.get("started", self._started)
-            except (json.JSONDecodeError, KeyError):
+            except json.JSONDecodeError, KeyError:
                 pass  # corrupt file — start fresh
 
         atexit.register(self.flush)
@@ -60,7 +60,7 @@ class ToolStats:
             return
         data = {
             "started": self._started,
-            "last_flush": datetime.now(timezone.utc).isoformat(),
+            "last_flush": datetime.now(UTC).isoformat(),
             "total_calls": self._total_calls,
             "tools": dict(sorted(self._tools.items())),
         }
@@ -80,7 +80,7 @@ def instrument(fn: Any, tool_name: str, stats: ToolStats) -> Any:
         result = fn(*args, **kwargs)
         try:
             response_bytes = len(json.dumps(result, default=str).encode())
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             response_bytes = 0
         stats.record(tool_name, response_bytes)
         return result

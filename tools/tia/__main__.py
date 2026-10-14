@@ -3,6 +3,8 @@
     baseline build   merge a recorded run into the baseline and publish it
     baseline show    validate a baseline and print what it holds
     baseline path    print where the baseline lives
+    baseline fetch   install the baseline a full CI run of main published,
+                     unless this worktree's own baseline is usable
     select           compute the selection and write its manifest
     run              select, then run the selected tests with pytest
     compare          compare a TIA run with a full run of the same revision
@@ -84,6 +86,24 @@ def cmd_baseline(args) -> int:
     if args.action == "path":
         print(args.baseline)
         return 0
+    if args.action == "fetch":
+        from .fetch import FetchError, fetch_baseline
+
+        try:
+            print(
+                "tia: "
+                + fetch_baseline(
+                    root,
+                    args.baseline,
+                    current_env=_current_env(),
+                    max_age_days=load_config(args.config).max_baseline_age_days,
+                    force=args.force,
+                )
+            )
+        except FetchError as exc:
+            print(f"tia: no baseline fetched: {exc}", file=sys.stderr)
+            return 1
+        return 0
     if args.action == "build":
         dest = args.baseline
         try:
@@ -123,6 +143,7 @@ def cmd_baseline(args) -> int:
     except BaselineError as exc:
         print(f"tia: baseline unusable -> {exc.kind}: {exc.detail}")
         return 1
+    b.close()
     m = b.manifest
     print(
         json.dumps(
@@ -218,13 +239,18 @@ def main(argv: list[str] | None = None) -> int:
         sp.add_argument("--config", default=None, help="rule file (default tools/tia/config.toml)")
 
     b = sub.add_parser("baseline", help="build or inspect a baseline")
-    b.add_argument("action", choices=["build", "show", "path"])
+    b.add_argument("action", choices=["build", "show", "path", "fetch"])
     b.add_argument("--run-dir", help="directory holding the recorder's tia-shard-*.json")
     b.add_argument("--coverage", help="the run's .coverage file (default <run-dir>/.coverage)")
     b.add_argument(
         "--only-if-passed",
         action="store_true",
         help="publish nothing unless the run passed outright",
+    )
+    b.add_argument(
+        "--force",
+        action="store_true",
+        help="fetch: replace this worktree's baseline even where it is usable",
     )
     common(b)
     b.set_defaults(func=cmd_baseline)

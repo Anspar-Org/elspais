@@ -228,3 +228,50 @@ def test_baseline_copied_elsewhere_still_works(repo, baseline, tmp_path):
     shutil.copytree(baseline, moved)
     change(repo)
     assert s.selected(s.select_now(repo, moved)) == {s.MUL, s.DOUBLE}
+
+
+# -- the coverage database is closed -------------------------------------------
+
+
+def _unclosed_database_warnings(act) -> list[str]:
+    """Run `act`, drop what it returned, collect, and return the leak warnings."""
+    import gc
+    import warnings
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", ResourceWarning)
+        result = act()
+        del result
+        gc.collect()
+    return [str(w.message) for w in caught if "unclosed database" in str(w.message)]
+
+
+def test_selection_closes_the_coverage_database(repo, baseline):
+    change(repo)
+
+    def act():
+        sel = s.select_now(repo, baseline)
+        assert sel.mode == "test-impact"
+        return sel
+
+    assert _unclosed_database_warnings(act) == []
+
+
+def test_refused_coverage_closes_the_coverage_database(work):
+    from tools.tia.baseline import BaselineError, load_baseline
+
+    rename = {n: f"tests/test_gone.py::t{i}" for i, n in enumerate(s.default_tests())}
+    variant = _variant(work, context_rename=rename)
+    # Only the words are kept: the exception's traceback holds the frames,
+    # and so the connection, alive past the collection.
+    refusals: list[tuple[str, str]] = []
+
+    def act():
+        try:
+            load_baseline(str(variant), str(work / "repo"))
+        except BaselineError as exc:
+            refusals.append((exc.kind, exc.detail))
+
+    assert _unclosed_database_warnings(act) == []
+    assert [kind for kind, _ in refusals] == ["coverage-corrupt"]
+    assert "no coverage context names a recorded test" in refusals[0][1]

@@ -93,7 +93,7 @@ def _importable(module: str) -> bool:
 
     try:
         return importlib.util.find_spec(module) is not None
-    except (ImportError, ValueError):
+    except ImportError, ValueError:
         return False
 
 
@@ -403,7 +403,7 @@ def hht_resolver():
 
 
 @pytest.fixture
-def temp_project(tmp_path: Path) -> Generator[Path, None, None]:
+def temp_project(tmp_path: Path) -> Generator[Path]:
     """Create a temporary project directory for testing."""
     project_dir = tmp_path / "test-project"
     project_dir.mkdir()

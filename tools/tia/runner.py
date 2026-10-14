@@ -55,7 +55,7 @@ def worker_count(root: str) -> int:
             check=True,
         ).stdout.strip()
         return max(1, int(out))
-    except (OSError, ValueError, subprocess.CalledProcessError):
+    except OSError, ValueError, subprocess.CalledProcessError:
         return 1
 
 
