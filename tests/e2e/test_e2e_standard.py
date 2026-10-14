@@ -2868,3 +2868,29 @@ class TestLineCoverageReports:
         combined = scratch / ".results" / ".elspais-coverage.info"
         assert combined.is_file()
         assert "SF:src/auth.py\n" in combined.read_text(encoding="utf-8")
+
+    # Verifies: REQ-d00334-A+B
+    def test_a_stale_only_run_leaves_the_combined_report_each_time(self, tmp_path, project):
+        scratch = tmp_path / "coverage-run"
+        self._copy_with_coverage(scratch, project)
+        toml = scratch / ".elspais.toml"
+        text = toml.read_text(encoding="utf-8")
+        # The stub's command also writes an LCOV file for src/auth.py.
+        ending = ')\\""\n'
+        assert text.count(ending) == 1
+        lcov = "; (p/'lcov.info').write_text('SF:src/auth.py\\\\nDA:1,1\\\\nend_of_record\\\\n')"
+        toml.write_text(text.replace(ending, ")" + lcov + ending[1:]), encoding="utf-8")
+        combined = scratch / ".results" / ".elspais-coverage.info"
+
+        first = run_elspais("test", "--stale-only", "--targets", "stub", cwd=scratch)
+        assert first.returncode == 0, first.stderr
+        assert combined.is_file()
+        assert "SF:src/auth.py\n" in combined.read_text(encoding="utf-8")
+
+        source = scratch / "src" / "auth.py"
+        source.write_text(source.read_text(encoding="utf-8") + "\n# edited\n", encoding="utf-8")
+
+        second = run_elspais("test", "--stale-only", "--targets", "stub", cwd=scratch)
+        assert second.returncode == 0, second.stderr
+        assert combined.is_file()
+        assert "SF:src/auth.py\n" in combined.read_text(encoding="utf-8")

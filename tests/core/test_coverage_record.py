@@ -13,6 +13,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import stat
 import types
 from pathlib import Path
 
@@ -384,3 +385,20 @@ def test_an_unreadable_record_is_refused_naming_the_remedy(tmp_path, content):
 )
 def test_a_record_renders_as_lcov_sorted_by_path_and_line(record, expected):
     assert render_lcov(record) == expected
+
+
+# Verifies: REQ-d00334-A
+@pytest.mark.parametrize("writer", ["record", "report"])
+def test_a_record_and_a_report_carry_an_ordinary_files_permissions(tmp_path, writer):
+    record = _two_file_record()
+    probe = tmp_path / "probe"
+    with open(probe, "w", encoding="utf-8") as fh:
+        fh.write("probe")
+    expected = stat.S_IMODE(os.stat(probe).st_mode)
+
+    if writer == "record":
+        written = write_record(tmp_path, record)
+    else:
+        written = write_report(tmp_path / REPORT_NAME, record)
+
+    assert oct(stat.S_IMODE(os.stat(written).st_mode)) == oct(expected)

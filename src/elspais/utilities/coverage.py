@@ -22,6 +22,12 @@ REPORT_NAME = ".elspais-coverage.info"
 COMBINED_LOCK = ".elspais-coverage.lock"
 RECORD_VERSION = 1
 
+# The permissions an ordinary file gets here: mkstemp creates its file
+# private, and a report is read by other tools and other users.
+_UMASK = os.umask(0)
+os.umask(_UMASK)
+_FILE_MODE = 0o666 & ~_UMASK
+
 
 class CoverageUnreadable(Exception):
     """A coverage file or record that cannot be read; the message names the remedy."""
@@ -184,6 +190,7 @@ def _atomic_write(path: Path, text: str) -> Path:
     fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(text)
+    os.chmod(tmp, _FILE_MODE)
     os.replace(tmp, path)
     return path
 

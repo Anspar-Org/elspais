@@ -984,6 +984,33 @@ match = "source"
 # full_selection = ""                         # what {selection} becomes on a run of every test
 ```
 
+## Line Coverage Reports
+
+When a run of a target that declares `coverage` finishes -- through
+`elspais test`, `elspais checks --run-tests` or `elspais fingerprint finish`
+-- elspais reads the coverage file in the format `coverage_format` names and
+writes three files:
+
+| File | Holds |
+|------|-------|
+| `<output root>/<target>/.elspais-coverage.json` | the target's coverage record: per source file, the hit count of each line, the per-test contexts, the content digest the file was measured at, and the runs that measured it |
+| `<output root>/<target>/.elspais-coverage.info` | the target's current line coverage, in LCOV |
+| `<output root>/.elspais-coverage.info` | every target's current line coverage merged, in LCOV |
+
+Current means measured on the content the file holds now. A run that
+retains tests measures only the tests it executes, so its record also holds
+the coverage of the retained tests, carried from the previous record. The two
+LCOV reports are therefore complete after a partial run, and a coverage
+service reads them directly: upload the combined report, or each target's
+report under its own flag. Paths in both are relative to the repository root.
+Where two targets measure one source file, the combined report holds the
+larger hit count of each line.
+
+elspais reads line coverage from the record alone. An output area holding a
+coverage file and no record was written by an earlier elspais; it is
+reported as an ingestion fault, and running the target again writes the
+record. A coverage file that cannot be read fails the run.
+
 ## CI Usage
 
 In CI, omit `command` so elspais only ingests files that the pipeline already
