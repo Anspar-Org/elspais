@@ -161,13 +161,11 @@ def render_reporters() -> str:
                 f"published table would present it as an empty cell. Give its "
                 f"`ReporterSpec` a `description`."
             )
-        rows.append(
-            [_code(name), spec.channel, spec.kind, _code(spec.path_origin), spec.description]
-        )
+        rows.append([_code(name), spec.kind, _code(spec.path_origin), spec.description])
 
     return "\n".join(
         [
-            _table(["Reporter", "Channel", "Kind", "Path origin", "Description"], rows),
+            _table(["Reporter", "Kind", "Path origin", "Description"], rows),
             "",
             "These are the reporters the tool is built with. `register_reporter()` admits",
             "further formats at run time, so a project that registers one has a reporter",

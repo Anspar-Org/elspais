@@ -1,27 +1,24 @@
 # Verifies: REQ-d00254-E
-"""Reporter registry: format name -> parser + channel (test-ingestion)."""
+"""Reporter registry: format name -> parser and kind (test-ingestion)."""
 
 import pytest
 
 from elspais.graph.parsers.results.registry import REPORTER_REGISTRY, get_reporter
 
 
-def test_flutter_machine_is_stdout_results():
+def test_flutter_machine_is_results():
     spec = get_reporter("flutter-machine")
-    assert spec.channel == "stdout"
     assert spec.kind == "results"
     assert spec.parser_factory() is not None
 
 
-def test_junit_is_file_results():
+def test_junit_is_results():
     spec = get_reporter("junit")
-    assert spec.channel == "file"
     assert spec.kind == "results"
 
 
-def test_lcov_is_file_coverage():
+def test_lcov_is_coverage():
     spec = get_reporter("lcov")
-    assert spec.channel == "file"
     assert spec.kind == "coverage"
 
 
@@ -35,11 +32,10 @@ def test_builtins_registered():
         assert name in REPORTER_REGISTRY
 
 
-def test_coverage_json_is_file_coverage():
+def test_coverage_json_is_coverage():
     # Verifies: REQ-d00254-E
     # coverage-json is backed by CoverageJsonParser (coverage.py `coverage json` output)
     spec = get_reporter("coverage-json")
-    assert spec.channel == "file"
     assert spec.kind == "coverage"
 
 

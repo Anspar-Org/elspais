@@ -58,7 +58,7 @@ def test_result_default_source_file_and_match():
 # (b) _ingest_target_results integration test
 # ---------------------------------------------------------------------------
 
-# Minimal flutter-machine output: one suite, one test passing.
+# A minimal `flutter test` event file: one suite, one test passing.
 _FLUTTER_MACHINE_SAMPLE = (
     '{"type":"suite","suite":{"id":0,"platform":"vm","path":"test/widget_test.dart"}}\n'
     '{"type":"testStart","test":{"id":1,"name":"my widget renders","suiteID":0,'
@@ -74,8 +74,9 @@ def test_ingest_target_results_flutter_machine(tmp_path: Path):
 
     builder = GraphBuilder(repo_root=tmp_path, namespace="REQ", resolver=grammar_for("REQ"))
     target = TestTargetConfig(name="flutter", reporter="flutter-machine", match="source")
+    results_file = str(tmp_path / ".results" / "flutter" / "machine.jsonl")
     count = _ingest_target_results(
-        builder, target, _FLUTTER_MACHINE_SAMPLE, tmp_path, namespace="REQ"
+        builder, target, _FLUTTER_MACHINE_SAMPLE, tmp_path, results_file, namespace="REQ"
     )
     assert count == 1
 
@@ -118,7 +119,8 @@ def test_ingest_target_results_source_file_repo_relative(tmp_path: Path):
     )
     builder = GraphBuilder(repo_root=tmp_path, namespace="REQ", resolver=grammar_for("REQ"))
     target = TestTargetConfig(name="flutter", reporter="flutter-machine", match="source")
-    _ingest_target_results(builder, target, sample, tmp_path, namespace="REQ")
+    results_file = str(tmp_path / ".results" / "flutter" / "machine.jsonl")
+    _ingest_target_results(builder, target, sample, tmp_path, results_file, namespace="REQ")
     graph = builder.build()
     node = next(iter(graph.iter_by_kind(NodeKind.RESULT)))
     # source_file should be repo-relative, not absolute
@@ -138,48 +140,61 @@ def test_run_configured_targets_no_targets_returns_empty(tmp_path: Path):
     from elspais.commands.test_runner import run_configured_targets
 
     cfg = _cfg_with_targets([])
-    results, captured = run_configured_targets(cfg, tmp_path)
+    results = run_configured_targets(cfg, tmp_path)
     assert results == []
-    assert captured == {}
 
 
-def test_run_configured_targets_stdout_channel_captured(tmp_path: Path):
-    """A stdout-channel reporter's output is captured into the map."""
+# The command writes these events into the output area of its target, as
+# `flutter test --file-reporter=json:<path>` does, and prints a banner of its
+# own on stdout that is no result.
+_WRITES_FLUTTER_EVENTS = (
+    'python3 -c "import os,pathlib; '
+    "pathlib.Path(os.environ['ELSPAIS_TARGET_OUTPUT'], 'machine.jsonl')"
+    ".write_text(open('events.jsonl').read())\"; echo 'Running flutter test...'"
+)
+
+
+# Verifies: REQ-d00254-F
+def test_REQ_d00254_F_flutter_results_are_read_from_the_results_file(tmp_path: Path):
+    """A flutter-machine target's results are read from the file its `results`
+    pattern names, never from its command's output; each result records the
+    artifact's repo-relative path and the line of its `testDone` event."""
     from elspais.commands.test_runner import run_configured_targets
+    from elspais.graph.factory import build_graph as _factory_build_graph
 
-    # flutter-machine is a stdout-channel reporter
-    # Build a single-line JSON event that is parseable (content doesn't matter
-    # for the capture test — we just need to verify the map key + stdout capture)
-    one_line = '{"type":"allSuites","count":0}'
+    (tmp_path / "events.jsonl").write_text(
+        '{"type":"suite","suite":{"id":0,"platform":"vm","path":"test/a_test.dart"}}\n'
+        '{"type":"testStart","test":{"id":1,"name":"first","suiteID":0,'
+        '"line":3,"column":1,"metadata":{}}}\n'
+        '{"type":"testStart","test":{"id":2,"name":"second","suiteID":0,'
+        '"line":9,"column":1,"metadata":{}}}\n'
+        '{"type":"testDone","testID":2,"result":"error","hidden":false,"time":7}\n'
+        '{"type":"testDone","testID":1,"result":"success","hidden":false,"time":5}\n',
+        encoding="utf-8",
+    )
     target = TestTargetConfig(
         name="flutter",
         reporter="flutter-machine",
-        command=f"echo '{one_line}'",
-        match="aggregate",
+        command=_WRITES_FLUTTER_EVENTS,
+        results="machine.jsonl",
+        match="source",
     )
-    cfg = _cfg_with_targets([target])
-    results, captured = run_configured_targets(cfg, tmp_path)
-    assert len(results) == 1
-    assert results[0].returncode == 0
-    assert "flutter" in captured
-    assert one_line in captured["flutter"]
-
-
-def test_run_configured_targets_file_channel_not_captured(tmp_path: Path):
-    """A file-channel reporter is NOT captured into the map (output passes through)."""
-    from elspais.commands.test_runner import run_configured_targets
-
-    target = TestTargetConfig(
-        name="junit",
-        reporter="junit",
-        command="true",
-        match="aggregate",
+    cfg = ElspaisConfig(
+        scanning=ScanningConfig(test=TestScanningConfig(targets=[target], enabled=True))
     )
-    cfg = _cfg_with_targets([target])
-    results, captured = run_configured_targets(cfg, tmp_path)
-    assert len(results) == 1
-    assert results[0].returncode == 0
-    assert "junit" not in captured
+    (result,) = run_configured_targets(cfg, tmp_path)
+    assert result.returncode == 0
+
+    graph = _factory_build_graph(config=cfg.model_dump(by_alias=True), repo_root=tmp_path)
+
+    by_name = {n.get_field("name"): n for n in graph.iter_by_kind(NodeKind.RESULT)}
+    assert sorted(by_name) == ["first", "second"]
+    for node in by_name.values():
+        assert node.get_field("result_file") == ".results/flutter/machine.jsonl"
+    assert by_name["second"].get_field("result_line") == 4
+    assert by_name["second"].get_field("status") != "passed"
+    assert by_name["first"].get_field("result_line") == 5
+    assert by_name["first"].get_field("status") == "passed"
 
 
 def test_run_configured_targets_target_without_command_skipped(tmp_path: Path):
@@ -188,9 +203,8 @@ def test_run_configured_targets_target_without_command_skipped(tmp_path: Path):
 
     target = TestTargetConfig(name="noop", reporter="flutter-machine", command="")
     cfg = _cfg_with_targets([target])
-    results, captured = run_configured_targets(cfg, tmp_path)
+    results = run_configured_targets(cfg, tmp_path)
     assert results == []
-    assert captured == {}
 
 
 def test_run_configured_targets_fail_fast(tmp_path: Path):
@@ -203,7 +217,7 @@ def test_run_configured_targets_fail_fast(tmp_path: Path):
         TestTargetConfig(name="never", reporter="flutter-machine", command=f"touch {marker}"),
     ]
     cfg = _cfg_with_targets(targets)
-    results, _ = run_configured_targets(cfg, tmp_path, fail_fast=True)
+    results = run_configured_targets(cfg, tmp_path, fail_fast=True)
     assert len(results) == 1
     assert results[0].name == "bad"
     assert not marker.exists()
@@ -224,7 +238,7 @@ def test_run_configured_targets_cwd_outside_repo_rejected(tmp_path: Path):
         cwd=str(outside),
     )
     cfg = _cfg_with_targets([target])
-    results, _ = run_configured_targets(cfg, repo)
+    results = run_configured_targets(cfg, repo)
     assert len(results) == 1
     assert results[0].returncode == -1
     assert "outside the repo root" in results[0].error
@@ -272,7 +286,7 @@ def test_target_results_not_ingested_when_scan_tests_false(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# (e) Per-file source_path for file-channel reporters (FIX 2+4)
+# (e) Per-file source_path for results read from files
 # ---------------------------------------------------------------------------
 
 
@@ -324,8 +338,8 @@ def test_ingest_two_junit_files_distinct_source_paths(tmp_path: Path):
 
     source_paths = {n.get_field("source_path") for n in result_nodes}
     # Each result must have a non-empty source_path
-    assert "" not in source_paths, "source_path must be non-empty for file-channel results"
-    assert None not in source_paths, "source_path must not be None for file-channel results"
+    assert "" not in source_paths, "source_path must be non-empty for results read from files"
+    assert None not in source_paths, "source_path must not be None for results read from files"
     # The two results must have distinct source_paths (no collision)
     assert len(source_paths) == 2, f"source_paths must be distinct per file, got: {source_paths}"
 

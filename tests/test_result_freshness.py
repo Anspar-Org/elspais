@@ -483,7 +483,7 @@ def test_the_runner_hands_the_command_its_folder_and_records_the_run(tmp_path):
     stale.mkdir(parents=True)
     (stale / "old.xml").write_text(_JUNIT, encoding="utf-8")
 
-    results, _ = run_configured_targets(validate_config(config), root)
+    results = run_configured_targets(validate_config(config), root)
 
     assert results[0].returncode == 0
     assert sorted(p.name for p in stale.iterdir()) == sorted([FINGERPRINT_NAME, "junit.xml"])

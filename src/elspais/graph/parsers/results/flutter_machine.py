@@ -1,4 +1,7 @@
-"""Parser for `flutter test --machine` newline-delimited JSON events.
+"""Parser for the newline-delimited JSON events `flutter test` writes.
+
+A target writes them to a file with ``--file-reporter=json:<path>`` and names
+that file in its ``results`` pattern.
 
 Builds result records carrying where each test is declared (path, line), the
 file that executed it, and its name.
@@ -76,19 +79,16 @@ class FlutterMachineParser(DiagnosticRecorder):
         events = 0
         done: set[Any] = set()
 
-        for line in content.splitlines():
+        for line_no, line in enumerate(content.splitlines(), start=1):
             line = line.strip()
             if not line:
                 continue
             try:
                 ev = json.loads(line)
             except ValueError, json.JSONDecodeError:
-                # Suppressed deliberately: this reporter reads a runner's live
-                # stdout, where a build banner, a warning, or a plugin's own
-                # print sits between events. A line that is not JSON is
-                # expected traffic, not a result record that failed to read. What
-                # would be a real condition -- a stream carrying no events at
-                # all -- is recorded once, after the loop.
+                # A line that is not JSON holds no event and is passed over.
+                # A file carrying no events at all is recorded once, after
+                # the loop.
                 continue
             if not isinstance(ev, dict):
                 continue
@@ -141,11 +141,9 @@ class FlutterMachineParser(DiagnosticRecorder):
                 runner = suites.get(meta["suiteID"], "")
                 results.append(
                     {
-                        # Implements: REQ-d00294-B
-                        # This reporter reads a runner's stream, so there is
-                        # no artifact to name. The position among the results
-                        # read from the stream is what separates one run of a
-                        # test from another.
+                        # Implements: REQ-d00294-A
+                        # The position among the results read from the file
+                        # separates one run of a test from another.
                         "ordinal": len(results) + 1,
                         "name": meta["name"],
                         "classname": "",
@@ -161,14 +159,12 @@ class FlutterMachineParser(DiagnosticRecorder):
                         # Implements: REQ-d00294-G
                         "runner_path": runner or None,
                         "test_id": None,
-                        # This format usually arrives on a runner's output,
-                        # where there is no artifact to name. It is also saved
-                        # to files and read back by a pattern, and then the
-                        # artifact is what separates one run's result records
-                        # from another's: without it every file's result records start
-                        # their count again and collide (REQ-d00294-A).
+                        # Implements: REQ-d00254-F, REQ-d00294-A
+                        # The artifact separates one file's result records
+                        # from another's, and the line of the `testDone`
+                        # event is where this result was recorded.
                         "result_file": source_path or None,
-                        "result_line": None,
+                        "result_line": line_no,
                     }
                 )
 
@@ -180,7 +176,7 @@ class FlutterMachineParser(DiagnosticRecorder):
         if content.strip() and not events:
             self._record_diagnostic(
                 source_path,
-                "flutter --machine output carried no JSON events",
+                "the file carried no `flutter test` JSON events",
             )
         # Implements: REQ-d00285-G, REQ-d00254-Q
         # A test that started and reported no result is a stream that ended

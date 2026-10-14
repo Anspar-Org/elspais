@@ -630,7 +630,7 @@ I. A run that evaluates no check SHALL select its targets by the same target and
 
 J. A run that evaluates no check SHALL return a non-zero exit code if any target it executed failed, and 0 only if every target it executed succeeded.
 
-K. A run that evaluates no check SHALL refuse, before it executes any target, a selection that holds a target whose results it would not record.
+K. A run that executes targets SHALL refuse, before it executes any target, a selection that holds a target whose results it would not record.
 
 L. The system SHALL run the command of a test target in the working directory of that target, resolved relative to the repository root.
 
@@ -662,11 +662,11 @@ target in one run selects the same target in the other.
 J reads the outcome from the targets alone, because that run produced
 nothing else to judge.
 
-K exists because the run records nothing that it does not write to disk.
-A target whose reporter reads the command's output, and which declares
-no results artifact, leaves no result for a later run to read. Such a
-run would succeed and leave the gate with nothing, so it is refused
-before any time is spent.
+K exists because a run reads a target's results only from the files the
+target writes. A target whose reporter reads results, and which declares
+no results artifact, leaves no result for any reader. Such a run would
+succeed and leave the gate with nothing, so it is refused before any time
+is spent.
 
 L and M confine a target's command to the repository it belongs to. Which targets run, in which order and at the same time as which others is REQ-d00314.
 
@@ -676,6 +676,8 @@ O and P let a run execute part of a test target. A run that retains results (REQ
 
 ### Changelog
 
+- 2026-10-14 | 63879f19 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-14 | - | - | Michael Lewis (<michael@anspar.org>) | K: every run that executes targets refuses a target whose results it would not record, since no run reads a command's output as results
 - 2026-10-12 | 15f1058b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-03 | 9e2255c3 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a run executes a federation member's target only where the selection names it (N)
@@ -691,7 +693,7 @@ O and P let a run execute part of a test target. A run that retains results (REQ
 - 2026-09-13 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-82: point the no-runners error at the document carrying target configuration examples (F)
 - 2026-09-12 | 784f8350 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: add missing changelog section
 
-*End* *Configured test runner execution* | **Hash**: 15f1058b
+*End* *Configured test runner execution* | **Hash**: 63879f19
 
 ## REQ-d00259: Requirement Format Reference Command
 

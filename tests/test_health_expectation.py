@@ -60,16 +60,17 @@ def _federation(*members: tuple[str, dict, list[UnreadArtifact]]) -> FederatedGr
 
 
 _FILE_TARGET = {"name": "unit", "reporter": "junit", "results": "junit.xml"}
-_OUTPUT_TARGET = {"name": "unit", "reporter": "flutter-machine"}
+_UNDECLARED_TARGET = {"name": "unit", "reporter": "flutter-machine"}
 
-# The same fact, a target with no results, delivered through each channel.
-_CHANNELS = pytest.mark.parametrize(
+# The same fact, a target with no results, whether its results pattern
+# matched nothing or it declares no results pattern.
+_NO_RESULTS = pytest.mark.parametrize(
     "target,artifact",
     [
         (_FILE_TARGET, _absent("unit")),
-        (_OUTPUT_TARGET, _absent("unit", path="")),
+        (_UNDECLARED_TARGET, _absent("unit", path="")),
     ],
-    ids=["file", "runner-output"],
+    ids=["pattern-matched-nothing", "no-results-pattern"],
 )
 
 
@@ -78,7 +79,7 @@ def _single(target: dict, *artifacts: UnreadArtifact) -> FederatedGraph:
 
 
 # Verifies: REQ-d00283-S+T
-@_CHANNELS
+@_NO_RESULTS
 def test_a_target_neither_executed_nor_expected_is_not_run(target, artifact):
     graph = _single(target, artifact)
 
@@ -96,7 +97,7 @@ def test_a_target_neither_executed_nor_expected_is_not_run(target, artifact):
 
 
 # Verifies: REQ-d00283-R+T
-@_CHANNELS
+@_NO_RESULTS
 def test_a_target_the_run_expected_with_no_results_is_missing_results(target, artifact):
     graph = _single(target, artifact)
 
@@ -461,7 +462,7 @@ def test_an_expected_run_in_progress_is_reported_once_as_missing_results(artifac
 
 
 # Verifies: REQ-d00283-R
-def test_an_expected_run_in_progress_reading_runner_output_names_the_target():
+def test_an_expected_run_in_progress_with_no_results_pattern_names_the_target():
     running = UnreadArtifact(
         target="unit",
         artifact="results",
@@ -469,7 +470,7 @@ def test_an_expected_run_in_progress_reading_runner_output_names_the_target():
         reason="running",
         started_at="2026-10-01T09:00:00+00:00",
     )
-    graph = _single(_OUTPUT_TARGET, running)
+    graph = _single(_UNDECLARED_TARGET, running)
 
     (finding,) = check_ingestion_faults(graph, {}, ("REQ:unit",)).findings
 
@@ -628,7 +629,9 @@ def test_a_run_expects_every_target_it_executes(tmp_path, monkeypatch, expect, e
         scanning=ScanningConfig(
             test=TestScanningConfig(
                 targets=[
-                    TestTargetConfig(name=name, command="true", reporter="junit")
+                    TestTargetConfig(
+                        name=name, command="true", reporter="junit", results="junit.xml"
+                    )
                     for name in ("a", "b")
                 ]
             )

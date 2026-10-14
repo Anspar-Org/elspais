@@ -61,7 +61,9 @@ def _base_args(targets: list[str] | list[list[str]] | None) -> argparse.Namespac
 
 # Verifies: REQ-d00254-H
 def test_unknown_target_name_errors(capsys, monkeypatch, tmp_path):
-    cfg = _cfg_with_targets([TestTargetConfig(name="a", command="true", reporter="junit")])
+    cfg = _cfg_with_targets(
+        [TestTargetConfig(name="a", command="true", reporter="junit", results="junit.xml")]
+    )
     monkeypatch.setattr("elspais.config.get_config", lambda *a, **k: {})
     monkeypatch.setattr(health, "_validate_config", lambda d: cfg)
 
@@ -83,7 +85,7 @@ def test_unknown_name_error_names_the_declared_groups_too(capsys, monkeypatch, t
     refusal publishes -- otherwise the message names a smaller set of legal
     spellings than the flag actually admits."""
     cfg = _cfg_with_targets(
-        [TestTargetConfig(name="a", command="true", reporter="junit")],
+        [TestTargetConfig(name="a", command="true", reporter="junit", results="junit.xml")],
         groups={"uat": "needs a live backend", "slow": "runs for over a minute"},
     )
     monkeypatch.setattr("elspais.config.get_config", lambda *a, **k: {})
@@ -104,7 +106,7 @@ def test_unknown_name_refusal_reads_the_same_on_every_surface(capsys, monkeypatc
     from elspais.commands._targets import resolve_fresh_targets
 
     cfg = _cfg_with_targets(
-        [TestTargetConfig(name="a", command="true", reporter="junit")],
+        [TestTargetConfig(name="a", command="true", reporter="junit", results="junit.xml")],
         groups={"uat": "needs a live backend"},
     )
     monkeypatch.setattr("elspais.config.get_config", lambda *a, **k: {})
@@ -128,8 +130,12 @@ def test_targets_flag_executes_only_named_subset(monkeypatch, tmp_path):
     marker_b = tmp_path / "b.txt"
     cfg = _cfg_with_targets(
         [
-            TestTargetConfig(name="a", command=f"touch {marker_a}", reporter="junit"),
-            TestTargetConfig(name="b", command=f"touch {marker_b}", reporter="junit"),
+            TestTargetConfig(
+                name="a", command=f"touch {marker_a}", reporter="junit", results="junit.xml"
+            ),
+            TestTargetConfig(
+                name="b", command=f"touch {marker_b}", reporter="junit", results="junit.xml"
+            ),
         ]
     )
     monkeypatch.setattr("elspais.config.get_config", lambda *a, **k: {})
@@ -153,8 +159,12 @@ def test_absent_targets_flag_runs_all(monkeypatch, tmp_path):
     marker_b = tmp_path / "b.txt"
     cfg = _cfg_with_targets(
         [
-            TestTargetConfig(name="a", command=f"touch {marker_a}", reporter="junit"),
-            TestTargetConfig(name="b", command=f"touch {marker_b}", reporter="junit"),
+            TestTargetConfig(
+                name="a", command=f"touch {marker_a}", reporter="junit", results="junit.xml"
+            ),
+            TestTargetConfig(
+                name="b", command=f"touch {marker_b}", reporter="junit", results="junit.xml"
+            ),
         ]
     )
     monkeypatch.setattr("elspais.config.get_config", lambda *a, **k: {})
@@ -174,11 +184,14 @@ def test_absent_targets_flag_runs_all(monkeypatch, tmp_path):
 
 def _two_commandful_targets(tmp_path, groups_for_b=()):
     return [
-        TestTargetConfig(name="a", command=f"touch {tmp_path / 'a.txt'}", reporter="junit"),
+        TestTargetConfig(
+            name="a", command=f"touch {tmp_path / 'a.txt'}", reporter="junit", results="junit.xml"
+        ),
         TestTargetConfig(
             name="b",
             command=f"touch {tmp_path / 'b.txt'}",
             reporter="junit",
+            results="junit.xml",
             groups=list(groups_for_b),
         ),
     ]
@@ -360,12 +373,22 @@ def _three_commandful_targets(tmp_path):
     """`a` in `default`, `b` in `uat`, `c` in `slow` -- so a target name and a
     group name can each reach a target the other does not."""
     return [
-        TestTargetConfig(name="a", command=f"touch {tmp_path / 'a.txt'}", reporter="junit"),
         TestTargetConfig(
-            name="b", command=f"touch {tmp_path / 'b.txt'}", reporter="junit", groups=["uat"]
+            name="a", command=f"touch {tmp_path / 'a.txt'}", reporter="junit", results="junit.xml"
         ),
         TestTargetConfig(
-            name="c", command=f"touch {tmp_path / 'c.txt'}", reporter="junit", groups=["slow"]
+            name="b",
+            command=f"touch {tmp_path / 'b.txt'}",
+            reporter="junit",
+            results="junit.xml",
+            groups=["uat"],
+        ),
+        TestTargetConfig(
+            name="c",
+            command=f"touch {tmp_path / 'c.txt'}",
+            reporter="junit",
+            results="junit.xml",
+            groups=["slow"],
         ),
     ]
 
@@ -475,7 +498,6 @@ directories = ["spec"]
     args = argparse.Namespace(
         spec_dir=None,
         config=str(config_path),
-        _captured_results=None,
         _fresh_targets={"a"},
     )
     from elspais.commands._requests import ChecksRequest

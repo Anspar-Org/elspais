@@ -126,13 +126,12 @@ def make_definition_id(namespace: str, relative_path: str, start_line: int) -> s
     return f"{DEFINITION_ID_PREFIX}{namespace}:{relative_path}:{start_line}"
 
 
-# Implements: REQ-d00294-A+B
+# Implements: REQ-d00294-A
 def make_result_id(namespace: str, place: str, ordinal: int) -> str:
     """Canonical RESULT node id for the place of a result record and its position there.
 
     The place is the repo-relative path of the artifact that holds the
-    result record, or the name of the target the result record was read from
-    where the producer wrote no artifact. One test run in several environments
+    result record. One test run in several environments
     writes one result record for each of them, and those result records agree
     about the test, the class and often the line, so the position is what
     tells them apart.
@@ -141,7 +140,7 @@ def make_result_id(namespace: str, place: str, ordinal: int) -> str:
     if not place:
         raise ValueError(
             "Cannot make a result id without a place: the id names the "
-            "artifact or the target the result record was read from."
+            "artifact the result record was read from."
         )
     return f"{RESULT_ID_PREFIX}{namespace}:{place}:{ordinal}"
 

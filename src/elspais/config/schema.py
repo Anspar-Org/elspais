@@ -820,8 +820,8 @@ class TestTargetConfig(_StrictModel):
     cwd: str = ""
     command: str = ""  # optional; omitted in CI (tests already ran)
     reporter: str = ""  # registry format name (e.g. "flutter-machine", "junit", "pytest-json")
-    # Glob relative to the target's output folder, for file-channel reporters;
-    # unused for stdout reporters.
+    # Glob relative to the target's output folder naming the files a
+    # results reporter reads.
     results: str = ""
     # lcov/coverage file relative to the target's output folder; empty = no coverage.
     coverage: str = ""

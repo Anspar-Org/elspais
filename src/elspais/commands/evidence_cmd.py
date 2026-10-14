@@ -243,7 +243,7 @@ def run(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 2
-        results, _captured = run_configured_targets(config, repo_root, only=set(selected))
+        results = run_configured_targets(config, repo_root, only=set(selected))
         # Implements: REQ-d00333-H
         settle_units(config, repo_root, raw_config, results)
         failed = [chosen.spell(r.name) for r in results if not r.succeeded]

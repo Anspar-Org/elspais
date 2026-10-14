@@ -2,13 +2,11 @@
 """Configured test-target dispatcher for the checks run-tests feature.
 
 With a ``concurrency`` of one, each entry in ``[[scanning.test.targets]]`` that
-has a ``command`` is executed in declaration order. A runner's output always
-reaches the invoking terminal live: a file-channel target inherits the parent's
-file descriptors, and a stdout-channel target -- whose stdout must be captured
-for the reporter to parse (REQ-d00254-F) -- has that stdout piped, echoed line
-by line to stderr as it arrives, and accumulated for the parser. stderr is
-never piped, so it streams straight through in both cases. This module also
-records timing and exit codes.
+has a ``command`` is executed in declaration order. A runner's output reaches
+the invoking terminal live, and nothing reads it as results: every reporter
+reads the files the target writes (REQ-d00254-F). The command's stdout is
+written to this process's stderr, because this process's stdout may carry a
+machine-readable report. This module also records timing and exit codes.
 
 With a larger ``concurrency``, targets run at the same time, except that two
 targets naming a common shared resource never overlap. Both streams of every
@@ -212,11 +210,11 @@ def plan_target_runs(
 
 # Implements: REQ-d00249-K
 def unrecorded_targets(config: ElspaisConfig, only: set[str] | None) -> list[str]:
-    """The selected targets whose results a run that evaluates no check would lose.
+    """The selected targets whose results a run would not record.
 
     A target whose reporter reads results and which declares no ``results``
-    pattern leaves nothing on disk. A run that evaluates checks reads such a
-    target's output while it runs. A run that evaluates no check reads nothing.
+    pattern leaves nothing on disk, and no run reads a command's output as
+    results.
     """
     from elspais.graph.parsers.results.registry import get_reporter
 
@@ -231,6 +229,15 @@ def unrecorded_targets(config: ElspaisConfig, only: set[str] | None) -> list[str
         if kind == "results" and not target.results:
             lost.append(target.name)
     return lost
+
+
+def unrecorded_refusal(names: list[str]) -> str:
+    """The refusal of a selection holding the targets :func:`unrecorded_targets` named."""
+    return (
+        f"target(s) {', '.join(names)} declare no `results` pattern, so their results "
+        f"would reach nothing. Have each command write its results into "
+        f"$ELSPAIS_TARGET_OUTPUT and declare the `results` pattern that matches them."
+    )
 
 
 # Implements: REQ-d00315-B+C+D+E+F
@@ -286,40 +293,6 @@ class RunnerResult:
         return self.returncode == 0
 
 
-# Implements: REQ-d00249-B, REQ-d00254-F
-def _run_teeing_stdout(
-    command: str, cwd: Path, env: dict[str, str] | None = None
-) -> subprocess.CompletedProcess[str]:
-    """Run ``command``, echoing its stdout live while also accumulating it.
-
-    A stdout-channel reporter's output IS the results artifact, so it has to be
-    captured for the parser (REQ-d00254-F) -- but capturing it must not cost the
-    developer sight of the run (REQ-d00249-B). stdout is therefore piped and
-    written back out line by line as it arrives, to stderr rather than stdout so
-    that machine-format output (e.g. ``flutter test --machine`` JSON lines)
-    cannot contaminate this process's own stdout, which may itself be a
-    machine-readable report. stderr is left unpiped, so the runner's own
-    diagnostics stream straight to the terminal and are never captured.
-    """
-    chunks: list[str] = []
-    with subprocess.Popen(
-        command,
-        shell=True,
-        cwd=cwd,
-        env=env,
-        stdout=subprocess.PIPE,
-        text=True,
-        bufsize=1,
-    ) as proc:
-        assert proc.stdout is not None
-        for line in proc.stdout:
-            chunks.append(line)
-            sys.stderr.write(line)
-            sys.stderr.flush()
-        returncode = proc.wait()
-    return subprocess.CompletedProcess(command, returncode, "".join(chunks), None)
-
-
 # Implements: REQ-d00316-A+D, REQ-d00314-O
 def run_configured_targets(
     config: ElspaisConfig,
@@ -330,7 +303,7 @@ def run_configured_targets(
     concurrency: int | None = None,
     stale_only: bool = False,
     full: bool = False,
-) -> tuple[list[RunnerResult], dict[str, str]]:
+) -> list[RunnerResult]:
     """Execute the selected targets, then record which of them the run executed.
 
     *concurrency* replaces ``[scanning.test] concurrency`` for this run.
@@ -347,11 +320,11 @@ def run_configured_targets(
         config = config.model_copy(
             update={"scanning": config.scanning.model_copy(update={"test": test_cfg})}
         )
-    results, captured = _run_targets(
+    results = _run_targets(
         config, repo_root, fail_fast=fail_fast, only=only, stale_only=stale_only, full=full
     )
     write_last_run(repo_root, config, [r.name for r in results if r.started])
-    return results, captured
+    return results
 
 
 # Implements: REQ-d00333-A+H, REQ-d00323-O
@@ -438,14 +411,12 @@ def _run_targets(
     only: set[str] | None = None,
     stale_only: bool = False,
     full: bool = False,
-) -> tuple[list[RunnerResult], dict[str, str]]:
+) -> list[RunnerResult]:
     """Execute each configured target's command in declaration order.
 
-    For targets whose reporter channel is ``"stdout"``, stdout is piped so it can
-    be returned in the ``captured`` map keyed by ``target.name``, and every line
-    read is echoed to this process's stderr as it arrives so the developer sees
-    the run live. For file-channel reporters stdout passes through to the parent
-    process untouched. stderr is inherited in both cases and never captured.
+    The command writes its stdout to this process's stderr and its stderr
+    where this process writes its own. Neither is piped, so the command sees
+    the terminal it was run from.
 
     Args:
         config: Loaded `ElspaisConfig`.
@@ -458,10 +429,8 @@ def _run_targets(
         stale_only, full: Passed to :func:`_begin_target`.
 
     Returns:
-        A tuple ``(results, captured)`` where ``results`` is one
-        ``RunnerResult`` per target that was actually invoked (command non-empty)
-        and ``captured`` maps target name → stdout text for stdout-channel
-        reporters.
+        One ``RunnerResult`` per target that was actually invoked (command
+        non-empty).
     """
     if config.scanning.test.concurrency > 1:
         return _run_concurrently(
@@ -469,7 +438,6 @@ def _run_targets(
         )
 
     results: list[RunnerResult] = []
-    captured: dict[str, str] = {}
 
     def emit(text: str) -> None:
         print(text, file=sys.stderr, end="")
@@ -488,16 +456,15 @@ def _run_targets(
         start = time.monotonic()
         if begun.spawns:
             try:
-                if begun.is_stdout_channel:
-                    completed = _run_teeing_stdout(begun.command, begun.cwd, begun.env)
-                    captured[target.name] = completed.stdout
-                else:
-                    completed = subprocess.run(
-                        begun.command,
-                        shell=True,
-                        cwd=begun.cwd,
-                        env=begun.env,
-                    )
+                sys.stdout.flush()
+                sys.stderr.flush()
+                completed = subprocess.run(
+                    begun.command,
+                    shell=True,
+                    cwd=begun.cwd,
+                    env=begun.env,
+                    stdout=_STDERR_FD,
+                )
                 result = begun.result(completed.returncode, time.monotonic() - start)
             except (FileNotFoundError, PermissionError, OSError) as exc:
                 result = begun.result(-1, time.monotonic() - start, error=str(exc))
@@ -507,7 +474,11 @@ def _run_targets(
         results.append(result)
         if fail_fast and result.returncode != 0:
             break
-    return results, captured
+    return results
+
+
+# The descriptor a command's stdout is written to: this process's stderr.
+_STDERR_FD = 2
 
 
 @dataclass(frozen=True)
@@ -518,7 +489,6 @@ class _Begun:
     cwd: Path
     command: str
     env: dict[str, str]
-    is_stdout_channel: bool
     plan: Any
 
     @property
@@ -560,14 +530,8 @@ def _begin_target(
     retained artifacts and the selection are written into the emptied area,
     and the command receives the selection.
     """
-    from elspais.graph.parsers.results.registry import get_reporter
     from elspais.utilities.fingerprint import OUTPUT_ENV, start_run
     from elspais.utilities.retention import command_for, plan_run, write_artifacts
-
-    try:
-        is_stdout_channel = get_reporter(target.reporter).channel == "stdout"
-    except KeyError:
-        is_stdout_channel = False
 
     resolved_root = repo_root.resolve()
     cwd = (repo_root / target.cwd).resolve() if target.cwd else resolved_root
@@ -607,7 +571,7 @@ def _begin_target(
     # a target running alongside can change files while this one waits.
     folder = start_run(repo_root, config, target.name)
     env = {**os.environ, OUTPUT_ENV: str(folder), **write_artifacts(folder, plan)}
-    return _Begun(target, cwd, command, env, is_stdout_channel, plan)
+    return _Begun(target, cwd, command, env, plan)
 
 
 # Implements: REQ-d00329-B+I
@@ -654,11 +618,9 @@ def _emit(stream: TextIO, text: str) -> None:
 
 
 # Implements: REQ-d00314-J+L
-def _pump(source: Any, prefix: str, echo: TextIO, keep: list[str] | None) -> None:
-    """Echo each line of *source* with *prefix* in front of it; keep it unprefixed in *keep*."""
+def _pump(source: Any, prefix: str, echo: TextIO) -> None:
+    """Echo each line of *source* with *prefix* in front of it."""
     for line in source:
-        if keep is not None:
-            keep.append(line)
         _emit(echo, prefix + (line if line.endswith("\n") else line + "\n"))
 
 
@@ -669,10 +631,10 @@ def _run_one_attributed(
     target: Any,
     stale_only: bool = False,
     full: bool = False,
-) -> tuple[RunnerResult, str | None]:
+) -> RunnerResult:
     """Run one target with each line of its output marked with its name.
 
-    Returns the result and, for a stdout-channel target, the stdout it wrote.
+    Both of the command's streams are echoed to this process's stderr.
     """
 
     def emit(text: str) -> None:
@@ -680,9 +642,8 @@ def _run_one_attributed(
 
     begun = _begin_target(config, repo_root, target, stale_only, full, emit)
     if isinstance(begun, RunnerResult):
-        return begun, None
+        return begun
     prefix = f"[{target.name}] "
-    kept: list[str] | None = [] if begun.is_stdout_channel else None
     start = time.monotonic()
     if not begun.spawns:
         result = begun.result(0, 0.0)
@@ -700,22 +661,11 @@ def _run_one_attributed(
                 errors="replace",
                 bufsize=1,
             )
-            # A stdout-channel target's stdout is its results, so it is echoed
-            # to stderr, as a run of one target at a time echoes it.
+            # stdout is echoed to stderr, as a run of one target at a time
+            # writes it.
             pumps = [
-                threading.Thread(
-                    target=_pump,
-                    args=(
-                        proc.stdout,
-                        prefix,
-                        sys.stderr if begun.is_stdout_channel else sys.stdout,
-                        kept,
-                    ),
-                    daemon=True,
-                ),
-                threading.Thread(
-                    target=_pump, args=(proc.stderr, prefix, sys.stderr, None), daemon=True
-                ),
+                threading.Thread(target=_pump, args=(stream, prefix, sys.stderr), daemon=True)
+                for stream in (proc.stdout, proc.stderr)
             ]
             for pump in pumps:
                 pump.start()
@@ -729,7 +679,7 @@ def _run_one_attributed(
         except OSError as exc:
             result = begun.result(-1, time.monotonic() - start, error=str(exc))
     _end_target(config, repo_root, target, result, emit)
-    return result, ("".join(list(kept)) if kept is not None else None)
+    return result
 
 
 def _resource_keys(target: Any) -> frozenset[str]:
@@ -745,7 +695,7 @@ def _run_concurrently(
     only: set[str] | None,
     stale_only: bool = False,
     full: bool = False,
-) -> tuple[list[RunnerResult], dict[str, str]]:
+) -> list[RunnerResult]:
     """Run the selected targets, up to ``concurrency`` at a time.
 
     A waiting target starts as soon as a place is free and no running target
@@ -760,10 +710,9 @@ def _run_concurrently(
     ]
     position = {t.name: i for i, t in enumerate(order)}
     pending = list(order)
-    running: dict[Future[tuple[RunnerResult, str | None]], Any] = {}
+    running: dict[Future[RunnerResult], Any] = {}
     in_use: set[str] = set()
     results: list[RunnerResult] = []
-    captured: dict[str, str] = {}
     stopping = False
 
     with ThreadPoolExecutor(max_workers=limit) as pool:
@@ -788,12 +737,10 @@ def _run_concurrently(
             for future in done:
                 target = running.pop(future)
                 in_use -= _resource_keys(target)
-                result, stdout_text = future.result()
+                result = future.result()
                 results.append(result)
-                if stdout_text is not None:
-                    captured[target.name] = stdout_text
                 if fail_fast and result.returncode != 0:
                     stopping = True
 
     results.sort(key=lambda r: position[r.name])
-    return results, captured
+    return results

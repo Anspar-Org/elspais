@@ -155,7 +155,7 @@ def _run(root: Path, config: dict, *, stale_only: bool = True, full: bool = Fals
     forget_probes()
     _write_config(root, config)
     typed = validate_config(config)
-    results, _ = run_configured_targets(typed, root, stale_only=stale_only, full=full)
+    results = run_configured_targets(typed, root, stale_only=stale_only, full=full)
     failures = settle_units(typed, root, config, results)
     return results[0], failures
 

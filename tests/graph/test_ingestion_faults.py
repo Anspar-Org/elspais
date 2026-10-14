@@ -192,17 +192,17 @@ def test_lcov_records_a_report_naming_no_source_file():
 
 
 # Verifies: REQ-d00285-G
-def test_flutter_machine_records_output_that_carried_no_events():
+def test_flutter_machine_records_a_file_that_carried_no_events():
     parser = FlutterMachineParser()
 
-    assert parser.parse("Running tests...\nBuild failed.\n", "target:app") == []
+    assert parser.parse("Running tests...\nBuild failed.\n", ".results/app/machine.jsonl") == []
     (diagnostic,) = list(parser.iter_diagnostics())
-    assert "no JSON events" in diagnostic.cause
+    assert "the file carried no `flutter test` JSON events" in diagnostic.cause
 
 
 # Verifies: REQ-d00285-G
 def test_flutter_machine_does_not_report_the_runners_own_chatter():
-    """Non-JSON lines between events are that stream's normal traffic."""
+    """A line between events that is not JSON holds no event and is passed over."""
     parser = FlutterMachineParser()
     content = (
         "Building application...\n"
@@ -211,7 +211,7 @@ def test_flutter_machine_does_not_report_the_runners_own_chatter():
         '{"type":"testDone","testID":2,"result":"success"}\n'
     )
 
-    results = parser.parse(content, "target:app")
+    results = parser.parse(content, ".results/app/machine.jsonl")
 
     assert len(results) == 1
     assert list(parser.iter_diagnostics()) == []
@@ -738,66 +738,36 @@ class TestPartialReads:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-_FLUTTER_OUTPUT = (
+_FLUTTER_EVENTS = (
     '{"type":"suite","suite":{"id":1,"path":"test/a_test.dart"}}\n'
     '{"type":"testStart","test":{"id":2,"suiteID":1,"name":"works","line":7}}\n'
     '{"type":"testDone","testID":2,"result":"success"}\n'
 )
 
 
-def _build_captured(project: Path, captured_results: dict[str, str] | None):
-    from elspais.graph.factory import build_graph
-
-    return build_graph(
-        config_path=project / ".elspais.toml",
-        repo_root=project,
-        scan_code=False,
-        captured_results=captured_results,
-    )
-
-
 # Verifies: REQ-d00283-T
 @pytest.mark.parametrize(
-    "targets,captured,path",
+    "targets,path",
     [
         (
             '\n[[scanning.test.targets]]\nname = "unit"\nreporter = "junit"\n'
             'results = "TEST-*.xml"\n',
-            None,
             ".results/unit/TEST-*.xml",
         ),
         (
             '\n[[scanning.test.targets]]\nname = "unit"\nreporter = "flutter-machine"\n',
-            None,
-            "",
-        ),
-        (
-            '\n[[scanning.test.targets]]\nname = "unit"\nreporter = "flutter-machine"\n',
-            {},
-            "",
-        ),
-        (
-            '\n[[scanning.test.targets]]\nname = "unit"\nreporter = "flutter-machine"\n',
-            {"other": _FLUTTER_OUTPUT},
             "",
         ),
     ],
-    ids=[
-        "file-channel",
-        "runner-output-no-run",
-        "runner-output-empty-capture",
-        "runner-output-other-target-captured",
-    ],
+    ids=["pattern-matched-nothing", "no-results-pattern"],
 )
-def test_absent_results_are_one_fact_whichever_channel_delivers_them(
-    tmp_path, targets, captured, path
-):
-    """A target with no results is recorded the same way whether its results
-    come from a file or from its runner's output, and whether or not this
-    invocation ran anything. Neither is an ingestion fault by itself."""
+def test_absent_results_are_one_fact_whether_or_not_a_pattern_is_declared(tmp_path, targets, path):
+    """A target with no results is recorded the same way whether its pattern
+    matched nothing or it declares no pattern at all. Neither is an ingestion
+    fault by itself."""
     from elspais.graph.builder import UnreadArtifact
 
-    graph = _build_captured(_project(tmp_path, targets), captured)
+    graph = _build(_project(tmp_path, targets))
 
     assert graph.ingestion_faults() == []
     assert graph.unread_artifacts() == [
@@ -805,16 +775,18 @@ def test_absent_results_are_one_fact_whichever_channel_delivers_them(
     ]
 
 
-# Verifies: REQ-d00283-T
-def test_runner_output_this_invocation_captured_is_read_not_recorded_absent(tmp_path):
-    """The negative of the absence above: captured output is results."""
+# Verifies: REQ-d00283-T, REQ-d00254-F
+def test_a_flutter_event_file_its_pattern_names_is_read_not_recorded_absent(tmp_path):
+    """The negative of the absence above: the events file the pattern names is results."""
     from elspais.graph.GraphNode import NodeKind
 
     project = _project(
         tmp_path,
-        '\n[[scanning.test.targets]]\nname = "unit"\nreporter = "flutter-machine"\n',
+        '\n[[scanning.test.targets]]\nname = "unit"\nreporter = "flutter-machine"\n'
+        'results = "machine.jsonl"\n',
+        results={".results/unit/machine.jsonl": _FLUTTER_EVENTS},
     )
-    graph = _build_captured(project, {"unit": _FLUTTER_OUTPUT})
+    graph = _build(project)
 
     assert graph.unread_artifacts() == []
     assert len(list(graph.iter_by_kind(NodeKind.RESULT))) == 1
@@ -888,23 +860,3 @@ def test_a_finished_run_is_read_as_it_always_was(tmp_path):
 
     assert len(list(graph.iter_by_kind(NodeKind.RESULT))) == 1
     assert [a for a in graph.unread_artifacts() if a.reason == "running"] == []
-
-
-# Verifies: REQ-d00311-N
-def test_output_this_invocation_captured_is_read_though_the_fingerprint_shows_no_end(tmp_path):
-    """Output a runner handed this invocation comes from a run that has ended,
-    whatever the fingerprint in its area says."""
-    from elspais.config import load_config
-    from elspais.graph.GraphNode import NodeKind
-    from elspais.utilities.fingerprint import start_run
-
-    project = _project(
-        tmp_path,
-        '\n[[scanning.test.targets]]\nname = "unit"\nreporter = "flutter-machine"\n',
-    )
-    start_run(project, load_config(project / ".elspais.toml"), "unit")
-
-    graph = _build_captured(project, {"unit": _FLUTTER_OUTPUT})
-
-    assert graph.unread_artifacts() == []
-    assert len(list(graph.iter_by_kind(NodeKind.RESULT))) == 1

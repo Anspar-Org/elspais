@@ -720,7 +720,6 @@ class TestEveryBranchAsksTheAuthority:
             argparse.Namespace(
                 spec_dir=None,
                 config=config_path,
-                _captured_results=None,
                 _fresh_targets=None,
             ),
             ChecksRequest(),
@@ -759,7 +758,6 @@ class TestEveryBranchAsksTheAuthority:
             argparse.Namespace(
                 spec_dir=None,
                 config=config_path,
-                _captured_results=None,
                 _fresh_targets=None,
             ),
             ChecksRequest(),

@@ -160,6 +160,7 @@ class _OneRecordParser:
                 "classname": "login.spec.ts",
                 "status": "passed",
                 "test_id": "test:login/spec/ts.py::logs in",
+                "result_file": source_path,
             }
         ]
 
@@ -188,7 +189,6 @@ def test_target_declaration_overrides_the_reporters(
     """The effective form is the target's where it declares one, else the reporter's."""
     spec = ReporterSpec(
         name="fake-reporter",
-        channel="file",
         kind="results",
         parser_factory=_OneRecordParser,
         classname=reporter_form,
@@ -202,6 +202,7 @@ def test_target_declaration_overrides_the_reporters(
         target,
         "",
         tmp_path,
+        str(tmp_path / ".results" / "t" / "results.xml"),
         namespace="REQ",
         scanned_tests=frozenset({"tests/e2e/login.spec.ts"}),
     )

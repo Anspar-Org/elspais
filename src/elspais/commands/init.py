@@ -289,8 +289,8 @@ _FIELD_COMMENTS: dict[str, str] = {
         " optional for a command when file_results is true"
     ),
     "scanning.test.targets.results": (
-        "Glob for result files (file-channel reporters: junit, pytest-json),"
-        " relative to the target's folder <output_root>/<name>"
+        "Glob for result files, relative to the target's folder"
+        " <output_root>/<name>; required for a results reporter with a command"
     ),
     "scanning.test.targets.coverage": (
         "Path to lcov/coverage-json file, relative to the target's folder"
@@ -957,16 +957,18 @@ def generate_config(
         'name    = "app"',
         'cwd     = "app"',
         (
-            'command = "flutter test --machine --coverage'
-            ' --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"'
+            'command = "flutter test'
+            " --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.jsonl"
+            ' --coverage --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"'
         ),
         'reporter = "flutter-machine"',
+        'results = "machine.jsonl"',
         'coverage = "lcov.info"',
         'match   = "source"',
         'credit_coverage = "verified"',
-        "# Tip: write the machine output to a `results` file, put {selection}",
-        "#   where the test files go, skip **/.dart_tool in `inputs`, declare an",
-        '#   environment probe such as { name = "flutter", command =',
+        "# Tip: put {selection} where the test files go, skip **/.dart_tool",
+        "#   in `inputs`, declare an environment probe such as",
+        '#   { name = "flutter", command =',
         '#   "flutter --version --machine" }, and declare units, so a',
         "#   stale-only run executes only the test files whose imports",
         "#   changed: [scanning.test.targets.units]",
@@ -983,10 +985,12 @@ def generate_config(
         'name    = "backend"',
         'cwd     = "backend"',
         (
-            'command = "flutter test --machine --coverage --concurrency=1'
-            ' --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"'
+            'command = "flutter test'
+            " --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.jsonl"
+            ' --coverage --concurrency=1 --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"'
         ),
         'reporter = "flutter-machine"',
+        'results = "machine.jsonl"',
         'coverage = "lcov.info"',
         'match   = "source"',
         'credit_coverage = "verified"',

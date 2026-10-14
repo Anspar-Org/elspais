@@ -1887,7 +1887,7 @@ A puts the file-level reading under the project's declaration because only the p
 
 B records the exit status where the target's results already live, so a run that executes no target reads the same verdict as the run that produced it, and the status is carried or fresh exactly as the target's other results are. I keeps a target whose command never reported an exit status from being read as passing or failing; with no exit status no file-level *Result Record* exists, so a test in such a file that no *Result Record* naming it binds to is awaiting a result under REQ-d00254-A.
 
-E identifies a file-level result as REQ-d00294-B identifies a result read from a command's output: by the target, with the file standing in for a position because there is exactly one such result for each file.
+E identifies a file-level result by its target, with the file standing in for a position, because there is exactly one such result for each file.
 
 F gives a citation in such a file a place to bind. A module-level assertion is inside no test and above none, so under REQ-d00332-G it binds to no test; F binds it to its file instead, and REQ-d00274-G and H report and withhold only a citation that binds to neither. G and H let one target mix both kinds of evidence: where a runner wrote a result naming a test, that result is the more precise one and decides its test; the file-level result binds only to what no such result reaches. Because a file-level result binds to the tests it decides, REQ-d00254-A's condition of a test with no *Result Record* does not hold for them. A test file that a file-level target scans is a file a configured target can execute, so REQ-d00276-E does not report it.
 

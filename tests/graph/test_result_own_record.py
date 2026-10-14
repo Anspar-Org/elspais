@@ -1,4 +1,4 @@
-# Verifies: REQ-d00294-A, REQ-d00294-B, REQ-d00294-C, REQ-d00294-D, REQ-d00294-F
+# Verifies: REQ-d00294-A, REQ-d00294-C, REQ-d00294-D, REQ-d00294-F
 """Every record a producer wrote is held as a result of its own.
 
 One test run in more than one environment is reported once for each of
@@ -33,7 +33,7 @@ _TWO_ENVIRONMENTS = """\
 </testsuite>
 """
 
-# One suite, one test, reported on a runner's stdout: no artifact holds it.
+# One test reported twice, in the events `flutter test` writes to a file.
 _FLUTTER_STREAM = (
     '{"type":"suite","suite":{"id":0,"platform":"vm","path":"test/widget_test.dart"}}\n'
     '{"type":"testStart","test":{"id":1,"name":"renders","suiteID":0,'
@@ -72,20 +72,27 @@ def test_two_records_of_one_test_are_two_results(tmp_path: Path):
     assert {n.get_field("status") for n in results} == {"passed", "failed"}
 
 
-# Verifies: REQ-d00294-B
-def test_a_stream_places_its_records_by_target(tmp_path: Path):
-    """Results read from a runner's output are placed by the target."""
+# Verifies: REQ-d00294-A
+def test_a_flutter_event_file_places_its_records_by_the_artifact(tmp_path: Path):
+    """Results read from a `flutter test` event file are placed by that file."""
+    artifact = tmp_path / "reports" / "machine.jsonl"
+    artifact.parent.mkdir()
+    artifact.write_text(_FLUTTER_STREAM, encoding="utf-8")
     builder = _builder(tmp_path)
-    target = TestTargetConfig(name="widgets", reporter="flutter-machine", match="source")
+    target = TestTargetConfig(
+        name="widgets", reporter="flutter-machine", results="reports/machine.jsonl", match="source"
+    )
 
-    count = _ingest_target_results(builder, target, _FLUTTER_STREAM, tmp_path, "", namespace="REQ")
+    count = _ingest_target_results(
+        builder, target, _FLUTTER_STREAM, tmp_path, str(artifact), namespace="REQ"
+    )
 
     assert count == 2
     graph = builder.build()
     results = sorted(graph.iter_by_kind(NodeKind.RESULT), key=lambda n: n.id)
     assert [n.id for n in results] == [
-        "result:REQ:widgets:1",
-        "result:REQ:widgets:2",
+        "result:REQ:reports/machine.jsonl:1",
+        "result:REQ:reports/machine.jsonl:2",
     ]
     assert {n.get_field("status") for n in results} == {"passed", "failed"}
 
@@ -263,8 +270,11 @@ def test_a_format_carrying_no_hostname_says_so(tmp_path: Path):
         match="source",
         environment="suite-hostname",
     )
+    artifact = _write(tmp_path, "reports/machine.jsonl", _FLUTTER_STREAM)
 
-    _ingest_target_results(builder, target, _FLUTTER_STREAM, tmp_path, "", namespace="REQ")
+    _ingest_target_results(
+        builder, target, _FLUTTER_STREAM, tmp_path, str(artifact), namespace="REQ"
+    )
 
     assert _environments(builder) == [None, None]
     faults = builder.build().ingestion_faults()
@@ -299,25 +309,6 @@ def test_a_record_holding_no_hostname_derives_none(tmp_path: Path):
     faults = builder.build().ingestion_faults()
     assert len(faults) == 1
     assert "names no hostname" in faults[0].cause
-
-
-# Verifies: REQ-d00294-D
-def test_a_stream_declaring_a_path_source_derives_none(tmp_path: Path):
-    """A runner's output has no results path, so no environment comes from one."""
-    builder = _builder(tmp_path)
-    target = TestTargetConfig(
-        name="widgets",
-        reporter="flutter-machine",
-        match="source",
-        environment="results-path",
-    )
-
-    _ingest_target_results(builder, target, _FLUTTER_STREAM, tmp_path, "", namespace="REQ")
-
-    assert _environments(builder) == [None, None]
-    faults = builder.build().ingestion_faults()
-    assert len(faults) == 1
-    assert "runner's output" in faults[0].cause
 
 
 # Verifies: REQ-d00294-F
@@ -359,8 +350,7 @@ def test_an_unknown_environment_source_is_refused():
 
 
 # A flutter suite saved to one file for each device, then read back by a
-# pattern. The format usually arrives on a runner's output, and a target that
-# saves it still has one artifact for each device.
+# pattern: one artifact for each device.
 _FLUTTER_ONE_RECORD = (
     '{"type":"suite","suite":{"id":0,"platform":"vm","path":"test/widget_test.dart"}}\n'
     '{"type":"testStart","test":{"id":1,"name":"renders","suiteID":0,'
@@ -373,10 +363,9 @@ _FLUTTER_ONE_RECORD = (
 def test_a_saved_stream_is_placed_by_its_artifact(tmp_path: Path):
     """Records saved to one file for each device do not take each other's place.
 
-    The format carries no artifact when it arrives on a runner's output. Read
-    back from files, each file is what separates its records from the next
-    file's: every file counts its records from one, so without the artifact
-    every device writes the same identity and one verdict survives.
+    Each file is what separates its records from the next file's: every file
+    counts its records from one, so without the artifact every device writes
+    the same identity and one verdict survives.
     """
     builder = _builder(tmp_path)
     target = TestTargetConfig(

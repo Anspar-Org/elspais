@@ -169,7 +169,7 @@
 | REQ-d00246 | Markdown Emphasis Normalization Utility                       | prd-core.md             | 6db4d559 |
 | REQ-d00247 | Fenced Code Block Preservation                                | prd-core.md             | 499a4ce4 |
 | REQ-d00248 | Fix Command Idempotency                                       | prd-core.md             | 99bb6d77 |
-| REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 15f1058b |
+| REQ-d00249 | Configured test runner execution                              | dev-cli.md              | 63879f19 |
 | REQ-d00250 | Section Heading Depth                                         | dev-graph-core.md       | 654f055b |
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | b49bd5ee |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 3b102d6f |

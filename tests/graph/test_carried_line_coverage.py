@@ -221,26 +221,6 @@ def test_a_file_s_line_coverage_records_why_it_is_stale(built) -> None:
         _assert_reason(reason, state)
 
 
-# Verifies: REQ-d00323-I
-def test_captured_output_is_not_judged_stale(tmp_path: Path) -> None:
-    """A target whose output this invocation captured is its own run.
-
-    Its coverage on disk carries no fingerprint, and is still read as fresh.
-    """
-    from elspais.graph.factory import build_graph
-
-    project = _make_project(tmp_path, "no-fingerprint")
-    graph = build_graph(
-        config_path=project / ".elspais.toml",
-        repo_root=project,
-        captured_results={"a": _RESULTS},
-    )
-
-    main = _main_file(graph)
-    assert main.get_field("line_coverage")
-    assert main.get_field("line_coverage_stale_reason") == ""
-
-
 # Verifies: REQ-d00323-I+J+K
 def test_a_requirement_s_line_figures_are_carried_when_its_coverage_is_stale(built) -> None:
     state, _, graph = built
