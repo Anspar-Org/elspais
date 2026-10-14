@@ -73,9 +73,9 @@ class WatchSet:
 def watch_set(members: Iterable[tuple[Path, dict[str, Any]]]) -> WatchSet:
     """Return the files a graph was built from, given the root and configuration of each member."""
     from elspais.config import config_document_candidates, validate_config
+    from elspais.utilities.coverage import RECORD_NAME
     from elspais.utilities.evidence import SNAPSHOT_FILES, TIMINGS_FILE
     from elspais.utilities.fingerprint import (
-        RETAINED_COVERAGE_NAME,
         RETAINED_RESULTS_NAME,
         declared_probes,
         target_folder,
@@ -99,10 +99,12 @@ def watch_set(members: Iterable[tuple[Path, dict[str, Any]]]) -> WatchSet:
             files.extend(directory / name for name in (*SNAPSHOT_FILES, TIMINGS_FILE))
         for target in typed.scanning.test.targets:
             folder = target_folder(root, typed, target.name)
-            # Implements: REQ-d00333-A+J
-            # The Retained Results and retained coverage a run writes are
-            # results the build reads, as the target's own are.
-            named = (target.results, target.coverage, RETAINED_RESULTS_NAME, RETAINED_COVERAGE_NAME)
+            # Implements: REQ-d00333-A, REQ-d00334-A
+            # The Retained Results a run writes are results the build reads,
+            # as the target's own are. Line coverage is read from its record
+            # alone, so the record is watched and the tool's file is not.
+            record = RECORD_NAME if target.coverage else ""
+            named = (target.results, record, RETAINED_RESULTS_NAME)
             patterns = tuple(str(folder / p) for p in named if p)
             areas.append(OutputArea(folder=folder, patterns=patterns))
             probes.extend(ProbeWatch(target.name, p) for p in declared_probes(root, target))

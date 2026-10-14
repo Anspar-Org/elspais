@@ -191,7 +191,9 @@ def test_a_member_target_carried_from_its_snapshot_owes_no_coverage_file(
     root, lib = _federation(tmp_path, monkeypatch)
     config_path = lib / ".elspais.toml"
     text = config_path.read_text(encoding="utf-8")
-    patched = text.replace('match = "source"\n', 'match = "source"\ncoverage = "lcov.info"\n')
+    patched = text.replace(
+        'match = "source"\n', 'match = "source"\ncoverage = "lcov.info"\ncoverage_format = "lcov"\n'
+    )
     assert patched != text
     config_path.write_text(patched, encoding="utf-8")
     _git(lib, "commit", "-q", "-am", "coverage")

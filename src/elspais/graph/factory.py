@@ -68,21 +68,6 @@ _log = logging.getLogger(__name__)
 
 
 # Implements: REQ-d00327-C, REQ-d00327-B+E
-def _resolve_coverage_file_node(graph, source_file, origin_dir, repo_root):
-    """The FILE node a coverage artifact's source path names, or None.
-
-    A relative path is read from *origin_dir*, the directory the origin that
-    applies to the artifact names. A path that names no scanned file of this
-    repository resolves to nothing.
-    """
-    rel = placed_in_repo(source_file, origin_dir, repo_root)
-    if rel is None:
-        return None
-    # Coverage is ingested into the repository whose graph this is, so the
-    # id is written in that repository's namespace.
-    return graph.find_by_id(make_file_id(graph.namespace, rel))
-
-
 # Implements: REQ-d00327-H
 def _context_origin_dir(target, working_dir: Path, repo_root: Path) -> Path:
     """The directory the test names in a target's coverage contexts are read from.
@@ -200,88 +185,56 @@ def target_test_files(target, scanned: Iterable[str], repo_root: Path) -> frozen
     return observed_set(repo_root, as_observation(selection), files)
 
 
-# Implements: REQ-d00333-J+L, REQ-d00323-J+K+N
-def _attach_line_coverage(
-    graph,
-    fresh: dict[str, dict],
-    retained: dict[str, dict],
-    repo_root: Path,
-    stale: str,
-    place_contexts: Callable[[dict[int, list[str]]], dict[int, list[str]]],
-    origin: Path,
-) -> int:
-    """Attach a target's line coverage to the FILE nodes it measures.
+# Implements: REQ-d00333-L, REQ-d00323-I+J+K+N+Q
+def _attach_line_coverage(graph, record: dict, carried_reason: str, latest_run: dict | None) -> int:
+    """Attach a target's recorded line coverage to the FILE nodes it measures.
 
-    Returns how many files the fresh measurement reached.
-
-    *fresh* is this run's measurement, keyed as recorded and read from
-    *origin*; *retained* is the measurement a run kept from earlier runs,
-    keyed repo-relative. A file's lines are the two merged by
-    :func:`merge_readings`. Where the retained measurement adds a line this
-    run did not measure executing, the file names the runs that measured it;
-    where no fresh executed line contributes, its coverage is carried.
-    *stale* says why the fresh measurement is stale, where it is.
+    Returns how many files it reached. *record* holds the entries that still
+    describe the tree. An entry is fresh only where the run being reported
+    produced it: *carried_reason* is empty and the target's latest run,
+    *latest_run*, measured it. Otherwise its reason names the runs that
+    measured it, followed by *carried_reason*.
     """
-    from elspais.graph.parsers.results.coverage_json import merge_readings
     from elspais.utilities.fingerprint import describe_run
 
     attached = 0
-    readings: list[tuple[Any, dict | None, dict | None]] = []
-    for source_file, data in fresh.items():
-        node = _resolve_coverage_file_node(graph, source_file, origin, repo_root)
-        if node is None:
-            continue
-        readings.append((node, data, None))
-    by_node = {r[0].id: i for i, r in enumerate(readings)}
-    for rel, data in retained.items():
+    for rel, entry in record.items():
         node = graph.find_by_id(make_file_id(graph.namespace, rel))
         if node is None:
             continue
-        if node.id in by_node:
-            n, f, _ = readings[by_node[node.id]]
-            readings[by_node[node.id]] = (n, f, data)
-        else:
-            readings.append((node, None, data))
-    for node, fresh_data, kept in readings:
-        attached += fresh_data is not None
-        placed = None
-        if fresh_data is not None:
-            placed = dict(fresh_data)
-            if fresh_data.get("contexts"):
-                placed["contexts"] = dict(place_contexts(fresh_data["contexts"]))
-        # Retained contexts were written repo-relative by elspais.
-        merged = merge_readings(placed, kept)
-        fresh_lines = (fresh_data or {}).get("line_coverage") or {}
-        fresh_hit = any(fresh_lines.values())
-        kept_lines = (kept or {}).get("line_coverage") or {}
-        reason = stale
+        attached += 1
+        fresh = not carried_reason and latest_run is not None and latest_run in entry.measured_in
         # Implements: REQ-d00333-L
-        # Wherever an earlier run's coverage adds a line this run did not
-        # measure executing, or stands alone, the figure names that run.
-        if kept is not None and (
-            not fresh_hit or any(hit and not fresh_lines.get(n) for n, hit in kept_lines.items())
-        ):
-            runs = (kept.get("provenance") or {}).get("measured_in") or []
-            named = "; ".join(describe_run(r) for r in runs if isinstance(r, dict))
-            reason = f"line coverage retained from {named or 'an earlier run'}"
-            if stale:
-                reason = f"{reason}; {stale}"
-        node.set_field("line_coverage", merged.get("line_coverage") or {})
+        # Wherever an earlier run measured the file, the figure names that
+        # run, fresh or not.
+        earlier = [r for r in entry.measured_in if r != latest_run]
+        named = "; ".join(describe_run(r) for r in earlier if isinstance(r, dict))
+        parts = [f"line coverage retained from {named}"] if named else []
+        if carried_reason:
+            parts.append(carried_reason)
+        reason = "; ".join(parts)
+        if not fresh and not reason:
+            reason = "line coverage the latest run did not measure"
+        node.set_field("line_coverage", dict(entry.hits))
         node.set_field("line_coverage_stale_reason", reason)
-        # Implements: REQ-d00323-I+J
-        # A file this run measured executing holds coverage the current tree
-        # produced, whatever an earlier run's coverage adds to it.
-        node.set_field("line_coverage_fresh", fresh_hit and not stale)
-        node.set_field("executable_lines", merged.get("executable_lines", 0))
+        node.set_field("line_coverage_fresh", fresh)
+        node.set_field("executable_lines", entry.executable)
         # Implements: REQ-d00254-Q
         # A file whose source could not be re-analysed has executed lines but
-        # no known total. Carry that, so a figure computed over this file can
-        # leave it out rather than treat its executed count as its size.
-        if fresh_data is not None and not fresh_data.get("source_analysed", True):
+        # no known total, so a figure computed over it can leave it out.
+        if not entry.source_analysed:
             node.set_field("source_analysed", False)
-        if merged.get("contexts"):
-            node.set_field("line_contexts", merged["contexts"])
+        if entry.contexts:
+            node.set_field(
+                "line_contexts", {line: list(names) for line, names in entry.contexts.items()}
+            )
     return attached
+
+
+def _first_recorded(record: dict) -> str:
+    """One source path of *record* as the tool recorded it."""
+    rel, entry = next(iter(record.items()))
+    return entry.recorded or rel
 
 
 # Implements: REQ-d00285-A
@@ -2004,14 +1957,24 @@ def _build_repository(
 
                 _record_declined_files(builder, domain_file, "test", repo_root)
 
-            # Implements: REQ-d00332-A
+            # Implements: REQ-d00332-A+D
             # A test file in a language the `ast` extra reads has no test
             # boundaries without it, so its citations bind to no test. The
-            # build says so once, naming the extra.
+            # build says so once, naming the extra. A file the prescan
+            # command returned records for takes its boundaries from them.
             from elspais.graph.parsers import syntax_tree
 
+            def _prescan_reads(rel: str) -> bool:
+                return bool(prescan_data) and (
+                    rel in prescan_data or str(repo_root / rel) in prescan_data
+                )
+
             if not syntax_tree.available():
-                unread = sorted(f for f in scanned_test_files if syntax_tree.handles(f))
+                unread = sorted(
+                    f
+                    for f in scanned_test_files
+                    if syntax_tree.handles(f) and not _prescan_reads(f)
+                )
                 if unread:
                     print(
                         f"Warning: {len(unread)} test file(s), such as {unread[0]}, have no "
@@ -2325,15 +2288,20 @@ def _build_repository(
     # snapshot and the specification alone.
     if typed_config.scanning.test.targets and not evidence_only:
         from elspais.graph.builder import UnreadArtifact
-        from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
-        from elspais.graph.parsers.results.coverage_sqlite import CoverageSqliteParser
-        from elspais.graph.parsers.results.registry import coverage_reader_for
         from elspais.graph.parsers.results.registry import get_reporter as _cov_spec
+        from elspais.utilities.coverage import (
+            RECORD_NAME,
+            CoverageUnreadable,
+            current,
+            read_diagnostics,
+            read_record,
+        )
         from elspais.utilities.fingerprint import (
-            RETAINED_COVERAGE_NAME,
             command_spawned,
             judge,
+            read_fingerprint,
             run_in_progress,
+            run_reference,
             stale_reason,
             target_folder,
         )
@@ -2384,23 +2352,35 @@ def _build_repository(
                     )
                 )
                 continue
-            # Implements: REQ-d00333-J
-            # The line coverage a run kept from earlier runs, beside its own.
-            retained_cov_path = cov_area / RETAINED_COVERAGE_NAME
-            retained_cov = (
-                CoverageJsonParser().parse(
-                    retained_cov_path.read_text(encoding="utf-8"), str(retained_cov_path)
+            # Implements: REQ-d00334-A
+            # A target's line coverage is read from its coverage record alone,
+            # which the run that finished wrote from the tool's own file.
+            try:
+                record = read_record(cov_area)
+            except CoverageUnreadable as exc:
+                graph.record_ingestion_fault(
+                    path=_repo_relative(cov_area / RECORD_NAME, repo_root),
+                    stage="coverage",
+                    cause=str(exc),
+                    target=target.name,
                 )
-                if retained_cov_path.is_file()
-                else {}
-            )
-            if not cov_path.is_file() and retained_cov:
-                # Implements: REQ-d00283-V, REQ-d00333-J
-                # A run that retained every result spawned no command, so it
-                # measured nothing of its own. A run that spawned one and
-                # left no coverage file is missing its coverage, and the
-                # absence is recorded beside what it retained.
-                if command_spawned(cov_area):
+                continue
+            if record is None:
+                if cov_path.is_file():
+                    graph.record_ingestion_fault(
+                        path=_repo_relative(cov_path, repo_root),
+                        stage="coverage",
+                        cause=(
+                            "the coverage file has no elspais coverage record beside it, so "
+                            "it was not read; run the target again"
+                        ),
+                        target=target.name,
+                    )
+                else:
+                    # Implements: REQ-d00283-V
+                    # No coverage file and coverage measuring nothing are the
+                    # same zero once the numbers are aggregated, so the
+                    # absence is recorded for a health check to judge.
                     graph.record_unread_artifact(
                         UnreadArtifact(
                             target=target.name,
@@ -2409,23 +2389,22 @@ def _build_repository(
                             reason="absent",
                         )
                     )
-                if target.name in stale_by_target:
-                    kept_stale = stale_by_target[target.name]
-                else:
-                    _kept_verdict = judge(repo_root, typed_config, target.name)
-                    kept_stale = (
-                        stale_reason(_kept_verdict) if _kept_verdict.state == "stale" else ""
-                    )
-                _attach_line_coverage(
-                    graph, {}, retained_cov, repo_root, kept_stale, lambda c: c, repo_root
-                )
                 continue
-            if not cov_path.is_file():
-                # Implements: REQ-d00283-V
-                # No coverage file and coverage measuring nothing are the same
-                # zero once the numbers are aggregated, so the absence is
-                # recorded for a health check to judge.
-                _log.debug("target %r: coverage file not found: %s", target.name, cov_path)
+            # Implements: REQ-d00285-G
+            # What the run's read of its coverage file declined.
+            for found in read_diagnostics(cov_area):
+                graph.record_ingestion_fault(
+                    path=str(found.get("path") or _repo_relative(cov_path, repo_root)),
+                    stage="coverage",
+                    cause=str(found.get("cause") or ""),
+                    line=found.get("line"),
+                    target=target.name,
+                    partial=bool(found.get("partial")),
+                )
+            # Implements: REQ-d00283-V
+            # A run that spawned its command and left no coverage file is
+            # missing its coverage, beside what it carried.
+            if not cov_path.is_file() and command_spawned(cov_area):
                 graph.record_unread_artifact(
                     UnreadArtifact(
                         target=target.name,
@@ -2434,91 +2413,51 @@ def _build_repository(
                         reason="absent",
                     )
                 )
-                continue
-            found_reader = coverage_reader_for(cov_path)
-            cov_reporter, cov_parser = found_reader if found_reader else (None, None)
-            if cov_parser is None:
-                # Implements: REQ-d00285-G
-                _log.debug("target %r: unrecognised coverage format: %s", target.name, cov_path)
-                graph.record_ingestion_fault(
-                    path=_repo_relative(cov_path, repo_root),
-                    stage="coverage",
-                    cause=(
-                        "no coverage reader recognises this file's format, so the "
-                        "measurement it holds was not read"
-                    ),
-                    target=target.name,
-                )
-                continue
-            # Implements: REQ-d00327-B+E, REQ-d00327-C
-            # A relative path in the coverage data is read from the origin the
-            # target declares for its coverage, or else from the one the
-            # reporter of the format declares.
-            cov_origin, cov_origin_dir = origin_dir(
-                _cov_spec(cov_reporter),
-                target.coverage_origin,
-                cwd_path,
-                repo_root,
-                foreign=False,
-            )
-            # Implements: REQ-d00327-H
-            # A per-test context names its test as the test runner wrote it,
-            # so the path in that name is read from the origin of the target's
-            # results, not from the origin of its coverage data.
-            place_contexts = context_placer(target, cwd_path, repo_root)
-            # Binary formats (e.g. the .coverage SQLite DB) can't be
-            # text-decoded -- their parser ignores `content` and reopens
-            # `source_path` directly (see CoverageSqliteParser.binary).
-            if getattr(cov_parser, "binary", False):
-                cov_content = ""
-            else:
-                cov_content = cov_path.read_text(encoding="utf-8")
-            if isinstance(cov_parser, CoverageSqliteParser):
-                # Contexts are the suite-scaled part of the data (every test
-                # context string per executed line). Only materialize them
-                # for measured files that actually resolve to a FILE node --
-                # unresolvable ones (test files, out-of-tree sources) are
-                # discarded by the annotation loop below anyway.
-                def _wanted(source_file: str, _cwd: Path = cov_origin_dir) -> bool:
-                    return (
-                        _resolve_coverage_file_node(graph, source_file, _cwd, repo_root) is not None
-                    )
-
-                parsed_cov = cov_parser.parse(cov_content, str(cov_path), wanted_files=_wanted)
-            else:
-                parsed_cov = cov_parser.parse(cov_content, str(cov_path))
-            # Implements: REQ-d00285-G
-            _record_parser_diagnostics(
-                graph, cov_parser, "coverage", target.name, str(cov_path), repo_root
-            )
-            # Implements: REQ-d00323-I
-            # Coverage the current tree did not produce is carried, by the
-            # judgement its target's results get.
+            # Implements: REQ-d00323-I+Q
+            # Coverage the run being reported did not produce is carried:
+            # coverage of a stale target, and of a target that run did not
+            # execute.
             if target.name in stale_by_target:
-                cov_stale = stale_by_target[target.name]
+                carried_reason = stale_by_target[target.name]
             else:
                 _cov_verdict = judge(repo_root, typed_config, target.name)
-                cov_stale = stale_reason(_cov_verdict) if _cov_verdict.state == "stale" else ""
+                carried_reason = stale_reason(_cov_verdict) if _cov_verdict.state == "stale" else ""
+            if (
+                not carried_reason
+                and fresh_targets is not None
+                and target.name not in fresh_targets
+            ):
+                carried_reason = "the run being reported did not execute this target"
+            fingerprint = read_fingerprint(cov_area)
+            usable = current(record, repo_root)
             attached = _attach_line_coverage(
                 graph,
-                parsed_cov,
-                retained_cov,
-                repo_root,
-                cov_stale,
-                place_contexts,
-                cov_origin_dir,
+                usable,
+                carried_reason,
+                run_reference(fingerprint) if fingerprint else None,
             )
             # Implements: REQ-d00327-I
             # Coverage read from the wrong origin attaches to no file and
             # credits no lines, which reads as a run that exercised nothing.
-            if parsed_cov and not attached:
+            if (
+                record
+                and not attached
+                and not any(graph.find_by_id(make_file_id(graph.namespace, rel)) for rel in record)
+            ):
+                cov_origin, _frame = origin_dir(
+                    _cov_spec(target.coverage_format),
+                    target.coverage_origin,
+                    cwd_path,
+                    repo_root,
+                    foreign=False,
+                )
                 graph.record_ingestion_fault(
                     path=_repo_relative(cov_path, repo_root),
                     stage="coverage",
                     cause=(
                         f"no file this coverage measures is a scanned file when read "
                         f"from the {cov_origin} origin (one recorded path: "
-                        f"{next(iter(parsed_cov))!r}), so no lines were credited"
+                        f"{_first_recorded(record)!r}), so no lines were credited"
                     ),
                     target=target.name,
                 )

@@ -446,7 +446,10 @@ def _declare_coverage(root: Path) -> None:
     """Make the target name a coverage file in its output area."""
     config_path = root / ".elspais.toml"
     text = config_path.read_text(encoding="utf-8")
-    patched = text.replace('match = "source"\n', f'match = "source"\ncoverage = "{_COVERAGE}"\n')
+    patched = text.replace(
+        'match = "source"\n',
+        f'match = "source"\ncoverage = "{_COVERAGE}"\ncoverage_format = "lcov"\n',
+    )
     assert patched != text
     config_path.write_text(patched, encoding="utf-8")
 

@@ -50,7 +50,7 @@ from glob import glob
 from pathlib import Path
 from typing import Any
 
-from elspais.utilities.git import commit_state
+from elspais.utilities.git import commit_state, ignored_untracked
 
 #: The name of the fingerprint file in the output area.
 FINGERPRINT_NAME = ".elspais-run.json"
@@ -83,9 +83,6 @@ _NOT_PROBE_CONFIGURATION = frozenset({"affects_retention"})
 
 #: The file in the output area holding the *Retained Results* of the run.
 RETAINED_RESULTS_NAME = ".elspais-retained.jsonl"
-
-#: The file in the output area holding the line coverage the run retained.
-RETAINED_COVERAGE_NAME = ".elspais-retained-coverage.json"
 
 #: The file in the output area recording each unit's last execution.
 UNIT_LEDGER_NAME = ".elspais-units.json"
@@ -196,10 +193,21 @@ def input_files(repo_root: Path, config: Any, target: Any) -> list[Path]:
         [*inputs.skip_files, *everywhere],
         list(inputs.file_patterns) or ["*"],
     )
-    return sorted(selection.selected)
+    # Implements: REQ-d00311-S
+    # A file version control ignores, and its own directory, which it never
+    # tracks, are generated or local to a tree, so neither is an input.
+    ignored, ignored_dirs = ignored_untracked(root)
+    skipped_dirs = (*ignored_dirs, ".git/")
+
+    def kept(path: Path) -> bool:
+        rel = path.relative_to(root).as_posix()
+        return rel not in ignored and not rel.startswith(skipped_dirs)
+
+    return sorted(p for p in selection.selected if kept(p))
 
 
-def _digest_file(path: Path) -> str:
+def file_digest(path: Path) -> str:
+    """The content digest of the file at *path*, as a manifest records it."""
     h = hashlib.sha256()
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1 << 16), b""):
@@ -225,9 +233,9 @@ def file_manifest(
     for path in input_files(root, config, target):
         try:
             if digest_cache is None:
-                digest = _digest_file(path)
+                digest = file_digest(path)
             elif (digest := digest_cache.get(path)) is None:
-                digest = digest_cache[path] = _digest_file(path)
+                digest = digest_cache[path] = file_digest(path)
             manifest[path.relative_to(root).as_posix()] = digest
         except OSError:
             # A file that disappears after the walk is not an input.
@@ -390,7 +398,9 @@ def differences(recorded: dict[str, str], current: dict[str, str]) -> list[str]:
 
 
 def _now() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
+    # Microseconds keep two runs started within one second apart: a run is
+    # named by its commit, root and start.
+    return datetime.now(UTC).isoformat(timespec="microseconds")
 
 
 def read_fingerprint(folder: Path) -> dict[str, Any] | None:
@@ -486,6 +496,7 @@ def finish_run(
     exit_status: int | None = None,
     *,
     spawned: bool = True,
+    carried_coverage: Any = None,
 ) -> dict[str, Any]:
     """Finish a run of a target. Record each input that changed during the run.
 
@@ -500,6 +511,10 @@ def finish_run(
 
     *spawned* is false where the run retained every result and never started
     the command, so it records no exit status.
+
+    *carried_coverage* is the line coverage a run that retained tests carries
+    from the previous record. The run's coverage record and reports are
+    written last; a coverage file that cannot be read is a fault of the run.
 
     Raises:
         RunNotStarted: No run of the target is in progress.
@@ -522,6 +537,16 @@ def finish_run(
     # Implements: REQ-d00333-A
     if not spawned:
         fingerprint["spawned"] = False
+    # Implements: REQ-d00334-A+B
+    # The coverage record is written before the run is recorded as finished,
+    # so a reader that sees a finished run finds its record; a failure to
+    # record coverage, whatever its cause, is a fault of the run.
+    from elspais.utilities.coverage import finish_coverage
+
+    try:
+        finish_coverage(root, config, target, fingerprint, carried_coverage)
+    except Exception as exc:  # noqa: BLE001 -- every cause becomes a run fault
+        fingerprint["run_faults"] = list(fingerprint.get("run_faults") or []) + [f"coverage: {exc}"]
     fingerprint["finished_at"] = _now()
     _write_fingerprint(folder, fingerprint)
     return fingerprint

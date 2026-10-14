@@ -12,11 +12,13 @@ from pathlib import Path
 
 import pytest
 
+from elspais.config import load_config
 from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
 from elspais.graph.parsers.results.flutter_machine import FlutterMachineParser
 from elspais.graph.parsers.results.junit_xml import JUnitXMLParser
 from elspais.graph.parsers.results.lcov import LcovParser
 from elspais.graph.parsers.results.pytest_json import PytestJSONParser
+from tests.coverage_helpers import finish_coverage_area
 
 _SPEC = """\
 ### REQ-p00001: Test Req
@@ -320,6 +322,7 @@ def test_a_coverage_file_that_is_not_there_is_recorded(tmp_path):
 name = "unit"
 reporter = "lcov"
 coverage = "lcov.info"
+coverage_format = "lcov"
 """,
     )
 
@@ -330,24 +333,6 @@ coverage = "lcov.info"
             target="unit", artifact="coverage", path=".results/unit/lcov.info", reason="absent"
         )
     ]
-
-
-# Verifies: REQ-d00285-G
-def test_a_coverage_file_no_reader_recognises_is_recorded(tmp_path):
-    project = _project(
-        tmp_path,
-        """
-[[scanning.test.targets]]
-name = "unit"
-reporter = "lcov"
-coverage = "report.txt"
-""",
-        {".results/unit/report.txt": "some other format\n"},
-    )
-
-    (fault,) = _build(project).ingestion_faults()
-    assert fault.stage == "coverage"
-    assert "format" in fault.cause
 
 
 # Verifies: REQ-d00285-G
@@ -364,12 +349,14 @@ def test_a_coverage_report_the_reader_declined_reaches_the_graph(tmp_path):
 name = "unit"
 reporter = "lcov"
 coverage = "lcov.info"
+coverage_format = "lcov"
 """,
         {
             "src/a.py": "def a():\n    return 1\n",
             ".results/unit/lcov.info": "SF:src/a.py\nDA:two,1\nend_of_record\n",
         },
     )
+    finish_coverage_area(project, load_config(project / ".elspais.toml"), "unit")
 
     (fault,) = _build(project, scan_code=True).ingestion_faults()
     assert fault.stage == "coverage"
@@ -585,6 +572,7 @@ results = "TEST-*.xml"
 name = "cover"
 reporter = "lcov"
 coverage = "lcov.info"
+coverage_format = "lcov"
 """,
     )
 
@@ -798,6 +786,7 @@ name = "unit"
 reporter = "junit"
 results = "junit.xml"
 coverage = "coverage.json"
+coverage_format = "coverage-json"
 """
 
 

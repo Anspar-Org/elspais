@@ -44,6 +44,13 @@ def run(args: argparse.Namespace) -> int:
                     + (f" and {len(changed) - 5} more" if len(changed) > 5 else ""),
                     file=sys.stderr,
                 )
+            # Implements: REQ-d00334-A
+            faults = [
+                f for f in fingerprint.get("run_faults") or [] if str(f).startswith("coverage:")
+            ]
+            if faults:
+                print(f"target {args.target}: {'; '.join(faults)}", file=sys.stderr)
+                return 1
     except KeyError as exc:
         print(f"error: {exc.args[0]}", file=sys.stderr)
         return 2

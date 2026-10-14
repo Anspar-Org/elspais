@@ -15,8 +15,10 @@ import pytest
 
 from elspais.commands._requests import TraceRequest
 from elspais.commands.trace import render_trace
+from elspais.config import load_config
 from elspais.graph.factory import build_graph
 from elspais.graph.held_config import held_config
+from tests.coverage_helpers import finish_coverage_area
 from tests.federation_repos import _git, make_repo
 
 PLAT_TOML = """version = 5
@@ -39,6 +41,7 @@ directories = ["tests"]
 name = "unit"
 reporter = "lcov"
 coverage = "lcov.info"
+coverage_format = "lcov"
 credit_coverage = "tested"
 """
 
@@ -108,6 +111,7 @@ def roots(tmp_path_factory):
     (plat / "src" / "thing.py").write_text(PLAT_CODE, encoding="utf-8")
     (plat / ".results" / "unit").mkdir(parents=True)
     (plat / ".results" / "unit" / "lcov.info").write_text(PLAT_LCOV, encoding="utf-8")
+    finish_coverage_area(plat, load_config(plat / ".elspais.toml"), "unit")
     _git(plat, "add", "-A")
     _git(plat, "commit", "-m", "code")
 

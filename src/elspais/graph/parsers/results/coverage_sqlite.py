@@ -25,14 +25,10 @@ from __future__ import annotations
 import logging
 import sqlite3
 from collections.abc import Callable
-from pathlib import Path
 
 from elspais.graph.parsers.results.diagnostics import DiagnosticRecorder
 
 _log = logging.getLogger(__name__)
-
-# SQLite database file header (first 16 bytes of every valid SQLite file).
-_SQLITE_MAGIC = b"SQLite format 3\x00"
 
 _INSTALL_HINT = (
     "coverage-sqlite: 'coverage' package not importable in this interpreter -- "
@@ -183,27 +179,6 @@ class CoverageSqliteParser(DiagnosticRecorder):
             return None
         contexts = {ln: ctxs for ln, ctxs in raw.items() if ctxs}
         return contexts or None
-
-    def can_parse(self, file_path: Path) -> bool:
-        """Check if this parser can handle the given file.
-
-        Sniffs the SQLite magic-byte header rather than relying on filename
-        (coverage.py's default data-file name is `.coverage`, with no
-        extension, and it may carry a parallel-mode suffix like
-        `.coverage.hostname.1234`).
-
-        Args:
-            file_path: Path to the file.
-
-        Returns:
-            True if the file's first 16 bytes are the SQLite 3 file header.
-        """
-        try:
-            with open(file_path, "rb") as fh:
-                magic = fh.read(len(_SQLITE_MAGIC))
-        except OSError:
-            return False
-        return magic == _SQLITE_MAGIC
 
 
 def create_parser() -> CoverageSqliteParser:

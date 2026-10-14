@@ -87,15 +87,19 @@ way -- `(baseline)` in a `trace` cell, `*` in a `summary` cell with a footnote
 -- and `code.code_tested` states why the coverage is stale. So does the
 `lcov_tested` credit taken from it.
 
-A target's **inputs** are every file in the repository by default, whether or
-not git tracks it. Three sets of paths are never inputs: the output root, the
-*Evidence Snapshot* directory that `[scanning.test] evidence` names, and the
-paths that the global `[scanning] skip` list names. The per-kind
-`skip_dirs`/`skip_files` of `[scanning.spec]`, `[scanning.code]` and the rest
-do not apply here. Put anything that changes during every run in that global
-list. Examples are `.git`, `.elspais/`, and caches that a test tool writes
-while it runs, such as `**/.pytest_cache` and `.coverage`. `elspais init`
-writes the common ones.
+A target's **inputs** are every file in the repository by default, except the
+files git ignores: a file git tracks is an input even where a tool generates
+it, and an untracked file that git does not ignore is an input too. Git's own
+`.git` directory is never an input, and neither are three further sets of
+paths: the output root, the *Evidence Snapshot* directory that
+`[scanning.test] evidence` names, and the paths that the global
+`[scanning] skip` list names. The per-kind `skip_dirs`/`skip_files` of
+`[scanning.spec]`, `[scanning.code]` and the rest do not apply here. A file a
+package manager or a test tool writes and git ignores, such as an ignored
+`pubspec.lock`, `.dart_tool/` or `.pytest_cache`, therefore needs no skip
+entry. Put anything else that changes during every run in the global list.
+A value that reaches the tests through an ignored file, such as a loaded
+`.env`, belongs in the target's environment probes instead.
 
 Write a skip entry so that it reaches every place the file or directory can
 appear. An entry holding a `/` is a path from the repository root, for a file
@@ -324,7 +328,8 @@ later `summary` or `trace` names as fresh, with `--targets last-run`.
 | `command` | string | (omit in CI) | Shell command to execute when `--run-tests` is passed |
 | `reporter` | string | (required with `results`, or with `command` unless `file_results`) | Parser format -- one of the names in the reporters table below |
 | `results` | string | `""` | Glob pattern for result files, relative to the target's folder; required for a results-kind reporter whose target has a `command` |
-| `coverage` | string | `""` | Path to an lcov.info, coverage.py JSON or `.coverage` file (format auto-detected), relative to the target's folder |
+| `coverage` | string | `""` | Path to an lcov.info, coverage.py JSON or `.coverage` file, relative to the target's folder |
+| `coverage_format` | string | `""` | The format of the `coverage` file: `lcov`, `coverage-json` or `coverage-sqlite`. Required where `coverage` is set |
 | `inputs` | table | every file | The files whose change makes this target's results stale: `directories`, `file_patterns`, `skip_dirs`, `skip_files` |
 | `match` | string | `"source"` | `"source"` or `"aggregate"` -- matching strategy |
 | `classname` | string | `""` (the reporter's own) | `"python-module"` or `"source-file"` -- how this target's results name the test that produced them |
@@ -435,8 +440,8 @@ this table does not name.
 Every reporter reads files from disk -- those matched by the `results` glob
 for a results-kind reporter, and the `coverage` path for a coverage-kind one.
 Nothing reads a command's output as results.  Those files can be pre-produced
-by CI.  A coverage-kind reporter is chosen by sniffing the file at `coverage`,
-so a coverage-only target need not name one.
+by CI.  A coverage-kind reporter is named by the target's `coverage_format`,
+so a coverage-only target needs no `reporter`.
 
 A command writes its results into the target's folder, which it finds in
 `$ELSPAIS_TARGET_OUTPUT`, and the target's `results` glob names them.  A run
@@ -576,6 +581,7 @@ command     = "flutter test --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.
 reporter    = "flutter-machine"
 results     = "machine.jsonl"
 coverage    = "lcov.info"
+coverage_format = "lcov"
 match       = "source"
 credit_coverage = "verified"
 ```
@@ -603,6 +609,7 @@ command     = "flutter test --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.
 reporter    = "flutter-machine"
 results     = "machine.jsonl"
 coverage    = "lcov.info"
+coverage_format = "lcov"
 match       = "source"
 credit_coverage = "verified"
 
@@ -613,6 +620,7 @@ command     = "flutter test --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.
 reporter    = "flutter-machine"
 results     = "machine.jsonl"
 coverage    = "lcov.info"
+coverage_format = "lcov"
 match       = "source"
 credit_coverage = "verified"
 resources   = ["db"]
@@ -657,6 +665,7 @@ there.  Pass
 
 ```toml
 coverage = "lcov.info"
+coverage_format = "lcov"
 ```
 
 **One target per package.**  Each Flutter package must have its own
@@ -701,14 +710,15 @@ coverage.py already writes this file (its own native data format) whenever you
 run under `--cov`. `COVERAGE_FILE` puts the file in the target's folder.
 elspais reads it directly via coverage.py's public
 API (`coverage.Coverage`/`coverage.CoverageData`), never by parsing the
-SQLite schema itself. Format detection sniffs the file's SQLite header, so
-no `reporter` field is required:
+SQLite schema itself. `coverage_format = "coverage-sqlite"` names the format,
+so no `reporter` field is required:
 
 ```toml
 [[scanning.test.targets]]
 name     = "unit"
 command  = "COVERAGE_FILE=$ELSPAIS_TARGET_OUTPUT/.coverage pytest tests/ --cov=src/yourpkg --cov-context=test"
 coverage = ".coverage"
+coverage_format = "coverage-sqlite"
 ```
 
 `--cov-context=test` (pytest-cov's per-test dynamic context, keyed by pytest
@@ -744,6 +754,7 @@ contexts can instead be exported into the JSON report:
 name     = "unit"
 command  = "pytest tests/ --cov=src/yourpkg --cov-context=test --cov-report=json:$ELSPAIS_TARGET_OUTPUT/coverage.json"
 coverage = "coverage.json"
+coverage_format = "coverage-json"
 ```
 
 ```toml
@@ -893,7 +904,9 @@ by single spaces, so a result that records no line binds by that name (see
 The `ast` extra installs tree-sitter and one grammar package per language,
 each a prebuilt wheel, so a build reads nothing from the network. Without it,
 a test file in one of these languages has no tests, every citation in it binds
-to no test, and a build prints one warning naming the extra. The extra also
+to no test, and a build prints one warning naming the extra. A file the
+`prescan_command` below returns records for is read from those records, so
+the warning leaves it out. The extra also
 gives the code files of these languages the extent of each function a citation
 is written above. Without it, elspais finds those functions by their shape on
 the line.
@@ -928,9 +941,11 @@ reporter = "junit"
 # <output_root>/<name> -- here .results/my-suite/*.xml, for every cwd.
 results = "*.xml"
 
-# Path to an lcov.info or coverage.py JSON file (format auto-detected),
-# relative to the target's folder. Omit if no coverage report.
+# Path to an lcov.info, coverage.py JSON or .coverage file, relative to the
+# target's folder, with coverage_format naming its format. Omit if no
+# coverage report.
 # coverage = "lcov.info"
+# coverage_format = "lcov"
 
 # inputs names the files whose change makes this target's results stale. The
 # default is every file in the repository. inputs has the same form as a
@@ -977,6 +992,33 @@ match = "source"
 # full_selection = ""                         # what {selection} becomes on a run of every test
 ```
 
+## Line Coverage Reports
+
+When a run of a target that declares `coverage` finishes -- through
+`elspais test`, `elspais checks --run-tests` or `elspais fingerprint finish`
+-- elspais reads the coverage file in the format `coverage_format` names and
+writes three files:
+
+| File | Holds |
+|------|-------|
+| `<output root>/<target>/.elspais-coverage.json` | the target's coverage record: per source file, the hit count of each line, the per-test contexts, the content digest the file was measured at, and the runs that measured it |
+| `<output root>/<target>/.elspais-coverage.info` | the target's current line coverage, in LCOV |
+| `<output root>/.elspais-coverage.info` | every target's current line coverage merged, in LCOV |
+
+Current means measured on the content the file holds now. A run that
+retains tests measures only the tests it executes, so its record also holds
+the coverage of the retained tests, carried from the previous record. The two
+LCOV reports are therefore complete after a partial run, and a coverage
+service reads them directly: upload the combined report, or each target's
+report under its own flag. Paths in both are relative to the repository root.
+Where two targets measure one source file, the combined report holds the
+larger hit count of each line.
+
+elspais reads line coverage from the record alone. An output area holding a
+coverage file and no record was written by an earlier elspais; it is
+reported as an ingestion fault, and running the target again writes the
+record. A coverage file that cannot be read fails the run.
+
 ## CI Usage
 
 In CI, omit `command` so elspais only ingests files that the pipeline already
@@ -995,6 +1037,7 @@ reporter = "flutter-machine"
 # Without `results`, only coverage credit is applied (no pass/fail signal).
 results  = "machine.jsonl"
 coverage = "lcov.info"
+coverage_format = "lcov"
 match    = "source"
 credit_coverage = "verified"
 ```
@@ -1796,19 +1839,16 @@ a partial run speaks for the executed test files alone.
 |-------------------------|-------|
 | `.elspais-units.json` | the *Unit Ledger*: per unit, the run that last executed it, its outcome, the digests of the files it reached, and its result lines |
 | `.elspais-retained.jsonl` | the Retained Results, in the result-line form of an Evidence Snapshot, each with the run that executed its test |
-| `.elspais-retained-coverage.json` | the line coverage the run kept from earlier runs |
 | `.elspais-selection` | the test files the run selected |
 
-Line coverage of a source file is kept from an earlier run only where the file
-still holds the content it held when that run measured it, with the test
-names of its per-test contexts made repo-relative. A file's figure is the
-current run's measurement merged with what was kept. Wherever kept coverage
-adds a line the current run did not measure executing, the report names the
-run that measured it; a file with no line the current run measured
-executing is carried. A partial run that started its command and wrote no
+Line coverage of a source file is carried from an earlier run only where the
+file still holds the content it held when that run measured it. The run's
+coverage record holds the current run's measurement merged with what was
+carried; a file the current run did not measure reads as carried, and its
+report names the run that measured it. A partial run that started its command and wrote no
 coverage file is reported as missing its coverage, and one that wrote no
-results as missing its results. A *Baseline Run* carries all four
-files, so a baseline adopted from the parent branch serves retention too.
+results as missing its results. A *Baseline Run* carries all three
+files and the coverage record, so a baseline adopted from the parent branch serves retention too.
 
 ### Reporting Retained Results
 

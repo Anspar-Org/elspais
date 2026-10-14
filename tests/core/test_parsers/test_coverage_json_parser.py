@@ -2,7 +2,6 @@
 """Tests for Python coverage.json parser."""
 
 import json
-from pathlib import Path
 
 from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
 
@@ -173,30 +172,6 @@ class TestCoverageJsonParserEdgeCases:
         parser = CoverageJsonParser()
         result = parser.parse(json.dumps({"meta": {}}), "coverage.json")
         assert result == {}
-
-
-class TestCoverageJsonParserCanParse:
-    """Tests for can_parse file detection."""
-
-    def test_coverage_json(self):
-        parser = CoverageJsonParser()
-        assert parser.can_parse(Path("coverage.json")) is True
-
-    def test_coverage_in_name_json(self):
-        parser = CoverageJsonParser()
-        assert parser.can_parse(Path("build/coverage-report.json")) is True
-
-    def test_plain_json_without_coverage(self):
-        parser = CoverageJsonParser()
-        assert parser.can_parse(Path("config.json")) is False
-
-    def test_non_json_file(self):
-        parser = CoverageJsonParser()
-        assert parser.can_parse(Path("coverage.xml")) is False
-
-    def test_dot_coverage_json(self):
-        parser = CoverageJsonParser()
-        assert parser.can_parse(Path(".coverage.json")) is True
 
 
 class TestCoverageJsonParserFactory:

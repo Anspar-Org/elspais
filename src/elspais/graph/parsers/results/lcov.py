@@ -7,8 +7,6 @@ the factory uses parsed data to annotate existing FILE nodes.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from elspais.graph.parsers.results.diagnostics import DiagnosticRecorder
 
 
@@ -132,20 +130,6 @@ class LcovParser(DiagnosticRecorder):
             )
 
         return results
-
-    def can_parse(self, file_path: Path) -> bool:
-        """Check if this parser can handle the given file.
-
-        Returns True for ``.info`` files or filenames containing ``lcov``.
-
-        Args:
-            file_path: Path to the file.
-
-        Returns:
-            True if the file looks like an LCOV coverage report.
-        """
-        name = file_path.name.lower()
-        return file_path.suffix.lower() == ".info" or "lcov" in name
 
 
 def create_parser() -> LcovParser:

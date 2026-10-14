@@ -48,6 +48,12 @@
 : For one change, a unit test that executed a file the change modifies, in the newest passing full unit run recorded for an ancestor of the change. Where no such run exists, or the change modifies the environment the tests run in, every unit test is an Impacted Test.
 *Defined in: file:REQ:spec/glossary.md (REQ)*
 
+## L
+
+**Line Coverage Report**
+: Line coverage written in a format that coverage tools other than the system read, with one entry per source file, each path read from the root of the repository.
+*Defined in: file:REQ:spec/glossary.md (REQ)*
+
 ## P
 
 **Project State**

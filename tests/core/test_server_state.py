@@ -949,6 +949,7 @@ name = "unit"
 reporter = "junit"
 results = "junit.xml"
 coverage = "coverage.json"
+coverage_format = "coverage-json"
 """
 )
 
@@ -1011,16 +1012,25 @@ class TestServedGraphCurrency:
         assert self._results_read(state)
         assert not state.is_stale(), "the rebuild must absorb the file it read"
 
-    # Verifies: REQ-d00313-B
-    def test_coverage_written_after_the_build_makes_the_graph_stale(self, tmp_path):
+    # Verifies: REQ-d00313-B, REQ-d00334-A
+    def test_a_coverage_record_written_after_the_build_makes_the_graph_stale(self, tmp_path):
+        """The build reads line coverage from the record alone, so the record
+        is what makes the graph stale, and the tool's own file is not."""
+        from elspais.config import load_config
+        from elspais.utilities.coverage import RECORD_NAME
+        from tests.coverage_helpers import finish_coverage_area
+
         root = self._repo(tmp_path)
         state = self._state(root)
 
         area = root / ".results" / "unit"
         area.mkdir(parents=True)
         (area / "coverage.json").write_text('{"files": {}}')
+        assert not state.is_stale(), "the tool's coverage file is not read by the build"
 
-        assert [p.name for p in state.changed_files()] == ["coverage.json"]
+        finish_coverage_area(root, load_config(root / ".elspais.toml"), "unit")
+
+        assert [p.name for p in state.changed_files()] == [RECORD_NAME]
 
     # Verifies: REQ-d00313-D
     def test_writes_during_a_run_count_only_when_the_run_records_its_end(self, tmp_path):

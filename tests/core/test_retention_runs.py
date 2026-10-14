@@ -11,8 +11,9 @@ executes beside the ones it is handed, writing a result for that file's first
 test alone; ``RUNNER_EXTRA_FAIL`` adds a failed result that names a file and
 no line; ``RUNNER_EXIT`` makes it exit non-zero whatever its results;
 ``RUNNER_NO_RESULTS`` writes no results file; ``RUNNER_COVERAGE`` writes line
-coverage of ``src/lib.py``, the lines ``RUNNER_COVERAGE_LINES``
-names, executed by the contexts ``RUNNER_CONTEXT`` names.
+coverage of ``src/lib.py``, or of the file ``RUNNER_COVERAGE_FILE`` names,
+the lines ``RUNNER_COVERAGE_LINES`` names, executed by the contexts
+``RUNNER_CONTEXT`` names.
 """
 
 from __future__ import annotations
@@ -86,7 +87,8 @@ if os.environ.get("RUNNER_COVERAGE"):
     entry = {"executed_lines": executed, "missing_lines": []}
     if os.environ.get("RUNNER_CONTEXT"):
         entry["contexts"] = {str(n): [os.environ["RUNNER_CONTEXT"]] for n in executed}
-    (out / "coverage.json").write_text(json.dumps({"files": {"src/lib.py": entry}}))
+    measured = os.environ.get("RUNNER_COVERAGE_FILE", "src/lib.py")
+    (out / "coverage.json").write_text(json.dumps({"files": {measured: entry}}))
 sys.exit(1 if any('"failed"' in l for l in lines) or os.environ.get("RUNNER_EXIT") else 0)
 """
 
@@ -382,6 +384,7 @@ def _coverage_project(tmp_path: Path, monkeypatch) -> tuple[Path, dict]:
     monkeypatch.setenv("RUNNER_COVERAGE", "1")
     root, config = _project(tmp_path)
     config["scanning"]["test"]["targets"][0]["coverage"] = "coverage.json"
+    config["scanning"]["test"]["targets"][0]["coverage_format"] = "coverage-json"
     return root, config
 
 
@@ -413,39 +416,18 @@ def test_line_coverage_of_an_unchanged_file_is_retained_naming_the_run_that_meas
 def test_line_coverage_of_a_changed_file_is_not_retained(tmp_path, monkeypatch):
     root, config = _coverage_project(tmp_path, monkeypatch)
     _run(root, config)
-    from elspais.utilities.fingerprint import compute_manifest, read_fingerprint
-    from elspais.utilities.retention import retained_coverage
+    from elspais.utilities.coverage import carried_entries
+    from elspais.utilities.fingerprint import read_fingerprint, run_reference
 
     typed = validate_config(config)
     target = typed.scanning.test.targets[0]
     last = read_fingerprint(_area(root, config))
-    current = compute_manifest(root, typed, target)
-    kept = retained_coverage(root, typed, target, last, current)
+    kept = carried_entries(root, typed, target)
     assert set(kept) == {"src/lib.py"}
-    assert kept["src/lib.py"]["provenance"]["measured_in"][0]["started_at"] == last["started_at"]
+    assert kept["src/lib.py"].measured_in == (run_reference(last),)
 
     (root / "src" / "lib.py").write_text("x = 2\n", encoding="utf-8")
-    current = compute_manifest(root, typed, target)
-    assert retained_coverage(root, typed, target, last, current) is None
-
-
-# Verifies: REQ-d00333-J
-def test_retained_coverage_reads_back_through_the_coverage_reader():
-    from elspais.graph.parsers.results.coverage_json import (
-        CoverageJsonParser,
-        render_coverage_json,
-    )
-
-    readings = {
-        "src/lib.py": {
-            "line_coverage": {1: 1, 2: 0},
-            "executable_lines": 2,
-            "covered_lines": 1,
-            "contexts": {1: ["tests/test_a.py::test_a|run"]},
-            "provenance": {"digest": "d", "measured_in": [{"commit": "c"}]},
-        }
-    }
-    assert CoverageJsonParser().parse(render_coverage_json(readings), "x") == readings
+    assert carried_entries(root, typed, target) == {}
 
 
 # Verifies: REQ-d00323-O
@@ -664,6 +646,35 @@ def test_a_file_measured_by_this_run_and_an_earlier_one_names_the_earlier_run(
     assert not _coverage_carried(lib)
 
 
+# Verifies: REQ-d00334-A, REQ-d00333-J
+def test_a_partial_run_records_the_coverage_it_measured_and_the_coverage_it_retained(
+    tmp_path, monkeypatch
+):
+    from elspais.utilities.coverage import RECORD_NAME, REPORT_NAME, read_record
+
+    root, config = _coverage_project(tmp_path, monkeypatch)
+    (root / "src" / "other.py").write_text("y = 2\n", encoding="utf-8")
+    monkeypatch.setenv("RUNNER_COVERAGE_FILE", "src/other.py")
+    first, _ = _run(root, config)
+    assert first.plan.whole
+    assert first.plan.carried_coverage is None
+    monkeypatch.setenv("RUNNER_COVERAGE_FILE", "src/lib.py")
+    (root / "tests" / "test_a.py").write_text(_test_file("a", "assert 1"), encoding="utf-8")
+
+    second, failures = _run(root, config)
+
+    assert failures == []
+    assert sorted(second.plan.selected) == ["tests/test_a.py"]
+    assert set(second.plan.carried_coverage) == {"src/other.py"}
+    area = _area(root, config)
+    record = read_record(area)
+    assert set(record) == {"src/lib.py", "src/other.py"}
+    assert record["src/other.py"].measured_in != record["src/lib.py"].measured_in
+    report = (area / REPORT_NAME).read_text(encoding="utf-8")
+    assert "SF:src/lib.py\n" in report and "SF:src/other.py\n" in report
+    assert (area / RECORD_NAME).is_file()
+
+
 # Verifies: REQ-d00283-V
 def test_a_partial_run_that_left_no_coverage_records_its_coverage_absent(tmp_path, monkeypatch):
     root, config = _coverage_project(tmp_path, monkeypatch)
@@ -691,9 +702,9 @@ def test_a_partial_run_that_left_no_results_records_its_results_absent(tmp_path,
 
 
 # Verifies: REQ-d00327-H
-def test_retained_coverage_holds_its_test_names_repo_relative(tmp_path):
-    from elspais.utilities.fingerprint import read_fingerprint
-    from elspais.utilities.retention import retained_coverage
+def test_recorded_coverage_holds_its_test_names_repo_relative(tmp_path):
+    from elspais.utilities.coverage import read_record
+    from tests.coverage_helpers import finish_coverage_area
 
     root, config = _project(tmp_path)
     target = config["scanning"]["test"]["targets"][0]
@@ -701,21 +712,19 @@ def test_retained_coverage_holds_its_test_names_repo_relative(tmp_path):
         {
             "cwd": "tests",
             "coverage": "coverage.json",
+            "coverage_format": "coverage-json",
             "results_origin": "working-directory",
             "coverage_origin": "repository-root",
         }
     )
-    typed = validate_config(config)
     area = _area(root, config)
     area.mkdir(parents=True)
     entry = {"executed_lines": [1], "missing_lines": [], "contexts": {"1": ["test_a.py::t|run"]}}
     (area / "coverage.json").write_text(json.dumps({"files": {"src/lib.py": entry}}))
-    last = {"commit": "c", "root": str(root), "started_at": "s", "manifest": {"src/lib.py": "D"}}
 
-    kept = retained_coverage(root, typed, typed.scanning.test.targets[0], last, {"src/lib.py": "D"})
+    finish_coverage_area(root, config, "unit")
 
-    assert kept["src/lib.py"]["contexts"] == {1: ["tests/test_a.py::t|run"]}
-    assert read_fingerprint(area) is None
+    assert read_record(area)["src/lib.py"].contexts == {1: ("tests/test_a.py::t|run",)}
 
 
 # Verifies: REQ-d00333-G
