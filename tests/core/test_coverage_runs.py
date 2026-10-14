@@ -9,6 +9,7 @@ the report for the repository from every target's record.
 
 from __future__ import annotations
 
+import sys
 import threading
 from pathlib import Path
 
@@ -30,6 +31,7 @@ from elspais.utilities.fingerprint import (
     file_digest,
     finish_run,
     output_root,
+    read_fingerprint,
     start_run,
     target_folder,
 )
@@ -282,3 +284,205 @@ def _no_probe_cache():
     forget_probes()
     yield
     forget_probes()
+
+
+# Verifies: REQ-d00333-J
+def test_a_file_edited_while_the_run_ran_is_reported_by_neither_report(tmp_path):
+    root = _repo(tmp_path)
+    config = _config()
+    carried = {
+        "src/lib.py": FileCoverage(
+            hits={1: 4},
+            executable=3,
+            digest=file_digest(root / "src" / "lib.py"),
+            measured_in=(_EARLIER_RUN,),
+        )
+    }
+    _lcov(start_run(root, config, "t"), {"src/lib.py": {1: 1, 2: 0, 3: 1}})
+    (root / "src" / "lib.py").write_text(_LIB + "z = 3\n", encoding="utf-8")
+
+    finish_run(root, config, "t", carried_coverage=carried)
+
+    area = target_folder(root, config, "t")
+    record = read_record(area) or {}
+    # The measurement describes no single content of the file, so the
+    # record holds no entry of this run for it.
+    assert "src/lib.py" not in record or record["src/lib.py"].measured_in == (_EARLIER_RUN,)
+    assert "src/lib.py" not in _report(area / REPORT_NAME)
+    assert "src/lib.py" not in _report(output_root(root, config) / REPORT_NAME)
+
+
+# Verifies: REQ-d00333-J
+def test_the_measurement_leaves_out_an_input_that_changed_since_the_run_started(tmp_path):
+    root = _repo(tmp_path)
+    config = _config()
+    _lcov(start_run(root, config, "t"), {"src/lib.py": {1: 1}, "src/other.py": {1: 1}})
+    (root / "src" / "lib.py").write_text(_LIB + "z = 3\n", encoding="utf-8")
+
+    fingerprint = finish_run(root, config, "t")
+
+    assert "src/lib.py" in fingerprint["changed_during_run"]
+    assert set(read_record(target_folder(root, config, "t"))) == {"src/other.py"}
+
+
+# Verifies: REQ-d00334-A
+def test_a_finished_fingerprint_is_written_only_after_the_coverage_record(tmp_path, monkeypatch):
+    root = _repo(tmp_path)
+    config = _config()
+    area = target_folder(root, config, "t")
+    real_write_record = cov.write_record
+    seen: list[str] = []
+
+    def observing_write_record(folder, record, diagnostics=None):
+        seen.append(str((read_fingerprint(area) or {}).get("finished_at") or ""))
+        return real_write_record(folder, record, diagnostics)
+
+    monkeypatch.setattr(cov, "write_record", observing_write_record)
+
+    _run(root, config, hits={"src/lib.py": {1: 1}})
+
+    assert seen == [""], "the fingerprint showed the run finished before its record existed"
+    assert read_fingerprint(area)["finished_at"]
+
+
+# Verifies: REQ-d00334-A
+def test_no_finished_fingerprint_lacks_the_coverage_fault_of_its_run(tmp_path, monkeypatch):
+    from elspais.utilities import fingerprint as fp
+
+    root = _repo(tmp_path)
+    config = _config()
+    monkeypatch.setattr(cov, "read_tool_coverage", _unreadable)
+    real_write = fp._write_fingerprint
+    written: list[dict] = []
+
+    def observing_write(folder, fingerprint):
+        written.append(dict(fingerprint))
+        return real_write(folder, fingerprint)
+
+    monkeypatch.setattr(fp, "_write_fingerprint", observing_write)
+
+    final = _run(root, config, hits={"src/lib.py": {1: 1}})
+
+    assert any(str(f).startswith("coverage:") for f in final.get("run_faults") or [])
+    finished = [w for w in written if w.get("finished_at")]
+    assert finished
+    for snapshot in finished:
+        faults = snapshot.get("run_faults") or []
+        assert any(str(f).startswith("coverage:") for f in faults), snapshot
+
+
+# Verifies: REQ-d00334-B
+def test_the_repository_report_is_written_where_no_file_lock_module_exists(tmp_path, monkeypatch):
+    root = _repo(tmp_path)
+    config = _config()
+    monkeypatch.setitem(sys.modules, "fcntl", None)
+
+    fingerprint = _run(root, config, hits={"src/lib.py": {1: 1}})
+
+    assert fingerprint["finished_at"]
+    assert _report(output_root(root, config) / REPORT_NAME) == {"src/lib.py": {1: 1}}
+
+
+# Verifies: REQ-d00334-B
+def test_an_unexpected_failure_measuring_coverage_is_a_fault_of_the_run(tmp_path, monkeypatch):
+    root = _repo(tmp_path)
+    config = _config()
+
+    def failing_measure(*_args, **_kwargs):
+        raise KeyError("x")
+
+    monkeypatch.setattr(cov, "measure", failing_measure)
+
+    fingerprint = _run(root, config, hits={"src/lib.py": {1: 1}})
+
+    faults = fingerprint.get("run_faults") or []
+    assert any(str(f).startswith("coverage:") for f in faults), faults
+
+
+# Verifies: REQ-d00333-J
+def test_a_previous_coverage_record_that_cannot_be_read_makes_the_run_whole(tmp_path, monkeypatch):
+    from elspais.utilities.fingerprint import forget_probes
+    from tests.core.test_retention_runs import _area as _units_area
+    from tests.core.test_retention_runs import _coverage_project, _test_file
+    from tests.core.test_retention_runs import _run as _units_run
+
+    monkeypatch.setenv("RUNNER_LOG", str(tmp_path / "runner.log"))
+    monkeypatch.setenv("TOOL_VERSION", "1")
+    monkeypatch.setenv("PYTHONDONTWRITEBYTECODE", "1")
+    forget_probes()
+    root, config = _coverage_project(tmp_path, monkeypatch)
+    first, _ = _units_run(root, config)
+    assert first.plan.whole
+    (_units_area(root, config) / RECORD_NAME).write_text("{not json", encoding="utf-8")
+    (root / "tests" / "test_a.py").write_text(_test_file("a", "assert 1"), encoding="utf-8")
+
+    second, _ = _units_run(root, config)
+
+    assert second.plan.whole
+    assert "coverage record" in second.plan.whole_reason
+
+
+_SPEC = """# REQ-d00001: Module
+
+**Level**: DEV | **Status**: Active | **Implements**: -
+
+## Assertions
+
+A. The module SHALL work.
+
+*End* *Module* | **Hash**: 00000000
+"""
+
+
+# Verifies: REQ-d00327-I
+def test_coverage_measuring_only_files_outside_the_repository_is_an_ingestion_fault(tmp_path):
+    import tomlkit
+
+    from elspais.graph.factory import build_graph
+    from elspais.graph.parsers.results.registry import get_reporter
+
+    root = _repo(tmp_path)
+    (root / "spec").mkdir()
+    (root / "spec" / "dev.md").write_text(_SPEC, encoding="utf-8")
+    config = _config()
+    config["version"] = 5
+    config["scanning"]["spec"] = {"directories": ["spec"]}
+    config["scanning"]["code"] = {"directories": ["src"]}
+    (root / ".elspais.toml").write_text(tomlkit.dumps(config), encoding="utf-8")
+    folder = start_run(root, config, "t")
+    (folder / "lcov.info").write_text(
+        "SF:../outside.py\nDA:1,1\nend_of_record\nSF:/elsewhere/x.py\nDA:1,1\nend_of_record\n",
+        encoding="utf-8",
+    )
+    finish_run(root, config, "t")
+
+    graph = build_graph(config=config, repo_root=root)
+
+    faults = [f for f in graph.ingestion_faults() if f.stage == "coverage" and f.target == "t"]
+    assert len(faults) == 1, faults
+    origin = get_reporter("lcov").path_origin
+    assert origin in faults[0].cause
+    assert "../outside.py" in faults[0].cause or "/elsewhere/x.py" in faults[0].cause
+
+
+# Verifies: REQ-d00334-B
+def test_the_repository_report_does_not_read_back_the_record_just_written(tmp_path, monkeypatch):
+    root = _repo(tmp_path)
+    config = _config()
+    area = target_folder(root, config, "t").resolve()
+    real_read_record = cov.read_record
+    reads: dict[Path, int] = {}
+
+    def counting_read_record(folder):
+        key = Path(folder).resolve()
+        reads[key] = reads.get(key, 0) + 1
+        return real_read_record(folder)
+
+    folder = start_run(root, config, "t")
+    _lcov(folder, {"src/lib.py": {1: 1}})
+    monkeypatch.setattr(cov, "read_record", counting_read_record)
+
+    finish_run(root, config, "t")
+
+    assert reads.get(area, 0) == 0, reads
+    assert _report(output_root(root, config) / REPORT_NAME) == {"src/lib.py": {1: 1}}

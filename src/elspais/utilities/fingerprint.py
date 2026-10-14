@@ -537,16 +537,18 @@ def finish_run(
     # Implements: REQ-d00333-A
     if not spawned:
         fingerprint["spawned"] = False
-    fingerprint["finished_at"] = _now()
-    _write_fingerprint(folder, fingerprint)
     # Implements: REQ-d00334-A+B
-    from elspais.utilities.coverage import CoverageUnreadable, finish_coverage
+    # The coverage record is written before the run is recorded as finished,
+    # so a reader that sees a finished run finds its record; a failure to
+    # record coverage, whatever its cause, is a fault of the run.
+    from elspais.utilities.coverage import finish_coverage
 
     try:
         finish_coverage(root, config, target, fingerprint, carried_coverage)
-    except (CoverageUnreadable, OSError, ValueError) as exc:
-        record_run_faults(root, config, target_name, [f"coverage: {exc}"])
-        fingerprint = read_fingerprint(folder) or fingerprint
+    except Exception as exc:  # noqa: BLE001 -- every cause becomes a run fault
+        fingerprint["run_faults"] = list(fingerprint.get("run_faults") or []) + [f"coverage: {exc}"]
+    fingerprint["finished_at"] = _now()
+    _write_fingerprint(folder, fingerprint)
     return fingerprint
 
 

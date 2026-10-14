@@ -660,14 +660,20 @@ def plan_run(
         return whole("the evidence of every test file changed")
     # Implements: REQ-d00334-A, REQ-d00333-J
     # The coverage of the tests this run does not execute is read before
-    # start_run empties the area, and recorded with the run's own.
-    from elspais.utilities.coverage import carried_entries
+    # start_run empties the area, and recorded with the run's own. A
+    # previous record that cannot be read carries nothing, so every test
+    # executes and the run measures the whole target again.
+    from elspais.utilities.coverage import CoverageUnreadable, carried_entries
 
+    try:
+        carried = carried_entries(root, typed, target) if target.coverage else None
+    except CoverageUnreadable as exc:
+        return whole(f"the previous coverage record cannot be read: {exc}")
     return UnitPlan(
         selected=judgement.selected,
         retained=judgement.retained,
         whole_reason="",
-        carried_coverage=carried_entries(root, typed, target) if target.coverage else None,
+        carried_coverage=carried,
         **common,
     )
 

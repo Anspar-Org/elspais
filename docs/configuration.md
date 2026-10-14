@@ -1177,8 +1177,9 @@ Reading contexts from `.coverage` requires the `coverage` package (the
 `elspais[coverage]` extra) to be importable in elspais's own interpreter --
 if it isn't, ingestion degrades gracefully: no line is attributed to a test
 and `Code Tested` renders the honest `n/a`, with a single warning naming the
-extra to install. No other config is required; format detection sniffs the
-SQLite file header, so no `reporter` field is needed for coverage alone. A
+extra to install. No other config is required: `coverage_format =
+"coverage-sqlite"` names the format, so no `reporter` field is needed for
+coverage alone. A
 stale `.coverage` misattributes contexts to old line numbers after source
 edits. The target's fingerprint then reports its results stale until the
 suite runs again.

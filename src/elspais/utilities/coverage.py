@@ -9,10 +9,12 @@ the reports other tools read are rendered from it.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sys
-import tempfile
+import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -21,12 +23,6 @@ RECORD_NAME = ".elspais-coverage.json"
 REPORT_NAME = ".elspais-coverage.info"
 COMBINED_LOCK = ".elspais-coverage.lock"
 RECORD_VERSION = 1
-
-# The permissions an ordinary file gets here: mkstemp creates its file
-# private, and a report is read by other tools and other users.
-_UMASK = os.umask(0)
-os.umask(_UMASK)
-_FILE_MODE = 0o666 & ~_UMASK
 
 
 class CoverageUnreadable(Exception):
@@ -94,7 +90,7 @@ def read_tool_coverage(
                 }
             )
     cwd = (root / target.cwd) if target.cwd else root
-    _origin, frame = origin_dir(spec, target.coverage_origin, cwd, root, foreign=False)
+    origin, frame = origin_dir(spec, target.coverage_origin, cwd, root, foreign=False)
     place_contexts = context_placer(target, cwd, root)
     placed: dict[str, dict] = {}
     for source, data in measured.items():
@@ -104,6 +100,22 @@ def read_tool_coverage(
         if data.get("contexts"):
             data = {**data, "contexts": place_contexts(data["contexts"])}
         placed[rel] = {**data, "recorded": source}
+    # Implements: REQ-d00327-I
+    # Coverage that measures only paths outside the repository credits
+    # nothing, which reads as a run that exercised nothing; say so.
+    if measured and not placed and diagnostics is not None:
+        diagnostics.append(
+            {
+                "path": _relative(str(path), root),
+                "cause": (
+                    f"no file this coverage measures lies in the repository when read "
+                    f"from the {origin} origin (one recorded path: {next(iter(measured))!r}), "
+                    f"so no lines were credited"
+                ),
+                "line": None,
+                "partial": False,
+            }
+        )
     return placed
 
 
@@ -116,10 +128,17 @@ def _relative(path: str, root: Path) -> str:
 
 # Implements: REQ-d00333-J
 def measure(
-    repo_root: Path, config: Any, target: Any, run: dict, diagnostics: list[dict] | None = None
+    repo_root: Path,
+    config: Any,
+    target: Any,
+    run: dict,
+    diagnostics: list[dict] | None = None,
+    manifest: dict[str, str] | None = None,
 ) -> Record:
-    """This run's measurement as record entries, each stamped with its file's digest now.
+    """This run's measurement as record entries, each stamped with the content it measured.
 
+    *manifest* is the run's starting manifest. An input whose content changed
+    while the run ran was measured on no single content, so it is left out.
     A measured path naming no file is kept with no digest, so the build can
     report coverage read from the wrong origin; no current view holds it.
     """
@@ -129,14 +148,19 @@ def measure(
     record: Record = {}
     for rel, data in read_tool_coverage(root, config, target, diagnostics).items():
         source = root / rel
+        digest = file_digest(source) if source.is_file() else ""
+        if manifest and rel in manifest and manifest[rel] != digest:
+            continue
         record[rel] = FileCoverage(
             hits={int(n): int(h) for n, h in (data.get("line_coverage") or {}).items()},
             executable=int(data.get("executable_lines", 0)),
             contexts={int(n): tuple(c) for n, c in (data.get("contexts") or {}).items()},
-            digest=file_digest(source) if source.is_file() else "",
+            digest=digest,
             measured_in=(run,),
             source_analysed=bool(data.get("source_analysed", True)),
-            recorded="" if data.get("recorded") == rel else str(data.get("recorded") or ""),
+            # The path as recorded is kept only where it names no file, for
+            # the fault that reports it; a resolved path is the key.
+            recorded="" if digest else str(data.get("recorded") or ""),
         )
     return record
 
@@ -156,6 +180,11 @@ def current(record: Record, repo_root: Path) -> Record:
 
 
 def _merge_one(a: FileCoverage, b: FileCoverage) -> FileCoverage:
+    # Implements: REQ-d00333-J
+    # Line numbers of two contents of one file do not correspond, so the
+    # newer measurement replaces the older rather than joining it.
+    if a.digest != b.digest:
+        return b
     hits = dict(a.hits)
     for line, count in b.hits.items():
         hits[line] = max(hits.get(line, 0), count)
@@ -185,13 +214,24 @@ def merge(a: Record, b: Record) -> Record:
 
 
 def _atomic_write(path: Path, text: str) -> Path:
-    """Write *text* to *path* through a temporary file, so a reader sees one whole file."""
+    """Write *text* to *path* through a temporary file, so a reader sees one whole file.
+
+    The file is created with the mode the umask gives an ordinary file, and a
+    write that fails leaves no temporary file behind.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
-        fh.write(text)
-    os.chmod(tmp, _FILE_MODE)
-    os.replace(tmp, path)
+    tmp = path.parent / f".{path.name}.{os.getpid()}.{uuid.uuid4().hex}"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(tmp)
+        raise
     return path
 
 
@@ -312,40 +352,86 @@ def finish_coverage(
         return
     folder = target_folder(repo_root, config, target.name)
     diagnostics: list[dict] = []
-    fresh = measure(repo_root, config, target, run_reference(fingerprint), diagnostics)
+    fresh = measure(
+        repo_root,
+        config,
+        target,
+        run_reference(fingerprint),
+        diagnostics,
+        manifest=fingerprint.get("manifest") or {},
+    )
     record = merge(carried or {}, fresh)
     write_record(folder, record, diagnostics)
     write_report(folder / REPORT_NAME, current(record, repo_root))
     try:
-        write_combined(repo_root, config)
+        write_combined(repo_root, config, written={target.name: record})
     except OSError as exc:
         print(f"Warning: the repository's coverage report was not written: {exc}", file=sys.stderr)
 
 
+@contextlib.contextmanager
+def _exclusive(lock_path: Path):
+    """Hold an exclusive lock on *lock_path* for the block.
+
+    The platform's file lock where it has one; elsewhere a lock file created
+    exclusively, waited on for a bounded time.
+    """
+    try:
+        import fcntl
+    except ImportError:
+        fcntl = None
+    if fcntl is not None:
+        with open(lock_path, "w") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            yield
+        return
+    marker = lock_path.with_suffix(lock_path.suffix + ".held")
+    deadline = time.monotonic() + 30.0
+    while True:
+        try:
+            os.close(os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666))
+            break
+        except FileExistsError:
+            if time.monotonic() > deadline:
+                raise OSError(
+                    f"{marker} is held by another process; remove it if none is"
+                ) from None
+            time.sleep(0.05)
+    try:
+        yield
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(marker)
+
+
 # Implements: REQ-d00334-B
-def write_combined(repo_root: Path, config: Any) -> Path | None:
+def write_combined(
+    repo_root: Path, config: Any, written: dict[str, Record] | None = None
+) -> Path | None:
     """Merge every target's current coverage into the report at the output root.
 
     A lock serializes the rewrite, because targets running at once finish at
-    once. A target whose record cannot be read contributes nothing here; the
-    build reports it.
+    once. *written* holds records the caller has just written, which are not
+    read back. A target whose record cannot be read contributes nothing here;
+    the build reports it.
     """
-    import fcntl
-
     from elspais.utilities.fingerprint import _typed, output_root, target_folder
 
     typed = _typed(config)
     root_dir = output_root(repo_root, typed)
     root_dir.mkdir(parents=True, exist_ok=True)
-    with open(root_dir / COMBINED_LOCK, "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    written = written or {}
+    with _exclusive(root_dir / COMBINED_LOCK):
         combined: Record = {}
         for target in typed.scanning.test.targets:
             if not target.coverage:
                 continue
-            try:
-                record = read_record(target_folder(repo_root, typed, target.name)) or {}
-            except CoverageUnreadable:
-                continue
+            if target.name in written:
+                record = written[target.name]
+            else:
+                try:
+                    record = read_record(target_folder(repo_root, typed, target.name)) or {}
+                except CoverageUnreadable:
+                    continue
             combined = merge(combined, current(record, repo_root))
         return write_report(root_dir / REPORT_NAME, combined)

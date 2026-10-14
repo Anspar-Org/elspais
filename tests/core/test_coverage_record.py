@@ -229,9 +229,13 @@ def test_current_coverage_holds_only_files_unchanged_since_they_were_measured(tm
     assert current(record, root) == {"src/lib.py": record["src/lib.py"]}
 
 
-# Verifies: REQ-d00334-A
-@pytest.mark.parametrize(("b_digest", "merged_digest"), [("d-b", "d-b"), ("", "d-a")])
-def test_merging_two_records_keeps_the_most_each_one_measured(b_digest, merged_digest):
+# Verifies: REQ-d00334-A, REQ-d00333-J
+@pytest.mark.parametrize(
+    "b_digest",
+    ["d-a", "d-b", ""],
+    ids=["same-content", "other-content", "no-content"],
+)
+def test_merging_two_records_keeps_the_most_each_one_measured_of_one_content(b_digest):
     a = {
         "both.py": FileCoverage(
             hits={1: 1, 2: 0},
@@ -259,7 +263,14 @@ def test_merging_two_records_keeps_the_most_each_one_measured(b_digest, merged_d
     merged = merge(a, b)
 
     assert set(merged) == {"both.py", "only_a.py", "only_b.py"}
+    assert merged["only_a.py"] == a["only_a.py"]
+    assert merged["only_b.py"] == b["only_b.py"]
     both = merged["both.py"]
+    if b_digest != a["both.py"].digest:
+        # Entries of two contents of one file describe no single content, so
+        # the newer one stands alone; an entry with no content is another.
+        assert both == b["both.py"]
+        return
     assert both.hits == {1: 1, 2: 3, 3: 0}
     assert both.executable == 3
     assert {line: set(names) for line, names in both.contexts.items()} == {
@@ -267,10 +278,8 @@ def test_merging_two_records_keeps_the_most_each_one_measured(b_digest, merged_d
         2: {"tests/test_b.py::test_b|run"},
     }
     assert all(len(names) == len(set(names)) for names in both.contexts.values())
-    assert both.digest == merged_digest
+    assert both.digest == "d-a"
     assert both.measured_in == (_RUN_1, _RUN_2, _RUN_3)
-    assert merged["only_a.py"] == a["only_a.py"]
-    assert merged["only_b.py"] == b["only_b.py"]
 
 
 def _two_file_record() -> dict:
@@ -402,3 +411,87 @@ def test_a_record_and_a_report_carry_an_ordinary_files_permissions(tmp_path, wri
         written = write_report(tmp_path / REPORT_NAME, record)
 
     assert oct(stat.S_IMODE(os.stat(written).st_mode)) == oct(expected)
+
+
+# Verifies: REQ-d00333-J
+def test_merging_entries_of_two_contents_of_one_file_keeps_the_newer_alone():
+    a = {"lib.py": FileCoverage(hits={1: 5}, executable=1, digest="d1", measured_in=(_RUN_1,))}
+    b = {"lib.py": FileCoverage(hits={2: 1}, executable=1, digest="d2", measured_in=(_RUN_2,))}
+
+    merged = merge(a, b)["lib.py"]
+
+    assert merged.hits == {2: 1}
+    assert merged.digest == "d2"
+
+
+def _absolute_lcov(root: Path) -> str:
+    return _write_lcov(
+        root, str((root / "src" / "lib.py").resolve()), str((root / "src" / "gone.py").resolve())
+    ).name
+
+
+def _absolute_sqlite(root: Path) -> str:
+    from coverage import CoverageData
+
+    data = CoverageData(basename=str(_area(root) / ".coverage"))
+    data.add_lines(
+        {
+            str((root / "src" / "lib.py").resolve()): [1, 3],
+            str((root / "src" / "gone.py").resolve()): [1],
+        }
+    )
+    data.write()
+    return ".coverage"
+
+
+# Verifies: REQ-d00334-A
+@pytest.mark.parametrize(
+    "fmt",
+    [
+        "lcov",
+        pytest.param(
+            "coverage-sqlite",
+            marks=pytest.mark.skipif(not _HAS_COVERAGE, reason="coverage is not importable"),
+        ),
+    ],
+)
+def test_a_written_record_holds_no_absolute_path_of_a_file_found_in_the_repository(tmp_path, fmt):
+    root = _repo(tmp_path)
+    name = (_absolute_lcov if fmt == "lcov" else _absolute_sqlite)(root)
+    record = measure(root, _CONFIG, _target(coverage=name, coverage_format=fmt), _RUN_1)
+
+    files = json.loads(write_record(tmp_path, record).read_text(encoding="utf-8"))["files"]
+
+    found = files["src/lib.py"]
+    assert not os.path.isabs(found.get("recorded", "")), found
+    # A file the measurement names and the tree lacks keeps the path as recorded.
+    assert files["src/gone.py"]["digest"] == ""
+    assert "recorded" in files["src/gone.py"]
+
+
+# Verifies: REQ-d00334-A
+def test_a_report_written_under_a_restrictive_umask_carries_that_umask(tmp_path):
+    previous = os.umask(0o077)
+    try:
+        written = write_report(tmp_path / REPORT_NAME, _two_file_record())
+    finally:
+        os.umask(previous)
+
+    assert oct(stat.S_IMODE(os.stat(written).st_mode)) == oct(0o600)
+
+
+# Verifies: REQ-d00334-A
+def test_a_write_that_fails_leaves_no_temporary_file_and_raises(tmp_path, monkeypatch):
+    destination = tmp_path / REPORT_NAME
+    destination.write_text("previous", encoding="utf-8")
+
+    def failing_replace(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(os, "replace", failing_replace)
+
+    with pytest.raises(OSError, match="disk full"):
+        write_report(destination, _two_file_record())
+
+    assert sorted(p.name for p in tmp_path.iterdir()) == [destination.name]
+    assert destination.read_text(encoding="utf-8") == "previous"

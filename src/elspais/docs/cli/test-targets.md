@@ -581,6 +581,7 @@ command     = "flutter test --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.
 reporter    = "flutter-machine"
 results     = "machine.jsonl"
 coverage    = "lcov.info"
+coverage_format = "lcov"
 match       = "source"
 credit_coverage = "verified"
 ```
@@ -608,6 +609,7 @@ command     = "flutter test --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.
 reporter    = "flutter-machine"
 results     = "machine.jsonl"
 coverage    = "lcov.info"
+coverage_format = "lcov"
 match       = "source"
 credit_coverage = "verified"
 
@@ -618,6 +620,7 @@ command     = "flutter test --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.
 reporter    = "flutter-machine"
 results     = "machine.jsonl"
 coverage    = "lcov.info"
+coverage_format = "lcov"
 match       = "source"
 credit_coverage = "verified"
 resources   = ["db"]
@@ -662,6 +665,7 @@ there.  Pass
 
 ```toml
 coverage = "lcov.info"
+coverage_format = "lcov"
 ```
 
 **One target per package.**  Each Flutter package must have its own
@@ -706,14 +710,15 @@ coverage.py already writes this file (its own native data format) whenever you
 run under `--cov`. `COVERAGE_FILE` puts the file in the target's folder.
 elspais reads it directly via coverage.py's public
 API (`coverage.Coverage`/`coverage.CoverageData`), never by parsing the
-SQLite schema itself. Format detection sniffs the file's SQLite header, so
-no `reporter` field is required:
+SQLite schema itself. `coverage_format = "coverage-sqlite"` names the format,
+so no `reporter` field is required:
 
 ```toml
 [[scanning.test.targets]]
 name     = "unit"
 command  = "COVERAGE_FILE=$ELSPAIS_TARGET_OUTPUT/.coverage pytest tests/ --cov=src/yourpkg --cov-context=test"
 coverage = ".coverage"
+coverage_format = "coverage-sqlite"
 ```
 
 `--cov-context=test` (pytest-cov's per-test dynamic context, keyed by pytest
@@ -749,6 +754,7 @@ contexts can instead be exported into the JSON report:
 name     = "unit"
 command  = "pytest tests/ --cov=src/yourpkg --cov-context=test --cov-report=json:$ELSPAIS_TARGET_OUTPUT/coverage.json"
 coverage = "coverage.json"
+coverage_format = "coverage-json"
 ```
 
 ```toml
@@ -935,9 +941,11 @@ reporter = "junit"
 # <output_root>/<name> -- here .results/my-suite/*.xml, for every cwd.
 results = "*.xml"
 
-# Path to an lcov.info or coverage.py JSON file (format auto-detected),
-# relative to the target's folder. Omit if no coverage report.
+# Path to an lcov.info, coverage.py JSON or .coverage file, relative to the
+# target's folder, with coverage_format naming its format. Omit if no
+# coverage report.
 # coverage = "lcov.info"
+# coverage_format = "lcov"
 
 # inputs names the files whose change makes this target's results stale. The
 # default is every file in the repository. inputs has the same form as a
@@ -1029,6 +1037,7 @@ reporter = "flutter-machine"
 # Without `results`, only coverage credit is applied (no pass/fail signal).
 results  = "machine.jsonl"
 coverage = "lcov.info"
+coverage_format = "lcov"
 match    = "source"
 credit_coverage = "verified"
 ```
