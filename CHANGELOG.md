@@ -10,6 +10,12 @@ All notable changes to elspais will be documented in this file.
 
 ### TOOL-157
 
+- **A coverage file's name can name its format (REQ-d00254-C)** -- a target whose `coverage` file name ends `.info` reads it as `lcov`, and one named `.coverage` as `coverage-sqlite`, without `coverage_format`. A configuration that works on elspais releases which refuse `coverage_format` therefore also works here. Any other coverage file, such as a JSON one, still needs `coverage_format`, and an explicit `coverage_format` always wins.
+
+- **No path through `.git` is a test target input (REQ-d00311-S)** -- the `.git` file of a linked worktree, and the `.git` directory of a repository nested in the tree, are no longer inputs. A baseline recorded in a clone now reads as fresh in a linked worktree of the same tree.
+
+- **The LCOV reports describe the tree when their run finished** -- documented in `elspais docs test-targets`: a source file edited after the run stays in the reports until the target runs again.
+
 - **A file git ignores is no test target input (REQ-d00311-S)** -- generated files a package manager or test tool writes and git ignores, such as an ignored lockfile or `.dart_tool/`, no longer make a target's results stale, so a CI run that resolved fewer packages than its baseline does not read as changed. Tracked files stay inputs, even generated ones, and git's own `.git` directory is never an input. Skip lists written only to keep ignored files out of the inputs can be deleted.
 
 - **Line coverage is read from its record alone (REQ-d00334-A, REQ-d00323-Q)** -- the graph build reads each target's coverage record and no longer parses the tool's coverage file or `.elspais-retained-coverage.json`, which is gone. An output area holding a coverage file but no record, written by an earlier elspais, is reported as an ingestion fault: run the target again. Line coverage of a target the reported run did not execute now reads as carried, as its results do, and hit counts reach the graph unreduced. The served graph rebuilds when a coverage record changes.

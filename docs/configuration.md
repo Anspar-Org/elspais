@@ -418,7 +418,7 @@ results  = "machine.jsonl"          # glob relative to the target's folder;
                                     # a run refuses a results reporter
                                     # whose target declares none
 match    = "source"                 # "source" (default) | "aggregate"
-coverage_format = "lcov"  # required with coverage: lcov | coverage-json | coverage-sqlite
+coverage_format = "lcov"  # lcov | coverage-json | coverage-sqlite; a *.info or .coverage name decides it
 coverage = "lcov.info"  # optional; relative to the target's
                         # folder .results/app, for every cwd. A relative
                         # source path inside the report is read from the

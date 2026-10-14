@@ -7,8 +7,10 @@ line_coverage).
 
 from __future__ import annotations
 
+import fnmatch
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import Any
 
 from elspais.config.schema import PATH_ORIGIN_CWD, PATH_ORIGIN_ROOT, PATH_ORIGINS
@@ -66,6 +68,12 @@ class ReporterSpec:
     # sentence here is refused when the table is rendered, rather than reaching
     # a reader as an empty cell.
     description: str = ""
+    # Implements: REQ-d00254-C
+    # The coverage file names that only this format writes, as patterns
+    # matched against the file's own name. A target naming such a file needs
+    # no coverage_format. A name two formats can write, such as a JSON file,
+    # is listed by neither.
+    file_names: tuple[str, ...] = ()
 
     # Implements: REQ-d00327-A+D+E
     # A results format reads its paths from the repository root and a
@@ -92,6 +100,17 @@ REPORTER_REGISTRY: dict[str, ReporterSpec] = {}
 
 def register_reporter(spec: ReporterSpec) -> None:
     REPORTER_REGISTRY[spec.name] = spec
+
+
+def coverage_format_named_by(path: str) -> str:
+    """The one coverage format whose file names match *path*'s name, or ``""``."""
+    name = PurePosixPath(path.replace("\\", "/")).name
+    found = [
+        spec.name
+        for spec in REPORTER_REGISTRY.values()
+        if spec.kind == "coverage" and any(fnmatch.fnmatchcase(name, p) for p in spec.file_names)
+    ]
+    return found[0] if len(found) == 1 else ""
 
 
 def get_reporter(name: str) -> ReporterSpec:
@@ -164,6 +183,7 @@ def _register_builtins() -> None:
             "lcov",
             "coverage",
             LcovParser,
+            file_names=("*.info",),
             description=(
                 "Parses an LCOV report -- the `lcov.info` that `flutter test --coverage` and "
                 "most language toolchains write -- into per-file line coverage."
@@ -186,6 +206,7 @@ def _register_builtins() -> None:
             "coverage-sqlite",
             "coverage",
             CoverageSqliteParser,
+            file_names=(".coverage",),
             description=(
                 "Reads coverage.py's own `.coverage` SQLite data file through coverage.py's "
                 "public API, so per-test contexts are read compactly rather than through a "

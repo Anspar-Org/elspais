@@ -583,7 +583,7 @@ def _end_target(
     A command that could not be spawned never exited, so it records no exit
     status and its files await a result.
     """
-    from elspais.utilities.fingerprint import finish_run
+    from elspais.utilities.fingerprint import coverage_faults, finish_run
 
     if result.error:
         tag = f"FAILED (spawn error: {result.error})"
@@ -604,7 +604,7 @@ def _end_target(
     )
     # Implements: REQ-d00334-A
     # A run whose coverage could not be recorded fails, naming why.
-    faults = [f for f in fingerprint.get("run_faults") or [] if str(f).startswith("coverage:")]
+    faults = coverage_faults(fingerprint)
     if faults:
         emit(f"<<< {target.name}: FAILED ({'; '.join(faults)})\n")
         if result.returncode == 0:

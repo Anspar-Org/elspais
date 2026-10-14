@@ -329,7 +329,7 @@ later `summary` or `trace` names as fresh, with `--targets last-run`.
 | `reporter` | string | (required with `results`, or with `command` unless `file_results`) | Parser format -- one of the names in the reporters table below |
 | `results` | string | `""` | Glob pattern for result files, relative to the target's folder; required for a results-kind reporter whose target has a `command` |
 | `coverage` | string | `""` | Path to an lcov.info, coverage.py JSON or `.coverage` file, relative to the target's folder |
-| `coverage_format` | string | `""` | The format of the `coverage` file: `lcov`, `coverage-json` or `coverage-sqlite`. Required where `coverage` is set |
+| `coverage_format` | string | `""` | The format of the `coverage` file: `lcov`, `coverage-json` or `coverage-sqlite`. Where it is empty, the file name decides it: a name ending `.info` is `lcov`, and the name `.coverage` is `coverage-sqlite`. Any other `coverage` file needs it |
 | `inputs` | table | every file | The files whose change makes this target's results stale: `directories`, `file_patterns`, `skip_dirs`, `skip_files` |
 | `match` | string | `"source"` | `"source"` or `"aggregate"` -- matching strategy |
 | `classname` | string | `""` (the reporter's own) | `"python-module"` or `"source-file"` -- how this target's results name the test that produced them |
@@ -996,7 +996,7 @@ match = "source"
 
 When a run of a target that declares `coverage` finishes -- through
 `elspais test`, `elspais checks --run-tests` or `elspais fingerprint finish`
--- elspais reads the coverage file in the format `coverage_format` names and
+-- elspais reads the coverage file in the format `coverage_format` or its file name names and
 writes three files:
 
 | File | Holds |
@@ -1013,6 +1013,11 @@ service reads them directly: upload the combined report, or each target's
 report under its own flag. Paths in both are relative to the repository root.
 Where two targets measure one source file, the combined report holds the
 larger hit count of each line.
+
+The LCOV reports describe the tree as it was when the run that wrote them
+finished. A source file edited or deleted after that run stays in them until
+a run of the target finishes again, while the graph stops using that file's
+coverage at once. Upload a report straight after the run that writes it.
 
 elspais reads line coverage from the record alone. An output area holding a
 coverage file and no record was written by an earlier elspais; it is

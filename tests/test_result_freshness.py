@@ -842,3 +842,51 @@ def test_results_stay_fresh_while_an_ignored_file_comes_changes_and_goes(tmp_pat
 
     target.unlink()
     assert judge(root, config, "unit").state == "fresh"
+
+
+# Verifies: REQ-d00311-S
+def test_the_git_file_of_a_linked_worktree_is_not_an_input(tmp_path):
+    main = _ignoring_repo(tmp_path)
+    worktree = tmp_path / "linked"
+    _git(main, "worktree", "add", "-q", "-b", "side", str(worktree))
+    config = _config([_target()])
+    assert (worktree / ".git").is_file()
+
+    manifest = file_manifest(worktree, config, _unit(config))
+
+    assert ".git" not in manifest
+    assert "src/a.py" in manifest
+
+
+# Verifies: REQ-d00311-S
+def test_a_nested_repository_s_git_directory_is_not_an_input(tmp_path):
+    root = _ignoring_repo(tmp_path)
+    nested = root / "sub"
+    nested.mkdir()
+    (nested / "real.txt").write_text("nested content\n", encoding="utf-8")
+    _git(nested, "init", "-q", "-b", "main")
+    _git(nested, "add", "-A")
+    _git(nested, "commit", "-q", "-m", "nested")
+    config = _config([_target()])
+
+    names = _input_names(root, config)
+
+    assert not [n for n in names if ".git" in n.split("/")]
+    assert "sub/real.txt" in names
+
+
+# Verifies: REQ-d00311-S
+@pytest.mark.parametrize(
+    "path",
+    [".gitignore", "docs/.gitkeep", ".github/x.yml", ".git-blame-ignore-revs"],
+    ids=["gitignore", "gitkeep", "github-dir", "git-prefixed-name"],
+)
+def test_a_tracked_file_whose_name_only_contains_git_stays_an_input(tmp_path, path):
+    root = _ignoring_repo(tmp_path)
+    (root / path).parent.mkdir(parents=True, exist_ok=True)
+    (root / path).write_text("tracked\n", encoding="utf-8")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "add")
+    config = _config([_target()])
+
+    assert path in _input_names(root, config)

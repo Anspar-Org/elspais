@@ -76,6 +76,7 @@ from elspais.utilities.fingerprint import (
     read_fingerprint,
     run_reference,
     target_folder,
+    typed_config,
 )
 
 LEDGER_VERSION = 1
@@ -232,14 +233,6 @@ def units_digest(target: Any) -> str:
 
 def _raw(config: Any) -> dict[str, Any]:
     return config if isinstance(config, dict) else config.model_dump(mode="json", by_alias=True)
-
-
-def _typed(config: Any) -> Any:
-    if isinstance(config, dict):
-        from elspais.config import validate_config
-
-        return validate_config(config)
-    return config
 
 
 def as_observation(kind_config: Any) -> Observation:
@@ -588,7 +581,7 @@ def plan_run(
     if target.units is None:
         return None
     root = Path(repo_root).resolve()
-    typed = _typed(config)
+    typed = typed_config(config)
     units = unit_inventory(root, config, target)
     inputs = frozenset(p.relative_to(root).as_posix() for p in input_files(root, typed, target))
     observed = observed_set(root, observation_of(root, config, target), inputs)
@@ -756,7 +749,7 @@ def settle(
     from elspais.utilities.evidence import OUTCOME_OF, result_line_of
 
     root = Path(repo_root).resolve()
-    typed = _typed(config)
+    typed = typed_config(config)
     raw = raw_config if raw_config is not None else _raw(config)
     graph = build_graph(config=raw, repo_root=root, scan_code=False)
     namespace = typed.project.namespace
