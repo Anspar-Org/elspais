@@ -18,11 +18,13 @@ import pytest
 from pydantic import ValidationError
 
 from elspais.commands.health import check_unmatched_results
+from elspais.config import load_config
 from elspais.config.schema import PATH_ORIGIN_CWD, PATH_ORIGIN_ROOT, TestTargetConfig
 from elspais.graph.GraphNode import NodeKind
 from elspais.graph.parsers.results.registry import REPORTER_REGISTRY, ReporterSpec
 from elspais.graph.relations import EdgeKind
 from tests.core.graph_test_helpers import record_run
+from tests.coverage_helpers import finish_coverage_area
 
 _SPEC = """\
 ### REQ-p00001: Login
@@ -432,6 +434,7 @@ def _context_project(
         path = project / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
+    finish_coverage_area(project, load_config(project / ".elspais.toml"), "unit")
     return project
 
 

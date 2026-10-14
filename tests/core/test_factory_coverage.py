@@ -16,6 +16,7 @@ import pytest
 from elspais.graph import NodeKind
 from elspais.graph.factory import build_graph
 from elspais.graph.GraphNode import make_file_id
+from tests.coverage_helpers import finish_coverage_area
 
 
 def _write_spec(spec_dir: Path, req_id: str = "REQ-p00001", title: str = "Test Req") -> None:
@@ -42,6 +43,13 @@ def _write_code_file(file_path: Path, req_id: str = "REQ-p00001") -> None:
         f"# Implements: {req_id}\ndef work(): pass\n",
         encoding="utf-8",
     )
+
+
+def _record(root: Path) -> None:
+    """Record the `unit` target's coverage the way a finished run does."""
+    from elspais.config import load_config
+
+    finish_coverage_area(root, load_config(root / ".elspais.toml"), "unit")
 
 
 def _unit_folder(root: Path) -> Path:
@@ -97,6 +105,8 @@ coverage_format = "lcov"
         _write_spec(tmp_path / "spec")
         _write_code_file(tmp_path / "src" / "main.py")
         _write_lcov(tmp_path / ".results" / "unit" / "lcov.info", "src/main.py")
+
+        _record(tmp_path)
 
         graph = build_graph(
             config_path=config_file,
@@ -184,6 +194,8 @@ coverage_format = "lcov"
         # Coverage for a file NOT in the scanned dirs
         _write_lcov(tmp_path / ".results" / "unit" / "lcov.info", "other/missing.py")
 
+        _record(tmp_path)
+
         graph = build_graph(
             config_path=config_file,
             repo_root=tmp_path,
@@ -243,6 +255,8 @@ coverage_format = "coverage-json"
         _unit_folder(tmp_path).joinpath("coverage.json").write_text(
             json.dumps(cov_data), encoding="utf-8"
         )
+
+        _record(tmp_path)
 
         graph = build_graph(
             config_path=config_file,
@@ -312,6 +326,8 @@ coverage_format = "coverage-json"
             json.dumps(cov_data), encoding="utf-8"
         )
 
+        _record(tmp_path)
+
         graph = build_graph(
             config_path=config_file,
             repo_root=tmp_path,
@@ -372,6 +388,8 @@ coverage_format = "coverage-json"
         _unit_folder(tmp_path).joinpath("coverage.json").write_text(
             json.dumps(cov_data), encoding="utf-8"
         )
+
+        _record(tmp_path)
 
         graph = build_graph(
             config_path=config_file,
@@ -435,6 +453,8 @@ coverage_format = "coverage-sqlite"
             cov.stop()
         cov.save()
 
+        _record(tmp_path)
+
         graph = build_graph(
             config_path=config_file,
             repo_root=tmp_path,
@@ -459,14 +479,12 @@ coverage_format = "coverage-sqlite"
         )
 
     # Verifies: REQ-d00254-G, REQ-d00258-W
-    def test_coverage_sqlite_unresolvable_file_contexts_not_materialized(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    def test_coverage_sqlite_contexts_of_an_unscanned_file_are_recorded_not_attached(
+        self, tmp_path: Path
     ) -> None:
-        """Measured files that don't resolve to a FILE node (e.g. sources
-        outside the scanned dirs) must never have their per-line context
-        lists materialized -- the factory passes a FILE-node-resolution
-        predicate to the sqlite parser so contexts_by_lineno() is only
-        called for resolvable files."""
+        """The coverage record holds the per-line contexts of every measured
+        file, scanned or not; the build attaches only those of a scanned
+        file."""
         coverage = pytest.importorskip("coverage")
 
         config_file = tmp_path / ".elspais.toml"
@@ -514,14 +532,7 @@ coverage_format = "coverage-sqlite"
             cov.stop()
         cov.save()
 
-        queried: list[str] = []
-        orig = coverage.CoverageData.contexts_by_lineno
-
-        def _spy(self, filename):
-            queried.append(filename)
-            return orig(self, filename)
-
-        monkeypatch.setattr(coverage.CoverageData, "contexts_by_lineno", _spy)
+        _record(tmp_path)
 
         graph = build_graph(
             config_path=config_file,
@@ -529,15 +540,17 @@ coverage_format = "coverage-sqlite"
             scan_tests=False,
         )
 
-        assert str(code_path) in queried, "resolvable file's contexts should be read"
-        assert str(outside_path) not in queried, (
-            "unresolvable measured file's contexts must never be materialized"
-        )
+        from elspais.utilities.coverage import read_record
 
-        # And the resolvable file's annotation still works end-to-end.
+        record = read_record(_unit_folder(tmp_path))
+        assert record is not None
+        assert record["other/helper.py"].contexts, "an unscanned file's contexts are recorded"
+        assert record["src/main.py"].contexts
+
         file_node = graph.find_by_id(make_file_id("REQ", "src/main.py"))
         assert file_node is not None
         assert file_node.get_field("line_contexts") is not None
+        assert graph.find_by_id(make_file_id("REQ", "other/helper.py")) is None
 
 
 def _write_cwd_project(
@@ -616,6 +629,8 @@ class TestCoveragePathsResolveAgainstTargetWorkingDirectory:
         config_file = _write_cwd_project(tmp_path, [code_file], cwd=cwd)
         _write_lcov(_unit_folder(tmp_path) / "lcov.info", recorded)
 
+        _record(tmp_path)
+
         graph = build_graph(config_path=config_file, repo_root=tmp_path, scan_tests=False)
 
         assert _credited(graph) == {code_file: {1: 1, 2: 1}}
@@ -645,6 +660,8 @@ class TestCoveragePathsResolveAgainstTargetWorkingDirectory:
             json.dumps(cov_data), encoding="utf-8"
         )
 
+        _record(tmp_path)
+
         graph = build_graph(config_path=config_file, repo_root=tmp_path, scan_tests=False)
 
         assert _credited(graph) == {"app/lib/x.py": {1: 1, 2: 1, 3: 0}}
@@ -653,6 +670,8 @@ class TestCoveragePathsResolveAgainstTargetWorkingDirectory:
     def test_absolute_path_is_read_as_it_stands(self, tmp_path: Path) -> None:
         config_file = _write_cwd_project(tmp_path, ["app/lib/x.py"], cwd="app")
         _write_lcov(_unit_folder(tmp_path) / "lcov.info", str(tmp_path / "app" / "lib" / "x.py"))
+
+        _record(tmp_path)
 
         graph = build_graph(config_path=config_file, repo_root=tmp_path, scan_tests=False)
 
@@ -676,6 +695,8 @@ class TestCoveragePathsResolveAgainstTargetWorkingDirectory:
         (tmp_path.parent / "outside.py").write_text("x = 1\n", encoding="utf-8")
         _write_lcov(_unit_folder(tmp_path) / "lcov.info", recorded)
 
+        _record(tmp_path)
+
         graph = build_graph(config_path=config_file, repo_root=tmp_path, scan_tests=False)
 
         assert _credited(graph) == {}
@@ -691,6 +712,8 @@ class TestCoveragePathsResolveAgainstTargetWorkingDirectory:
             code_dirs=["app/lib", "lib"],
         )
         _write_lcov(_unit_folder(tmp_path) / "lcov.info", "lib/x.py")
+
+        _record(tmp_path)
 
         graph = build_graph(config_path=config_file, repo_root=tmp_path, scan_tests=False)
 
@@ -745,6 +768,7 @@ namespace = "LIB"
         lib = make_repo(tmp_path, "lib", namespace="LIB", config_text=lib_toml)
         _write_code_file(lib / "pkg" / "lib" / "x.py", req_id="LIB-d00001")
         _write_lcov(lib / ".results" / "unit" / "lcov.info", "lib/x.py")
+        _record(lib)
         _git(lib, "add", "-A")
         _git(lib, "commit", "-m", "code")
         root = make_repo(tmp_path, "root", namespace="ROOT", config_text=root_toml)
@@ -796,6 +820,8 @@ class TestCoveragePathsFollowTheDeclaredOrigin:
             extra='coverage_origin = "repository-root"\n',
         )
 
+        _record(tmp_path)
+
         graph = build_graph(config_path=config_file, repo_root=tmp_path, scan_tests=False)
 
         assert _credited(graph) == {"app/lib/x.py": {1: 1, 2: 1}}
@@ -825,6 +851,8 @@ class TestCoveragePathsFollowTheDeclaredOrigin:
         )
         _write_lcov(_unit_folder(tmp_path) / "lcov.info", "lib/x.py")
 
+        _record(tmp_path)
+
         graph = build_graph(config_path=config_file, repo_root=tmp_path, scan_tests=False)
 
         assert _credited(graph) == {credited: {1: 1, 2: 1}}
@@ -840,6 +868,8 @@ class TestCoveragePathsFollowTheDeclaredOrigin:
             extra='results_origin = "repository-root"\n',
         )
         _write_lcov(_unit_folder(tmp_path) / "lcov.info", "lib/x.py")
+
+        _record(tmp_path)
 
         graph = build_graph(config_path=config_file, repo_root=tmp_path, scan_tests=False)
 

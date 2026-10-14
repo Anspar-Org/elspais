@@ -84,9 +84,6 @@ _NOT_PROBE_CONFIGURATION = frozenset({"affects_retention"})
 #: The file in the output area holding the *Retained Results* of the run.
 RETAINED_RESULTS_NAME = ".elspais-retained.jsonl"
 
-#: The file in the output area holding the line coverage the run retained.
-RETAINED_COVERAGE_NAME = ".elspais-retained-coverage.json"
-
 #: The file in the output area recording each unit's last execution.
 UNIT_LEDGER_NAME = ".elspais-units.json"
 

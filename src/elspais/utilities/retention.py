@@ -63,7 +63,6 @@ from elspais.utilities.evidence import (
 )
 from elspais.utilities.fingerprint import (
     ENVIRONMENT_PREFIX,
-    RETAINED_COVERAGE_NAME,
     RETAINED_RESULTS_NAME,
     RUN_REFERENCE_KEYS,
     SELECTION_NAME,
@@ -480,7 +479,6 @@ class UnitPlan:
     evidence: Evidence | None
     source_failed: str = ""
     outside_inputs: tuple[str, ...] = ()
-    retained_coverage: dict[str, Any] | None = None
     carried_coverage: dict[str, Any] | None = None
     receives: str = "placeholder"
     full_selection: str = ""
@@ -660,7 +658,6 @@ def plan_run(
         if len(causes) == 1:
             return whole(causes.pop())
         return whole("the evidence of every test file changed")
-    coverage = retained_coverage(root, typed, target, verdict.fingerprint, current)
     # Implements: REQ-d00334-A, REQ-d00333-J
     # The coverage of the tests this run does not execute is read before
     # start_run empties the area, and recorded with the run's own.
@@ -670,7 +667,6 @@ def plan_run(
         selected=judgement.selected,
         retained=judgement.retained,
         whole_reason="",
-        retained_coverage=coverage,
         carried_coverage=carried_entries(root, typed, target) if target.coverage else None,
         **common,
     )
@@ -711,77 +707,9 @@ def write_artifacts(folder: Path, plan: UnitPlan | None) -> dict[str, str]:
     if plan is None or plan.whole:
         return {}
     write_retained(folder, plan.retained)
-    if plan.retained_coverage:
-        from elspais.graph.parsers.results.coverage_json import render_coverage_json
-
-        (folder / RETAINED_COVERAGE_NAME).write_text(
-            render_coverage_json(plan.retained_coverage), encoding="utf-8"
-        )
     selection = folder / SELECTION_NAME
     selection.write_text("".join(w + "\n" for w in selection_words(plan)), encoding="utf-8")
     return {SELECTION_ENV: str(selection)}
-
-
-# Implements: REQ-d00333-J+L
-def retained_coverage(
-    repo_root: Path,
-    config: Any,
-    target: Any,
-    last_fingerprint: dict[str, Any],
-    current: dict[str, str],
-) -> dict[str, Any] | None:
-    """The line coverage a partial run keeps from earlier runs, in coverage-json form.
-
-    A file's measurement is kept only where the file holds the content it
-    held in the run that measured it. The earlier area's own coverage file
-    was measured by the last run; a measurement that run itself retained
-    carries the digest and the runs recorded with it.
-    """
-    from elspais.graph.factory import context_placer
-    from elspais.graph.parsers.results.coverage_json import CoverageJsonParser, merge_readings
-    from elspais.graph.parsers.results.placement import origin_dir, placed_in_repo
-    from elspais.graph.parsers.results.registry import get_reporter
-
-    folder = target_folder(repo_root, config, target.name)
-    root = Path(repo_root).resolve()
-    kept: dict[str, Any] = {}
-    last_run = run_reference(last_fingerprint)
-    last_manifest = last_fingerprint.get("manifest") or {}
-    if target.coverage:
-        path = folder / target.coverage
-        found = path.is_file()
-        if found:
-            name = target.coverage_format
-            reader = get_reporter(name).parser_factory()
-            content = "" if getattr(reader, "binary", False) else path.read_text(encoding="utf-8")
-            measured = reader.parse(content, str(path))
-            cwd = (root / target.cwd) if target.cwd else root
-            _origin, frame = origin_dir(
-                get_reporter(name), target.coverage_origin, cwd, root, foreign=False
-            )
-            # The retained coverage is written with its test names
-            # repo-relative, as the build places a run's own.
-            place_contexts = context_placer(target, cwd, root)
-            for source, data in measured.items():
-                rel = placed_in_repo(source, frame, root)
-                digest = last_manifest.get(rel) if rel else None
-                if rel is None or digest is None or current.get(rel) != digest:
-                    continue
-                placed = dict(data)
-                if data.get("contexts"):
-                    placed["contexts"] = place_contexts(data["contexts"])
-                kept[rel] = {**placed, "provenance": {"digest": digest, "measured_in": [last_run]}}
-    earlier = folder / RETAINED_COVERAGE_NAME
-    if earlier.is_file():
-        for rel, data in (
-            CoverageJsonParser().parse(earlier.read_text(encoding="utf-8"), str(earlier)).items()
-        ):
-            provenance = data.get("provenance") or {}
-            digest = provenance.get("digest")
-            if not digest or current.get(rel) != digest:
-                continue
-            kept[rel] = merge_readings(kept.get(rel), data)
-    return kept or None
 
 
 @dataclass
@@ -1030,7 +958,6 @@ __all__ = [
     "outside_inputs_of",
     "plan_run",
     "read_ledger",
-    "retained_coverage",
     "settle",
     "unit_inventory",
     "write_artifacts",

@@ -14,8 +14,10 @@ from pathlib import Path
 
 import pytest
 
+from elspais.config import load_config
 from elspais.graph.GraphNode import NodeKind
 from tests.core.graph_test_helpers import record_run
+from tests.coverage_helpers import finish_coverage_area
 
 _SPEC = """\
 # Requirements
@@ -166,10 +168,12 @@ def _make_project(tmp_path: Path, state: str) -> Path:
         (project / ".results" / "b").mkdir(parents=True)
         (project / ".results" / "b" / "results.xml").write_text(_RESULTS_B, encoding="utf-8")
         (project / ".results" / "b" / "lcov.info").write_text(_LCOV_B, encoding="utf-8")
+        finish_coverage_area(project, load_config(project / ".elspais.toml"), "b")
     elif state == "no-fingerprint":
         (project / ".results" / "a").mkdir(parents=True)
         (project / ".results" / "a" / "results.xml").write_text(_RESULTS, encoding="utf-8")
         (project / ".results" / "a" / "lcov.info").write_text(_LCOV, encoding="utf-8")
+        finish_coverage_area(project, load_config(project / ".elspais.toml"), "a")
     else:
         record_run(project, "a", {"results.xml": _RESULTS, "lcov.info": _LCOV})
     if state == "input-changed":
@@ -184,10 +188,16 @@ def _build(project: Path):
     return build_graph(config_path=project / ".elspais.toml", repo_root=project)
 
 
+def _assert_no_fingerprint_reason(reason: str) -> None:
+    """The reason names the run that measured the coverage, then the verdict."""
+    assert reason.startswith("line coverage retained from the run of "), reason
+    assert reason.endswith(f"; {_NO_FINGERPRINT}"), reason
+
+
 def _assert_reason(reason: str, state: str) -> None:
     """The stated reason is the fingerprint verdict for *state*."""
     if state == "no-fingerprint":
-        assert reason == _NO_FINGERPRINT
+        _assert_no_fingerprint_reason(reason)
     else:
         assert reason.startswith("inputs changed since it ran:")
         assert "spec/reqs.md" in reason
@@ -365,12 +375,15 @@ def test_figures_with_fresh_and_stale_coverage_are_not_carried_and_say_why(
         for f in graph.iter_by_kind(NodeKind.FILE)
         if f.get_field("line_coverage")
     }
-    assert files == {"src/main.py": "", "src/other.py": _NO_FINGERPRINT}
+    assert set(files) == {"src/main.py", "src/other.py"}
+    assert files["src/main.py"] == ""
+    stale_reason = files["src/other.py"]
+    _assert_no_fingerprint_reason(stale_reason)
 
     metrics = graph.find_by_id("REQ-d00001").get_metric("rollup_metrics")
     assert (metrics.code_tested.covered_lines, metrics.code_tested.total_lines) == (4, 6)
     assert metrics.code_tested.carried is False
-    assert metrics.code_tested.stale_reason == _NO_FINGERPRINT
+    assert metrics.code_tested.stale_reason == stale_reason
     assert metrics.lcov_tested.covered > 0
     assert metrics.lcov_tested.carried is False
 
@@ -390,9 +403,9 @@ def test_figures_with_fresh_and_stale_coverage_are_not_carried_and_say_why(
 
     check = check_line_coverage(graph, config)
     assert check.details["carried"] is False
-    assert check.details["stale_reason"] == _NO_FINGERPRINT
+    assert check.details["stale_reason"] == stale_reason
     assert (
-        f"some from stale line coverage the current tree did not produce ({_NO_FINGERPRINT})"
+        f"some from stale line coverage the current tree did not produce ({stale_reason})"
         in check.message
     )
 
@@ -420,14 +433,18 @@ def test_a_coverage_only_target_is_judged_like_any_other(tmp_path: Path, recorde
     else:
         (project / ".results" / "a").mkdir(parents=True)
         (project / ".results" / "a" / "lcov.info").write_text(_LCOV, encoding="utf-8")
+        finish_coverage_area(project, load_config(project / ".elspais.toml"), "a")
 
     graph = _build(project)
 
     main = _main_file(graph)
     assert main.get_field("line_coverage")
-    expected = "" if recorded else _NO_FINGERPRINT
-    assert main.get_field("line_coverage_stale_reason") == expected
+    reason = main.get_field("line_coverage_stale_reason")
+    if recorded:
+        assert reason == ""
+    else:
+        _assert_no_fingerprint_reason(reason)
     code_tested = graph.find_by_id("REQ-d00001").get_metric("rollup_metrics").code_tested
     assert code_tested.has_measurement
     assert code_tested.carried is not recorded
-    assert code_tested.stale_reason == expected
+    assert code_tested.stale_reason == reason

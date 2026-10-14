@@ -12,11 +12,13 @@ from pathlib import Path
 
 import pytest
 
+from elspais.config import load_config
 from elspais.graph.parsers.results.coverage_json import CoverageJsonParser
 from elspais.graph.parsers.results.flutter_machine import FlutterMachineParser
 from elspais.graph.parsers.results.junit_xml import JUnitXMLParser
 from elspais.graph.parsers.results.lcov import LcovParser
 from elspais.graph.parsers.results.pytest_json import PytestJSONParser
+from tests.coverage_helpers import finish_coverage_area
 
 _SPEC = """\
 ### REQ-p00001: Test Req
@@ -354,6 +356,7 @@ coverage_format = "lcov"
             ".results/unit/lcov.info": "SF:src/a.py\nDA:two,1\nend_of_record\n",
         },
     )
+    finish_coverage_area(project, load_config(project / ".elspais.toml"), "unit")
 
     (fault,) = _build(project, scan_code=True).ingestion_faults()
     assert fault.stage == "coverage"

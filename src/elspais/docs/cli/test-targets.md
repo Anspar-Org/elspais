@@ -1799,19 +1799,16 @@ a partial run speaks for the executed test files alone.
 |-------------------------|-------|
 | `.elspais-units.json` | the *Unit Ledger*: per unit, the run that last executed it, its outcome, the digests of the files it reached, and its result lines |
 | `.elspais-retained.jsonl` | the Retained Results, in the result-line form of an Evidence Snapshot, each with the run that executed its test |
-| `.elspais-retained-coverage.json` | the line coverage the run kept from earlier runs |
 | `.elspais-selection` | the test files the run selected |
 
-Line coverage of a source file is kept from an earlier run only where the file
-still holds the content it held when that run measured it, with the test
-names of its per-test contexts made repo-relative. A file's figure is the
-current run's measurement merged with what was kept. Wherever kept coverage
-adds a line the current run did not measure executing, the report names the
-run that measured it; a file with no line the current run measured
-executing is carried. A partial run that started its command and wrote no
+Line coverage of a source file is carried from an earlier run only where the
+file still holds the content it held when that run measured it. The run's
+coverage record holds the current run's measurement merged with what was
+carried; a file the current run did not measure reads as carried, and its
+report names the run that measured it. A partial run that started its command and wrote no
 coverage file is reported as missing its coverage, and one that wrote no
-results as missing its results. A *Baseline Run* carries all four
-files, so a baseline adopted from the parent branch serves retention too.
+results as missing its results. A *Baseline Run* carries all three
+files and the coverage record, so a baseline adopted from the parent branch serves retention too.
 
 ### Reporting Retained Results
 

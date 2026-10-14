@@ -37,6 +37,7 @@ class FileCoverage:
     digest: str = ""
     measured_in: tuple[dict, ...] = ()
     source_analysed: bool = True
+    recorded: str = ""  # the path as the tool recorded it, where it differs
 
 
 Record = dict[str, FileCoverage]
@@ -96,7 +97,7 @@ def read_tool_coverage(
             continue
         if data.get("contexts"):
             data = {**data, "contexts": place_contexts(data["contexts"])}
-        placed[rel] = data
+        placed[rel] = {**data, "recorded": source}
     return placed
 
 
@@ -111,22 +112,25 @@ def _relative(path: str, root: Path) -> str:
 def measure(
     repo_root: Path, config: Any, target: Any, run: dict, diagnostics: list[dict] | None = None
 ) -> Record:
-    """This run's measurement as record entries, each stamped with its file's digest now."""
+    """This run's measurement as record entries, each stamped with its file's digest now.
+
+    A measured path naming no file is kept with no digest, so the build can
+    report coverage read from the wrong origin; no current view holds it.
+    """
     from elspais.utilities.fingerprint import file_digest
 
     root = Path(repo_root).resolve()
     record: Record = {}
     for rel, data in read_tool_coverage(root, config, target, diagnostics).items():
         source = root / rel
-        if not source.is_file():
-            continue
         record[rel] = FileCoverage(
             hits={int(n): int(h) for n, h in (data.get("line_coverage") or {}).items()},
             executable=int(data.get("executable_lines", 0)),
             contexts={int(n): tuple(c) for n, c in (data.get("contexts") or {}).items()},
-            digest=file_digest(source),
+            digest=file_digest(source) if source.is_file() else "",
             measured_in=(run,),
             source_analysed=bool(data.get("source_analysed", True)),
+            recorded="" if data.get("recorded") == rel else str(data.get("recorded") or ""),
         )
     return record
 
@@ -140,7 +144,7 @@ def current(record: Record, repo_root: Path) -> Record:
     kept: Record = {}
     for rel, entry in record.items():
         source = root / rel
-        if source.is_file() and file_digest(source) == entry.digest:
+        if entry.digest and source.is_file() and file_digest(source) == entry.digest:
             kept[rel] = entry
     return kept
 
@@ -161,6 +165,7 @@ def _merge_one(a: FileCoverage, b: FileCoverage) -> FileCoverage:
         digest=b.digest or a.digest,
         measured_in=tuple(runs),
         source_analysed=a.source_analysed and b.source_analysed,
+        recorded=b.recorded or a.recorded,
     )
 
 
@@ -199,6 +204,7 @@ def write_record(folder: Path, record: Record, diagnostics: list[dict] | None = 
             "digest": e.digest,
             "measured_in": list(e.measured_in),
             "source_analysed": e.source_analysed,
+            **({"recorded": e.recorded} if e.recorded else {}),
         }
         for rel, e in sorted(record.items())
     }
@@ -249,6 +255,7 @@ def read_record(folder: Path) -> Record | None:
             digest=f["digest"],
             measured_in=tuple(f.get("measured_in") or ()),
             source_analysed=bool(f.get("source_analysed", True)),
+            recorded=str(f.get("recorded") or ""),
         )
         for rel, f in (data.get("files") or {}).items()
     }

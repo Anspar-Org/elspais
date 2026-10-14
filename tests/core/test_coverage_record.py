@@ -17,6 +17,7 @@ import types
 from pathlib import Path
 
 import pytest
+
 from elspais.utilities.coverage import (
     RECORD_NAME,
     REPORT_NAME,
@@ -31,7 +32,6 @@ from elspais.utilities.coverage import (
     write_record,
     write_report,
 )
-
 from elspais.utilities.fingerprint import file_digest, target_folder
 
 _CONFIG: dict = {"scanning": {"test": {"output_root": ".results"}}}
@@ -198,12 +198,15 @@ def test_a_measurement_records_the_digest_of_each_file_and_the_run_that_measured
 
     record = measure(root, _CONFIG, _target(), _RUN_1)
 
-    assert set(record) == {"src/lib.py"}
+    assert set(record) == {"src/lib.py", "src/gone.py"}
     entry = record["src/lib.py"]
     assert entry.hits == {1: 1, 2: 0, 3: 1}
     assert entry.executable == 3
     assert entry.digest == file_digest(root / "src" / "lib.py")
     assert entry.measured_in == (_RUN_1,)
+    # A measured file that is not there is kept, with no content to describe.
+    assert record["src/gone.py"].digest == ""
+    assert set(current(record, root)) == {"src/lib.py"}
 
 
 # Verifies: REQ-d00333-J
