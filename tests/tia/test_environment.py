@@ -91,14 +91,28 @@ def _job_install(workflow: str, job: str) -> str:
     return installs[0]
 
 
-@pytest.mark.parametrize(
-    "workflow,job",
-    [
-        ("ci.yml", "test"),
-        ("ci.yml", "test-impact"),
-        ("tia-calibration.yml", "calibrate"),
-    ],
-)
+#: The jobs that record a baseline or select from one. `test` does both: a
+#: full run records, any other run selects.
+_BASELINE_JOBS = [("ci.yml", "test"), ("tia-calibration.yml", "calibrate")]
+
+
+def _jobs_reading_or_recording_baselines() -> set[tuple[str, str]]:
+    found = set()
+    for path in (ROOT / ".github" / "workflows").glob("*.yml"):
+        config = yaml.safe_load(path.read_text())
+        for name, job in config.get("jobs", {}).items():
+            text = yaml.safe_dump(job)
+            if "tools.tia" in text or "ELSPAIS_TIA_" in text:
+                found.add((path.name, name))
+    return found
+
+
+def test_the_baseline_job_list_is_complete():
+    """Every job naming the TIA tool or its settings is checked below."""
+    assert _jobs_reading_or_recording_baselines() == set(_BASELINE_JOBS)
+
+
+@pytest.mark.parametrize("workflow,job", _BASELINE_JOBS)
 def test_baseline_jobs_install_what_make_setup_installs(workflow, job):
     lock, extras = _setup_install()
     assert lock == LOCK

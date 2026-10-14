@@ -74,7 +74,9 @@ def opens_a_declaration(text: str, class_patterns) -> bool:
 
 
 # Implements: REQ-d00254-D
-def bind_unowned_comments(lines, is_owned, target_at, assign, skippable=None) -> None:
+def bind_unowned_comments(
+    lines, is_owned, target_at, assign, skippable=None, skips_line=None
+) -> None:
     """Bind each unowned comment line to the next declaration below it.
 
     ``is_owned(line_number)`` says whether a line already has an owner,
@@ -82,6 +84,8 @@ def bind_unowned_comments(lines, is_owned, target_at, assign, skippable=None) ->
     line or None if it is not a declaration, ``assign(line_number, target)``
     records the binding, and ``skippable(text)`` -- when given -- says a line
     stands between the citation and its declaration without ending the search.
+    ``skips_line(line_number)`` says the same of a line by its number, for a
+    reading that knows a header's lines rather than how one looks.
 
     The walk stops at the first line that is none of these, because a citation
     is written above a declaration only when nothing that does work separates
@@ -97,6 +101,8 @@ def bind_unowned_comments(lines, is_owned, target_at, assign, skippable=None) ->
                 assign(ln, target)
                 break
             if skippable is not None and skippable(ahead_text):
+                continue
+            if skips_line is not None and skips_line(ahead_ln):
                 continue
             if ahead_text.strip() and not is_comment_line(ahead_text):
                 break
@@ -332,6 +338,54 @@ def _bind_comments_to_declarations(
     return context
 
 
+# Implements: REQ-d00254-D
+def _tree_line_context(
+    lines: list[tuple[int, str]],
+    reading,
+    class_patterns: list,
+) -> dict[int, tuple[str | None, str | None, int, int]]:
+    """Per-line function/class context from a ``syntax_tree`` reading.
+
+    The same rule ``python_line_context`` and ``_bind_comments_to_declarations``
+    apply to Python: the innermost declaration enclosing a line owns it, and
+    every comment is offered to the downward walk, which binds it to the
+    declaration it is written above.  A class header -- its attributes, its
+    annotations and the line its body opens on -- stands between a citation
+    and the first method inside it without ending the walk.
+    """
+    context: dict[int, tuple[str | None, str | None, int, int]] = {}
+    for ln, _text in lines:
+        name: str | None = None
+        class_name: str | None = None
+        start = end = 0
+        for c_start, c_end, c_name in reading.classes:
+            if c_start <= ln <= c_end:
+                class_name = c_name
+        for f_start, f_end, f_name, f_class in reading.functions:
+            if f_start <= ln <= f_end:
+                name, class_name, start, end = f_name, f_class or class_name, f_start, f_end
+        context[ln] = (name, class_name, start, end)
+
+    by_start: dict[int, tuple[str | None, str | None, int, int]] = {}
+    for f_start, f_end, f_name, f_class in reading.functions:
+        by_start.setdefault(f_start, (f_name, f_class, f_start, f_end))
+
+    def _assign(ln, target):
+        name, class_name, start, end = target
+        _, own_class, _, _ = context[ln]
+        context[ln] = (name, class_name or own_class, start, end)
+
+    bind_unowned_comments(
+        lines,
+        the_walk_decides,
+        lambda _idx, ahead_ln, _text: by_start.get(ahead_ln),
+        _assign,
+        skippable=lambda text: opens_a_declaration(text, class_patterns),
+        skips_line=lambda ln: ln in reading.class_header_lines,
+    )
+    return context
+
+
 # Language-aware function/class patterns for context tracking
 # Python: def name(
 _PYTHON_FUNC = re.compile(r"^(\s*)(?:async\s+)?def\s+(\w+)\s*\(")
@@ -558,11 +612,23 @@ def _patterns_for(language: str) -> tuple[list, list, str]:
     return [_PYTHON_FUNC], [_PYTHON_CLASS], "indent"
 
 
+def _syntax_tree_reading(path: str | None, lines: list[tuple[int, str]]):
+    """The tree-sitter reading of *lines*, or None where *path* has none."""
+    if not path:
+        return None
+    from elspais.graph.parsers import syntax_tree
+
+    if not syntax_tree.handles(path):
+        return None
+    return syntax_tree.read(path, "\n".join(text for _, text in lines))
+
+
 # Implements: REQ-d00254-D
 def declaration_starts(
     lines: list[tuple[int, str]],
     language: str,
     syntax: PythonSyntax | None = None,
+    path: str | None = None,
 ) -> list[int]:
     """The line each function declaration in a file BEGINS at, ascending.
 
@@ -586,11 +652,18 @@ def declaration_starts(
 
     Returns an empty list when nothing can be read, so the caller imposes no
     bound rather than a wrong one.
+
+    A file whose language ``syntax_tree`` reads (*path* names it) takes its
+    declarations from that reading where the ``ast`` extra is installed, for
+    the same reason the AST is preferred for Python.
     """
     if language == "python":
         syntax = _python_syntax(syntax, lines)
         if syntax.parsed:
             return list(syntax.declaration_starts)
+    reading = _syntax_tree_reading(path, lines)
+    if reading is not None:
+        return reading.declaration_starts
 
     func_patterns, _class_patterns, _scope_mode = _patterns_for(language)
     found: set[int] = set()
@@ -615,6 +688,7 @@ def build_line_context(
     lines: list[tuple[int, str]],
     language: str,
     syntax: PythonSyntax | None = None,
+    path: str | None = None,
 ) -> dict[int, tuple[str | None, str | None, int, int]]:
     """Build function/class context map for each line.
 
@@ -637,6 +711,7 @@ def build_line_context(
         language: Detected language key.
         syntax: The source already read by ``read_python``, where the caller
             holds it; read from *lines* otherwise.
+        path: The file's path, which selects a ``syntax_tree`` reading.
 
     Returns:
         Dict mapping line_number to (function_name, class_name, function_line, function_end_line).
@@ -651,6 +726,9 @@ def build_line_context(
         ast_context = python_line_context(lines, syntax)
         if ast_context is not None:
             return _bind_comments_to_declarations(lines, ast_context, func_patterns, class_patterns)
+    reading = _syntax_tree_reading(path, lines)
+    if reading is not None:
+        return _tree_line_context(lines, reading, class_patterns)
 
     current_class: str | None = None
     current_class_indent: int = -1
@@ -1141,6 +1219,46 @@ def dart_prescan(
     return line_context, all_test_funcs
 
 
+# Implements: REQ-d00332-A+E+F+G+I
+def tree_prescan(
+    lines: list[tuple[int, str]],
+    reading,
+) -> tuple[
+    dict[int, tuple[str | None, str | None, int, int]],
+    list[tuple[int, str | None, str | None]],
+]:
+    """Pre-scan a test file from a ``syntax_tree`` reading.
+
+    Each test's extent is the declaration or call the syntax tree holds, so
+    it ends where the test ends and never takes in the comments written above
+    the next one.  A line inside several tests belongs to the innermost.  A
+    comment no test encloses binds to the test, or to the group holding a
+    test, written directly below it -- the same rule ``dart_prescan`` applies.
+    """
+    tests = sorted(reading.tests, key=lambda t: t[0])
+    line_context: dict[int, tuple[str | None, str | None, int, int]] = {}
+    for ln, _text in lines:
+        owner: tuple[str | None, str | None, int, int] = (None, None, 0, 0)
+        for start, end, name, group in tests:
+            if start <= ln <= end and start > owner[2]:
+                owner = (name, group, start, end)
+        line_context[ln] = owner
+
+    bindable: dict[int, tuple[str | None, str | None, int, int]] = {
+        start: (name, group, start, end) for start, end, name, group in tests
+    }
+    for start, end, name in reading.groups:
+        bindable.setdefault(start, (None, name, start, end))
+
+    bind_unowned_comments(
+        lines,
+        lambda ln: bool(line_context[ln][2]),
+        lambda _idx, ahead_ln, _text: bindable.get(ahead_ln),
+        lambda ln, target: line_context.__setitem__(ln, target),
+    )
+    return line_context, [(start, name, group) for start, _end, name, group in tests]
+
+
 # Implements: REQ-d00284-H
 def _dart_description(text: str, i: int) -> str | None:
     """The description a ``test(`` / ``group(`` call's first argument writes.
@@ -1166,10 +1284,16 @@ def _dart_description(text: str, i: int) -> str | None:
 def reads_test_names(path: str) -> bool:
     """Whether the scan reads the full name of each test in the file at ``path``.
 
-    Only a Dart test file's names are read, because only a Dart runner may
-    record no source line for a result, leaving the name to bind it by.
+    A test file's names are read where its framework names a test by the
+    descriptions of the test and its groups, and may record no source line
+    for a result, leaving the name to bind it by: Dart, and JavaScript or
+    TypeScript where the ``ast`` extra reads them.
     """
-    return path.endswith(".dart")
+    if path.endswith(".dart"):
+        return True
+    from elspais.graph.parsers import syntax_tree
+
+    return syntax_tree.names_tests_by_description(path) and syntax_tree.available()
 
 
 # Implements: REQ-d00284-G+H

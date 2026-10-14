@@ -412,7 +412,7 @@ def build_import_graph(root: str, py_files: list[str], import_roots: list[str]) 
         try:
             with open(os.path.join(root, p), "rb") as fh:
                 tree = ast.parse(fh.read(), p)
-        except (OSError, SyntaxError, ValueError):
+        except OSError, SyntaxError, ValueError:
             continue
         is_pkg = p.endswith("__init__.py")
         for dep in imported_modules(tree, m, is_pkg):

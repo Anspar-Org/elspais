@@ -108,7 +108,7 @@ def _await_viewer(
         if port is None:
             try:
                 info = json.loads(record.read_text())
-            except (OSError, ValueError):
+            except OSError, ValueError:
                 info = None
             if (
                 isinstance(info, dict)
@@ -124,7 +124,7 @@ def _await_viewer(
             resp = urllib.request.urlopen(f"{root_url}{base_path}/api/status", timeout=2)
             if resp.status == 200:
                 return root_url
-        except (urllib.error.URLError, OSError):
+        except urllib.error.URLError, OSError:
             pass
         time.sleep(poll)
     pytest.fail(

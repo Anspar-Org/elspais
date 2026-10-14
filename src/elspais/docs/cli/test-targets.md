@@ -471,7 +471,8 @@ that produced it, as `(run by <runner file>)`.
 A result that records no source line binds by its test's full name instead.
 The full name is the descriptions of the `group()` calls that enclose the test
 and the test's own description, in order, joined by single spaces -- the name
-the Dart runner records. A test run in a browser (`flutter test --platform
+the Dart runner records. A JavaScript or TypeScript test read with the `ast`
+extra has a full name built the same way from its `describe()` groups. A test run in a browser (`flutter test --platform
 chrome`) needs this: its runner reports a line of the compiled JavaScript,
 which is no line of the Dart file, so elspais keeps only the suite file and
 the name. elspais knows a description only where the source writes it as
@@ -765,10 +766,12 @@ journey/step UAT coverage per spec rather than as one whole-suite verdict.
 
 Three things must be true:
 
-1. **Specs are scanned as TEST nodes.**  elspais cannot parse TypeScript
-   natively, so point `[scanning.test].prescan_command` at an external scanner
-   that reports each `test(...)` call, and add the spec directories /
-   `*.spec.ts` to the test `directories` / `file_patterns`.  Each
+1. **Specs are scanned as TEST nodes.**  Add the spec directories /
+   `*.spec.ts` to the test `directories` / `file_patterns`.  With the `ast`
+   extra installed (`pip install elspais[ast]`), elspais reads each `test(...)`
+   call and its `describe(...)` groups itself (see *How the Tests of a File
+   Are Found*).  Without it, point `[scanning.test].prescan_command` at an
+   external scanner that reports each `test(...)` call.  Each
    attribution record carries `file`, `function`, `line`, an optional `class`
    and an optional `end_line`.  The name is the test's own -- an attribution
    record names one test, so its spelling decides nothing -- and `line` is
@@ -855,6 +858,44 @@ any failing case flags them.  The journey verdict is all-or-nothing -- `full`
 only when every step is verified-passing, `partial` if any step is uncovered,
 `fail` if any is failing.  If you cannot inject `file=`, fall back to
 `match = "aggregate"` for a whole-suite pass/fail signal.
+
+## How the Tests of a File Are Found
+
+elspais binds a result to a test, and a citation to a test, through the line
+extent of each test in its file. It finds the tests of a file as follows:
+
+| Language | How elspais reads it | What is a test | Group |
+| --- | --- | --- | --- |
+| Python | The standard library's parser | A `test_*` function, at module level or in a `Test*` class | The `Test*` class |
+| Dart | Its own Dart reader | A `test(...)` or `testWidgets(...)` call | A `group(...)` call |
+| JavaScript, TypeScript | tree-sitter (`ast` extra) | An `it`, `test`, `fit` or `xit` call, `test.each(...)(...)` included | A `describe`, `fdescribe`, `xdescribe`, `context` or `suite` call |
+| Go | tree-sitter (`ast` extra) | A `Test*`, `Benchmark*`, `Fuzz*` or `Example*` function | None |
+| Java, Kotlin | tree-sitter (`ast` extra) | A method annotated `@Test`, `@ParameterizedTest`, `@RepeatedTest`, `@TestFactory` or `@TestTemplate` | The class |
+| Rust | tree-sitter (`ast` extra) | A function with a `#[test]`, `#[tokio::test]` or `#[rstest]` attribute | The `mod` |
+| C# | tree-sitter (`ast` extra) | A method with a `[Test]`, `[TestCase]`, `[TestCaseSource]`, `[Fact]`, `[Theory]`, `[TestMethod]` or `[DataTestMethod]` attribute | The class |
+
+A test's extent runs from its first line -- the first annotation or attribute
+written above it, where it has one -- to its last. A group is a test's group
+only where it holds a test, and a citation written above a group binds to the
+tests it holds. An annotation or attribute is recognised by its last name
+segment, so `@org.junit.jupiter.api.Test` is a test.
+
+A JavaScript or TypeScript test is known by its line, as a Dart test is. Its
+full name is the descriptions of the groups that enclose it and its own, joined
+by single spaces, so a result that records no line binds by that name (see
+*match*). Every other language's test is known by its function or method name.
+
+The `ast` extra installs tree-sitter and one grammar package per language,
+each a prebuilt wheel, so a build reads nothing from the network. Without it,
+a test file in one of these languages has no tests, every citation in it binds
+to no test, and a build prints one warning naming the extra. The extra also
+gives the code files of these languages the extent of each function a citation
+is written above. Without it, elspais finds those functions by their shape on
+the line.
+
+A configured `[scanning.test].prescan_command` takes precedence over all of
+these for every file it returns attribution records for, so a language or a
+test convention this table does not name can still be read.
 
 ## Your Language Here
 

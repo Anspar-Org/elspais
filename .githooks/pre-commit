@@ -332,9 +332,12 @@ fi
 # the full suite, and the full tier runs through .githooks/unit-verdict, which
 # records the unit verdict for the tree and publishes a fresh baseline when it
 # passes. ELSPAIS_UNIT_MODE=full runs the full tier that way regardless.
+# Where this worktree holds no usable baseline, the hook first fetches the one
+# a full CI run of main published, so a new worktree selects on its first
+# commit; without network access or `gh` it says so and selects without one.
 #
-# This is fast feedback, not the verdict a merge rests on: CI runs the full
-# unit tier on every pull request and on main.
+# This is fast feedback, not the verdict a merge rests on: CI selects the same
+# way on a pull request, and runs the full suite before a release.
 #
 # A checkpoint commit (ELSPAIS_CHECKPOINT=1) runs no unit tests. Every gate
 # above still ran.
@@ -351,6 +354,9 @@ else
     RUN_FULL_TIER=true
     if [ "$UNIT_MODE" = "impacted" ]; then
         echo -e "${BLUE}Selecting the impacted unit tests (Test Impact Analysis)...${NC}"
+        if ! (cd "$REPO_ROOT" && python -m tools.tia baseline fetch); then
+            echo -e "${YELLOW}No CI baseline fetched (tolerated: the selection reports what it lacks)${NC}"
+        fi
         TIA_MODE=""
         if TIA_SUMMARY=$(cd "$REPO_ROOT" && python -m tools.tia select --out "$TIA_RUN_DIR" 2>&1); then
             TIA_MODE=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["selection_mode"])' \

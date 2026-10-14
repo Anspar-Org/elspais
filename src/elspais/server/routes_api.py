@@ -949,11 +949,11 @@ async def api_attach_client(request: Request) -> JSONResponse:
     state = _st(request)
     try:
         data = json.loads(await request.body() or b"{}")
-    except (json.JSONDecodeError, ValueError):
+    except json.JSONDecodeError, ValueError:
         return JSONResponse({"attached": False, "error": "invalid JSON body"}, status_code=400)
     try:
         pid = int(data.get("pid", 0))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         pid = 0
 
     watchdog = state.shared.get("watchdog")
@@ -1790,7 +1790,7 @@ async def api_mutate_requirement_add(request: Request) -> JSONResponse:
                 from elspais.graph.relations import EdgeKind
 
                 file_node.link(req_node, EdgeKind.CONTAINS)
-        except (ValueError, KeyError):
+        except ValueError, KeyError:
             pass
     result = _with_version(state, result, file_id)
     status_code = 200 if result.get("success") else 400

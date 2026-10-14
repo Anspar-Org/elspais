@@ -609,7 +609,7 @@ class _Reading:
         unreadable = f"{where} is not a version 2 package configuration; {_PUB_GET}"
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, ValueError):
+        except OSError, UnicodeDecodeError, ValueError:
             return unreadable
         if not isinstance(data, dict) or data.get("configVersion") != 2:
             return unreadable

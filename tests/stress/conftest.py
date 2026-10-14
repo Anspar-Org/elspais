@@ -40,7 +40,7 @@ def _await_daemon_port(daemon_json: Path, proc: subprocess.Popen, log_path: Path
         if daemon_json.is_file():
             try:
                 info = json.loads(daemon_json.read_text())
-            except (json.JSONDecodeError, OSError):
+            except json.JSONDecodeError, OSError:
                 info = {}
             port = info.get("port")
             if isinstance(port, int):

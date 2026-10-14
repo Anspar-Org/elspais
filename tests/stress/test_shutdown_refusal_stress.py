@@ -135,7 +135,7 @@ class TestWritesRacingTheShutdownDecision:
                     r = client.get(f"/api/node/{node}")
                     if r.status_code == 200:
                         version = r.json()["version"]
-                except (httpx.HTTPError, ValueError):
+                except httpx.HTTPError, ValueError:
                     pass
             n = 0
             while not stop.is_set():
@@ -157,7 +157,7 @@ class TestWritesRacingTheShutdownDecision:
                     # writers still holding a live connection.
                     timelines[i].append("gone")
                     break
-                except (httpx.HTTPError, ValueError):
+                except httpx.HTTPError, ValueError:
                     # An established connection died with the process.
                     # Nothing was acknowledged, which is a safe outcome.
                     timelines[i].append("gone")
@@ -257,7 +257,7 @@ class TestWritesRacingTheShutdownDecision:
                     json={"node_id": node, "new_title": "late", "if_version": version},
                 )
                 body = r.json()
-            except (httpx.HTTPError, ValueError):
+            except httpx.HTTPError, ValueError:
                 break
             if body.get("code") == "server_shutting_down":
                 refusal = body

@@ -1361,7 +1361,7 @@ def _owned_path(graph: FederatedGraph, file_node: GraphNode, repo_root: Path) ->
     owning_entry = None
     try:
         owning_entry = graph.repo_for_node(file_node)
-    except (KeyError, AttributeError):
+    except KeyError, AttributeError:
         pass
     path = Path(file_node.get_field("relative_path") or "")
     if not path.is_absolute():
@@ -1526,7 +1526,7 @@ def mark_parts_unlike_disk(graph: FederatedGraph) -> None:
         resolver = None
         try:
             resolver = getattr(graph.repo_for_node(file_node).graph, "_resolver", None)
-        except (KeyError, AttributeError):
+        except KeyError, AttributeError:
             pass
         for _order, part, _start in _parts_unlike_disk(file_node, disk_text, resolver):
             if not part.get_field("parse_dirty"):
@@ -1820,7 +1820,7 @@ def render_save(
                 if renamed is not None:
                     try:
                         rename_root = graph.repo_for_node(renamed).repo_root
-                    except (KeyError, AttributeError):
+                    except KeyError, AttributeError:
                         pass
                 old_path = rename_root / old_rel
                 new_path = rename_root / new_rel
@@ -1888,7 +1888,7 @@ def render_save(
         owning_entry = None
         try:
             owning_entry = graph.repo_for_node(file_node)
-        except (KeyError, AttributeError):
+        except KeyError, AttributeError:
             pass
 
         abs_path = Path(rel_path)

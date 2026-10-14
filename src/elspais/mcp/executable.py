@@ -68,7 +68,7 @@ def installation_can_change() -> bool:
 
     try:
         recorded = distribution("elspais").read_text("direct_url.json")
-    except (PackageNotFoundError, OSError):
+    except PackageNotFoundError, OSError:
         return False
     if not recorded:
         return False
@@ -76,7 +76,7 @@ def installation_can_change() -> bool:
         import json
 
         return bool(json.loads(recorded).get("dir_info", {}).get("editable"))
-    except (ValueError, AttributeError):
+    except ValueError, AttributeError:
         return False
 
 

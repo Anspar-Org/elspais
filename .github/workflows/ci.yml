@@ -1,25 +1,38 @@
-# Implements: REQ-o00066-B+C+D+E+I+J+K+L+M
+# Implements: REQ-o00066-B+C+D+E+I+J+L+M+O
 name: CI
 
+# Every job runs on the one Python the project supports.
+#
 # A pull request runs CI whatever branch it targets, so a pull request stacked
 # on another one's branch is tested too (REQ-o00066-L,
 # docs/stacked-pull-requests.md). `merge_group` is the merge queue: it tests
 # the commit that will actually land, with the checks a pull request into main
 # gets (REQ-o00066-M). Path-filtered tiers always run there, because the queue
-# is the last gate before main. A push to main runs every tier on every
-# supported Python with no path filter (REQ-o00066-K), because the release
-# takes that run's verdict on the commit it publishes (REQ-o00066-N).
+# is the last gate before main.
 #
-# The release calls this workflow (`workflow_call`) for a commit no push run
-# has passed. A called run takes its caller's event, so `inputs.ref` is what
-# selects the push behaviour there: every tier, every supported Python, no
-# path filter, each checkout at `inputs.ref`. A called run records no TIA
-# baseline and promotes no image.
+# The `plan` job decides whether a run is FULL. A full run executes every
+# tier with no path filter. Any other run executes only the unit tests Test
+# Impact Analysis selects (REQ-o00066-I+O, docs/test-impact-analysis.md).
+# A run is full where:
+#   - the pull request carries the label `publish` or `baseline` -- for a push
+#     to main, the pull request that was merged;
+#   - the daily schedule finds no recorded full run of main's newest commit;
+#   - a person dispatches the workflow;
+#   - the release calls it (`workflow_call`) for a commit no full push run
+#     passed (REQ-o00066-N). A called run takes its caller's event, so
+#     `inputs.ref` is what marks it, and each checkout is at `inputs.ref`.
+# A full run of main records the TIA baseline that later runs, and developers'
+# hooks, select from. A called run records no baseline and promotes no image.
+# A push to main that is not full runs no e2e, stress or browser tier: the
+# pull request ran them, and the next full run of main runs them again.
 on:
   pull_request:
   merge_group:
   push:
     branches: [main]
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
   workflow_call:
     inputs:
       ref:
@@ -32,8 +45,90 @@ env:
   IMAGE_BASE: ghcr.io/anspar-org/elspais-ci
 
 jobs:
+  plan:
+    # Decides whether this run is full (see the header). Labels are read
+    # through the API rather than from the event, so a re-run reads the
+    # labels the pull request carries now.
+    name: Plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      full: ${{ steps.mode.outputs.full }}
+      skip: ${{ steps.mode.outputs.skip }}
+      record: ${{ steps.mode.outputs.record }}
+    steps:
+      - name: Look for a recorded full run of this commit
+        id: recorded
+        if: github.event_name == 'schedule'
+        uses: actions/cache/restore@v4
+        with:
+          path: .results/tia/baseline
+          key: tia-baseline-v2-py3.14-${{ github.sha }}
+          lookup-only: true
+
+      - name: Choose full or impacted
+        id: mode
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          REF_INPUT: ${{ inputs.ref }}
+          GIT_REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          QUEUE_REF: ${{ github.event.merge_group.head_ref }}
+          RECORDED: ${{ steps.recorded.outputs.cache-hit }}
+        run: |
+          labels=""
+          case "$EVENT" in
+            pull_request)
+              labels=$(gh api "repos/${REPOSITORY}/issues/${PR_NUMBER}/labels" --jq '.[].name') ;;
+            merge_group)
+              # gh-readonly-queue/<base>/pr-<number>-<sha>
+              number=$(printf '%s' "$QUEUE_REF" | sed -n 's|.*/pr-\([0-9][0-9]*\)-.*|\1|p')
+              if [ -n "$number" ]; then
+                labels=$(gh api "repos/${REPOSITORY}/issues/${number}/labels" --jq '.[].name')
+              fi ;;
+            push)
+              labels=$(gh api "repos/${REPOSITORY}/commits/${SHA}/pulls" --jq '.[].labels[].name') ;;
+          esac
+          full=false
+          skip=false
+          if [ -n "$REF_INPUT" ]; then
+            full=true; why="the release tests ${REF_INPUT}"
+          elif [ "$EVENT" = "schedule" ]; then
+            if [ "$RECORDED" = "true" ]; then
+              skip=true; why="a full run of ${SHA} is already recorded"
+            else
+              full=true; why="the daily run found no full run of ${SHA}"
+            fi
+          elif [ "$EVENT" = "workflow_dispatch" ]; then
+            full=true; why="dispatched by hand"
+          elif printf '%s\n' "$labels" | grep -qx -E 'publish|baseline'; then
+            full=true; why="labelled $(printf '%s' "$labels" | grep -x -E 'publish|baseline' | paste -sd, -)"
+          else
+            why="no label asks for the full suite"
+          fi
+          # Only a full run of main records a baseline: its tree is the one
+          # later changes are diffed against.
+          record=false
+          if [ "$full" = "true" ] && [ -z "$REF_INPUT" ] && [ "$GIT_REF" = "refs/heads/main" ] \
+            && [ "$EVENT" != "pull_request" ] && [ "$EVENT" != "merge_group" ]; then
+            record=true
+          fi
+          {
+            echo "full=${full}"
+            echo "skip=${skip}"
+            echo "record=${record}"
+          } >> "$GITHUB_OUTPUT"
+          echo "full=${full} skip=${skip} record=${record}: ${why}"
+
   compute-hash:
     name: Compute Dockerfile Hash
+    needs: plan
+    if: needs.plan.outputs.skip != 'true'
     runs-on: ubuntu-latest
     outputs:
       hash: ${{ steps.hash.outputs.hash }}
@@ -57,7 +152,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -94,14 +189,20 @@ jobs:
           tags: ${{ env.IMAGE_BASE }}:py${{ matrix.python-version }}-sha-${{ needs.compute-hash.outputs.hash }}
 
   test:
+    # The unit tier. A full run executes all of it; any other run executes
+    # only the tests Test Impact Analysis selects from the newest baseline a
+    # full run of main recorded, which falls back to the full tier whenever it
+    # cannot determine impact (no baseline, a changed environment, a
+    # broad-impact file, ...).
     name: Test (Python ${{ matrix.python-version }})
-    needs: [compute-hash, prepare-image]
+    needs: [plan, compute-hash, prepare-image]
+    if: needs.plan.outputs.skip != 'true'
     runs-on: ubuntu-latest
     container: ghcr.io/anspar-org/elspais-ci:py${{ matrix.python-version }}-sha-${{ needs.compute-hash.outputs.hash }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.14"]
     env:
       # The cache steps below save and restore this directory.
       ELSPAIS_TIA_BASELINE: .results/tia/baseline
@@ -110,80 +211,33 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.ref }}
+          # A selection diffs the baseline's tree, a commit on main, against
+          # this one.
+          fetch-depth: ${{ needs.plan.outputs.full == 'true' && 1 || 0 }}
 
       - name: Mark workspace safe for git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      # The extras and the lock `make setup` installs: the 3.13 leg records the
-      # TIA baseline, which an environment selects from only where every
-      # installed distribution matches it (docs/test-impact-analysis.md).
+      # The extras and the lock `make setup` installs: a baseline selects only
+      # in an environment where every installed distribution matches it
+      # (docs/test-impact-analysis.md).
       - name: Install package with dev dependencies
         run: pip install -c requirements/dev.lock -e ".[dev,all,browser]"
 
-      # On a push to main, the 3.13 leg also records a Test Impact Analysis
-      # baseline (docs/test-impact-analysis.md) for pull requests to select
-      # from. Recording does not change the tier: same tests, same verdict.
-      - name: Run tests
-        env:
-          ELSPAIS_TIA_RECORD: ${{ (github.event_name == 'push' && !inputs.ref && matrix.python-version == '3.13') && '1' || '' }}
-        run: .githooks/run-unit-tier .results/elspais-unit
-
-      - name: Save TIA baseline
-        if: ${{ !cancelled() && github.event_name == 'push' && !inputs.ref && matrix.python-version == '3.13' && hashFiles('.results/tia/baseline/baseline.json') != '' }}
-        uses: actions/cache/save@v4
-        with:
-          path: .results/tia/baseline
-          key: tia-baseline-v2-py3.13-${{ github.sha }}
-
-  test-impact:
-    # Pull requests only, never the merge queue: the queue runs the full unit
-    # tier in `test`, so a selection adds nothing there, and a job skipped by
-    # its own condition reports success, so it never holds the queue.
-    # Test Impact Analysis (docs/test-impact-analysis.md): only the unit tests
-    # the change can affect, selected from the newest baseline main recorded.
-    # ADVISORY: the `test` job above still runs the full unit tier on every
-    # Python and stays authoritative. This job reports what TIA would have
-    # run, how long it took, and whether it agrees -- and falls back to the
-    # full tier whenever it cannot determine impact (no baseline, a changed
-    # environment, a broad-impact file, ...). Add the label `full-tests` to a
-    # pull request to bypass selection.
-    name: Test Impact (advisory)
-    if: github.event_name == 'pull_request' && !inputs.ref
-    needs: [compute-hash, prepare-image]
-    runs-on: ubuntu-latest
-    container: ghcr.io/anspar-org/elspais-ci:py3.13-sha-${{ needs.compute-hash.outputs.hash }}
-    env:
-      # The restore step below fills this directory.
-      ELSPAIS_TIA_BASELINE: .results/tia/baseline
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref }}
-          # The baseline names a tree on main; the selector diffs against it.
-          fetch-depth: 0
-
-      - name: Mark workspace safe for git
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-      # The environment the `test` job recorded the baseline in.
-      - name: Install package with dev dependencies
-        run: pip install -c requirements/dev.lock -e ".[dev,all,browser]"
-
-      - name: Restore TIA baseline
+      - name: Restore the newest baseline of main
+        if: needs.plan.outputs.full != 'true'
         uses: actions/cache/restore@v4
         with:
           path: .results/tia/baseline
-          key: tia-baseline-v2-py3.13-${{ github.event.pull_request.base.sha }}
-          restore-keys: tia-baseline-v2-py3.13-
+          key: tia-baseline-v2-py3.14-${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          restore-keys: tia-baseline-v2-py3.14-
 
-      - name: Run impacted unit tests
-        env:
-          TIA_FULL: ${{ contains(github.event.pull_request.labels.*.name, 'full-tests') && '1' || '' }}
+      - name: Run the impacted unit tests
+        if: needs.plan.outputs.full != 'true'
         run: python -m tools.tia run --out .results/tia/run
 
-      - name: Upload TIA manifest
-        if: ${{ !cancelled() }}
+      - name: Upload the selection manifest
+        if: ${{ !cancelled() && needs.plan.outputs.full != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: tia-manifest
@@ -192,23 +246,64 @@ jobs:
             .results/tia/run/junit.xml
           if-no-files-found: warn
 
+      # Recording does not change the tier: same tests, same verdict. The
+      # baseline is published only from a run that passed.
+      - name: Run the full unit tier
+        if: needs.plan.outputs.full == 'true'
+        env:
+          ELSPAIS_TIA_RECORD: ${{ needs.plan.outputs.record == 'true' && '1' || '' }}
+        run: .githooks/run-unit-tier .results/elspais-unit
+
+      # `python -m tools.tia baseline fetch` downloads this artifact into a
+      # developer's worktree, and `save-baseline` copies it into the cache
+      # later runs restore from.
+      - name: Publish the baseline
+        if: ${{ !cancelled() && needs.plan.outputs.record == 'true' && hashFiles('.results/tia/baseline/baseline.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tia-baseline-${{ github.sha }}
+          path: .results/tia/baseline
+          retention-days: 30
+          if-no-files-found: error
+
+  save-baseline:
+    # Copies the published baseline into the Actions cache that later runs
+    # restore from. The job checks out no code: the cache is shared with
+    # every run on main, so only files the recording run published reach it.
+    name: Save Baseline
+    needs: [plan, test]
+    if: ${{ !cancelled() && needs.plan.outputs.record == 'true' && needs.test.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Download the published baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: tia-baseline-${{ github.sha }}
+          path: .results/tia/baseline
+
+      - name: Save the baseline for later runs
+        uses: actions/cache/save@v4
+        with:
+          path: .results/tia/baseline
+          key: tia-baseline-v2-py3.14-${{ github.sha }}
+
   e2e-test:
     # The e2e tier, run the way the pre-push hook runs it: through
     # .githooks/run-e2e-tier, which spawns the real `elspais` program for every
     # CLI, MCP and viewer path. It covers the CLI broadly, so it runs on every
     # change rather than behind a path filter. Browser tests carrying the e2e
     # marker run here too, so the browser extra and chromium are installed.
-    # A pull request, and a merge-queue candidate, runs it on the newest
-    # supported Python only; the unit tier already runs on every supported
-    # version. A push to main runs it on every supported version.
+    # A push to main runs it only when the run is full.
     name: E2E (Python ${{ matrix.python-version }})
-    needs: [compute-hash, prepare-image]
+    needs: [plan, compute-hash, prepare-image]
+    if: needs.plan.outputs.skip != 'true' && (github.event_name != 'push' || needs.plan.outputs.full == 'true')
     runs-on: ubuntu-latest
     container: ghcr.io/anspar-org/elspais-ci:py${{ matrix.python-version }}-sha-${{ needs.compute-hash.outputs.hash }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'merge_group') && !inputs.ref && '["3.13"]' || '["3.10", "3.11", "3.12", "3.13"]') }}
+        python-version: ["3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -229,19 +324,20 @@ jobs:
 
   stress-test:
     # Concurrency stress battery (pytest -m stress): races live daemon
-    # surfaces with barrier-released writer threads. A pull request runs it on
-    # one Python, and only when the change can affect the concurrency
-    # machinery -- the guard/lock/shared-state code paths -- so unrelated pull
-    # requests don't pay for it. A merge-queue candidate always runs it. A
-    # push to main always runs it on every supported version.
+    # surfaces with barrier-released writer threads. A pull request runs it
+    # only when the change can affect the concurrency machinery -- the
+    # guard/lock/shared-state code paths -- so unrelated pull requests don't
+    # pay for it. A merge-queue candidate and a full run always run it. A
+    # push to main runs it only when the run is full.
     name: Concurrency Stress (Python ${{ matrix.python-version }})
-    needs: [compute-hash, prepare-image]
+    needs: [plan, compute-hash, prepare-image]
+    if: needs.plan.outputs.skip != 'true' && (github.event_name != 'push' || needs.plan.outputs.full == 'true')
     runs-on: ubuntu-latest
     container: ghcr.io/anspar-org/elspais-ci:py${{ matrix.python-version }}-sha-${{ needs.compute-hash.outputs.hash }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ${{ fromJSON((github.event_name == 'push' || inputs.ref) && '["3.10", "3.11", "3.12", "3.13"]' || '["3.12"]') }}
+        python-version: ["3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -253,7 +349,7 @@ jobs:
 
       - name: Detect concurrency-relevant changes
         id: filter
-        if: github.event_name == 'pull_request' && !inputs.ref
+        if: github.event_name == 'pull_request' && !inputs.ref && needs.plan.outputs.full != 'true'
         uses: dorny/paths-filter@v3
         with:
           filters: |
@@ -266,23 +362,23 @@ jobs:
               - '.github/workflows/ci.yml'
 
       - name: Install package with dev dependencies
-        if: steps.filter.outputs.concurrency == 'true' || github.event_name != 'pull_request' || inputs.ref
+        if: steps.filter.outputs.concurrency == 'true' || github.event_name != 'pull_request' || inputs.ref || needs.plan.outputs.full == 'true'
         run: pip install -c requirements/dev.lock -e ".[dev,all,browser]"
 
       - name: Run concurrency stress battery
-        if: steps.filter.outputs.concurrency == 'true' || github.event_name != 'pull_request' || inputs.ref
+        if: steps.filter.outputs.concurrency == 'true' || github.event_name != 'pull_request' || inputs.ref || needs.plan.outputs.full == 'true'
         run: pytest tests/stress -m stress --tb=short -q
 
       - name: Skipped (no concurrency-relevant changes)
-        if: github.event_name == 'pull_request' && !inputs.ref && steps.filter.outputs.concurrency != 'true'
+        if: github.event_name == 'pull_request' && !inputs.ref && needs.plan.outputs.full != 'true' && steps.filter.outputs.concurrency != 'true'
         run: echo "No concurrency-relevant files changed; stress battery not required."
 
   browser-test:
     # Playwright viewer tier (pytest -m browser). Kept off the main test job
     # because it needs a browser binary the CI image does not carry. A pull
-    # request runs it on one Python, and only when the change can reach what
-    # the viewer renders. A merge-queue candidate always runs it. A push to
-    # main always runs it on every supported version.
+    # request runs it only when the change can reach what the viewer renders.
+    # A merge-queue candidate and a full run always run it. A push to main
+    # runs it only when the run is full.
     #
     # This tier reported green for its whole life without running: the module
     # opens with `pytest.importorskip("playwright")`, no install path reached
@@ -291,13 +387,14 @@ jobs:
     # tests/conftest.py now errors when the marker is asked for and the extra
     # is missing, so a run that cannot honour the request says so.
     name: Viewer Browser Tier (Python ${{ matrix.python-version }})
-    needs: [compute-hash, prepare-image]
+    needs: [plan, compute-hash, prepare-image]
+    if: needs.plan.outputs.skip != 'true' && (github.event_name != 'push' || needs.plan.outputs.full == 'true')
     runs-on: ubuntu-latest
     container: ghcr.io/anspar-org/elspais-ci:py${{ matrix.python-version }}-sha-${{ needs.compute-hash.outputs.hash }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ${{ fromJSON((github.event_name == 'push' || inputs.ref) && '["3.10", "3.11", "3.12", "3.13"]' || '["3.12"]') }}
+        python-version: ["3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -309,7 +406,7 @@ jobs:
 
       - name: Detect viewer-relevant changes
         id: filter
-        if: github.event_name == 'pull_request' && !inputs.ref
+        if: github.event_name == 'pull_request' && !inputs.ref && needs.plan.outputs.full != 'true'
         uses: dorny/paths-filter@v3
         with:
           filters: |
@@ -323,32 +420,44 @@ jobs:
               - '.github/workflows/ci.yml'
 
       - name: Install package with browser test dependencies
-        if: steps.filter.outputs.viewer == 'true' || github.event_name != 'pull_request' || inputs.ref
+        if: steps.filter.outputs.viewer == 'true' || github.event_name != 'pull_request' || inputs.ref || needs.plan.outputs.full == 'true'
         run: pip install -c requirements/dev.lock -e ".[dev,all,browser]"
 
       - name: Install chromium
-        if: steps.filter.outputs.viewer == 'true' || github.event_name != 'pull_request' || inputs.ref
+        if: steps.filter.outputs.viewer == 'true' || github.event_name != 'pull_request' || inputs.ref || needs.plan.outputs.full == 'true'
         run: playwright install --with-deps chromium
 
       - name: Run viewer browser tier
-        if: steps.filter.outputs.viewer == 'true' || github.event_name != 'pull_request' || inputs.ref
+        if: steps.filter.outputs.viewer == 'true' || github.event_name != 'pull_request' || inputs.ref || needs.plan.outputs.full == 'true'
         run: pytest -m browser --tb=short -q
 
       - name: Skipped (no viewer-relevant changes)
-        if: github.event_name == 'pull_request' && !inputs.ref && steps.filter.outputs.viewer != 'true'
+        if: github.event_name == 'pull_request' && !inputs.ref && needs.plan.outputs.full != 'true' && steps.filter.outputs.viewer != 'true'
         run: echo "No viewer-relevant files changed; browser tier not required."
+
+  full-suite:
+    # Succeeds only in a full run whose every tier passed. The release gate
+    # reads a push run as a verdict on its commit only where this job passed
+    # (REQ-o00066-N); in any other run it is skipped.
+    name: Full Suite
+    needs: [plan, test, e2e-test, stress-test, browser-test]
+    if: needs.plan.outputs.full == 'true'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - run: echo "Every tier ran in full and passed."
 
   promote-image:
     name: Promote CI Image (Python ${{ matrix.python-version }})
-    needs: [compute-hash, test, e2e-test, stress-test, browser-test]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && !inputs.ref
+    needs: [compute-hash, full-suite]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule') && !inputs.ref
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.14"]
 
     steps:
       - name: Install crane
@@ -368,6 +477,7 @@ jobs:
 
   lint:
     name: Lint
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
 
     steps:
@@ -378,7 +488,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       # Before the install: a pyproject.toml change the lock does not carry
       # can make the constrained install fail, and this names the remedy.
@@ -408,6 +518,7 @@ jobs:
 
   self-validate:
     name: Self-Validate Specs
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
 
     steps:
@@ -418,7 +529,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Install elspais
         run: pip install -c requirements/dev.lock -e .
@@ -446,6 +557,7 @@ jobs:
 
   security:
     name: Security Scan
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
 
     steps:
@@ -469,7 +581,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Install package
         run: pip install -c requirements/dev.lock -e ".[all]"

@@ -59,6 +59,9 @@ class TermDictionary:
 
     def __init__(self) -> None:
         self._entries: dict[str, TermEntry] = {}
+        # Counts the changes to the set of entries, so a reader can hold a
+        # derived view and tell when it no longer describes the dictionary.
+        self.revision = 0
 
     # Implements: REQ-d00220-A
     def add(self, entry: TermEntry) -> TermEntry | None:
@@ -68,6 +71,7 @@ class TermDictionary:
         if existing is not None:
             return existing
         self._entries[key] = entry
+        self.revision += 1
         return None
 
     # Implements: REQ-d00220-B
@@ -120,6 +124,7 @@ class TermDictionary:
                 duplicates.append((existing, entry))
             else:
                 self._entries[key] = entry
+                self.revision += 1
         return duplicates
 
     def __len__(self) -> int:

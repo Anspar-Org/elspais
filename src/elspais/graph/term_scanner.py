@@ -12,6 +12,7 @@ import io
 import os
 import re
 import tokenize
+import weakref
 from fnmatch import fnmatch
 from typing import TYPE_CHECKING
 
@@ -178,6 +179,28 @@ def _terms_longest_first(td: TermDictionary) -> list:
     return sorted(td.iter_all(), key=lambda e: (-len(e.term), e.term))
 
 
+# Each dictionary's longest-first order, with each term casefolded, keyed by
+# the dictionary and held with the revision it was taken at.
+_ORDERED: weakref.WeakKeyDictionary[TermDictionary, tuple[int, list[tuple[object, str]]]] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+# Implements: REQ-d00237-G
+def _ordered_terms(td: TermDictionary) -> list[tuple[object, str]]:
+    """``_terms_longest_first(td)`` with each term casefolded beside its entry.
+
+    A build scans every text region against one dictionary per member, so the
+    order is taken once per dictionary revision rather than once per region.
+    """
+    held = _ORDERED.get(td)
+    if held is not None and held[0] == td.revision:
+        return held[1]
+    ordered = [(entry, entry.term.casefold()) for entry in _terms_longest_first(td)]
+    _ORDERED[td] = (td.revision, ordered)
+    return ordered
+
+
 @functools.cache
 def _build_emphasis_pattern(delimiter: str, term: str) -> re.Pattern[str]:
     """Build a regex that matches *term* wrapped in *delimiter*.
@@ -243,10 +266,10 @@ def scan_text_for_terms(
 
     # Implements: REQ-d00237-G
     # Longest-first, for deterministic nesting.
-    for entry in _terms_longest_first(td):
+    for entry, term_cf in _ordered_terms(td):
         term = entry.term
 
-        if term.casefold() not in text_cf:
+        if term_cf not in text_cf:
             continue
 
         # --- Phase 1: scan all 4 emphasis delimiters --------------------------
@@ -500,13 +523,13 @@ def _canonicalize_text(
     # Longest-first, so a compound term (e.g.
     # "Sponsor Portal") is marked as a whole rather than having its inner
     # term ("Sponsor") wrapped first.
-    for entry in _terms_longest_first(td):
+    for entry, term_cf in _ordered_terms(td):
         if not entry.indexed:
             continue
         term = entry.term
         # Cheap pre-filter: no canonical/emphasis/unmarked form can match if the
         # bare term isn't present (case-insensitively) in the current text.
-        if term.casefold() not in text_cf:
+        if term_cf not in text_cf:
             continue
         canonical = f"{markup_style}{term}{markup_style}"
 

@@ -222,7 +222,7 @@ class JUnitXMLParser(DiagnosticRecorder):
                 line_attr = testcase.get("line")
                 try:
                     line_no = int(line_attr) if line_attr else None
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     line_no = None
 
                 # Generate canonical TEST node ID using test_identity utility

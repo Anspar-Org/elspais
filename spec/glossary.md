@@ -34,6 +34,9 @@ Dependency Evidence
 Baseline Run
 : A recorded run of a test target, made on another tree, that a run on the current tree takes as the earlier run of that target.
 
+Impacted Test
+: For one change, a unit test that executed a file the change modifies, in the newest passing full unit run recorded for an ancestor of the change. Where no such run exists, or the change modifies the environment the tests run in, every unit test is an Impacted Test.
+
 Result Record
 : One outcome of one test that a results producer wrote, such as one test case in a JUnit XML file or one test entry in a pytest JSON report.
 

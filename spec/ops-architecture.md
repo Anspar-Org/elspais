@@ -111,11 +111,11 @@ The pipeline validates at three levels:
 
 These checks are required status checks on the main branch, preventing merges that do not meet the standards.
 
-I, J and K divide the test suite by trigger. The end-to-end tier is the slowest part of the suite, and a difference between Python versions shows first in the unit tier. Consequently, a pull request runs the end-to-end tier on one supported version, and every push to main runs the whole suite on every supported version.
+I, J and O divide the test suite by trigger. The project supports one Python version, the one its consumers run, so every tier runs on that version. A pull request and a push to main run only each *Impacted Test* of the change, which keeps the time CI consumes in proportion to the change. The full suite runs on every commit a release publishes (N), on a change its author marks for release or for a fresh selection record, and once a day where main changed since the last full run. The daily run keeps the record that selects each *Impacted Test* close to main, and it finds a failure that a selection missed.
 
 H is stated apart from B because formatting and linting are enforced by the same tool and were not enforced in the same places. A local hook cannot be the only gate for a standard: it is absent from a fresh clone until configured, a contributor may bypass it, and it never runs at all for a commit created on the forge -- an automated version bump, or an edit accepted through the web. A standard enforced only there reaches main unenforced, and is then inherited by whoever next touches the tree.
 
-N binds a release to K's result for the exact commit it publishes. A local hook runs only the tests a change can affect, so the full suite first runs in CI. A version published before that run finishes can carry code that no full run has passed. A version tagged from a later commit than the tested one can too.
+N binds a release to a full run of the exact commit it publishes. A pull request and a push to main run only the tests a change can affect, so a commit on main can reach a release that no full run has passed. A version tagged from a later commit than the tested one can too.
 
 ## Assertions
 
@@ -135,11 +135,11 @@ G. The PR validation pipeline SHALL require both a ticket reference (uppercase t
 
 H. The CI pipeline SHALL enforce the project's code formatting.
 
-I. For every pull request targeting main, the CI pipeline SHALL run the unit tier on every supported Python version.
+I. For every pull request targeting main, the CI pipeline SHALL run every *Impacted Test* of the change.
 
 J. For every pull request targeting main, the CI pipeline SHALL run the end-to-end tier on at least one supported Python version.
 
-K. For every push to main, the CI pipeline SHALL run the full test suite on every supported Python version.
+K. <RETIRED> For every push to main, the CI pipeline SHALL run the full test suite on every supported Python version.
 
 L. The CI pipeline SHALL support stacked pull requests.
 
@@ -147,8 +147,12 @@ M. The CI pipeline SHALL support a merge queue for main.
 
 N. The release process SHALL publish only a commit that passed the full test suite on every supported Python version.
 
+O. For every push to main, the CI pipeline SHALL run every *Impacted Test* of the change.
+
 ## Changelog
 
+- 2026-10-13 | d024e6c1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-13 | - | - | Michael Lewis (<michael@anspar.org>) | I and O: a pull request and a push to main run each Impacted Test of the change; K retired: the full suite runs before a release (N), on a marked change, and daily
 - 2026-10-12 | 1f14a101 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-12 | - | - | Michael Lewis (<michael@anspar.org>) | Add N: the release process publishes only a commit that passed the full test suite on every supported Python version
 - 2026-10-12 | 826a1e02 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -161,7 +165,7 @@ N. The release process SHALL publish only a commit that passed the full test sui
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: F/G accept any Linear team prefix, not only CUR — the repo's team moved to TOOL; matches the commit-msg hook's existing pattern
 - 2026-03-30 | 315accce | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *CI/CD Pipeline Enforcement* | **Hash**: 1f14a101
+*End* *CI/CD Pipeline Enforcement* | **Hash**: d024e6c1
 ---
 
 # REQ-o00078: Release Completeness Across Distribution Channels

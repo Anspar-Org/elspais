@@ -26,6 +26,7 @@ pip install elspais[trace-review]  # Interactive viewer server
 pip install elspais[mcp]           # MCP server for AI integration
 pip install elspais[coverage]      # Per-test line coverage from .coverage files
 pip install elspais[dart]          # Dart and Flutter test selection by imports
+pip install elspais[ast]           # Test and function boundaries in JS/TS, Go, Java, Kotlin, Rust, C#
 pip install elspais[all]           # Everything
 ```
 
@@ -174,14 +175,14 @@ make setup
 make test
 ```
 
-`make setup` builds `.venv`, installs elspais into it, and installs the git
-hooks. The hooks and the test targets both run the tools from that
+`make setup` builds `.venv` with Python 3.14, the one version elspais supports
+(`uv python install 3.14` provides `python3.14` where the system lacks it),
+installs elspais into it, and installs the git hooks. The hooks and the test targets both run the tools from that
 directory, so what they report describes this checkout and not some other
 installation of elspais.
 
 Every dependency is installed at the version `requirements/dev.lock` pins, and
-CI installs the same, so a test run here and in CI on the same Python minor
-version see the same packages. After changing the dependencies in
+CI installs the same, so a test run here and in CI see the same packages. After changing the dependencies in
 `pyproject.toml`, run `make lock` and commit the regenerated lock with the
 change; CI fails while the lock is out of date. Run `make setup` again when the
 lock moves.

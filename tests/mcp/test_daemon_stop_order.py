@@ -31,7 +31,7 @@ def _proc_state(pid: int) -> str | None:
     """The state letter ``/proc/<pid>/stat`` reports, or None once it is gone."""
     try:
         return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
-    except (OSError, IndexError):
+    except OSError, IndexError:
         return None
 
 
@@ -299,7 +299,7 @@ class TestRecordIsNeverSeenHalfWritten:
             while time.monotonic() < deadline:
                 try:
                     json.loads(record.read_text())
-                except (json.JSONDecodeError, FileNotFoundError):
+                except json.JSONDecodeError, FileNotFoundError:
                     torn += 1
             assert torn == 0, f"{torn} torn reads: the record was seen half-written"
         finally:

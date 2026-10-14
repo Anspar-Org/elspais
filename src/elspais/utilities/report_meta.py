@@ -8,7 +8,7 @@ that any report renderer can include in its output.
 from __future__ import annotations
 
 import socket
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 
@@ -29,7 +29,7 @@ def report_metadata(repo_root: Path | None = None) -> dict[str, str]:
 
     meta: dict[str, str] = {
         "version": __version__,
-        "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "date": datetime.now(UTC).strftime("%Y-%m-%d"),
     }
 
     if repo_root is None:

@@ -15,12 +15,9 @@ line -- and nothing else about continuation does.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import TypeVar
 
 from elspais.graph.parsers.patterns import KEYWORD_PATTERN
 from elspais.utilities.patterns import REF_LIST_SEPARATOR
-
-T = TypeVar("T")
 
 
 # Implements: REQ-d00269-H, REQ-d00269-E
@@ -38,7 +35,7 @@ def opens_with_keyword(text: str) -> bool:
 
 
 # Implements: REQ-d00269-H
-def fold_continuation(
+def fold_continuation[T](
     opener_text: str,
     opener_line: int,
     candidates: Sequence[T],

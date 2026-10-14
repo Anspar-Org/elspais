@@ -1,8 +1,9 @@
 name: TIA Calibration
 
 # Empirical check of Test Impact Analysis (docs/test-impact-analysis.md).
-# Not part of PR CI: it runs the complete unit tier (twice the cost of one
-# PR run) and probes seeded faults, so it runs nightly and on demand.
+# Not part of PR CI: it runs the complete unit tier and probes seeded faults,
+# so it runs weekly and on demand. CI's daily full run of main already finds a
+# failure a selection missed; this measures how often selection would miss.
 #
 # 1. Restores the previous baseline main recorded, then runs the full unit
 #    tier on main's head, recording a fresh baseline. The full run's JUnit
@@ -17,7 +18,7 @@ name: TIA Calibration
 
 on:
   schedule:
-    - cron: "17 6 * * *"
+    - cron: "17 6 * * 1"
   workflow_dispatch:
     inputs:
       mutants:
@@ -33,7 +34,7 @@ jobs:
   calibrate:
     name: TIA calibration
     runs-on: ubuntu-latest
-    container: ghcr.io/anspar-org/elspais-ci:py3.13
+    container: ghcr.io/anspar-org/elspais-ci:py3.14
     timeout-minutes: 180
     env:
       # The cache, the probes and the report all read the baseline here.
@@ -56,8 +57,8 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .results/tia/baseline
-          key: tia-baseline-v2-py3.13-${{ github.sha }}
-          restore-keys: tia-baseline-v2-py3.13-
+          key: tia-baseline-v2-py3.14-${{ github.sha }}
+          restore-keys: tia-baseline-v2-py3.14-
 
       - name: Keep it aside
         run: |

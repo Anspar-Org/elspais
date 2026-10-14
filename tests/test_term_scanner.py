@@ -1518,6 +1518,73 @@ def test_REQ_d00237_G_three_level_nest_longest_wins(order):
     assert surfaces == ["Sponsor Portal Admin"]
 
 
+# -- REQ-d00237-G: a dictionary that gains a term is read with it -------------
+#
+# The longest-first order is held per dictionary between scans. A term added to
+# the same dictionary object after a scan must take its place in that order.
+
+
+def _grow_by_add(td: TermDictionary, term: str) -> None:
+    td.add(
+        TermEntry(
+            term=term,
+            definition=f"A {term}.",
+            namespace="test",
+            defined_in="REQ-p00001",
+        )
+    )
+
+
+def _grow_by_merge(td: TermDictionary, term: str) -> None:
+    td.merge(_td_nested(term))
+
+
+_GROWTHS = [
+    pytest.param(_grow_by_add, id="add"),
+    pytest.param(_grow_by_merge, id="merge"),
+]
+
+
+# Verifies: REQ-d00237-G
+@pytest.mark.parametrize("grow", _GROWTHS)
+def test_REQ_d00237_G_scan_reads_term_added_after_earlier_scan(grow):
+    """After a scan against a dictionary holding only "Sponsor", adding
+    "Sponsor Portal" to the same dictionary makes the next scan report the
+    compound alone."""
+    td = _td_nested("Sponsor")
+    text = "The Sponsor Portal is here."
+
+    before = scan_text_for_terms(text, td, node_id="REQ-001", namespace="main")
+    assert [r.surface_form for r in before] == ["Sponsor"]
+
+    grow(td, "Sponsor Portal")
+    after = scan_text_for_terms(text, td, node_id="REQ-001", namespace="main")
+
+    surfaces = [r.surface_form for r in after]
+    assert surfaces == ["Sponsor Portal"]
+    assert after[0].marked is False
+    assert "Sponsor" not in surfaces
+
+
+# Verifies: REQ-d00237-G
+@pytest.mark.parametrize("grow", _GROWTHS)
+def test_REQ_d00237_G_canonicalize_reads_term_added_after_earlier_pass(grow):
+    """After canonicalizing against a dictionary holding only "Sponsor",
+    adding "Sponsor Portal" to the same dictionary makes the next pass mark
+    the compound as a whole."""
+    td = _td_nested("Sponsor")
+    text = "The Sponsor Portal is here."
+
+    before, _ = _canonicalize_text(text, td, "*", {"*", "**"})
+    assert before == "The *Sponsor* Portal is here."
+
+    grow(td, "Sponsor Portal")
+    after, repls = _canonicalize_text(text, td, "*", {"*", "**"})
+
+    assert after == "The *Sponsor Portal* is here."
+    assert repls == [("Sponsor Portal", "*Sponsor Portal*")]
+
+
 # =============================================================================
 # REQ-d00237-G / REQ-d00248-A: claimed spans follow the text as it is edited
 #
