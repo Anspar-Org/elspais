@@ -10,6 +10,8 @@ All notable changes to elspais will be documented in this file.
 
 ### TOOL-157
 
+- **A finished run writes its coverage record and LCOV reports (REQ-d00334-A+B)** -- when a run of a target that declares `coverage` finishes, through `elspais test`, `checks --run-tests` or `elspais fingerprint finish`, elspais records the run's line coverage, with what a run that retained tests carried from earlier runs, and writes the target's current coverage as `.elspais-coverage.info` in its output area and the repository's as `.elspais-coverage.info` at the output root. A coverage file that cannot be read fails the run. Run start times are recorded to the microsecond.
+
 - **A test target names the format of its coverage file (REQ-d00254-C)** -- `coverage_format` (`lcov`, `coverage-json` or `coverage-sqlite`) is required wherever `coverage` is set, and a configuration without it is refused naming the key and the formats. elspais no longer guesses the format from the file's name.
 
 - **Line coverage reports, carried coverage and ignored inputs are specified (REQ-d00334, REQ-d00333-J, REQ-d00323-Q, REQ-d00311-S)** -- the system keeps a *Line Coverage Report* of the line coverage it uses for each test target and for the repository; a coverage measurement is used only while its source file holds the content it was measured on; line coverage of a target a run did not execute is carried, as its results are; and a file version control ignores is no input of a test target.

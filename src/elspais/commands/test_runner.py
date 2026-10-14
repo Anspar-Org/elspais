@@ -594,13 +594,21 @@ def _end_target(
     else:
         tag = f"FAILED (exit {result.returncode})"
     emit(f"<<< {target.name}: {tag} ({result.duration_seconds:.1f}s)\n")
-    finish_run(
+    fingerprint = finish_run(
         repo_root,
         config,
         target.name,
         exit_status=None if result.error else result.returncode,
         spawned=result.spawned,
+        carried_coverage=result.plan.carried_coverage if result.plan else None,
     )
+    # Implements: REQ-d00334-A
+    # A run whose coverage could not be recorded fails, naming why.
+    faults = [f for f in fingerprint.get("run_faults") or [] if str(f).startswith("coverage:")]
+    if faults:
+        emit(f"<<< {target.name}: FAILED ({'; '.join(faults)})\n")
+        if result.returncode == 0:
+            result.returncode = 1
 
 
 # How long the pumps may drain a target's pipes after its command exits.

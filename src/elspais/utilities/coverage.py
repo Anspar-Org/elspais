@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,6 +19,7 @@ from typing import Any
 
 RECORD_NAME = ".elspais-coverage.json"
 REPORT_NAME = ".elspais-coverage.info"
+COMBINED_LOCK = ".elspais-coverage.lock"
 RECORD_VERSION = 1
 
 
@@ -41,8 +43,14 @@ Record = dict[str, FileCoverage]
 
 
 # Implements: REQ-d00254-F
-def read_tool_coverage(repo_root: Path, config: Any, target: Any) -> dict[str, dict]:
-    """The target's own coverage file, read in its declared format, keyed repo-relative."""
+def read_tool_coverage(
+    repo_root: Path, config: Any, target: Any, diagnostics: list[dict] | None = None
+) -> dict[str, dict]:
+    """The target's own coverage file, read in its declared format, keyed repo-relative.
+
+    What the reader declined to read is appended to *diagnostics*, where given,
+    so the build can report it from the record.
+    """
     from elspais.graph.factory import context_placer
     from elspais.graph.parsers.results.placement import origin_dir, placed_in_repo
     from elspais.graph.parsers.results.registry import get_reporter
@@ -54,7 +62,13 @@ def read_tool_coverage(repo_root: Path, config: Any, target: Any) -> dict[str, d
         return {}
     spec = get_reporter(target.coverage_format)
     reader = spec.parser_factory()
-    content = "" if getattr(reader, "binary", False) else path.read_text(encoding="utf-8")
+    try:
+        content = "" if getattr(reader, "binary", False) else path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise CoverageUnreadable(
+            f"target {target.name!r}: the coverage file {target.coverage!r} is not "
+            f"{target.coverage_format} text ({exc}); check coverage_format"
+        ) from exc
     try:
         measured = reader.parse(content, str(path))
     except ImportError as exc:
@@ -62,6 +76,16 @@ def read_tool_coverage(repo_root: Path, config: Any, target: Any) -> dict[str, d
             f"target {target.name!r}: {target.coverage_format} coverage needs the "
             f"'coverage' extra: pip install elspais[coverage] ({exc})"
         ) from exc
+    if diagnostics is not None:
+        for found in getattr(reader, "iter_diagnostics", lambda: ())():
+            diagnostics.append(
+                {
+                    "path": _relative(found.path or str(path), root),
+                    "cause": found.cause,
+                    "line": found.line,
+                    "partial": bool(getattr(found, "partial", False)),
+                }
+            )
     cwd = (root / target.cwd) if target.cwd else root
     _origin, frame = origin_dir(spec, target.coverage_origin, cwd, root, foreign=False)
     place_contexts = context_placer(target, cwd, root)
@@ -76,14 +100,23 @@ def read_tool_coverage(repo_root: Path, config: Any, target: Any) -> dict[str, d
     return placed
 
 
+def _relative(path: str, root: Path) -> str:
+    try:
+        return Path(path).resolve().relative_to(root).as_posix()
+    except ValueError:
+        return path
+
+
 # Implements: REQ-d00333-J
-def measure(repo_root: Path, config: Any, target: Any, run: dict) -> Record:
+def measure(
+    repo_root: Path, config: Any, target: Any, run: dict, diagnostics: list[dict] | None = None
+) -> Record:
     """This run's measurement as record entries, each stamped with its file's digest now."""
     from elspais.utilities.fingerprint import file_digest
 
     root = Path(repo_root).resolve()
     record: Record = {}
-    for rel, data in read_tool_coverage(root, config, target).items():
+    for rel, data in read_tool_coverage(root, config, target, diagnostics).items():
         source = root / rel
         if not source.is_file():
             continue
@@ -151,8 +184,11 @@ def _atomic_write(path: Path, text: str) -> Path:
 
 
 # Implements: REQ-d00334-A
-def write_record(folder: Path, record: Record) -> Path:
-    """Write *record* into *folder*. Test names are stored once, in one table."""
+def write_record(folder: Path, record: Record, diagnostics: list[dict] | None = None) -> Path:
+    """Write *record* into *folder*. Test names are stored once, in one table.
+
+    *diagnostics* are what the run's read of its coverage file declined.
+    """
     names = sorted({n for e in record.values() for c in e.contexts.values() for n in c})
     index = {n: i for i, n in enumerate(names)}
     files = {
@@ -166,15 +202,14 @@ def write_record(folder: Path, record: Record) -> Path:
         }
         for rel, e in sorted(record.items())
     }
-    text = json.dumps(
-        {"version": RECORD_VERSION, "contexts": names, "files": files}, sort_keys=True
-    )
+    body = {"version": RECORD_VERSION, "contexts": names, "files": files}
+    if diagnostics:
+        body["diagnostics"] = list(diagnostics)
+    text = json.dumps(body, sort_keys=True)
     return _atomic_write(Path(folder) / RECORD_NAME, text + "\n")
 
 
-# Implements: REQ-d00334-A
-def read_record(folder: Path) -> Record | None:
-    """The record in *folder*, or ``None`` where the folder holds none."""
+def _load(folder: Path) -> dict | None:
     path = Path(folder) / RECORD_NAME
     if not path.is_file():
         return None
@@ -188,6 +223,21 @@ def read_record(folder: Path) -> Record | None:
         raise CoverageUnreadable(
             f"{path}: the coverage record is of another version; run the target again"
         )
+    return data
+
+
+def read_diagnostics(folder: Path) -> list[dict]:
+    """What the run recorded in *folder* declined to read of its coverage file."""
+    data = _load(folder)
+    return list((data or {}).get("diagnostics") or [])
+
+
+# Implements: REQ-d00334-A
+def read_record(folder: Path) -> Record | None:
+    """The record in *folder*, or ``None`` where the folder holds none."""
+    data = _load(folder)
+    if data is None:
+        return None
     names = data.get("contexts") or []
     return {
         rel: FileCoverage(
@@ -222,3 +272,66 @@ def render_lcov(record: Record) -> str:
 def write_report(path: Path, record: Record) -> Path:
     """Write *record* as an LCOV report at *path*."""
     return _atomic_write(Path(path), render_lcov(record))
+
+
+# Implements: REQ-d00334-A, REQ-d00333-J
+def carried_entries(repo_root: Path, config: Any, target: Any) -> Record:
+    """The entries of the target's record that still describe the tree.
+
+    Read before a run empties the target's output area, so a run that retains
+    tests can carry the coverage of the tests it does not execute.
+    """
+    from elspais.utilities.fingerprint import target_folder
+
+    record = read_record(target_folder(repo_root, config, target.name)) or {}
+    return current(record, repo_root)
+
+
+# Implements: REQ-d00334-A+B
+def finish_coverage(
+    repo_root: Path, config: Any, target: Any, fingerprint: dict, carried: Record | None
+) -> None:
+    """Record a finished run's coverage, report it, and report the repository's."""
+    from elspais.utilities.fingerprint import run_reference, target_folder
+
+    if not target.coverage:
+        return
+    folder = target_folder(repo_root, config, target.name)
+    diagnostics: list[dict] = []
+    fresh = measure(repo_root, config, target, run_reference(fingerprint), diagnostics)
+    record = merge(carried or {}, fresh)
+    write_record(folder, record, diagnostics)
+    write_report(folder / REPORT_NAME, current(record, repo_root))
+    try:
+        write_combined(repo_root, config)
+    except OSError as exc:
+        print(f"Warning: the repository's coverage report was not written: {exc}", file=sys.stderr)
+
+
+# Implements: REQ-d00334-B
+def write_combined(repo_root: Path, config: Any) -> Path | None:
+    """Merge every target's current coverage into the report at the output root.
+
+    A lock serializes the rewrite, because targets running at once finish at
+    once. A target whose record cannot be read contributes nothing here; the
+    build reports it.
+    """
+    import fcntl
+
+    from elspais.utilities.fingerprint import _typed, output_root, target_folder
+
+    typed = _typed(config)
+    root_dir = output_root(repo_root, typed)
+    root_dir.mkdir(parents=True, exist_ok=True)
+    with open(root_dir / COMBINED_LOCK, "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        combined: Record = {}
+        for target in typed.scanning.test.targets:
+            if not target.coverage:
+                continue
+            try:
+                record = read_record(target_folder(repo_root, typed, target.name)) or {}
+            except CoverageUnreadable:
+                continue
+            combined = merge(combined, current(record, repo_root))
+        return write_report(root_dir / REPORT_NAME, combined)

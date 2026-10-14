@@ -2820,3 +2820,51 @@ class TestServedGraphReadsResultsWrittenWhileServing:
         assert not self._names_stub(after["tests.not_run"])
         assert not self._names_stub(after["tests.run_in_progress"])
         assert self._served_by(project) == serving, "the daemon was replaced, not refreshed"
+
+
+# ===================================================================
+# Group 7: the line coverage reports a finished run leaves
+# ===================================================================
+
+
+class TestLineCoverageReports:
+    """A finished run records its target's line coverage and reports it.
+
+    Verifies: REQ-d00334-A+B
+    """
+
+    @staticmethod
+    def _copy_with_coverage(scratch, project):
+        TestStaleResultsWarning._results_without_a_run(scratch, project)
+        toml = scratch / ".elspais.toml"
+        text = toml.read_text(encoding="utf-8")
+        marker = 'name = "stub"\n'
+        assert text.count(marker) == 1 and text.count("cli_ttl = 2\n") == 1
+        text = text.replace("cli_ttl = 2\n", "cli_ttl = 0\n")
+        coverage = 'coverage = "lcov.info"\ncoverage_format = "lcov"\n'
+        toml.write_text(text.replace(marker, marker + coverage), encoding="utf-8")
+
+    # Verifies: REQ-d00334-A+B
+    def test_a_recorded_run_leaves_its_record_and_both_reports(self, tmp_path, project):
+        from pathlib import Path
+
+        scratch = tmp_path / "coverage"
+        self._copy_with_coverage(scratch, project)
+        started = run_elspais("fingerprint", "start", "stub", cwd=scratch)
+        assert started.returncode == 0, started.stderr
+        folder = Path(started.stdout.strip())
+        assert folder == (scratch / ".results" / "stub").resolve()
+        (folder / "lcov.info").write_text(
+            "SF:src/auth.py\nDA:1,1\nDA:2,0\nLF:2\nLH:1\nend_of_record\n", encoding="utf-8"
+        )
+
+        finished = run_elspais("fingerprint", "finish", "stub", cwd=scratch)
+        assert finished.returncode == 0, finished.stderr
+
+        assert (folder / ".elspais-coverage.json").is_file()
+        area_report = folder / ".elspais-coverage.info"
+        assert area_report.is_file()
+        assert "SF:src/auth.py\nDA:1,1\nDA:2,0\n" in area_report.read_text(encoding="utf-8")
+        combined = scratch / ".results" / ".elspais-coverage.info"
+        assert combined.is_file()
+        assert "SF:src/auth.py\n" in combined.read_text(encoding="utf-8")

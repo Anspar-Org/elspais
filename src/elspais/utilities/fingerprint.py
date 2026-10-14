@@ -391,7 +391,9 @@ def differences(recorded: dict[str, str], current: dict[str, str]) -> list[str]:
 
 
 def _now() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
+    # Microseconds keep two runs started within one second apart: a run is
+    # named by its commit, root and start.
+    return datetime.now(UTC).isoformat(timespec="microseconds")
 
 
 def read_fingerprint(folder: Path) -> dict[str, Any] | None:
@@ -487,6 +489,7 @@ def finish_run(
     exit_status: int | None = None,
     *,
     spawned: bool = True,
+    carried_coverage: Any = None,
 ) -> dict[str, Any]:
     """Finish a run of a target. Record each input that changed during the run.
 
@@ -501,6 +504,10 @@ def finish_run(
 
     *spawned* is false where the run retained every result and never started
     the command, so it records no exit status.
+
+    *carried_coverage* is the line coverage a run that retained tests carries
+    from the previous record. The run's coverage record and reports are
+    written last; a coverage file that cannot be read is a fault of the run.
 
     Raises:
         RunNotStarted: No run of the target is in progress.
@@ -525,6 +532,14 @@ def finish_run(
         fingerprint["spawned"] = False
     fingerprint["finished_at"] = _now()
     _write_fingerprint(folder, fingerprint)
+    # Implements: REQ-d00334-A+B
+    from elspais.utilities.coverage import CoverageUnreadable, finish_coverage
+
+    try:
+        finish_coverage(root, config, target, fingerprint, carried_coverage)
+    except (CoverageUnreadable, OSError, ValueError) as exc:
+        record_run_faults(root, config, target_name, [f"coverage: {exc}"])
+        fingerprint = read_fingerprint(folder) or fingerprint
     return fingerprint
 
 

@@ -11,8 +11,9 @@ executes beside the ones it is handed, writing a result for that file's first
 test alone; ``RUNNER_EXTRA_FAIL`` adds a failed result that names a file and
 no line; ``RUNNER_EXIT`` makes it exit non-zero whatever its results;
 ``RUNNER_NO_RESULTS`` writes no results file; ``RUNNER_COVERAGE`` writes line
-coverage of ``src/lib.py``, the lines ``RUNNER_COVERAGE_LINES``
-names, executed by the contexts ``RUNNER_CONTEXT`` names.
+coverage of ``src/lib.py``, or of the file ``RUNNER_COVERAGE_FILE`` names,
+the lines ``RUNNER_COVERAGE_LINES`` names, executed by the contexts
+``RUNNER_CONTEXT`` names.
 """
 
 from __future__ import annotations
@@ -86,7 +87,8 @@ if os.environ.get("RUNNER_COVERAGE"):
     entry = {"executed_lines": executed, "missing_lines": []}
     if os.environ.get("RUNNER_CONTEXT"):
         entry["contexts"] = {str(n): [os.environ["RUNNER_CONTEXT"]] for n in executed}
-    (out / "coverage.json").write_text(json.dumps({"files": {"src/lib.py": entry}}))
+    measured = os.environ.get("RUNNER_COVERAGE_FILE", "src/lib.py")
+    (out / "coverage.json").write_text(json.dumps({"files": {measured: entry}}))
 sys.exit(1 if any('"failed"' in l for l in lines) or os.environ.get("RUNNER_EXIT") else 0)
 """
 
@@ -663,6 +665,35 @@ def test_a_file_measured_by_this_run_and_an_earlier_one_names_the_earlier_run(
         "line coverage retained from the run of "
     )
     assert not _coverage_carried(lib)
+
+
+# Verifies: REQ-d00334-A, REQ-d00333-J
+def test_a_partial_run_records_the_coverage_it_measured_and_the_coverage_it_retained(
+    tmp_path, monkeypatch
+):
+    from elspais.utilities.coverage import RECORD_NAME, REPORT_NAME, read_record
+
+    root, config = _coverage_project(tmp_path, monkeypatch)
+    (root / "src" / "other.py").write_text("y = 2\n", encoding="utf-8")
+    monkeypatch.setenv("RUNNER_COVERAGE_FILE", "src/other.py")
+    first, _ = _run(root, config)
+    assert first.plan.whole
+    assert first.plan.carried_coverage is None
+    monkeypatch.setenv("RUNNER_COVERAGE_FILE", "src/lib.py")
+    (root / "tests" / "test_a.py").write_text(_test_file("a", "assert 1"), encoding="utf-8")
+
+    second, failures = _run(root, config)
+
+    assert failures == []
+    assert sorted(second.plan.selected) == ["tests/test_a.py"]
+    assert set(second.plan.carried_coverage) == {"src/other.py"}
+    area = _area(root, config)
+    record = read_record(area)
+    assert set(record) == {"src/lib.py", "src/other.py"}
+    assert record["src/other.py"].measured_in != record["src/lib.py"].measured_in
+    report = (area / REPORT_NAME).read_text(encoding="utf-8")
+    assert "SF:src/lib.py\n" in report and "SF:src/other.py\n" in report
+    assert (area / RECORD_NAME).is_file()
 
 
 # Verifies: REQ-d00283-V

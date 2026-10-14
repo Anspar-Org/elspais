@@ -481,6 +481,7 @@ class UnitPlan:
     source_failed: str = ""
     outside_inputs: tuple[str, ...] = ()
     retained_coverage: dict[str, Any] | None = None
+    carried_coverage: dict[str, Any] | None = None
     receives: str = "placeholder"
     full_selection: str = ""
     cwd_rel: str = ""
@@ -660,11 +661,17 @@ def plan_run(
             return whole(causes.pop())
         return whole("the evidence of every test file changed")
     coverage = retained_coverage(root, typed, target, verdict.fingerprint, current)
+    # Implements: REQ-d00334-A, REQ-d00333-J
+    # The coverage of the tests this run does not execute is read before
+    # start_run empties the area, and recorded with the run's own.
+    from elspais.utilities.coverage import carried_entries
+
     return UnitPlan(
         selected=judgement.selected,
         retained=judgement.retained,
         whole_reason="",
         retained_coverage=coverage,
+        carried_coverage=carried_entries(root, typed, target) if target.coverage else None,
         **common,
     )
 
