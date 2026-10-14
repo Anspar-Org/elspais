@@ -174,7 +174,7 @@
 | REQ-d00251 | A Repository's Identifier Grammar                             | dev-graph-config.md     | b49bd5ee |
 | REQ-d00252 | External Library Integration via Integrates Keyword           | dev-graph-federation.md | 3b102d6f |
 | REQ-d00253 | Federation Write/Generation Scope                             | dev-graph-federation.md | 8360f2f4 |
-| REQ-d00254 | Test Evidence: Ingestion and Coverage Crediting               | dev-graph-core.md       | 812dcbf7 |
+| REQ-d00254 | Test Evidence: Ingestion and Coverage Crediting               | dev-graph-core.md       | 14881316 |
 | REQ-d00255 | Test-to-Journey UAT Verification                              | dev-graph-core.md       | ab5cb648 |
 | REQ-d00256 | Step-Level UAT Verification                                   | dev-graph-core.md       | 8bf40a7c |
 | REQ-d00257 | UAT-Scoped Traceability Report                                | dev-graph-core.md       | 1ea68210 |
@@ -213,7 +213,7 @@
 | REQ-d00291 | Coverage Inclusion                                            | dev-graph-core.md       | 13bc6949 |
 | REQ-d00292 | Viewer Coverage Presentation                                  | dev-graph-core.md       | db9415cd |
 | REQ-d00293 | Configurable Viewer Presentation                              | dev-graph-core.md       | 31848b5c |
-| REQ-d00294 | Each Result Record Is a Result of Its Own                     | dev-graph-core.md       | cd9ff4c9 |
+| REQ-d00294 | Each Result Record Is a Result of Its Own                     | dev-graph-core.md       | d7316f92 |
 | REQ-d00295 | Viewer Served Under a Configured Prefix                       | dev-traceview-review.md | ae94b103 |
 | REQ-d00296 | Request Identity From a Trusted Proxy                         | prd-features.md         | fe4f3620 |
 | REQ-d00297 | Opening a Pull Request From the Viewer                        | prd-core.md             | 006e3f69 |

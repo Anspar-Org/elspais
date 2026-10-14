@@ -635,9 +635,9 @@ C. The configuration surface SHALL express test result and coverage ingestion vi
 
 D. A run of citations with no executable line between them SHALL attribute the lines of the function it is written above, or else the executable lines following it up to the next citation, the end of its enclosing function or -- where no function encloses it -- the start of the next function declaration (its first decorator line, where it has decorators), or the end of the file, whichever comes first.
 
-E. A reporter registry SHALL map each `reporter` format name to a parser and an input channel (`stdout` or `file`). The registry SHALL include a native `flutter test --machine` reporter that parses the machine JSON event stream into *Result Records* carrying the file and line at which each test is declared, the file that executed it, and its pass/fail/skip status -- without an external JUnit converter.
+E. A reporter registry SHALL map each `reporter` format name to a parser. The registry SHALL include a native reporter for the JSON event stream that `flutter test` writes, which parses it into *Result Records* carrying the file and line at which each test is declared, the file that executed it, and its pass/fail/skip status -- without an external JUnit converter.
 
-F. For each configured target, the system SHALL obtain the reporter's output (captured from the command's stdout for stdout-channel reporters, or read from the `results` glob for file-channel reporters), build RESULT nodes carrying the real test-file path (`source_file`, repo-relative) and the target's `match` mode, and ingest the target's `coverage` file. Coverage crediting SHALL be derived from the targets' `credit_coverage`/`min_coverage_fraction`. File-channel results SHALL additionally record where each result was recorded — the results artifact's repo-relative path and, when derivable from the artifact (e.g. one JUnit `<testcase>` per line), the per-result line — as provenance distinct from the test's source path, and result links in reporting surfaces SHALL point at that artifact location.
+F. For each configured target, the system SHALL read the reporter's input from the files its `results` glob names, build RESULT nodes carrying the real test-file path (`source_file`, repo-relative) and the target's `match` mode, and ingest the target's `coverage` file. Coverage crediting SHALL be derived from the targets' `credit_coverage`/`min_coverage_fraction`. Each result SHALL additionally record where it was recorded — the results artifact's repo-relative path and, when derivable from the artifact (e.g. one JUnit `<testcase>` per line), the per-result line — as provenance distinct from the test's source path, and result links in reporting surfaces SHALL point at that artifact location.
 
 G. Each target SHALL select its result-to-test matching via `match`: `source` SHALL bind each result at the most precise scope available — first step scope, when the result's recorded test name embeds exactly one journey-step reference (in the configured reference form) that resolves to a step whose verifying test(s) live in the result's source file; then test scope, resolving the file and line at which the result's test is declared to the specific test node at that `(path, line)`, or, where the result records no usable line, resolving its recorded name as REQ-d00284 states. A result that binds at neither scope SHALL credit nothing. `aggregate` SHALL derive a green/red signal per target working directory, which informs the line-coverage dimension only.
 
@@ -697,6 +697,8 @@ G places a result where its citations are: at the file and line where its test i
 
 ### Changelog
 
+- 2026-10-14 | 14881316 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
+- 2026-10-14 | - | - | Michael Lewis (<michael@anspar.org>) | E and F: every reporter reads its input from the files the target's `results` glob names, and the Flutter reporter reads the event stream `flutter test` writes to a file
 - 2026-10-12 | 812dcbf7 | - | Michael Lewis (<michael@anspar.org>) | TOOL-157: per-test attribution (K-N, R-V) moves to REQ-d00332; a coverage artifact's relative path is read as REQ-d00327-C states (Y); a result binds where its test is declared under G (Z)
 - 2026-10-05 | 06c0380b | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-05 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-141: the aggregate signal is named per target working directory (G)
@@ -746,7 +748,7 @@ G places a result where its citations are: at the file and line where its test i
 - 2026-06-20 | 98120740 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-06-20 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | CUR-1533: initial
 
-*End* *Test Evidence: Ingestion and Coverage Crediting* | **Hash**: 812dcbf7
+*End* *Test Evidence: Ingestion and Coverage Crediting* | **Hash**: 14881316
 
 ---
 
@@ -1357,7 +1359,7 @@ others do not. This says how one result is told from another.
 
 A. Every *Result Record* a producer wrote SHALL be held as a result of its own, identified by the place it was recorded in and its position among the *Result Records* in that place.
 
-B. A result a producer reported through its output, with no artifact holding it, SHALL be identified by the target it was read from and the result's position among that target's results.
+B. <RETIRED> identified a result that reached the tool through a command's output. Every result is read from an artifact, and A identifies it.
 
 C. Each test target SHALL declare where, if anywhere, the environment a result was recorded in is read from. A result SHALL carry an environment only where a source for one is declared.
 
@@ -1385,12 +1387,6 @@ on the order they were read, which is not a fact about the result. The
 rule speaks of *Result Records* because that is what a producer writes. Whether a producer
 writes one *Result Record* for each try of a test is the producer's business, and A holds
 either way.
-
-B covers the results that reach the tool through a command's output. There is no
-artifact for them, so the place A names does not exist and the identity
-has to come from somewhere else. The target is what the tool read them from, and
-the position within that target's results separates them from each other. Stating
-this case on its own keeps a reader from having to read it out of A.
 
 C asks the project to say where the environment is written, because it is written
 in a different place in each grid: a path an artifact sits under in one, a field
@@ -1424,9 +1420,10 @@ G applies the same principle to one scenario that several runner files execute. 
 
 ### Changelog
 
+- 2026-10-14 | - | - | Michael Lewis (<michael@anspar.org>) | B retired: no result reaches the tool through a command's output
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the result record with the Defined Term Result Record, and retitle the requirement after it
 
-*End* *Each Result Record Is a Result of Its Own* | **Hash**: cd9ff4c9
+*End* *Each Result Record Is a Result of Its Own* | **Hash**: d7316f92
 
 ## REQ-d00322: Evidence Snapshot
 
