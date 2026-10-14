@@ -111,9 +111,7 @@ pytest --junitxml=results/report.xml
 ID format: `result:<namespace>:<place>:<position>`, e.g.
 `result:REQ:results/report.xml:7`. Each RESULT node holds one result
 record: one outcome of one test that the producer wrote. The place is the
-results file that holds the result record. Where a reporter reads the
-runner's output, no file holds the result record, and the place is the name
-of the test target. The position is the place of the result record among the
+results file that holds the result record. The position is the place of the result record among the
 result records read from there. One test that runs in more than one
 environment writes one result record for each of them, and the position keeps
 each verdict.

@@ -3896,10 +3896,9 @@ def check_test_results(graph: FederatedGraph, config: dict | None = None) -> Hea
             if runner and runner != node.get_field("source_file"):
                 where += f" (run by {runner})"
             # The recorded line counts lines in the results artifact, so it
-            # belongs to that artifact and to nothing else. Where the result
-            # came from a runner's output there is no artifact, and carrying
-            # the line over to the test's own source would point a reader at
-            # a line that means nothing there.
+            # belongs to that artifact and to nothing else. Carrying it over
+            # to the test's own source would point a reader at a line that
+            # means nothing there.
             result_file = node.get_field("result_file")
             # Implements: REQ-d00323-G
             # A failure the current tree did not produce is still a failure,
@@ -5135,9 +5134,8 @@ def _absent_results_cause(item: Any) -> str:
             "read for a target this run executed or expected"
         )
     return (
-        "the target's reporter reads its runner's output, no output was captured, and "
-        "the target names no results file, so no test results were read for a target "
-        "this run executed or expected"
+        "the target declares no `results` pattern, so no test results were read for a "
+        "target this run executed or expected"
     )
 
 
@@ -5830,6 +5828,7 @@ def run(args: argparse.Namespace) -> int:
             not_fresh_targets,
             plan_target_runs,
             settle_units,
+            unrecorded_refusal,
             unrecorded_targets,
         )
 
@@ -5854,26 +5853,13 @@ def run(args: argparse.Namespace) -> int:
         except SelectionRefused as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
-        # Implements: REQ-d00249-N
-        # A runner's captured output reaches the invoking repository's build
-        # alone, so a member's target that leaves no results on disk would
-        # run and credit nothing. It is refused before anything executes.
+        # Implements: REQ-d00249-K
         lost = [
-            run.spell(name)
-            for run in runs
-            if not run.is_root
-            for name in unrecorded_targets(run.config, run.only)
+            run.spell(name) for run in runs for name in unrecorded_targets(run.config, run.only)
         ]
         if lost:
-            print(
-                f"error: target(s) {', '.join(lost)} of another member declare no "
-                f"`results` pattern, so their results would reach nothing. Have each "
-                f"command write its results into $ELSPAIS_TARGET_OUTPUT and declare "
-                f"the `results` pattern that matches them.",
-                file=sys.stderr,
-            )
+            print(f"error: {unrecorded_refusal(lost)}", file=sys.stderr)
             return 2
-        captured_map: dict[str, str] = {}
         # Implements: REQ-d00254-I
         # A run that executes no target of this repository ran none of its
         # targets fresh.
@@ -5892,7 +5878,7 @@ def run(args: argparse.Namespace) -> int:
                 remaining = (configured if only is None else only) - carry
                 only = None if remaining == configured else remaining
             # Implements: REQ-d00249-N
-            results, captured = run_configured_targets(
+            results = run_configured_targets(
                 target_run.config,
                 target_run.repo_root,
                 fail_fast=fail_fast,
@@ -5911,11 +5897,9 @@ def run(args: argparse.Namespace) -> int:
                 if t.command and (target_run.only is None or t.name in target_run.only)
             }
             if target_run.is_root:
-                captured_map = captured
                 fresh = only
             if fail_fast and runner_failed:
                 break
-        args._captured_results = captured_map
         # Implements: REQ-d00254-I
         args._fresh_targets = fresh
         if fail_fast and runner_failed:
@@ -6054,7 +6038,6 @@ def _run_local_checks(args: argparse.Namespace, request: ChecksRequest) -> dict[
     config_path = getattr(args, "config", None)
     start_path = Path.cwd()
     lenient = request.lenient
-    captured = getattr(args, "_captured_results", None)
     fresh_targets = getattr(args, "_fresh_targets", None)
 
     report = HealthReport()
@@ -6086,7 +6069,6 @@ def _run_local_checks(args: argparse.Namespace, request: ChecksRequest) -> dict[
         graph = build_graph(
             spec_dirs=[spec_dir] if spec_dir else None,
             config_path=config_path,
-            captured_results=captured,
             fresh_targets=fresh_targets,
         )
         if config is None:

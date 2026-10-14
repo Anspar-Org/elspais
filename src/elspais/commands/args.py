@@ -170,7 +170,8 @@ class ChecksArgs:
     """Show full details for passing checks."""
 
     run_tests: bool = False
-    """Execute each [[scanning.test.targets]] command before checks; exits 2 if none have a command.
+    """Execute each [[scanning.test.targets]] command before checks; exits 2 if none have a command,
+    or if a target whose reporter reads results declares no `results` pattern.
     """
 
     fail_fast: bool = False
@@ -1214,8 +1215,8 @@ class TestArgs:
     The exit code reflects only the targets: 1 if any target failed, 0 if all
     passed. Evaluate the checks separately with `elspais checks --expect ...`,
     once, over every recorded result. A target whose reporter reads test
-    results must declare a `results` pattern, because nothing reads its output
-    while it runs.
+    results must declare a `results` pattern, because results are read only
+    from the files a target writes. Each command's output goes to stderr.
     """
 
     __test__ = False  # a CLI argument model, not a pytest test class

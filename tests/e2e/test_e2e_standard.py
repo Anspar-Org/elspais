@@ -2299,10 +2299,12 @@ class TestRunTestsFailFast:
             'name = "bad"\n'
             'command = "false"\n'
             'reporter = "junit"\n'
+            'results = "junit.xml"\n'
             "\n[[scanning.test.targets]]\n"
             'name = "after"\n'
             f'command = "{sentinel_cmd}"\n'
             'reporter = "junit"\n'
+            'results = "junit.xml"\n'
         )
         # Split on the targets block start - the fixture's targets block is the
         # last [scanning.*] section, so everything before it is what we keep.

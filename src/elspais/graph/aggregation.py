@@ -1261,8 +1261,7 @@ def _measure_fields(prefix: str, sums: DimensionSums) -> dict[str, float]:
 class FileBoundResults:
     """The results one artifact holds that bind only through a test file.
 
-    ``artifact`` is where the result records were read: the results file, or the
-    target name where the runner's output held them and no file exists.
+    ``artifact`` is the results file the result records were read from.
     ``namespace`` names the repository that read them, because two members
     can hold one repository-relative path. ``tests`` are the tests each result
     could have bound to: every test in the file its result record names.

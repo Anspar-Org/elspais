@@ -1,8 +1,8 @@
-"""Reporter registry: maps a `reporter` format name to its parser + channel.
+"""Reporter registry: maps a `reporter` format name to its parser.
 
-Channel: "stdout" (captured from a runner command's stdout) or "file"
-(read from the target's `results`/`coverage` path). Kind: "results"
-(produces result records) or "coverage" (annotates FILE line_coverage).
+Every parser reads files: the target's `results` or `coverage` path. Kind:
+"results" (produces result records) or "coverage" (annotates FILE
+line_coverage).
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ from elspais.graph.parsers.results.pytest_json import PytestJSONParser
 @dataclass(frozen=True)
 class ReporterSpec:
     name: str
-    channel: str  # "stdout" | "file"
     kind: str  # "results" | "coverage"
     parser_factory: Callable[[], Any]
     # Implements: REQ-d00254-O
@@ -125,7 +124,6 @@ def _register_builtins() -> None:
     register_reporter(
         ReporterSpec(
             "evidence-snapshot",
-            "file",
             "results",
             EvidenceSnapshotParser,
             description=(
@@ -141,12 +139,11 @@ def _register_builtins() -> None:
     register_reporter(
         ReporterSpec(
             "flutter-machine",
-            "stdout",
             "results",
             FlutterMachineParser,
             description=(
-                "Parses the `flutter test --machine` JSON-line protocol from the command's "
-                "stdout. Carries the file and line where each test is declared, and the file "
+                "Parses the JSON event file that `flutter test --file-reporter=json:<path>` "
+                "writes. Carries the file and line where each test is declared, and the file "
                 'that executed it, so `match = "source"` binds each result to its test, '
                 "including a test declared in a shared file that a runner file executes. "
                 "A test run in a browser records no Dart line, so its result binds by the "
@@ -158,7 +155,6 @@ def _register_builtins() -> None:
     register_reporter(
         ReporterSpec(
             "junit",
-            "file",
             "results",
             JUnitXMLParser,
             line_base=0,
@@ -172,7 +168,6 @@ def _register_builtins() -> None:
     register_reporter(
         ReporterSpec(
             "pytest-json",
-            "file",
             "results",
             PytestJSONParser,
             description=(
@@ -183,7 +178,6 @@ def _register_builtins() -> None:
     register_reporter(
         ReporterSpec(
             "lcov",
-            "file",
             "coverage",
             LcovParser,
             description=(
@@ -195,7 +189,6 @@ def _register_builtins() -> None:
     register_reporter(
         ReporterSpec(
             "coverage-json",
-            "file",
             "coverage",
             CoverageJsonParser,
             description=(
@@ -207,7 +200,6 @@ def _register_builtins() -> None:
     register_reporter(
         ReporterSpec(
             "coverage-sqlite",
-            "file",
             "coverage",
             CoverageSqliteParser,
             description=(

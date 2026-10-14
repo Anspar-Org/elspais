@@ -19,15 +19,15 @@ suite.  Each entry tells elspais two things:
 ```text
   Development (--run-tests):        CI (pre-produced results):
   +-----------------------+         +------------------------+
-  | elspais checks        |         | flutter test --machine |
-  |   --run-tests         |         |   > results.jsonl      |
-  |                       |         |                        |
-  | 1. runs `command`     |         | (done by CI pipeline)  |
-  | 2. captures stdout or |         +------------------------+
-  |    reads `results`    |
-  | 3. reads `coverage`   |         elspais checks
-  | 4. runs checks        |         (reads results + coverage files)
-  +-----------------------+
+  | elspais checks        |         | flutter test           |
+  |   --run-tests         |         |   --file-reporter=     |
+  |                       |         |   json:machine.jsonl   |
+  | 1. runs `command`     |         |                        |
+  | 2. reads `results`    |         | (done by CI pipeline)  |
+  | 3. reads `coverage`   |         +------------------------+
+  | 4. runs checks        |
+  +-----------------------+         elspais checks
+                                    (reads results + coverage files)
 ```
 
 When `command` is absent, `elspais checks` skips execution and ingests
@@ -323,7 +323,7 @@ later `summary` or `trace` names as fresh, with `--targets last-run`.
 | `cwd` | string | `""` (repo root) | Directory relative to repo root where the command runs, and the base for a relative source path wherever the origin that applies is `"working-directory"` |
 | `command` | string | (omit in CI) | Shell command to execute when `--run-tests` is passed |
 | `reporter` | string | (required with `results`, or with `command` unless `file_results`) | Parser format -- one of the names in the reporters table below |
-| `results` | string | `""` | Glob pattern for result files (file-channel reporters), relative to the target's folder |
+| `results` | string | `""` | Glob pattern for result files, relative to the target's folder; required for a results-kind reporter whose target has a `command` |
 | `coverage` | string | `""` | Path to an lcov.info, coverage.py JSON or `.coverage` file (format auto-detected), relative to the target's folder |
 | `inputs` | table | every file | The files whose change makes this target's results stale: `directories`, `file_patterns`, `skip_dirs`, `skip_files` |
 | `match` | string | `"source"` | `"source"` or `"aggregate"` -- matching strategy |
@@ -417,32 +417,32 @@ read from, so the declaration to change is visible.
 <!-- generated: reporters -->
 <!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
 
-| Reporter | Channel | Kind | Path origin | Description |
-| --- | --- | --- | --- | --- |
-| `coverage-json` | file | coverage | `working-directory` | Parses the JSON report `coverage json` (coverage.py) writes, in either its aggregate or its per-context form, into per-file line coverage. |
-| `coverage-sqlite` | file | coverage | `working-directory` | Reads coverage.py's own `.coverage` SQLite data file through coverage.py's public API, so per-test contexts are read compactly rather than through a JSON expansion of them. Needs the `coverage` package (`elspais[coverage]`) importable, and degrades to unattributed coverage where it is not. |
-| `evidence-snapshot` | file | results | `repository-root` | Reads the `results.jsonl` of an Evidence Snapshot. A build reads it for each target that has not run in the tree and that the run does not execute, from the directory `[scanning.test] evidence` names, tagging those results carried. Such a target owes no coverage file in that build, because the snapshot holds none. |
-| `flutter-machine` | stdout | results | `repository-root` | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the file and line where each test is declared, and the file that executed it, so `match = "source"` binds each result to its test, including a test declared in a shared file that a runner file executes. A test run in a browser records no Dart line, so its result binds by the test's full name. Each result also carries its duration and the output its test printed. |
-| `junit` | file | results | `repository-root` | Parses JUnit XML result files matched by the `results` glob. Honours an optional per-`<testcase>` `file` attribute (a real source path) and `line` attribute, so `match = "source"` can bind to a scanned test node. |
-| `lcov` | file | coverage | `working-directory` | Parses an LCOV report -- the `lcov.info` that `flutter test --coverage` and most language toolchains write -- into per-file line coverage. |
-| `pytest-json` | file | results | `repository-root` | Parses the report pytest's `--json-report` writes, matched by the `results` glob. |
+| Reporter | Kind | Path origin | Description |
+| --- | --- | --- | --- |
+| `coverage-json` | coverage | `working-directory` | Parses the JSON report `coverage json` (coverage.py) writes, in either its aggregate or its per-context form, into per-file line coverage. |
+| `coverage-sqlite` | coverage | `working-directory` | Reads coverage.py's own `.coverage` SQLite data file through coverage.py's public API, so per-test contexts are read compactly rather than through a JSON expansion of them. Needs the `coverage` package (`elspais[coverage]`) importable, and degrades to unattributed coverage where it is not. |
+| `evidence-snapshot` | results | `repository-root` | Reads the `results.jsonl` of an Evidence Snapshot. A build reads it for each target that has not run in the tree and that the run does not execute, from the directory `[scanning.test] evidence` names, tagging those results carried. Such a target owes no coverage file in that build, because the snapshot holds none. |
+| `flutter-machine` | results | `repository-root` | Parses the JSON event file that `flutter test --file-reporter=json:<path>` writes. Carries the file and line where each test is declared, and the file that executed it, so `match = "source"` binds each result to its test, including a test declared in a shared file that a runner file executes. A test run in a browser records no Dart line, so its result binds by the test's full name. Each result also carries its duration and the output its test printed. |
+| `junit` | results | `repository-root` | Parses JUnit XML result files matched by the `results` glob. Honours an optional per-`<testcase>` `file` attribute (a real source path) and `line` attribute, so `match = "source"` can bind to a scanned test node. |
+| `lcov` | coverage | `working-directory` | Parses an LCOV report -- the `lcov.info` that `flutter test --coverage` and most language toolchains write -- into per-file line coverage. |
+| `pytest-json` | results | `repository-root` | Parses the report pytest's `--json-report` writes, matched by the `results` glob. |
 
 These are the reporters the tool is built with. `register_reporter()` admits
 further formats at run time, so a project that registers one has a reporter
 this table does not name.
 <!-- /generated: reporters -->
 
-A **stdout-channel** reporter captures output directly from the running
-`command`; the `results` field is not used.  Capturing it does not hide it: each
-line is echoed to elspais's stderr as it arrives, so the run is visible live
-while the text itself is kept for the parser.  The command's own stderr is never
-captured and passes straight through.
+Every reporter reads files from disk -- those matched by the `results` glob
+for a results-kind reporter, and the `coverage` path for a coverage-kind one.
+Nothing reads a command's output as results.  Those files can be pre-produced
+by CI.  A coverage-kind reporter is chosen by sniffing the file at `coverage`,
+so a coverage-only target need not name one.
 
-A **file-channel** reporter reads files from disk -- those matched by the
-`results` glob for a results-kind reporter, and the `coverage` path for a
-coverage-kind one.  Those files can be pre-produced by CI.  A coverage-kind
-reporter is chosen by sniffing the file at `coverage`, so a coverage-only
-target need not name one.
+A command writes its results into the target's folder, which it finds in
+`$ELSPAIS_TARGET_OUTPUT`, and the target's `results` glob names them.  A run
+that executes targets refuses, before it runs any of them, a target whose
+reporter reads results and which declares no `results` pattern.  Such a target
+would leave no result to read.
 
 ### match
 
@@ -561,9 +561,9 @@ dimension:
 
 This is the recommended setup for Flutter/Dart packages.  Use
 `reporter = "flutter-machine"` with `match = "source"` to get real per-test
-attribution -- elspais reads the file and line where the Flutter test machine
-protocol says each test is declared, and matches each result to the specific
-test node at that `(path, line)` in the graph. A test declared in a shared
+attribution -- elspais reads the file and line where Flutter's JSON event file
+says each test is declared, and matches each result to the specific test node
+at that `(path, line)` in the graph. A test declared in a shared
 scenario file binds there, whichever runner file executed it.
 
 ### Single-package example
@@ -572,17 +572,20 @@ scenario file binds there, whichever runner file executed it.
 [[scanning.test.targets]]
 name        = "app"
 cwd         = "app"
-command     = "flutter test --machine --coverage --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"
+command     = "flutter test --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.jsonl --coverage --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"
 reporter    = "flutter-machine"
+results     = "machine.jsonl"
 coverage    = "lcov.info"
 match       = "source"
 credit_coverage = "verified"
 ```
 
-`--coverage-path` writes the lcov report into the target's folder,
-`.results/app/`. `coverage` names the report relative to that folder. The
-`SF:` paths inside the report are relative to the package, and elspais reads
-them from `cwd`, the origin every coverage reporter declares.
+`--file-reporter` writes Flutter's JSON event stream into the target's folder,
+`.results/app/`, and `--coverage-path` writes the lcov report there too.
+`results` and `coverage` name those files relative to that folder. The
+terminal shows Flutter's readable reporter while the run goes. The `SF:`
+paths inside the report are relative to the package, and elspais reads them
+from `cwd`, the origin every coverage reporter declares.
 
 ### Two-package example (one with a shared DB)
 
@@ -596,8 +599,9 @@ db = "The local Postgres instance the backend suites share"
 [[scanning.test.targets]]
 name        = "app"
 cwd         = "app"
-command     = "flutter test --machine --coverage --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"
+command     = "flutter test --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.jsonl --coverage --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"
 reporter    = "flutter-machine"
+results     = "machine.jsonl"
 coverage    = "lcov.info"
 match       = "source"
 credit_coverage = "verified"
@@ -605,8 +609,9 @@ credit_coverage = "verified"
 [[scanning.test.targets]]
 name        = "backend"
 cwd         = "backend"
-command     = "flutter test --machine --coverage --concurrency=1 --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"
+command     = "flutter test --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.jsonl --coverage --concurrency=1 --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"
 reporter    = "flutter-machine"
+results     = "machine.jsonl"
 coverage    = "lcov.info"
 match       = "source"
 credit_coverage = "verified"
@@ -635,7 +640,7 @@ parallel test execution causes flakes.  Add `--concurrency=1` to the
 `command` to serialise test files within that package:
 
 ```toml
-command = "flutter test --machine --coverage --concurrency=1 --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"
+command = "flutter test --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.jsonl --coverage --concurrency=1 --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"
 ```
 
 Flutter's `--concurrency` and elspais's `[scanning.test] concurrency` govern
@@ -919,8 +924,8 @@ command = "my-test-runner --output $ELSPAIS_TARGET_OUTPUT/results.xml"
 # Reporter format: "junit" | "pytest-json" | "flutter-machine"
 reporter = "junit"
 
-# Glob for result files (file-channel reporters), relative to the target's
-# folder <output_root>/<name> -- here .results/my-suite/*.xml, for every cwd.
+# Glob for result files, relative to the target's folder
+# <output_root>/<name> -- here .results/my-suite/*.xml, for every cwd.
 results = "*.xml"
 
 # Path to an lcov.info or coverage.py JSON file (format auto-detected),
@@ -986,11 +991,9 @@ name     = "app"
 cwd      = "app"
 # No `command` -- CI already ran flutter test
 reporter = "flutter-machine"
-# flutter-machine is a stdout reporter, so `results` is unused.
-# To get per-test pass/fail attribution in CI, save `flutter test --machine`
-# output to a file in the target's folder and point `results` at it:
-#   results = "test-results.jsonl"
+# CI ran `flutter test --file-reporter=json:<target folder>/machine.jsonl`.
 # Without `results`, only coverage credit is applied (no pass/fail signal).
+results  = "machine.jsonl"
 coverage = "lcov.info"
 match    = "source"
 credit_coverage = "verified"
@@ -1025,12 +1028,13 @@ A job then fails only for its own tests. A specification error fails the
 gate alone. `--expect` makes a missing result of a named target a fault, so
 the gate stays strict.
 
-`elspais test` reads nothing while a command runs. Consequently, every target
-it executes whose reporter reads test results must declare a `results` pattern
-that matches what the command writes into `$ELSPAIS_TARGET_OUTPUT`. A stdout
-reporter's output is not recorded on its own. The command refuses (exit 2),
-before it runs anything, a selection that holds such a target with no
-`results` pattern. A coverage target is not affected.
+A run reads results only from the files a target writes. Consequently, every
+target `elspais test` executes whose reporter reads test results must declare
+a `results` pattern that matches what the command writes into
+`$ELSPAIS_TARGET_OUTPUT`. The command refuses (exit 2), before it runs
+anything, a selection that holds such a target with no `results` pattern.
+`elspais checks --run-tests` and `elspais evidence write` refuse it the same
+way. A coverage target is not affected.
 
 Separate jobs divide a suite across machines. On one machine, `[scanning.test]
 concurrency` runs several targets of one run at the same time, and
@@ -1049,7 +1053,9 @@ concurrency = 4
 ```
 
 With `concurrency = 1`, the default, targets run one at a time in declaration
-order. Their output passes straight through to the terminal.
+order. Their output reaches the terminal as it is written. A target's stdout
+goes to elspais's stderr, so it never mixes with the report elspais writes to
+its stdout.
 
 With a larger value, a run schedules its targets as follows:
 
@@ -1085,18 +1091,17 @@ states its outcome and elapsed time:
 
 ```text
 >>> Running 'unit' target: pytest tests/unit --junitxml=$ELSPAIS_TARGET_OUTPUT/junit.xml
->>> Running 'backend' target: flutter test --machine --coverage ...
+>>> Running 'backend' target: flutter test --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.jsonl --coverage ...
 [unit] ============================= test session starts ==============================
-[backend] {"protocolVersion":"0.1.1","runnerVersion":"1.25.0","type":"start"}
+[backend] 00:01 +0: loading test/db_test.dart
 <<< unit: passed (1.2s)
 <<< backend: FAILED (exit 3) (4.7s)
 ```
 
-The stdout of a file-channel target goes to elspais's stdout, and its stderr
-goes to elspais's stderr. The stdout of a stdout-channel target is its results,
-so elspais shows it on stderr and captures it for that target alone. A target
-never reads another target's output as its results. No target reads stdin:
-each one runs with its stdin at `/dev/null`.
+Both the stdout and the stderr of every target go to elspais's stderr, so
+elspais's own stdout carries its report alone. Nothing reads a target's output
+as results. No target reads stdin: each one runs with its stdin at
+`/dev/null`.
 
 ### Shared resources
 
@@ -1430,10 +1435,9 @@ selected target is executed when any of these holds:
 
 - Its results are stale: an input changed since its run began, or no run
   recorded a fingerprint for them.
-- It has no results on disk. A target with no `results` pattern therefore
-  always runs. A coverage-only target is one example. A stdout reporter with
-  no `results` pattern is another under `checks --run-tests`; `elspais test`
-  refuses such a target (see
+- It has no results on disk. A coverage-only target, which declares no
+  `results` pattern, therefore always runs. A run refuses a target whose
+  reporter reads results and which declares no `results` pattern (see
   [Parallel jobs and one gate](#parallel-jobs-and-one-gate)).
 - Its last run recorded a start and no end.
 
@@ -1482,8 +1486,7 @@ disk for a later run to read; that later run names them with
 | executed or expected | `tests.ingestion_fault` | `tests.ingestion_fault` |
 | neither | `tests.not_run` (info) | `tests.ingestion_fault` |
 
-The rule is the same for a target that reads a results file and for one that
-reads its runner's output. A target another federation member declares is
+A target another federation member declares is
 expected only where the run names it, as `NAMESPACE:NAME`; the name is resolved
 by that member's own configuration, so a group of that member stands for that
 member's targets. An associate's targets the run does not name, with no

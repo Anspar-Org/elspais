@@ -311,7 +311,8 @@ reference_keyword = "Verifies"
 output_root = ".results"
 # concurrency is the most test targets one run executes at the same time, a
 # whole number of 1 or more. 1 (the default) runs the targets one at a time, in
-# declaration order, with their output passed straight through. Above 1, a
+# declaration order, with their output passed straight through to elspais's
+# stderr, so it never mixes with the report on elspais's stdout. Above 1, a
 # waiting target starts in declaration order as soon as a place is free and no
 # running target names a shared resource it names; a target held back by a
 # resource does not hold back the targets after it. Every line a target writes
@@ -410,9 +411,12 @@ concurrency = 1
 name     = "app"
 cwd      = "app"                    # relative to repo root; empty = repo root
 # Omit `command` in CI (tests already ran). The command reads its folder
-# from ELSPAIS_TARGET_OUTPUT.
-command  = "flutter test --machine --coverage --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"
-reporter = "flutter-machine"        # stdout-channel reporter
+# from ELSPAIS_TARGET_OUTPUT and writes its results there.
+command  = "flutter test --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.jsonl --coverage --coverage-path=$ELSPAIS_TARGET_OUTPUT/lcov.info"
+reporter = "flutter-machine"
+results  = "machine.jsonl"          # glob relative to the target's folder;
+                                    # a run refuses a results reporter
+                                    # whose target declares none
 match    = "source"                 # "source" (default) | "aggregate"
 coverage = "lcov.info"  # optional; relative to the target's
                         # folder .results/app, for every cwd. A relative
@@ -474,7 +478,7 @@ coverage = "lcov.info"  # optional; relative to the target's
 # receives       = "placeholder"
 # full_selection = ""
 
-# File-channel reporter example (junit XML):
+# Another reporter example (junit XML):
 # [[scanning.test.targets]]
 # name     = "pytest"
 # reporter = "junit"
@@ -1199,15 +1203,15 @@ the file at `coverage`, so a coverage-only target need not name one.
 <!-- generated: reporters -->
 <!-- Rendered from the program's own definitions; edits here are overwritten. Regenerate: python -m elspais.utilities.doc_tables -->
 
-| Reporter | Channel | Kind | Path origin | Description |
-| --- | --- | --- | --- | --- |
-| `coverage-json` | file | coverage | `working-directory` | Parses the JSON report `coverage json` (coverage.py) writes, in either its aggregate or its per-context form, into per-file line coverage. |
-| `coverage-sqlite` | file | coverage | `working-directory` | Reads coverage.py's own `.coverage` SQLite data file through coverage.py's public API, so per-test contexts are read compactly rather than through a JSON expansion of them. Needs the `coverage` package (`elspais[coverage]`) importable, and degrades to unattributed coverage where it is not. |
-| `evidence-snapshot` | file | results | `repository-root` | Reads the `results.jsonl` of an Evidence Snapshot. A build reads it for each target that has not run in the tree and that the run does not execute, from the directory `[scanning.test] evidence` names, tagging those results carried. Such a target owes no coverage file in that build, because the snapshot holds none. |
-| `flutter-machine` | stdout | results | `repository-root` | Parses the `flutter test --machine` JSON-line protocol from the command's stdout. Carries the file and line where each test is declared, and the file that executed it, so `match = "source"` binds each result to its test, including a test declared in a shared file that a runner file executes. A test run in a browser records no Dart line, so its result binds by the test's full name. Each result also carries its duration and the output its test printed. |
-| `junit` | file | results | `repository-root` | Parses JUnit XML result files matched by the `results` glob. Honours an optional per-`<testcase>` `file` attribute (a real source path) and `line` attribute, so `match = "source"` can bind to a scanned test node. |
-| `lcov` | file | coverage | `working-directory` | Parses an LCOV report -- the `lcov.info` that `flutter test --coverage` and most language toolchains write -- into per-file line coverage. |
-| `pytest-json` | file | results | `repository-root` | Parses the report pytest's `--json-report` writes, matched by the `results` glob. |
+| Reporter | Kind | Path origin | Description |
+| --- | --- | --- | --- |
+| `coverage-json` | coverage | `working-directory` | Parses the JSON report `coverage json` (coverage.py) writes, in either its aggregate or its per-context form, into per-file line coverage. |
+| `coverage-sqlite` | coverage | `working-directory` | Reads coverage.py's own `.coverage` SQLite data file through coverage.py's public API, so per-test contexts are read compactly rather than through a JSON expansion of them. Needs the `coverage` package (`elspais[coverage]`) importable, and degrades to unattributed coverage where it is not. |
+| `evidence-snapshot` | results | `repository-root` | Reads the `results.jsonl` of an Evidence Snapshot. A build reads it for each target that has not run in the tree and that the run does not execute, from the directory `[scanning.test] evidence` names, tagging those results carried. Such a target owes no coverage file in that build, because the snapshot holds none. |
+| `flutter-machine` | results | `repository-root` | Parses the JSON event file that `flutter test --file-reporter=json:<path>` writes. Carries the file and line where each test is declared, and the file that executed it, so `match = "source"` binds each result to its test, including a test declared in a shared file that a runner file executes. A test run in a browser records no Dart line, so its result binds by the test's full name. Each result also carries its duration and the output its test printed. |
+| `junit` | results | `repository-root` | Parses JUnit XML result files matched by the `results` glob. Honours an optional per-`<testcase>` `file` attribute (a real source path) and `line` attribute, so `match = "source"` can bind to a scanned test node. |
+| `lcov` | coverage | `working-directory` | Parses an LCOV report -- the `lcov.info` that `flutter test --coverage` and most language toolchains write -- into per-file line coverage. |
+| `pytest-json` | results | `repository-root` | Parses the report pytest's `--json-report` writes, matched by the `results` glob. |
 
 These are the reporters the tool is built with. `register_reporter()` admits
 further formats at run time, so a project that registers one has a reporter

@@ -56,15 +56,14 @@ def _terminal_tee(path: Path):
 # Verifies: REQ-d00314-C
 def test_no_targets_returns_empty(tmp_path: Path):
     cfg = _cfg_with_targets([])
-    results, captured = run_configured_targets(cfg, tmp_path)
+    results = run_configured_targets(cfg, tmp_path)
     assert results == []
-    assert captured == {}
 
 
 # Verifies: REQ-d00314-K, REQ-d00249-L
 def test_single_target_success(tmp_path: Path):
     cfg = _cfg_with_targets([TestTargetConfig(name="ok", command="true", reporter="junit")])
-    results, captured = run_configured_targets(cfg, tmp_path)
+    results = run_configured_targets(cfg, tmp_path)
     assert len(results) == 1
     r = results[0]
     assert r.name == "ok"
@@ -78,7 +77,7 @@ def test_single_target_success(tmp_path: Path):
 # Verifies: REQ-d00314-K
 def test_target_failure_records_nonzero(tmp_path: Path):
     cfg = _cfg_with_targets([TestTargetConfig(name="bad", command="false", reporter="junit")])
-    results, _captured = run_configured_targets(cfg, tmp_path)
+    results = run_configured_targets(cfg, tmp_path)
     assert results[0].returncode != 0
 
 
@@ -91,7 +90,7 @@ def test_targets_run_in_declaration_order(tmp_path: Path):
             TestTargetConfig(name="second", command=f"echo second >> {marker}", reporter="junit"),
         ]
     )
-    results, _captured = run_configured_targets(cfg, tmp_path)
+    results = run_configured_targets(cfg, tmp_path)
     assert [r.name for r in results] == ["first", "second"]
     assert marker.read_text().splitlines() == ["first", "second"]
 
@@ -105,7 +104,7 @@ def test_fail_fast_stops_after_first_failure(tmp_path: Path):
             TestTargetConfig(name="never", command=f"touch {marker}", reporter="junit"),
         ]
     )
-    results, _captured = run_configured_targets(cfg, tmp_path, fail_fast=True)
+    results = run_configured_targets(cfg, tmp_path, fail_fast=True)
     assert len(results) == 1
     assert results[0].name == "bad"
     assert not marker.exists()
@@ -118,7 +117,7 @@ def test_cwd_resolves_relative_to_repo_root(tmp_path: Path):
     cfg = _cfg_with_targets(
         [TestTargetConfig(name="pwd", command="pwd > out.txt", cwd="subproj", reporter="junit")]
     )
-    results, _captured = run_configured_targets(cfg, tmp_path)
+    results = run_configured_targets(cfg, tmp_path)
     assert results[0].returncode == 0
     assert results[0].cwd == subdir.resolve()
     assert (subdir / "out.txt").read_text().strip() == str(subdir.resolve())
@@ -129,7 +128,7 @@ def test_empty_cwd_uses_repo_root(tmp_path: Path):
     cfg = _cfg_with_targets(
         [TestTargetConfig(name="here", command="pwd > out.txt", reporter="junit")]
     )
-    results, _captured = run_configured_targets(cfg, tmp_path)
+    results = run_configured_targets(cfg, tmp_path)
     assert results[0].cwd == tmp_path
     assert (tmp_path / "out.txt").read_text().strip() == str(tmp_path.resolve())
 
@@ -143,7 +142,7 @@ def test_default_does_not_fail_fast(tmp_path: Path):
             TestTargetConfig(name="after", command=f"touch {marker}", reporter="junit"),
         ]
     )
-    results, _captured = run_configured_targets(cfg, tmp_path)
+    results = run_configured_targets(cfg, tmp_path)
     assert len(results) == 2
     assert results[0].returncode != 0
     assert results[1].returncode == 0
@@ -159,7 +158,7 @@ def test_absolute_cwd_outside_repo_is_rejected(tmp_path: Path):
     cfg = _cfg_with_targets(
         [TestTargetConfig(name="escape", command="true", cwd=str(outside), reporter="junit")]
     )
-    results, _captured = run_configured_targets(cfg, repo)
+    results = run_configured_targets(cfg, repo)
     assert len(results) == 1
     r = results[0]
     assert r.returncode == -1
@@ -173,7 +172,7 @@ def test_parent_traversal_cwd_is_rejected(tmp_path: Path):
     cfg = _cfg_with_targets(
         [TestTargetConfig(name="dotdot", command="true", cwd="../elsewhere", reporter="junit")]
     )
-    results, _captured = run_configured_targets(cfg, repo)
+    results = run_configured_targets(cfg, repo)
     assert results[0].returncode == -1
     assert "outside the repo root" in results[0].error
 
@@ -185,7 +184,7 @@ def test_relative_subdir_cwd_is_accepted(tmp_path: Path):
     cfg = _cfg_with_targets(
         [TestTargetConfig(name="ok", command="true", cwd="sub", reporter="junit")]
     )
-    results, _captured = run_configured_targets(cfg, tmp_path)
+    results = run_configured_targets(cfg, tmp_path)
     assert results[0].returncode == 0
     assert results[0].cwd == sub.resolve()
 
@@ -194,7 +193,7 @@ def test_relative_subdir_cwd_is_accepted(tmp_path: Path):
 def test_target_without_command_is_skipped(tmp_path: Path):
     """Targets with empty command are skipped (CI mode — tests already ran)."""
     cfg = _cfg_with_targets([TestTargetConfig(name="no-cmd", reporter="junit")])
-    results, _captured = run_configured_targets(cfg, tmp_path)
+    results = run_configured_targets(cfg, tmp_path)
     assert results == []
 
 
@@ -208,7 +207,7 @@ def test_only_runs_named_targets(tmp_path: Path):
             TestTargetConfig(name="b", command=f"echo b >> {marker}", reporter="junit"),
         ]
     )
-    results, _captured = run_configured_targets(cfg, tmp_path, only={"a"})
+    results = run_configured_targets(cfg, tmp_path, only={"a"})
     assert [r.name for r in results] == ["a"]
     assert marker.read_text().splitlines() == ["a"]
 
@@ -222,23 +221,18 @@ def test_only_none_runs_all_targets(tmp_path: Path):
             TestTargetConfig(name="b", command="true", reporter="junit"),
         ]
     )
-    results, _captured = run_configured_targets(cfg, tmp_path, only=None)
+    results = run_configured_targets(cfg, tmp_path, only=None)
     assert [r.name for r in results] == ["a", "b"]
 
 
 # Verifies: REQ-d00249-B
-@pytest.mark.parametrize(
-    ("reporter", "stdout_is_captured"),
-    [("junit", False), ("flutter-machine", True)],
-)
-def test_REQ_d00249_B_both_streams_reach_terminal(
-    tmp_path: Path, reporter: str, stdout_is_captured: bool
+@pytest.mark.parametrize("reporter", ["junit", "flutter-machine"])
+def test_REQ_d00249_B_both_streams_reach_stderr_and_none_reaches_stdout(
+    tmp_path: Path, capfd, reporter: str
 ):
-    """A runner's stdout AND stderr reach the invoking terminal, whatever its reporter.
-
-    A stdout-channel reporter additionally needs that stdout captured for its
-    parser (REQ-d00254-F); capturing it must not cost the developer sight of it.
-    """
+    """A runner's stdout is written to this process's stderr, and its stderr is
+    inherited, whatever its reporter; nothing of the command reaches stdout,
+    which may carry a machine-readable report."""
     # The sentinels live in files the command reads, never in the command text
     # itself -- the runner banner echoes the command, and a sentinel spelled
     # there would be found on the terminal whether or not the runner's own
@@ -254,22 +248,17 @@ def test_REQ_d00249_B_both_streams_reach_terminal(
             )
         ]
     )
-    log = tmp_path / "terminal.log"
-    with _terminal_tee(log):
-        results, captured = run_configured_targets(cfg, tmp_path)
-    terminal = log.read_text()
+    results = run_configured_targets(cfg, tmp_path)
+    out, err = capfd.readouterr()
 
     assert results[0].returncode == 3
-    assert "OUTLINE" in terminal, f"runner stdout never reached the terminal: {terminal!r}"
-    assert "ERRLINE" in terminal, f"runner stderr never reached the terminal: {terminal!r}"
-    if stdout_is_captured:
-        assert "OUTLINE" in captured["t"]
-    else:
-        assert "t" not in captured
+    assert "OUTLINE" in err, f"runner stdout never reached stderr: {err!r}"
+    assert "ERRLINE" in err, f"runner stderr never reached stderr: {err!r}"
+    assert "OUTLINE" not in out and "ERRLINE" not in out, f"runner output on stdout: {out!r}"
 
 
 # Verifies: REQ-d00249-B
-def test_REQ_d00249_B_stdout_channel_streams_live_not_at_exit(tmp_path: Path):
+def test_REQ_d00249_B_output_streams_live_not_at_exit(tmp_path: Path):
     """Output appears on the terminal while the runner is still going, not after it ends."""
     # Sentinels come from files, not the command text (see above).
     (tmp_path / "early.txt").write_text("EARLY\n")
@@ -279,7 +268,7 @@ def test_REQ_d00249_B_stdout_channel_streams_live_not_at_exit(tmp_path: Path):
             TestTargetConfig(
                 name="slow",
                 command="cat early.txt; sleep 1.5; cat late.txt",
-                reporter="flutter-machine",
+                reporter="junit",
             )
         ]
     )
@@ -300,14 +289,14 @@ def test_REQ_d00249_B_stdout_channel_streams_live_not_at_exit(tmp_path: Path):
     watcher.start()
     try:
         with _terminal_tee(log):
-            results, captured = run_configured_targets(cfg, tmp_path)
+            results = run_configured_targets(cfg, tmp_path)
     finally:
         stop.set()
         watcher.join(timeout=2.0)
     total = time.monotonic() - start
 
     assert results[0].returncode == 0
-    assert "LATE" in captured["slow"]
+    assert "LATE" in log.read_text()
     assert total >= 1.4, "the runner did not actually take the time the probe relies on"
     assert seen_early_at, "no runner output reached the terminal before the runner exited"
     assert seen_early_at[0] < 1.0, (
@@ -488,34 +477,36 @@ def test_both_runs_refuse_an_unknown_name_with_one_text(tmp_path, monkeypatch, c
 
 
 # Verifies: REQ-d00249-K
+@pytest.mark.parametrize("reporter", ["flutter-machine", "junit"])
 @pytest.mark.parametrize(
-    "reporter",
-    ["flutter-machine", "junit"],
-    ids=["stdout-channel", "file-channel"],
+    "argv",
+    [["test"], ["checks", "--lenient", "--run-tests"]],
+    ids=["test", "checks-run-tests"],
 )
 def test_a_target_whose_results_would_not_be_recorded_refuses_the_run(
-    tmp_path, monkeypatch, capsys, reporter
+    tmp_path, monkeypatch, capsys, reporter, argv
 ):
-    """A results target with no `results` pattern leaves nothing on disk,
-    whichever channel its reporter reads. The whole selection is refused
-    before the other target runs, and the refusal names no other command."""
+    """A results target of the invoking repository with no `results` pattern
+    leaves nothing on disk, and no run reads a command's output as results.
+    Both runs that execute targets refuse the whole selection, exit 2, before
+    the other target runs."""
     from elspais.cli import main
 
     marker = tmp_path / "ran.txt"
-    _cli_project(
+    root = _cli_project(
         tmp_path,
         monkeypatch,
         _target_toml("unit", f"touch {marker}"),
         _target_toml("widgets", "true", reporter=reporter, results=None),
     )
 
-    assert main(["test"]) == 2
+    assert main(argv) == 2
 
     err = capsys.readouterr().err
     assert "widgets" in err
     assert "declare the `results` pattern" in err
-    assert "--run-tests" not in err
     assert not marker.exists()
+    assert not (root / ".results").exists()
 
 
 # Verifies: REQ-d00249-K
@@ -536,7 +527,7 @@ def test_a_coverage_target_with_no_results_pattern_is_executed(tmp_path, monkeyp
 
 
 # Verifies: REQ-d00249-K
-def test_a_stdout_target_declaring_its_results_is_executed(tmp_path, monkeypatch, capsys):
+def test_a_flutter_target_declaring_its_results_is_executed(tmp_path, monkeypatch, capsys):
     """The negative: the same reporter with a results pattern is not refused."""
     from elspais.cli import main
 

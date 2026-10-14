@@ -576,8 +576,8 @@ def _ingest_target_results(
             path_environment, reason = (
                 None,
                 (
-                    "this target's results were read from a runner's output, "
-                    "so there is no results path to read an environment from"
+                    "these results were read from a file no results pattern "
+                    "matched, so no part of its path stands for an environment"
                 ),
             )
         if path_environment is None:
@@ -679,13 +679,11 @@ def _ingest_target_results(
         result_file = _repo_relative_or_kept(rec.get("result_file") or None, recorded=False)
         result_line = rec.get("result_line")
 
-        # Implements: REQ-d00294-A+B
+        # Implements: REQ-d00294-A
         # The id is spelled here, where the repository root and the
         # namespace are known, so the place of a result record is
         # repo-relative and the same run reads the same way in any checkout.
-        # A result record an artifact holds is placed by that artifact; one
-        # read from a runner's output has no artifact and is placed by its
-        # target.
+        # The artifact holding a result record is its place.
         # An artifact outside the repository keeps the path it has, because
         # it has no repo-relative form to take. Such an id holds a path from
         # the machine that read it, and two checkouts reading one artifact
@@ -698,7 +696,13 @@ def _ingest_target_results(
                 f"result records of the same test. Every results reporter numbers "
                 f"its result records."
             )
-        result_id = make_result_id(namespace, result_file or target.name, ordinal)
+        if not result_file:
+            raise ValueError(
+                f"reporter {reporter_name!r} produced a result naming no results "
+                f"file, so the result record has no place. Every results reporter "
+                f"names the file it read."
+            )
+        result_id = make_result_id(namespace, result_file, ordinal)
 
         # Implements: REQ-d00294-C+D
         if env_source == "results-path":
@@ -787,7 +791,6 @@ def _ingest_file_results(
     *,
     namespace: str,
     carried: bool,
-    captured: bool,
     evidence_only: bool,
 ) -> int:
     """Add the file-level result of each test file *target* scans.
@@ -861,7 +864,7 @@ def _ingest_file_results(
 
     # Implements: REQ-d00311-N
     running = run_in_progress(area)
-    if running is not None and not captured:
+    if running is not None:
         if not reads_per_test:
             builder.record_unread_artifact(
                 UnreadArtifact(
@@ -1561,7 +1564,6 @@ def build_graph(
     repo_root: Path | None = None,
     scan_code: bool = True,
     scan_tests: bool = True,
-    captured_results: dict[str, str] | None = None,
     fresh_targets: set[str] | None = None,
     evidence_only: bool = False,
 ) -> FederatedGraph:
@@ -1586,8 +1588,6 @@ def build_graph(
         repo_root: Repository root for relative paths (defaults to cwd).
         scan_code: Whether to scan code directories from traceability.scan_patterns.
         scan_tests: Whether to scan test directories from testing.test_dirs.
-        captured_results: Optional mapping of target name -> captured stdout/results
-            text, bypassing the on-disk results glob for that target.
         fresh_targets: Optional set of [[scanning.test.targets]] names considered
             "freshly run" (e.g. via ``--targets``). When set, every RESULT node
             ingested for a target NOT in this set is tagged ``carried=True``,
@@ -1641,7 +1641,6 @@ def build_graph(
         config_path=config_path,
         scan_code=scan_code,
         scan_tests=scan_tests,
-        captured_results=captured_results,
         fresh_targets=fresh_targets,
         federation_resolvers=federation_resolvers,
         evidence_only=evidence_only,
@@ -1725,7 +1724,6 @@ def _build_repository(
     config_path: Path | None = None,
     scan_code: bool = True,
     scan_tests: bool = True,
-    captured_results: dict[str, str] | None = None,
     fresh_targets: set[str] | None = None,
     federation_resolvers: list[IdResolver] | None = None,
     evidence_only: bool = False,
@@ -2042,7 +2040,6 @@ def _build_repository(
             # reads each input once.
             _digest_cache: dict[Path, str] = {}
 
-            _captured = captured_results or {}
             from elspais.graph.parsers.results.registry import get_reporter as _get_reporter
 
             # Implements: REQ-d00322-J+L
@@ -2169,10 +2166,8 @@ def _build_repository(
                 # Implements: REQ-d00311-N
                 # A run in progress has emptied the area and writes into it
                 # while it runs, so nothing there is read until it ends.
-                # Output this invocation captured is read: it is a run that
-                # has ended.
                 _running = run_in_progress(target_folder(repo_root, typed_config, target.name))
-                if target.name not in _captured and _running is not None:
+                if _running is not None:
                     builder.record_unread_artifact(
                         UnreadArtifact(
                             target=target.name,
@@ -2205,16 +2200,13 @@ def _build_repository(
                 # carried, whatever this invocation selected. The judgement is
                 # the one `tests.results_stale` reports, and its reason rides
                 # on each result so a failure can say why it may be out of
-                # date. Output this invocation captured is its own run.
+                # date.
                 stale_reason_here = ""
-                if target.name not in _captured:
-                    _verdict = judge(
-                        repo_root, typed_config, target.name, digest_cache=_digest_cache
-                    )
-                    if _verdict.state == "stale":
-                        carried = True
-                        stale_reason_here = stale_reason(_verdict)
-                    stale_by_target[target.name] = stale_reason_here
+                _verdict = judge(repo_root, typed_config, target.name, digest_cache=_digest_cache)
+                if _verdict.state == "stale":
+                    carried = True
+                    stale_reason_here = stale_reason(_verdict)
+                stale_by_target[target.name] = stale_reason_here
                 # Implements: REQ-d00333-A
                 # The Retained Results a run wrote beside its own results are
                 # results of the target, read after them.
@@ -2222,19 +2214,7 @@ def _build_repository(
                     target_folder(repo_root, typed_config, target.name) / RETAINED_RESULTS_NAME
                 )
                 has_retained = _retained.is_file()
-                if target.name in _captured:
-                    _ingest_target_results(
-                        builder,
-                        target,
-                        _captured[target.name],
-                        repo_root,
-                        "",
-                        namespace=typed_config.project.namespace,
-                        carried=carried,
-                        scanned_tests=target_tests,
-                        recorded_root=recorded_root,
-                    )
-                elif target.results:
+                if target.results:
                     # Implements: REQ-d00312-A+C
                     # target.results names files inside the output area of the
                     # target. The working directory of the target does not
@@ -2296,11 +2276,8 @@ def _build_repository(
                         continue
                     # Implements: REQ-d00283-R+S+T
                     # The same fact as a results pattern that matched nothing,
-                    # for a target whose reporter reads its runner's output.
-                    _log.debug(
-                        "target %r: stdout reporter with no captured output and no results glob",
-                        target.name,
-                    )
+                    # for a target that declares no results pattern.
+                    _log.debug("target %r: no results pattern", target.name)
                     builder.record_unread_artifact(
                         UnreadArtifact(
                             target=target.name, artifact="results", path="", reason="absent"
@@ -2335,7 +2312,6 @@ def _build_repository(
                         scanned_test_files,
                         namespace=typed_config.project.namespace,
                         carried=fresh_targets is not None and target.name not in fresh_targets,
-                        captured=target.name in _captured,
                         evidence_only=evidence_only,
                     )
 
@@ -2397,7 +2373,7 @@ def _build_repository(
             cov_path = (cov_area / target.coverage).resolve()
             # Implements: REQ-d00311-N
             _running = run_in_progress(cov_area)
-            if _running is not None and target.name not in (captured_results or {}):
+            if _running is not None:
                 graph.record_unread_artifact(
                     UnreadArtifact(
                         target=target.name,
@@ -2517,11 +2493,8 @@ def _build_repository(
             )
             # Implements: REQ-d00323-I
             # Coverage the current tree did not produce is carried, by the
-            # judgement its target's results get. Output this invocation
-            # captured is its own run.
-            if target.name in (captured_results or {}):
-                cov_stale = ""
-            elif target.name in stale_by_target:
+            # judgement its target's results get.
+            if target.name in stale_by_target:
                 cov_stale = stale_by_target[target.name]
             else:
                 _cov_verdict = judge(repo_root, typed_config, target.name)

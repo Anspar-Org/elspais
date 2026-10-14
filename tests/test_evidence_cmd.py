@@ -388,7 +388,7 @@ def _truncated_stream(root: Path) -> str:
     ("target", "results", "cause"),
     [
         (_UNKNOWN_REPORTER_TARGET, lambda root: "<testsuite/>\n", "junit-xmll"),
-        (_COPIED_TARGET, lambda root: "{not json\n", "no JSON events"),
+        (_COPIED_TARGET, lambda root: "{not json\n", "no `flutter test` JSON events"),
         (_COPIED_TARGET, _truncated_stream, "started and reported no result"),
     ],
     ids=["unknown-reporter", "unparseable", "truncated-stream"],

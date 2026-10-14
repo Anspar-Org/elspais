@@ -32,6 +32,7 @@ def run(args: argparse.Namespace) -> int:
         plan_target_runs,
         run_configured_targets,
         settle_units,
+        unrecorded_refusal,
         unrecorded_targets,
     )
 
@@ -67,14 +68,7 @@ def run(args: argparse.Namespace) -> int:
     # Implements: REQ-d00249-K
     lost = [run.spell(name) for run in runs for name in unrecorded_targets(run.config, run.only)]
     if lost:
-        print(
-            f"error: target(s) {', '.join(lost)} declare no `results` pattern. This "
-            f"command evaluates no check and reads no output while a command runs, so "
-            f"their results would reach nothing. Have each command write its results "
-            f"into $ELSPAIS_TARGET_OUTPUT and declare the `results` pattern that "
-            f"matches them.",
-            file=sys.stderr,
-        )
+        print(f"error: {unrecorded_refusal(lost)}", file=sys.stderr)
         return 2
 
     fail_fast = bool(getattr(args, "fail_fast", False))
@@ -92,7 +86,7 @@ def run(args: argparse.Namespace) -> int:
         # Implements: REQ-d00249-N
         # Each member's targets execute under that member's root, with its
         # configuration, writing into its output area.
-        results, _captured = run_configured_targets(
+        results = run_configured_targets(
             target_run.config,
             target_run.repo_root,
             fail_fast=fail_fast,

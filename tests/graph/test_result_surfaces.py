@@ -93,8 +93,17 @@ def test_one_fetched_result_says_where_it_was_recorded():
 
 # Verifies: REQ-d00294-F
 def test_a_fetched_result_without_a_place_omits_the_keys():
-    """Keys a result does not carry are left out rather than sent empty."""
-    node = _result("result:REQ:widgets:1", environment=None, result_file=None, result_line=None)
+    """Keys a result does not carry are left out rather than sent empty.
+
+    A file-level result is one such result: no results artifact holds it."""
+    from elspais.graph.GraphNode import make_file_result_id
+
+    node = _result(
+        make_file_result_id("REQ", "widgets", "test/a_test.dart"),
+        environment=None,
+        result_file=None,
+        result_line=None,
+    )
     graph = _graph(node)
 
     properties = _serialize_node_generic(node, graph)["properties"]

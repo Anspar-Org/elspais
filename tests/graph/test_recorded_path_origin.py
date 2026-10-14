@@ -159,7 +159,6 @@ def test_each_provided_reporter_declares_the_origin_of_its_kind():
 def test_a_reporter_may_declare_an_origin_other_than_its_kinds():
     spec = ReporterSpec(
         name="cwd-junit",
-        channel="file",
         kind="results",
         parser_factory=lambda: None,
         path_origin=PATH_ORIGIN_CWD,
@@ -346,7 +345,6 @@ def test_a_reporter_declaring_an_undeclarable_origin_is_refused(origin):
     with pytest.raises(ValueError) as excinfo:
         ReporterSpec(
             name="misdeclared",
-            channel="file",
             kind="coverage",
             parser_factory=lambda: None,
             path_origin=origin,

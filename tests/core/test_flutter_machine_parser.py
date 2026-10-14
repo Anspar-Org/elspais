@@ -291,7 +291,11 @@ def test_a_result_node_carries_its_duration_and_printed_output(tmp_path):
     builder = GraphBuilder(repo_root=tmp_path, namespace="REQ", resolver=grammar_for("REQ"))
     target = TestTargetConfig(name="flutter", reporter="flutter-machine", match="source")
     stream = _timed_stream(_print("ratio 0.9x"), _print("pause 12ms"))
-    assert _ingest_target_results(builder, target, stream, tmp_path, namespace="REQ") == 1
+    results_file = str(tmp_path / ".results" / "flutter" / "machine.jsonl")
+    assert (
+        _ingest_target_results(builder, target, stream, tmp_path, results_file, namespace="REQ")
+        == 1
+    )
 
     (node,) = list(builder.build().iter_by_kind(NodeKind.RESULT))
 

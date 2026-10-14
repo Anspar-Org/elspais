@@ -245,7 +245,7 @@ def test_targets_naming_a_common_resource_never_overlap(
         resources={"db": "the local postgres"},
     )
 
-    results, _ = run_configured_targets(cfg, repo)
+    results = run_configured_targets(cfg, repo)
 
     assert [r.returncode for r in results] == [0, 0]
     (a_start, a_end), (b_start, b_end) = _interval(repo, cfg, "a"), _interval(repo, cfg, "b")
@@ -266,7 +266,7 @@ def test_unrelated_targets_run_at_the_same_time(repo, stub):
         concurrency=2,
     )
 
-    results, _ = run_configured_targets(cfg, repo)
+    results = run_configured_targets(cfg, repo)
 
     assert [(r.name, r.returncode) for r in results] == [("a", 0), ("b", 0)]
 
@@ -284,7 +284,7 @@ def test_a_target_waiting_for_a_resource_does_not_hold_back_the_next(repo, stub,
         resources={"db": "the local postgres"},
     )
 
-    results, _ = run_configured_targets(cfg, repo)
+    results = run_configured_targets(cfg, repo)
 
     assert [(r.name, r.returncode) for r in results] == [("a", 0), ("b", 0), ("c", 0)]
     assert _interval(repo, cfg, "a")[1] <= _interval(repo, cfg, "b")[0]
@@ -297,7 +297,7 @@ def test_no_more_targets_run_at_once_than_the_maximum(repo, stub):
         concurrency=2,
     )
 
-    results, _ = run_configured_targets(cfg, repo)
+    results = run_configured_targets(cfg, repo)
 
     assert [r.returncode for r in results] == [0, 0, 0]
     intervals = [_interval(repo, cfg, n) for n in ("a", "b", "c")]
@@ -312,47 +312,38 @@ def test_no_more_targets_run_at_once_than_the_maximum(repo, stub):
 _TALLY = r"\(\d+\.\ds\)"
 
 
-# Verifies: REQ-d00314-J+K+L
-def test_a_concurrent_run_attributes_every_line_and_keeps_captures_apart(repo, stub, capsys):
+# Verifies: REQ-d00314-J+K+L, REQ-d00249-B
+def test_a_concurrent_run_attributes_every_line_on_stderr(repo, stub, capsys):
+    """Both streams of every command arrive on stderr, each line prefixed with
+    its target's name, whatever the target's reporter; stdout carries none."""
     cfg = _cfg(
         [
             _target("alpha", stub("say", "ALPHA", "5", "0", "beta"), reporter="flutter-machine"),
-            _target("beta", stub("say", "BETA", "5", "3", "alpha"), reporter="flutter-machine"),
+            _target("beta", stub("say", "BETA", "5", "3", "alpha")),
             _target("gamma", stub("say", "GAMMA", "3", "0")),
         ],
         concurrency=3,
     )
 
-    results, captured = run_configured_targets(cfg, repo)
+    results = run_configured_targets(cfg, repo)
     out, err = capsys.readouterr()
 
     assert [(r.name, r.returncode) for r in results] == [("alpha", 0), ("beta", 3), ("gamma", 0)]
-    # A stdout-channel target's stdout is echoed to stderr; a file-channel
-    # target's stdout to stdout; every stderr line to stderr.
-    expected = {
-        "alpha": (5, err, err),
-        "beta": (5, err, err),
-        "gamma": (3, out, err),
-    }
-    for name, (count, stdout_stream, stderr_stream) in expected.items():
+    for name, count in (("alpha", 5), ("beta", 5), ("gamma", 3)):
         token = name.upper()
         for i in range(count):
-            assert stdout_stream.splitlines().count(f"[{name}] {token}-OUT-{i}") == 1
-            assert stderr_stream.splitlines().count(f"[{name}] {token}-ERR-{i}") == 1
-        for line in (out + err).splitlines():
+            assert err.splitlines().count(f"[{name}] {token}-OUT-{i}") == 1
+            assert err.splitlines().count(f"[{name}] {token}-ERR-{i}") == 1
+        assert f"{token}-" not in out, f"{name}'s output reached stdout: {out!r}"
+        for line in err.splitlines():
             if f"{token}-" in line:
                 assert line.startswith(f"[{name}] "), f"unattributed line: {line!r}"
 
-    # The two stdout-channel targets really did write at the same time.
+    # The two meeting targets really did write at the same time.
     lines = err.splitlines()
     alpha_at = [i for i, line in enumerate(lines) if "ALPHA-OUT" in line]
     beta_at = [i for i, line in enumerate(lines) if "BETA-OUT" in line]
     assert beta_at[0] < alpha_at[-1] and alpha_at[0] < beta_at[-1]
-
-    # Each capture holds its own target's stdout alone, unprefixed.
-    assert captured["alpha"] == "".join(f"ALPHA-OUT-{i}\n" for i in range(5))
-    assert captured["beta"] == "".join(f"BETA-OUT-{i}\n" for i in range(5))
-    assert "gamma" not in captured
 
     assert re.search(rf"^<<< alpha: passed {_TALLY}$", err, re.M)
     assert re.search(rf"^<<< beta: FAILED \(exit 3\) {_TALLY}$", err, re.M)
@@ -376,7 +367,7 @@ def test_a_target_ends_when_its_command_exits_though_a_background_process_holds_
 
     try:
         began = time.monotonic()
-        results, _ = run_configured_targets(cfg, repo)
+        results = run_configured_targets(cfg, repo)
         elapsed = time.monotonic() - began
     finally:
         deadline = time.monotonic() + 5
@@ -391,13 +382,14 @@ def test_a_target_ends_when_its_command_exits_though_a_background_process_holds_
 
     assert elapsed < 15, f"the run waited {elapsed:.1f}s for the background process"
     assert [(r.name, r.returncode) for r in results] == [("bg", 0)]
-    assert "[bg] started" in out.splitlines()
+    assert "[bg] started" in err.splitlines()
+    assert "started" not in out
     assert re.search(rf"^<<< bg: passed {_TALLY}$", err, re.M)
     fingerprint = read_fingerprint(target_folder(repo, cfg, "bg"))
     assert fingerprint is not None and fingerprint.get("finished_at")
 
 
-# Verifies: REQ-d00314-B+C+D
+# Verifies: REQ-d00314-B+C+D, REQ-d00249-B
 def test_without_a_maximum_targets_run_one_at_a_time_in_order_unmarked(
     repo, stub, tmp_path, monkeypatch, capfd
 ):
@@ -406,7 +398,7 @@ def test_without_a_maximum_targets_run_one_at_a_time_in_order_unmarked(
     names = ("zeta", "alpha", "mid")
     cfg = _cfg([_target(n, stub("say", n.upper(), "2", "0")) for n in names])
 
-    results, _ = run_configured_targets(cfg, repo)
+    results = run_configured_targets(cfg, repo)
     out, err = capfd.readouterr()
 
     assert [r.name for r in results] == list(names)
@@ -415,8 +407,10 @@ def test_without_a_maximum_targets_run_one_at_a_time_in_order_unmarked(
     assert all(intervals[i][1] <= intervals[i + 1][0] for i in range(len(names) - 1))
     for name in names:
         token = name.upper()
-        assert out.splitlines().count(f"{token}-OUT-0") == 1
+        # A command's stdout is written to this process's stderr.
+        assert err.splitlines().count(f"{token}-OUT-0") == 1
         assert err.splitlines().count(f"{token}-ERR-0") == 1
+        assert f"{token}-" not in out
     assert "] " not in "".join(line for line in (out + err).splitlines() if "-OUT-" in line)
 
 
@@ -431,7 +425,7 @@ def test_fail_fast_starts_nothing_more_and_lets_running_targets_finish(repo, stu
         concurrency=2,
     )
 
-    results, _ = run_configured_targets(cfg, repo, fail_fast=True)
+    results = run_configured_targets(cfg, repo, fail_fast=True)
 
     assert [(r.name, r.returncode) for r in results] == [("a", 1), ("b", 0)]
     assert not target_folder(repo, cfg, "c").exists(), "a target started after the failure"
@@ -773,7 +767,7 @@ def test_a_run_records_the_targets_it_executed_beside_the_output_areas(repo, stu
     names = ("c", "a", "b")
     cfg = _cfg([_target(n, stub("hold", "0")) for n in names])
 
-    results, _ = run_configured_targets(cfg, repo, only={"c", "a"})
+    results = run_configured_targets(cfg, repo, only={"c", "a"})
 
     assert sorted(r.name for r in results) == ["a", "c"]
     path = last_run_path(repo, cfg)
@@ -802,7 +796,7 @@ def test_a_record_replaces_the_record_of_every_earlier_run(repo, stub):
 def test_a_target_refused_before_its_run_began_is_not_recorded(repo, stub):
     cfg = _cfg([_target("outside", stub("hold", "0"), cwd=".."), _target("b", stub("hold", "0"))])
 
-    results, _ = run_configured_targets(cfg, repo)
+    results = run_configured_targets(cfg, repo)
 
     by_name = {r.name: r for r in results}
     assert by_name["outside"].started is False
@@ -815,7 +809,7 @@ def test_under_fail_fast_a_target_never_started_is_not_recorded(repo, stub):
     """`a` fails and was executed, so it is recorded; `b` never starts."""
     cfg = _cfg([_target("a", stub("fail", "1")), _target("b", stub("hold", "0"))])
 
-    results, _ = run_configured_targets(cfg, repo, fail_fast=True)
+    results = run_configured_targets(cfg, repo, fail_fast=True)
 
     assert [(r.name, r.returncode) for r in results] == [("a", 1)]
     assert _last_run(repo, cfg)["executed"] == ["a"]
@@ -1071,7 +1065,8 @@ def test_a_run_lowers_the_maximum_the_project_sets(tmp_path, monkeypatch, stub, 
     cfg = _config(root)
     first, second = (_interval(root, cfg, n) for n in names)
     assert first[1] <= second[0]
-    assert "ZETA-OUT-0" in out.splitlines()
+    assert "ZETA-OUT-0" in err.splitlines()
+    assert "ZETA-OUT-0" not in out
     assert "] " not in "".join(line for line in (out + err).splitlines() if "-OUT-" in line)
 
 

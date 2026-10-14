@@ -1,4 +1,4 @@
-# Verifies: REQ-d00294-A, REQ-d00294-B, REQ-d00294-C, REQ-d00294-E, REQ-d00294-F
+# Verifies: REQ-d00294-A, REQ-d00294-C, REQ-d00294-E, REQ-d00294-F
 """A whole build over a grid: one test, many environments, many results.
 
 A grid runs one test in several places and writes one record for each of
@@ -278,37 +278,6 @@ def test_a_result_is_placed_by_a_repo_relative_path(grid, tmp_path):
         _, _, place, _ = parse_structural_id(node.id)
         assert not Path(place).is_absolute()
         assert str(tmp_path) not in place
-
-
-# Verifies: REQ-d00294-B
-def test_a_captured_target_places_its_records_by_the_target(tmp_path):
-    """Results read from a runner's output are placed by the target.
-
-    No artifact holds them, so the place of record an artifact would give
-    does not exist and the target is what the tool read them from.
-    """
-    stream = (
-        '{"type":"suite","suite":{"id":0,"platform":"vm","path":"tests/e2e/test_login.py"}}\n'
-        '{"type":"testStart","test":{"id":1,"name":"logs in","suiteID":0,'
-        '"line":2,"column":1,"metadata":{},"root_line":2,"root_column":1}}\n'
-        '{"type":"testDone","testID":1,"result":"success","hidden":false,"time":42}\n'
-        '{"type":"testStart","test":{"id":2,"name":"logs in","suiteID":0,'
-        '"line":2,"column":1,"metadata":{},"root_line":2,"root_column":1}}\n'
-        '{"type":"testDone","testID":2,"result":"failure","hidden":false,"time":43}\n'
-    )
-    project = _project(
-        tmp_path,
-        target="widgets",
-        reporter="flutter-machine",
-        target_body='match = "source"\ncommand = "flutter test --machine"\n',
-        artifacts={},
-    )
-
-    graph = _build(project, captured_results={"widgets": stream})
-
-    results = _results(graph)
-    assert [node.id for node in results] == ["result:REQ:widgets:1", "result:REQ:widgets:2"]
-    assert {node.get_field("status") for node in results} == {"passed", "failed"}
 
 
 # Verifies: REQ-d00294-E

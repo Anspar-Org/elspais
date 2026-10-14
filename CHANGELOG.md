@@ -10,6 +10,8 @@ All notable changes to elspais will be documented in this file.
 
 ### TOOL-157
 
+- **Every reporter reads its results from the files a target writes (REQ-d00249-K, REQ-d00254-F)** -- a Flutter target writes its event stream with `flutter test --file-reporter=json:$ELSPAIS_TARGET_OUTPUT/machine.jsonl` and declares `results = "machine.jsonl"`, so the terminal shows Flutter's readable reporter while the run goes. `flutter-machine` records each result's line in that file. Every target's command writes its output to elspais's stderr, in a run of one target at a time and in a concurrent run alike, so it never mixes with the report elspais writes to its stdout. `elspais test`, `elspais checks --run-tests` and `elspais evidence write` each refuse (exit 2), before running anything, a selection holding a target whose reporter reads results and which declares no `results` pattern.
+
 - **elspais requires Python 3.14** -- the one version the project supports and CI tests. An installation on an older Python is refused by the package metadata; `make setup` builds the development venv with `python3.14`.
 
 - **CI runs the unit tests a change can affect, and the full suite where asked (REQ-o00066-I+N+O)** -- a pull request and a push to main run each *Impacted Test* the newest baseline of main selects, and a push to main that is not full skips the e2e, stress and browser tiers. A run executes every tier in full where the pull request carries the label `publish` or `baseline`, once a day where main changed since its last full run, and when a release tests the commit it publishes. A full run of main records the baseline, and `python -m tools.tia baseline fetch` installs it in a worktree that holds no usable one; the pre-commit hook runs it before every selection.

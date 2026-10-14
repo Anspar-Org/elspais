@@ -494,25 +494,6 @@ def test_trace_marks_stale_results_as_baseline_on_a_run_that_selected_nothing(
     assert "results or line coverage the current tree did not produce (stale)" in out
 
 
-# Verifies: REQ-d00323-F
-def test_output_this_invocation_captured_is_not_judged_stale(tmp_path: Path) -> None:
-    """A target whose output was captured is its own run, whatever the disk holds.
-
-    Target 'b' has results on disk with no fingerprint, which would be stale
-    if read from there; its captured output is read instead.
-    """
-    from elspais.graph.factory import build_graph
-
-    project = _make_project(tmp_path, unrecorded=frozenset({"b"}))
-    graph = build_graph(
-        config_path=project / ".elspais.toml",
-        repo_root=project,
-        captured_results={"b": _RESULTS_B},
-    )
-
-    assert _results_by_target(graph)["b"] == {(False, "")}
-
-
 def _health_inputs(tmp_path: Path, stale: bool):
     from elspais.config import get_config
 

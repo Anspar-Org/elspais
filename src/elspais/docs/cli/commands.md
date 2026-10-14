@@ -128,7 +128,9 @@ To see malformed references, use: `elspais malformed`
                    command before evaluating checks, so coverage runs against
                    fresh result files. Each run empties the target's folder.
                    The run then records a fingerprint of its inputs there.
-                   Exits 2 if no target has a command.
+                   Exits 2 if no target has a command, or if a target whose
+                   reporter reads results declares no `results` pattern.
+                   Each command's output is written to stderr.
   `--fail-fast`    Stop at the first target failure and skip the checks pass.
                    With `concurrency` above 1, no further target starts and
                    the targets already running finish.
@@ -205,9 +207,10 @@ passed. Each run empties the target's folder and records a fingerprint, as
                    a time, in declaration order. Below 1 is refused (exit 2).
 
 Every executed target whose reporter reads test results must declare a
-`results` pattern, because this command reads nothing while a command runs. A
-selection that holds such a target with no `results` pattern is refused before
-anything runs (exit 2). A coverage target is not affected. See
+`results` pattern, because a run reads results only from the files a target
+writes. A selection that holds such a target with no `results` pattern is
+refused before anything runs (exit 2). A coverage target is not affected.
+Each command's output is written to elspais's stderr. See
 `elspais docs test-targets`, *Parallel jobs and one gate*.
 
 ## fingerprint

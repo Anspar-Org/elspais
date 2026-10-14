@@ -274,7 +274,7 @@ def test_a_command_that_could_not_start_records_no_exit_status(tmp_path: Path):
         update={"scanning": config.scanning.model_copy(update={"test": test_cfg})}
     )
 
-    (result,) = run_configured_targets(config, tmp_path)[0]
+    (result,) = run_configured_targets(config, tmp_path)
 
     assert result.error
     fingerprint = read_fingerprint(target_folder(tmp_path, config, "scripts"))
@@ -317,7 +317,7 @@ def ran_project(request, tmp_path_factory):
 
     root = tmp_path_factory.mktemp("filelevel") / "proj"
     _write_project(root, layout_ok=request.param)
-    (result,) = run_configured_targets(_typed_config(root), root)[0]
+    (result,) = run_configured_targets(_typed_config(root), root)
     graph, config = _build(root)
     return request.param, result, graph, config, root
 
