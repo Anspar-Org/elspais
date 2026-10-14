@@ -10,6 +10,8 @@ extra to install.
 
 from __future__ import annotations
 
+import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -372,6 +374,75 @@ def test_with_the_extra_the_build_warns_of_nothing(tmp_path, capsys):
     build_graph(repo_root=root)
 
     assert f"elspais[{syntax_tree.EXTRA}]" not in capsys.readouterr().err
+
+
+_SPEC_FILES = ("test/a.spec.ts", "test/b.spec.ts")
+
+# Reads candidate paths on stdin and reports one test for each path ending in
+# a name given on its command line.
+_PRESCAN = """\
+import json
+import sys
+
+reported = sys.argv[1:]
+records = [
+    {"file": path, "function": "logs in", "class": "Auth", "line": 3}
+    for path in sys.stdin.read().splitlines()
+    if any(path.endswith(name) for name in reported)
+]
+print(json.dumps(records))
+"""
+
+
+def _write_prescan_project(root: Path, reported: tuple[str, ...] | None) -> None:
+    config = _CONFIG.replace('["*.test.ts"]', '["*.spec.ts"]')
+    if reported is not None:
+        script = root / "prescan.py"
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.write_text(_PRESCAN, encoding="utf-8")
+        command = " ".join([f'"{sys.executable}"', f'"{script}"', *reported])
+        config = config.replace(
+            'file_patterns = ["*.spec.ts"]',
+            f'file_patterns = ["*.spec.ts"]\nprescan_command = {json.dumps(command)}',
+        )
+    for rel, text in {
+        ".elspais.toml": config,
+        "spec/requirements.md": _SPEC,
+        **dict.fromkeys(_SPEC_FILES, _TS),
+    }.items():
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+
+# Verifies: REQ-d00332-D
+@pytest.mark.parametrize(
+    ("reported", "unread"),
+    [
+        pytest.param(("a.spec.ts", "b.spec.ts"), (), id="prescan-reads-both"),
+        pytest.param(("a.spec.ts",), ("test/b.spec.ts",), id="prescan-reads-one"),
+        pytest.param(None, _SPEC_FILES, id="no-prescan-command"),
+    ],
+)
+def test_without_the_extra_the_warning_leaves_out_files_the_prescan_command_reads(
+    tmp_path, without_extra, capsys, reported, unread
+):
+    from elspais.graph.factory import build_graph
+
+    root = tmp_path / "proj"
+    _write_prescan_project(root, reported)
+    build_graph(repo_root=root)
+
+    warnings = [
+        line
+        for line in capsys.readouterr().err.splitlines()
+        if f"elspais[{syntax_tree.EXTRA}]" in line
+    ]
+    if not unread:
+        assert warnings == []
+    else:
+        (warning,) = warnings
+        assert f"{len(unread)} test file(s), such as {unread[0]}," in warning
 
 
 # ---------------------------------------------------------------------------

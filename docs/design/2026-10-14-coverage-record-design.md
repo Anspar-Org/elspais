@@ -107,8 +107,8 @@ Failures:
 
 - **The graph build** reads each target's record and nothing else from the
   area. It parses no tool coverage file and merges nothing. It applies the
-  current-tree rule. A file reads as fresh where the target is fresh and the
-  run its fingerprint records measured the file. Otherwise it reads as
+  current-tree rule. A file reads as fresh only where the run being reported
+  executed the target and that run measured the file. Otherwise it reads as
   carried, and its stale reason names the runs that measured it.
 - **Retention** reads the previous record through the coverage module.
 - **The served-graph watch** watches each target's record in place of the
@@ -127,23 +127,36 @@ A finished output area that holds a tool coverage file and no record is an
 ingestion fault naming the target and the remedy: run the target again. No
 older file is read.
 
+## Ignored files are not inputs
+
+A file that version control ignores is not an input of any test target. A
+tracked file stays an input, even where a tool generates it. Generated,
+ignored files such as an ignored `pubspec.lock`, `.dart_tool/` and platform
+build files therefore make no target stale, so a CI run that resolved fewer
+packages than its baseline does not read as changed. A value that reaches the
+tests through an ignored file, such as a loaded `.env`, is declared as an
+environment probe. Outside a git repository, no file is excluded on these
+grounds.
+
 ## Specification
 
 Each obligation goes through the `requirement-structure` skill and Jev
 before any text is written:
 
-1. After every finished run of a target that declares coverage, its output
-   area holds the target's complete current line coverage in a standard
-   format.
-2. The output root holds the combined current line coverage of every
-   target.
-3. A measurement counts only while its source file holds the content that
-   was measured.
-4. A target names the format of its coverage file.
+1. After every finished run, the complete current line coverage of each
+   target, and of the repository as a whole, is available to other tools in
+   a standard format.
+2. A coverage measurement counts only while the code it measured is
+   unchanged.
+3. A result or a measurement that the run did not produce is distinguishable
+   from one it did, wherever elspais reports it.
+4. A target's coverage is read in the format the project declares for it.
+5. A file that version control ignores is not an input of a test target.
 
-The likely requirements to amend are REQ-d00333-J+L, REQ-d00254, REQ-d00323-I+J
-and REQ-d00313-B. Assertions that describe the retained coverage file are
-retired.
+The obligations state outcomes, not file names, locations or mechanisms;
+those stay in this design. The likely requirements to amend are
+REQ-d00333-J+L, REQ-d00254, REQ-d00323-I+J and REQ-d00313-B. Assertions that
+describe the retained coverage file are retired.
 
 ## Tests
 
@@ -161,16 +174,42 @@ A subagent writes the tests.
 
 ## Rollout
 
-1. An elspais pull request with the `publish` label. elspais's own
+1. The first implementation commit also carries the `ast` warning fix: a
+   build without the `ast` extra no longer warns about test files the
+   prescan command reads.
+2. An elspais pull request with the `publish` label. elspais's own
    `.elspais.toml` declares `coverage_format` for each target that declares
    coverage.
-2. hht_diary, in one commit: the elspais pin moves to the release; each
+3. hht_diary, in one commit: the elspais pin moves to the release; each
    coverage target declares `coverage_format`; Codecov and the coverage table
    read the combined report or each target's report.
-3. Each sponsor repository makes the same change when it moves its pin.
+4. Each sponsor repository makes the same change when it moves its pin.
+
+## Decision: what carried means
+
+A result or a line-coverage measurement that the run did not produce is
+carried, whatever the reason it was not re-run. Unchanged inputs do not make
+it fresh, because indirect effects can change it.
+
+- This holds for every target of every federation member. No boundary
+  narrows it: the applications in one repository relate to each other, so a
+  run of one can affect another.
+- Results already follow it (REQ-d00254-I). Line coverage changes to follow
+  it: REQ-d00323-I, which ties carried coverage to a stale judgement, is
+  amended.
+- In the record, an entry is fresh only where the run being reported measured
+  it. A retained entry, and every entry of a target that run did not execute,
+  is carried and names the runs that measured it.
+- The lcov reports cannot hold that distinction; elspais's own reports show
+  it.
 
 ## Out of scope
 
 - Other report formats, such as Cobertura, and an export command.
 - A report spanning federation members.
+- Coverage of another member's code. A consumer's tests that execute an
+  associate's code measure paths outside the consumer's repository, and
+  placement drops them, so the associate gets no line coverage or
+  `code_tested` credit from them. Crediting it needs placement to resolve a
+  path into the member that owns it, which is a separate change.
 - Branch and function coverage.

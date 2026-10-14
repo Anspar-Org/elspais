@@ -86,6 +86,14 @@
 - REQ-o00066-O
 - REQ-o00066:section:0
 
+## Line Coverage Report
+
+**REQ:**
+
+- REQ-d00334-A
+- REQ-d00334-B
+- REQ-d00334:section:1
+
 ## Project State
 
 **REQ:**

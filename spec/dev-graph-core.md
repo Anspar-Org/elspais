@@ -1565,6 +1565,8 @@ Q. The system SHALL report as a finding each tracked file of the repository that
 
 R. The system SHALL treat the environment that a test target declares, and the configuration of that test target, as inputs of that test target.
 
+S. The system SHALL exclude from the inputs of every test target each file that version control ignores.
+
 ### Rationale
 
 The inputs of a test target are the files whose content can change what its run reports, so results stay current exactly as long as those files are unchanged, and reuse of results from an earlier run is legitimate. The default takes every file because a missed dependency makes old results look current, which is worse than a needless run. What a run writes, and what tools keep for themselves while it runs, changes during every run, so the project names those paths in its global skip list. An *Evidence Snapshot* is written from a run's results after the run ends, so it is never an input of that run.
@@ -1584,7 +1586,7 @@ R reaches what no file of the repository shows. The environment of a test target
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the run fingerprint with the Defined Term Result Fingerprint (D)
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: the Evidence Snapshot directory is never an input of a test target (M)
 
-*End* *Test Result Freshness* | **Hash**: ee45c6f3
+*End* *Test Result Freshness* | **Hash**: d21ac480
 
 ## REQ-d00312: Test Target Output Areas
 
@@ -1785,6 +1787,8 @@ O. When a run holds *Retained Results*, the system SHALL state, for each test ta
 
 P. When the results of a test target include a *Retained Result*, the system SHALL report a finding that lists each *Retained Result* of that target.
 
+Q. The system SHALL treat as carried the line coverage of a test target that a run did not execute.
+
 ### Rationale
 
 The carried mark exists for the reader who must not mistake old evidence for new. A figure built from carried results and shown without the mark makes that mistake for them, so the mark follows the evidence wherever the evidence is counted. C names the conducted case because a requirement credited only through the requirements that refine it has no results of its own, and the mark must not depend on where the results are attached.
@@ -1799,7 +1803,9 @@ A *Retained Result* describes a tree other than the one being reported on, whate
 
 P lets a project decide how much a *Retained Result* matters to it. Retaining is legitimate in a quick local run, while a release may require evidence from the current tree alone, and the severity of the finding is the project's to set.
 
-*End* *Carried Result Provenance* | **Hash**: a322b375
+Q gives line coverage the meaning REQ-d00254-I gives results: what a run did not execute is carried, whatever the reason it was not executed. An unchanged input does not make it fresh, because the parts of one repository can affect each other in ways no input records.
+
+*End* *Carried Result Provenance* | **Hash**: 8c396dce
 
 ## REQ-d00327: Origin of a Recorded Source Path
 
@@ -2014,7 +2020,7 @@ H. A run of a test target that declares the source of the *Dependency Evidence* 
 
 I. When a run asks to execute every test of its test targets, that run SHALL take no *Retained Result*.
 
-J. The system SHALL take line coverage of a source file from an earlier run only where that file holds the content it held in the run that measured that coverage.
+J. The system SHALL use a line-coverage measurement of a source file only while that file holds the content it held when it was measured.
 
 K. Where a test target declares that a part of its environment leaves retention unaffected, the system SHALL leave that part out of the *Dependency Evidence* of the tests of that target.
 
@@ -2042,7 +2048,7 @@ H closes the run. A test that the run neither retained nor got a result for migh
 
 I is the run for a project that wants evidence from the current tree alone, such as a release. It composes with a stale-only run (REQ-d00315-B): a run that asks for both executes every test of each target whose results are not fresh.
 
-J keeps line coverage attached to the lines that ran. It compares against the run that measured the coverage, so a chain of runs that each carried it forward never hides a change. Once a source file changes, the lines an earlier run covered no longer correspond to the lines of the file, and every test that reaches the file executes again, so only the current run's measurement describes it.
+J keeps line coverage attached to the lines that ran, in every figure, report and later run. It compares against the content the measurement was taken on, so a chain of runs that each carried it forward never hides a change. Once a source file changes, the lines an earlier run covered no longer correspond to the lines of the file, and every test that reaches the file executes again, so only the current run's measurement describes it.
 
 K lets a project choose how much a change of environment executes. By default every part of the environment is in the *Dependency Evidence* of every test, so a new version of a tool executes every test of the target. A project that judges a tool's version unlikely to change its outcomes, such as a formatter or a minor compiler release, declares that part, and its change then executes only the tests that the rest of the evidence selects. The results stay truthful either way: the target is still stale and the report names the part of the environment that changed (REQ-d00311-E+F), and each *Retained Result* names the run that executed its test (REQ-d00323-M).
 
@@ -2050,4 +2056,25 @@ L gives line coverage taken from an earlier run the provenance that REQ-d00323-M
 
 M keeps the units of a target and the tests that its command executes the same set. A target that holds no scanned test has nothing to retain or to select, so its command would execute tests that no result of the run can be recorded against, or would never run while the run reports success. The refusal names the working directory of the target and the scan settings, so the project can correct either one.
 
-*End* *Per-Test Result Retention* | **Hash**: e53aed54
+*End* *Per-Test Result Retention* | **Hash**: dfdc1b1e
+
+## REQ-d00334: Line Coverage Reports
+
+**Level**: dev | **Status**: Draft | **Implements**: -
+**Refines**: REQ-d00254-F, REQ-d00333-J
+
+Other tools read the line coverage that the system judges. This requirement states which *Line Coverage Reports* the system keeps, so that such a tool reads coverage that a partial run kept from earlier runs as well as the coverage that run measured.
+
+### Assertions
+
+A. The system SHALL keep a *Line Coverage Report* of the line coverage that it uses for each test target.
+
+B. The system SHALL keep a *Line Coverage Report* of the line coverage that it uses for the repository.
+
+### Rationale
+
+A run that retains results measures only the tests it executes, so the coverage file its test tool writes describes part of the target. A *Line Coverage Report* holds the line coverage the system uses: what the run measured and what it kept from earlier runs, under the rule of REQ-d00333-J. Without one, every consumer has to combine the parts itself, by rules it cannot see.
+
+B serves a consumer that reads one report for the repository, such as a coverage service. Where two targets measure one source file, the report holds both measurements of it.
+
+*End* *Line Coverage Reports* | **Hash**: 621cf1f8

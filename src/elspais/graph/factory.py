@@ -2004,14 +2004,24 @@ def _build_repository(
 
                 _record_declined_files(builder, domain_file, "test", repo_root)
 
-            # Implements: REQ-d00332-A
+            # Implements: REQ-d00332-A+D
             # A test file in a language the `ast` extra reads has no test
             # boundaries without it, so its citations bind to no test. The
-            # build says so once, naming the extra.
+            # build says so once, naming the extra. A file the prescan
+            # command returned records for takes its boundaries from them.
             from elspais.graph.parsers import syntax_tree
 
+            def _prescan_reads(rel: str) -> bool:
+                return bool(prescan_data) and (
+                    rel in prescan_data or str(repo_root / rel) in prescan_data
+                )
+
             if not syntax_tree.available():
-                unread = sorted(f for f in scanned_test_files if syntax_tree.handles(f))
+                unread = sorted(
+                    f
+                    for f in scanned_test_files
+                    if syntax_tree.handles(f) and not _prescan_reads(f)
+                )
                 if unread:
                     print(
                         f"Warning: {len(unread)} test file(s), such as {unread[0]}, have no "

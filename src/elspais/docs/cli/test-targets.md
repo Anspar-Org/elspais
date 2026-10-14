@@ -893,7 +893,9 @@ by single spaces, so a result that records no line binds by that name (see
 The `ast` extra installs tree-sitter and one grammar package per language,
 each a prebuilt wheel, so a build reads nothing from the network. Without it,
 a test file in one of these languages has no tests, every citation in it binds
-to no test, and a build prints one warning naming the extra. The extra also
+to no test, and a build prints one warning naming the extra. A file the
+`prescan_command` below returns records for is read from those records, so
+the warning leaves it out. The extra also
 gives the code files of these languages the extent of each function a citation
 is written above. Without it, elspais finds those functions by their shape on
 the line.
