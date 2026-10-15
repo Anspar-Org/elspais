@@ -173,10 +173,10 @@ COVERAGE_FORMATS = ("lcov", "coverage-json", "coverage-sqlite")
 @pytest.mark.parametrize(
     "settings",
     [
-        {"coverage": "lcov.info"},
+        {"coverage": "coverage.json"},
         {"coverage": "lcov.info", "coverage_format": "junit"},
     ],
-    ids=["coverage-without-format", "results-reporter-as-format"],
+    ids=["json-name-without-format", "results-reporter-as-format"],
 )
 def test_a_coverage_file_without_a_coverage_reporter_is_refused_naming_the_formats(
     settings,
@@ -201,3 +201,25 @@ def test_a_target_without_coverage_needs_no_coverage_format():
     t = TestTargetConfig(name="x")
     assert t.coverage == ""
     assert t.coverage_format == ""
+
+
+# Verifies: REQ-d00254-C
+@pytest.mark.parametrize(
+    "coverage,expected",
+    [
+        ("lcov.info", "lcov"),
+        ("coverage/app.info", "lcov"),
+        (".coverage", "coverage-sqlite"),
+        ("out/.coverage", "coverage-sqlite"),
+    ],
+    ids=["lcov-name", "lcov-path", "sqlite-name", "sqlite-path"],
+)
+def test_a_coverage_file_name_that_decides_the_format_needs_no_coverage_format(coverage, expected):
+    t = TestTargetConfig(name="x", coverage=coverage)
+    assert t.coverage_format == expected
+
+
+# Verifies: REQ-d00254-C
+def test_an_explicit_coverage_format_wins_over_the_file_name():
+    t = TestTargetConfig(name="x", coverage="x.info", coverage_format="coverage-json")
+    assert t.coverage_format == "coverage-json"

@@ -1585,6 +1585,7 @@ R reaches what no file of the repository shows. The environment of a test target
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: a result keeps binding to its test after the tree its run executed in moves (P)
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: name the run fingerprint with the Defined Term Result Fingerprint (D)
 - 2026-10-02 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-123: the Evidence Snapshot directory is never an input of a test target (M)
+- 2026-10-14 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-157: a file that version control ignores is not an input of a test target (S)
 
 *End* *Test Result Freshness* | **Hash**: d21ac480
 
@@ -1804,6 +1805,10 @@ A *Retained Result* describes a tree other than the one being reported on, whate
 P lets a project decide how much a *Retained Result* matters to it. Retaining is legitimate in a quick local run, while a release may require evidence from the current tree alone, and the severity of the finding is the project's to set.
 
 Q gives line coverage the meaning REQ-d00254-I gives results: what a run did not execute is carried, whatever the reason it was not executed. An unchanged input does not make it fresh, because the parts of one repository can affect each other in ways no input records.
+
+### Changelog
+
+- 2026-10-14 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-157: line coverage of a test target that a run did not execute is carried (Q)
 
 *End* *Carried Result Provenance* | **Hash**: 8c396dce
 
@@ -2056,6 +2061,10 @@ L gives line coverage taken from an earlier run the provenance that REQ-d00323-M
 
 M keeps the units of a target and the tests that its command executes the same set. A target that holds no scanned test has nothing to retain or to select, so its command would execute tests that no result of the run can be recorded against, or would never run while the run reports success. The refusal names the working directory of the target and the scan settings, so the project can correct either one.
 
+### Changelog
+
+- 2026-10-14 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-157: a line-coverage measurement of a source file is used only while that file holds the content that was measured (J)
+
 *End* *Per-Test Result Retention* | **Hash**: dfdc1b1e
 
 ## REQ-d00334: Line Coverage Reports
@@ -2076,5 +2085,9 @@ B. The system SHALL keep a *Line Coverage Report* of the line coverage that it u
 A run that retains results measures only the tests it executes, so the coverage file its test tool writes describes part of the target. A *Line Coverage Report* holds the line coverage the system uses: what the run measured and what it kept from earlier runs, under the rule of REQ-d00333-J. Without one, every consumer has to combine the parts itself, by rules it cannot see.
 
 B serves a consumer that reads one report for the repository, such as a coverage service. Where two targets measure one source file, the report holds both measurements of it.
+
+### Changelog
+
+- 2026-10-14 | 00000000 | - | Michael Lewis (<michael@anspar.org>) | TOOL-157: initial authoring: a Line Coverage Report for each test target and for the repository
 
 *End* *Line Coverage Reports* | **Hash**: 621cf1f8

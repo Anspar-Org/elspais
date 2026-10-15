@@ -19,6 +19,7 @@ from elspais.config import find_git_root, get_config, validate_config
 def run(args: argparse.Namespace) -> int:
     from elspais.utilities.fingerprint import (
         RunNotStarted,
+        coverage_faults,
         finish_run,
         input_label,
         start_run,
@@ -45,9 +46,7 @@ def run(args: argparse.Namespace) -> int:
                     file=sys.stderr,
                 )
             # Implements: REQ-d00334-A
-            faults = [
-                f for f in fingerprint.get("run_faults") or [] if str(f).startswith("coverage:")
-            ]
+            faults = coverage_faults(fingerprint)
             if faults:
                 print(f"target {args.target}: {'; '.join(faults)}", file=sys.stderr)
                 return 1

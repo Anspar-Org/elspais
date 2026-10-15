@@ -1025,6 +1025,20 @@ class TestTargetConfig(_StrictModel):
             raise ValueError("min_coverage_fraction must be in [0.0, 1.0]")
         return v
 
+    # Implements: REQ-d00254-C
+    @model_validator(mode="before")
+    @classmethod
+    def _format_from_file_name(cls, data: Any) -> Any:
+        # A coverage file whose name only one format writes is read in that
+        # format, so its target need not declare it.
+        if isinstance(data, dict) and data.get("coverage") and not data.get("coverage_format"):
+            from elspais.graph.parsers.results.registry import coverage_format_named_by
+
+            named = coverage_format_named_by(str(data["coverage"]))
+            if named:
+                return {**data, "coverage_format": named}
+        return data
+
     # Implements: REQ-d00329-A
     @model_validator(mode="after")
     def _require_reporter(self) -> TestTargetConfig:
@@ -1034,14 +1048,16 @@ class TestTargetConfig(_StrictModel):
         if self.results and not self.reporter:
             raise ValueError("reporter is required when results is set")
         # Implements: REQ-d00254-C
-        # A coverage file is read in the format the project names for it.
+        # A coverage file is read in the format the project names for it, or
+        # that its file name names.
         from elspais.graph.parsers.results.registry import REPORTER_REGISTRY
 
         formats = sorted(n for n, s in REPORTER_REGISTRY.items() if s.kind == "coverage")
         if self.coverage and not self.coverage_format:
             raise ValueError(
-                f"coverage = {self.coverage!r} is set without coverage_format; set "
-                f"coverage_format to the format of that file: {', '.join(formats)}"
+                f"coverage = {self.coverage!r} is set without coverage_format, and its "
+                f"file name does not decide the format; set coverage_format to the "
+                f"format of that file: {', '.join(formats)}"
             )
         if self.coverage_format and self.coverage_format not in formats:
             raise ValueError(

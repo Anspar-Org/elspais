@@ -106,6 +106,9 @@ _probe_cache: dict[tuple[str, str], str] = {}
 #: A target name cannot start with ``.``, so no output area can take this name.
 LAST_RUN_NAME = ".elspais-last-run.json"
 
+# A run fault that says the run's coverage was not recorded opens with this.
+COVERAGE_FAULT_PREFIX = "coverage: "
+
 _LAST_RUN_VERSION = 1
 
 
@@ -133,7 +136,7 @@ class Freshness:
     current: dict[str, str] | None = None
 
 
-def _typed(config: Any) -> Any:
+def typed_config(config: Any) -> Any:
     """Return the typed configuration from a dict or a schema model."""
     if isinstance(config, dict):
         from elspais.config import validate_config
@@ -144,7 +147,7 @@ def _typed(config: Any) -> Any:
 
 def output_root(repo_root: Path, config: Any) -> Path:
     """Return the project's test output root as an absolute path."""
-    return (Path(repo_root) / _typed(config).scanning.test.output_root).resolve()
+    return (Path(repo_root) / typed_config(config).scanning.test.output_root).resolve()
 
 
 def target_folder(repo_root: Path, config: Any, target_name: str) -> Path:
@@ -156,7 +159,7 @@ def target_folder(repo_root: Path, config: Any, target_name: str) -> Path:
 
 
 def _find_target(config: Any, target_name: str) -> Any:
-    typed = _typed(config)
+    typed = typed_config(config)
     for target in typed.scanning.test.targets:
         if target.name == target_name:
             return target
@@ -178,7 +181,7 @@ def input_files(repo_root: Path, config: Any, target: Any) -> list[Path]:
     """
     from elspais.graph.file_selection import select_files
 
-    typed = _typed(config)
+    typed = typed_config(config)
     root = Path(repo_root).resolve()
     inputs = target.inputs
     everywhere = list(typed.scanning.skip)
@@ -194,14 +197,19 @@ def input_files(repo_root: Path, config: Any, target: Any) -> list[Path]:
         list(inputs.file_patterns) or ["*"],
     )
     # Implements: REQ-d00311-S
-    # A file version control ignores, and its own directory, which it never
-    # tracks, are generated or local to a tree, so neither is an input.
+    # A file version control ignores, and its own files, which it never
+    # tracks, are generated or local to a tree, so neither is an input. Its
+    # own files are every path through a `.git`: a directory in a clone, a
+    # file naming the directory in a linked worktree, and either one in a
+    # repository nested in the tree.
     ignored, ignored_dirs = ignored_untracked(root)
-    skipped_dirs = (*ignored_dirs, ".git/")
 
     def kept(path: Path) -> bool:
-        rel = path.relative_to(root).as_posix()
-        return rel not in ignored and not rel.startswith(skipped_dirs)
+        rel = path.relative_to(root)
+        if ".git" in rel.parts:
+            return False
+        posix = rel.as_posix()
+        return posix not in ignored and not posix.startswith(ignored_dirs)
 
     return sorted(p for p in selection.selected if kept(p))
 
@@ -546,10 +554,19 @@ def finish_run(
     try:
         finish_coverage(root, config, target, fingerprint, carried_coverage)
     except Exception as exc:  # noqa: BLE001 -- every cause becomes a run fault
-        fingerprint["run_faults"] = list(fingerprint.get("run_faults") or []) + [f"coverage: {exc}"]
+        fingerprint["run_faults"] = list(fingerprint.get("run_faults") or []) + [
+            f"{COVERAGE_FAULT_PREFIX}{exc}"
+        ]
     fingerprint["finished_at"] = _now()
     _write_fingerprint(folder, fingerprint)
     return fingerprint
+
+
+# Implements: REQ-d00334-A
+def coverage_faults(fingerprint: dict) -> list[str]:
+    """The faults of a finished run that say its coverage was not recorded."""
+    faults = (str(f) for f in fingerprint.get("run_faults") or [])
+    return [f for f in faults if f.startswith(COVERAGE_FAULT_PREFIX)]
 
 
 # Implements: REQ-d00333-A

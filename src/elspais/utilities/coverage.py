@@ -72,13 +72,7 @@ def read_tool_coverage(
             f"target {target.name!r}: the coverage file {target.coverage!r} is not "
             f"{target.coverage_format} text ({exc}); check coverage_format"
         ) from exc
-    try:
-        measured = reader.parse(content, str(path))
-    except ImportError as exc:
-        raise CoverageUnreadable(
-            f"target {target.name!r}: {target.coverage_format} coverage needs the "
-            f"'coverage' extra: pip install elspais[coverage] ({exc})"
-        ) from exc
+    measured = reader.parse(content, str(path))
     if diagnostics is not None:
         for found in getattr(reader, "iter_diagnostics", lambda: ())():
             diagnostics.append(
@@ -415,9 +409,9 @@ def write_combined(
     read back. A target whose record cannot be read contributes nothing here;
     the build reports it.
     """
-    from elspais.utilities.fingerprint import _typed, output_root, target_folder
+    from elspais.utilities.fingerprint import output_root, target_folder, typed_config
 
-    typed = _typed(config)
+    typed = typed_config(config)
     root_dir = output_root(repo_root, typed)
     root_dir.mkdir(parents=True, exist_ok=True)
     written = written or {}
