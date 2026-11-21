@@ -170,8 +170,7 @@ def _answer_for(
 
     # Implements: REQ-d00335-C+D+G+H
     entry["status"] = SCANNED
-    file_type = file_node.get_field("file_type")
-    entry["role"] = file_type.value if file_type is not None else None
+    entry["role"] = _role_of(file_node)
     entry["links"] = _links_of(file_node)
     # Implements: REQ-d00241-E
     # A citation that produced no link is still a citation: reported with the
@@ -179,6 +178,27 @@ def _answer_for(
     entry["unresolved"] = _unresolved_in(file_node, unresolved)
     entry["unbound"] = _unbound_in(graph, member, relative)
     return entry
+
+
+# Implements: REQ-d00335-H
+def _role_of(file_node: GraphNode) -> str | None:
+    """The role the scan gave a file: its file type, or ``journey`` for a journey file.
+
+    The spec scan reads journeys from the same directories as requirements,
+    so a journey file carries the spec file type. What it holds tells the two
+    apart: a spec-typed file holding journeys and no requirement is a
+    journey file.
+    """
+    from elspais.graph.GraphNode import FileType
+
+    file_type = file_node.get_field("file_type")
+    if file_type is None:
+        return None
+    if file_type == FileType.SPEC:
+        kinds = {c.kind for c in file_node.iter_children(edge_kinds={EdgeKind.CONTAINS})}
+        if NodeKind.USER_JOURNEY in kinds and NodeKind.REQUIREMENT not in kinds:
+            return FileType.JOURNEY.value
+    return file_type.value
 
 
 # Implements: REQ-d00335-C+D
