@@ -1775,6 +1775,68 @@ class TestPrereleasePackageCheck:
             assert "::error::" in said
 
 
+# --- REQ-o00080-D, REQ-o00081-D: the publishing credentials live in an environment ---
+
+_PUBLISHING_SECRETS = ("secrets.PYPI_TOKEN", "secrets.HOMEBREW_TAP_TOKEN")
+
+
+def _environment_name(job: dict):
+    environment = job.get("environment")
+    return environment.get("name") if isinstance(environment, dict) else environment
+
+
+def _jobs_of_every_workflow() -> list[tuple[str, str, dict]]:
+    return [
+        (path.name, name, job)
+        for path in sorted(WORKFLOWS.glob("*.yml"))
+        for name, job in (_load_path(path).get("jobs") or {}).items()
+    ]
+
+
+def _credential_holders() -> list[tuple[str, str, dict]]:
+    return [
+        (workflow, name, job)
+        for workflow, name, job in _jobs_of_every_workflow()
+        if any(secret in text for text in _strings(job) for secret in _PUBLISHING_SECRETS)
+    ]
+
+
+class TestPublishEnvironment:
+    # Verifies: REQ-o00080-D, REQ-o00081-D
+    @pytest.mark.parametrize(
+        "workflow,name,job",
+        [pytest.param(*row, id=f"{row[0]}-{row[1]}") for row in _credential_holders()],
+    )
+    def test_REQ_o00081_D_every_credential_holder_is_in_the_publish_environment(
+        self, workflow, name, job
+    ):
+        """A repository secret is readable by any workflow file on any branch
+        of the repository; an environment's secret only by a job the
+        environment's deployment policy admits (main and release tags)."""
+        assert _environment_name(job) == "publish"
+
+    # Verifies: REQ-o00080-D, REQ-o00081-D
+    def test_REQ_o00081_D_the_credential_holders_are_found(self):
+        """The scan above reaches each publishing job, so it is not vacuous."""
+        found = {(workflow, name) for workflow, name, _ in _credential_holders()}
+        assert {
+            ("prerelease-pypi.yml", "prerelease"),
+            ("publish-pypi.yml", "publish"),
+            ("publish-pypi.yml", "update-homebrew"),
+        } <= found
+
+    # Verifies: REQ-o00080-D, REQ-o00081-D
+    @pytest.mark.parametrize("name", sorted(_load_path(CI_WORKFLOW)["jobs"]))
+    def test_REQ_o00081_D_no_job_running_the_commit_enters_the_environment(self, name):
+        """Every CI job checks out or runs the commit under test, the automain
+        commit included, so none of them may read the publishing credential;
+        neither may a job that calls CI."""
+        assert _environment_name(_load_path(CI_WORKFLOW)["jobs"][name]) is None
+        for workflow, caller, job in _jobs_of_every_workflow():
+            if str(job.get("uses", "")).endswith("/ci.yml"):
+                assert _environment_name(job) is None, (workflow, caller)
+
+
 def _pr_check_steps(pr_config) -> list[dict]:
     """The steps that read a pull request: its title and its commit range."""
     jobs = pr_config["jobs"]

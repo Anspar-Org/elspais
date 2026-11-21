@@ -52,7 +52,10 @@ passed. It publishes that commit to PyPI as the PEP 440 developmental release
   (REQ-o00081-C). PyPI keeps a number for ever, even after a yank, so the
   workflow refuses such a version rather than renumbering. A re-run for a
   commit that already has its pre-release therefore fails and publishes
-  nothing.
+  nothing. A release made from `main` while the commit's CI runs can also
+  move `X.Y.Z` between the build and the publication; the package then
+  carries a version the workflow no longer computes, so it is refused, and a
+  re-run of that commit's CI builds and publishes it under the new base.
 
 `python -m tools.prerelease_version` computes the version. The workflow
 makes no tag, no GitHub release and no Homebrew update.
@@ -82,7 +85,7 @@ one:
 ```sh
 pip install elspais                    # the newest release
 pip install --upgrade elspais          # the newest release
-pip install "elspais==0.130.8.dev812"  # that pre-release
+pip install "elspais==0.130.9.dev812"  # that pre-release
 ```
 
 A repository's `automain` work may pin a pre-release this way. Its `main`
@@ -101,5 +104,10 @@ A repository administrator sets these, not a pull request:
   `main` into it included. A rewrite or a fast-forward of `automain` can lower
   the first-parent count, and the workflow then refuses each number that PyPI
   already carries.
-- The `PYPI_TOKEN` secret that the release uses also publishes the
-  pre-releases.
+- A `publish` environment that holds `PYPI_TOKEN` and `HOMEBREW_TAP_TOKEN`,
+  with a deployment policy that admits the branch `main` and the tags `v*`
+  alone, and a tag ruleset that lets only maintainers create `v*` tags. The
+  repository holds neither secret outside that environment. A workflow file
+  on `automain`, or on any pull request branch, then cannot read either token,
+  so its code cannot publish. The release and the pre-release jobs name this
+  environment.

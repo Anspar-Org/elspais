@@ -42,6 +42,10 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'automain'
     runs-on: ubuntu-latest
+    # PYPI_TOKEN lives in the `publish` environment, whose deployment policy
+    # admits main and release tags alone. A workflow_run job runs at main, so
+    # it qualifies, and a workflow file on automain cannot read the token.
+    environment: publish
     timeout-minutes: 10
     permissions:
       contents: read

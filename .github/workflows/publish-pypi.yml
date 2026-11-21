@@ -196,6 +196,11 @@ jobs:
   # would skip this job, so the condition names both ways to proceed.
   publish:
     runs-on: ubuntu-latest
+    # Implements: REQ-o00080-D
+    # PYPI_TOKEN lives in the `publish` environment, whose deployment policy
+    # admits main and release tags alone, so a workflow file on any other ref
+    # cannot read it (docs/automain.md).
+    environment: publish
     needs: [gate, tests]
     if: >-
       !cancelled() && !inputs.skip_pypi && needs.gate.result == 'success' &&
@@ -230,6 +235,8 @@ jobs:
 
   update-homebrew:
     runs-on: ubuntu-latest
+    # HOMEBREW_TAP_TOKEN lives in the `publish` environment too.
+    environment: publish
     needs: [gate, tests, publish]
     # A skip_pypi run skips `publish` and still reaches the tap, so the test
     # verdict is required here as well.
