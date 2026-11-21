@@ -44,18 +44,31 @@ pull requests are supported) and M (the merge queue).
    `origin/main` into the bottom branch, then each branch into the one above
    it, and push each. A branch behind `origin/main` cannot be pushed, and
    merging `main` in after the squash would put `main`'s changes into the
-   pull request's own commit.
+   pull request's diff.
 2. **Finish and verify the work.** Commit as often as useful while the branch
-   is private. Bring in the slot below: merge the branch of the top slot (or
-   `origin/main` when the stack is empty) into the work branch. Then run
-   `make test-all` and fix what fails.
+   is private. Bring in the slot below: record the commit at the top of the
+   branch of the top slot (or of `origin/main` when the stack is empty), and
+   merge that commit into the work branch. Then run `make test-all` and fix
+   what fails.
+
+   ```bash
+   git fetch origin
+   base=$(git rev-parse origin/<top-slot-branch>)   # or origin/main
+   git merge --no-ff "$base"
+   ```
+
 3. **Squash the work to one commit**, with the pull request title as its
    subject and the requirement references in its body:
 
    ```bash
-   git reset --soft origin/<top-slot-branch>   # the base merged in step 2
+   git merge-base --is-ancestor "$base" HEAD   # the commit merged in step 2
+   git reset --soft "$base"
    git commit                                  # subject: the PR title
    ```
+
+   Reset to the recorded commit, never to the remote branch by name: a fetch
+   in the meantime moves that name, and a reset to a newer base would keep
+   the old tree and so revert what landed in between.
 
    The squash does not change the tree, so the verification in step 2 still
    applies. The version bump belongs in this commit: bump the version before
