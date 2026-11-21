@@ -733,6 +733,28 @@ async def api_search(request: Request) -> JSONResponse:
     return JSONResponse(compute_search(state.graph, state.config, search_request))
 
 
+# Implements: REQ-d00335-A, REQ-p00015-E
+async def api_files(request: Request) -> JSONResponse:
+    """GET /api/files?paths=<JSON array> - What each named file links to."""
+    from elspais.commands._requests import files_request_from_params
+    from elspais.commands.files_cmd import compute_files
+
+    state = _st(request)
+    try:
+        files_request = files_request_from_params(dict(request.query_params))
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    watched = getattr(state.shared, "graph_predates", None)
+    result = compute_files(
+        state.graph,
+        state.config,
+        files_request,
+        built_at=state.shared["build_time"],
+        changed=watched() if watched is not None else (),
+    )
+    return _served(state, result)
+
+
 async def api_test_coverage(request: Request) -> JSONResponse:
     """GET /api/test-coverage/{req_id} - Per-assertion test coverage map."""
     state = _st(request)

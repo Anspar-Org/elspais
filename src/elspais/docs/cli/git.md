@@ -81,6 +81,17 @@ until someone reviews it, even after its change has merged and the base has
 moved past it. A review is a person's act: `elspais fix` never touches the
 record, and no MCP tool records a review.
 
+## Requirements a Change Touches
+
+`elspais changed` reports spec changes. To ask which requirements a set of
+changed files bears on -- code, tests and journeys as well as spec files --
+hand the paths to `elspais files`:
+
+  $ git diff --name-only main | xargs elspais files
+
+Each file is answered with the requirements it defines, implements,
+verifies or validates (see `elspais docs commands`, section `files`).
+
 ## In Trace View
 
 The interactive viewer (`elspais viewer`) shows:

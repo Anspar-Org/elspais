@@ -231,3 +231,40 @@ class SearchRequest:
         if self.regex:
             params["regex"] = "true"
         return params
+
+
+# The key that carries the paths of a files query to a serving process. A
+# path may hold any character a list separator could be, so the paths travel
+# as one JSON array.
+FILES_PATHS_PARAM = "paths"
+
+
+# Implements: REQ-d00335-A
+@dataclass(frozen=True)
+class FilesRequest:
+    """The paths a caller asks about, each as the caller gave it."""
+
+    paths: tuple[str, ...] = ()
+
+    def to_params(self) -> dict[str, str]:
+        import json
+
+        return {FILES_PATHS_PARAM: json.dumps(list(self.paths))}
+
+
+def files_request_from_params(params: Mapping[str, str]) -> FilesRequest:
+    """The files query a serving process was sent.
+
+    ONE reader of the wire key, so a request and the process that answers it
+    read the paths the same way. A value that is not a JSON array of strings
+    is refused rather than read as some other set of paths.
+    """
+    import json
+
+    raw = (params or {}).get(FILES_PATHS_PARAM)
+    if not raw:
+        return FilesRequest()
+    paths = json.loads(raw)
+    if not isinstance(paths, list) or not all(isinstance(p, str) for p in paths):
+        raise ValueError(f"'{FILES_PATHS_PARAM}' must be a JSON array of path strings")
+    return FilesRequest(paths=tuple(paths))

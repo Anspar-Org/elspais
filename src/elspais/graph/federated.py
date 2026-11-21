@@ -1054,14 +1054,17 @@ class FederatedGraph:
         return result
 
     # Implements: REQ-d00241-F
-    def unscanned_keyword_files(self) -> list[UnscannedKeywordFile]:
+    def unscanned_keyword_files(self, namespace: str | None = None) -> list[UnscannedKeywordFile]:
         """Every declined file carrying a citation, across all repos.
 
         # Strategy: aggregate
+
+        ``namespace`` restricts the answer to that member's files.
         """
         result: list[UnscannedKeywordFile] = []
-        for _name, graph in self._live_graphs():
-            result.extend(graph.unscanned_keyword_files())
+        for name, graph in self._live_graphs():
+            if namespace is None or name == namespace:
+                result.extend(graph.unscanned_keyword_files())
         return result
 
     # Implements: REQ-d00274-G

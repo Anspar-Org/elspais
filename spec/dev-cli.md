@@ -1058,11 +1058,15 @@ F. If a file at a path named is outside every scan the tool performs, then the a
 
 G. If a scanned file names no requirement, then the answer for that file SHALL state that the tool scanned the file and found no link in it.
 
+H. For each scanned file, the answer SHALL state whether the scan read it as a spec, journey, code, test, result or configuration file.
+
+I. The tool SHALL accept an absolute path to a file in any repository of the federation.
+
 ### Rationale
 
 Two people can change different files that bear on one requirement: one edits the code that implements it, the other the test that verifies it. A comparison of file names does not see that the two changes meet; a comparison of the requirements each file names does. The question is general, so the answer carries nothing particular to any one caller, and it is read from the graph every other report reads, through the citations the scan already reads. A file's links are the ones the federated graph holds, so an identifier an associate owns names what it names in every other report (REQ-p00005-A).
 
-A, B and C are the question itself. A caller holds paths in whatever form its own tools give it, so a path relative to the repository root and an absolute one are both accepted, and an absolute path may lie in any member of the federation. D is what lets a caller tell an edit to a requirement's text from an edit to the evidence for it. The answer also names the role the scan gave each scanned file -- spec, journey, code, test, or another kind it reads -- because a caller weighing two changes against each other reads that role first.
+A, B, C and I are the question itself. A caller holds paths in whatever form its own tools give it, so a path relative to the repository root and an absolute one are both accepted, and an absolute path may lie in any member of the federation. D is what lets a caller tell an edit to a requirement's text from an edit to the evidence for it. H names the role the scan gave each scanned file, because a caller weighing two changes against each other reads that role first.
 
 E, F and G keep apart three answers that would otherwise all read as an empty list. A path with no file is a caller's mistake or a deletion; a file the tool does not scan names nothing the tool can see, which is not the same as naming nothing; and a scanned file without a link is an honest zero. Read as one another, each hides the others: a deleted file looks clean, and a file outside the scan looks unlinked when nobody looked. A citation in a scanned file that produced no link is reported with the file rather than read as no citation at all (REQ-d00241-E), so G applies only where the file truly cites nothing.
 
@@ -1070,9 +1074,10 @@ The answer reflects the working tree, uncommitted changes included. Where the gr
 
 ### Changelog
 
+- 2026-11-21 | 5763f2d1 | - | Michael Lewis (<michael@anspar.org>) | H and I added: the role of a scanned file, and an absolute path in any member
 - 2026-11-21 | e9867ad7 | - | Michael Lewis (<michael@anspar.org>) | Requirement authored: the requirements each named file defines, implements, verifies or validates
 
-*End* *Requirements a File Names* | **Hash**: e9867ad7
+*End* *Requirements a File Names* | **Hash**: 5763f2d1
 
 ---
 

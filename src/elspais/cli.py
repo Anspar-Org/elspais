@@ -24,6 +24,7 @@ from elspais.commands import (
     doctor,
     edit,
     example_cmd,
+    files_cmd,
     fix_cmd,
     health,
     init,
@@ -69,6 +70,7 @@ from elspais.commands.args import (
     EvidenceWriteArgs,
     ExampleArgs,
     FailingArgs,
+    FilesArgs,
     FingerprintArgs,
     FingerprintFinishArgs,
     FingerprintStartArgs,
@@ -155,6 +157,7 @@ def _to_namespace(global_args: GlobalArgs) -> argparse.Namespace:
         ChangedArgs: "changed",
         AnalysisArgs: "analysis",
         SearchArgs: "search",
+        FilesArgs: "files",
         VersionArgs: "version",
         InitArgs: "init",
         ExampleArgs: "example",
@@ -460,6 +463,8 @@ def main(argv: list[str] | None = None) -> int:
             return analysis_cmd.run(args)
         elif args.command == "search":
             return search_cmd.run(args)
+        elif args.command == "files":
+            return files_cmd.run(args)
         elif args.command == "version":
             return version_command(args)
         elif args.command == "init":
