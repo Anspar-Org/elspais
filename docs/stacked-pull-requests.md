@@ -1,94 +1,124 @@
 # Stacked pull requests and the merge queue
 
-A change too large to review comfortably is split into a **stack**. Each pull
-request is based on the branch of the one below it, so each part can be
-reviewed, merged or reverted on its own:
+The maintainers and their agents keep one ordered **stack** of open pull
+requests in this repository. The first slot builds on `main`. Each later slot
+builds on the branch of the slot below it:
 
 ```text
 main  <-  #A (base: main)  <-  #B (base: A's branch)  <-  #C (base: B's branch)
 ```
 
+Each pull request holds its own work as one commit, and it lands on `main` as
+a merge commit. Its commit therefore keeps its identity on `main`, and git
+alone shows whether a branch has merged: `git branch --merged origin/main`
+lists it. The first-parent history of `main` (`git log --first-parent main`)
+shows one merge commit for each pull request, and the message of that merge
+commit is the pull request's title and description.
+
+A pull request from anyone else, or from a dependency bot, does not take a
+slot. It targets `main` and lands through the merge queue in the same way.
+
 Requirements: REQ-o00066-I/J (CI on pull requests into `main`), L (stacked
 pull requests are supported) and M (the merge queue).
+
+## The rules of the stack
+
+- **The stack is at most three pull requests deep.** A fourth waits until the
+  bottom one merges.
+- **A pull request takes the next slot only.** Its base is the branch of the
+  top slot, or `main` when the stack is empty. A session hook refuses to open,
+  or mark ready, a pull request whose base is anything else, whose base is not
+  yet merged into its branch, or that would make the stack too deep. The
+  refusal states the rule and what to do.
+- **A branch takes a slot only when it is verified locally** on every tier CI
+  runs: `make test-all` passes on the tree the pull request will hold.
+- **After a branch takes its slot, its history only grows.** A review fix is a
+  new commit. Nobody rebases, amends or force-pushes a branch in the stack: a
+  reviewer's or contributor's checkout of it would no longer be valid, and the
+  commits of the pull request must stay the ones that land on `main`.
+
+## Taking a slot
+
+1. **Finish and verify the work.** Commit as often as useful while the branch
+   is private. Run `make test-all` and fix what fails.
+2. **Bring in the slot below.** Merge the branch of the top slot (or
+   `origin/main` when the stack is empty) into the work branch, and run the
+   tiers again if the merge changed anything.
+3. **Squash the work to one commit**, with the pull request title as its
+   subject and the requirement references in its body:
+
+   ```bash
+   git fetch origin
+   git merge --no-ff origin/<top-slot-branch>    # or origin/main
+   git reset --soft origin/<top-slot-branch>      # the same base
+   git commit                                     # subject: the PR title
+   ```
+
+   The squash does not change the tree, so the verification in step 1 still
+   applies. This is the one planned rewrite of a branch. A branch that was
+   pushed before it took its slot is pushed under a new name, so no pushed
+   branch is rewritten.
+4. **Push and open the pull request** against the slot below:
+   `gh pr create --base <top-slot-branch>` (or `--base main`). Its title is the
+   subject of the commit, and its `[TEAM-NNN]` reference is required.
 
 ## What CI does for a stack
 
 - **Every pull request gets CI, whatever branch it targets.** `ci.yml` and
   `pr-validation.yml` trigger on every pull request, so #B and #C are tested
-  and validated like #A. Each one's diff, and its path-filtered tiers (stress,
-  browser), cover that pull request's own changes relative to the branch below
-  it.
+  and validated like #A. Each pull request's diff, and its path-filtered tiers
+  (stress, browser), cover its own changes relative to the branch below it.
 - **The merge queue tests what will actually land.** Both workflows also run on
-  `merge_group`, so a merge queue on `main` can be turned on (see
-  [Repository settings](#repository-settings)). A queue candidate gets the
-  checks a pull request into `main` gets, except that the stress and browser
-  tiers always run there instead of only when their paths changed. The queue
-  is the last gate before `main`. The title and commit-message checks have
-  nothing to read in the queue, so they pass there as not applicable. They
-  already ran on the pull request.
+  `merge_group`. A queue candidate gets the checks a pull request into `main`
+  gets, except that the stress and browser tiers always run there instead of
+  only when their paths changed. The queue tests the exact result of each merge
+  before `main` changes, so the ruleset does not also require a branch to be up
+  to date with `main`. The title and commit-message checks have nothing to read
+  in the queue, so they pass there as not applicable. They already ran on the
+  pull request.
 
-## When the pull request below merges
+In the normal case a pull request runs CI once as a pull request and once in
+the queue.
 
-The repository deletes a branch when its pull request merges, and GitHub then
-retargets each pull request based on that branch to the branch it merged into.
-Nothing more is usually needed.
+## Review fixes
 
-**Usually: merge it as it is.** CI on a stacked pull request tests it combined
-with the one below. When the one below is squash-merged, `main` ends up with
-that pull request's final content, so merging the upper pull request gives
-exactly the content its CI already tested. Retargeting re-runs only the title
-check, not the tests. The pull request's diff on GitHub then also shows the
-merged pull request's changes, because git no longer sees them as merged; that
-is only how the diff is drawn.
+Fix a review comment on the branch that owns the code, as a new commit, and
+push it. Then merge that branch into each branch above it, bottom-up, and push
+each one, so every pull request above is tested with the fix. Only ever add
+commits, including merge commits, to a branch in the stack.
 
-That holds when the upper branch already contains the lower pull request's
-last commit. If the lower branch gained a commit the upper one never merged,
-bring it up to date as below so CI tests the combination.
+## Landing
 
-**Sometimes: a conflict after a squash merge.** A squash commit is unrelated to
-the commits it replaced, so git meets the merged work twice. It reports a
-conflict wherever the upper pull request edited lines the lower one introduced,
-even though nothing really conflicts. Record the merged pull request's last
-commit as already merged, then bring `main` in:
+Merge from the bottom up. The bottom pull request enters the merge queue
+(`gh pr merge <number> --merge`). The queue lands it as a merge commit whose
+message is the pull request's title and description.
 
-```bash
-git fetch origin main refs/pull/<lower-PR-number>/head
-git checkout -B stack-repair origin/main
-git merge -s ours --no-edit FETCH_HEAD      # the lower PR's last commit, as merged
-git checkout <upper-branch>
-git merge --no-ff stack-repair               # sees only what main gained beyond it
-git push
-```
+The repository then deletes the merged branch, and GitHub retargets the pull
+request above it to `main`. That branch already contains every commit that
+merged, so git sees nothing twice: there is no false conflict and nothing to
+repair. Its diff on GitHub shows only its own work. Retargeting runs the
+title check again, not the tests. The next pull request in the stack then
+enters the queue in the same way.
 
-The merge leaves the upper pull request's files as they were. It is a new
-commit, so CI runs again. Do the same, one level at a time, for any pull
-request stacked above it that then conflicts.
-
-## Working with a stack
-
-1. **Open each pull request against the branch below it.** For example,
-   `gh pr create --base <lower-branch>`. Give each one its own `[TEAM-NNN]`
-   title; every title becomes a squash commit on `main`.
-2. **Fix review comments on the branch that owns the code**, and push. Then
-   merge that branch into each branch above it, bottom-up, and push each one,
-   so every pull request above is tested with the fix.
-3. **Merge from the bottom up**, through the merge queue if it is enabled.
-4. **To bring a whole stack up to date with `main`**, merge `main` into the
-   bottom branch, then each branch into the one above it, and push each.
-
-Only ever add merge commits to a branch in a stack. Never rebase or
-force-push one: a reviewer's or contributor's checkout of it would no longer
-be valid. The pre-push hook refuses a branch that is behind `origin/main`, so
-update the bottom branch first (step 4).
+The pre-push hook refuses a branch that is behind `origin/main`. Before the
+next push to a branch whose base has merged, merge `origin/main` into it; to
+bring a whole stack up to date, merge `origin/main` into the bottom branch,
+then each branch into the one above it, and push each.
 
 ## Repository settings
 
-These are set by a repository administrator, not by a pull request:
+These are set by a repository administrator, not by a pull request. The flow
+above holds once they are in place:
 
-- **Merge queue on `main`**: *Settings → Rules → Rulesets* (or branch
-  protection), *Require merge queue*. Use the same required status checks as
-  for pull requests. Every check in `ci.yml` and `pr-validation.yml` reports in
+- **Merge method**: merge commits only. The repository allows neither squash
+  nor rebase merges, and the `main` ruleset permits only the merge method.
+- **Merge commit message**: the pull request title and description
+  (*Default commit message*: *Pull request title and description*).
+- **Merge queue on `main`**: *Settings -> Rules -> Rulesets*, *Require merge
+  queue*, merge method *Merge commit*. It uses the same required status checks
+  as pull requests. Every check in `ci.yml` and `pr-validation.yml` reports in
   the queue, so any of them can be required.
-- **Automatically delete head branches**: on today. GitHub then retargets the
-  pull requests stacked on a merged one itself. With it off, retarget each by
-  hand (`gh pr edit <number> --base main`).
+- **Up-to-date branches**: not required. The merge queue gives the same
+  protection without a CI run on every open pull request after each merge.
+- **Automatically delete head branches**: on. GitHub then retargets the pull
+  requests stacked on a merged one itself.

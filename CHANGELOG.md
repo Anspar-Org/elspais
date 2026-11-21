@@ -4,6 +4,10 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-170
+
+- **Stacked pull requests land as merge commits through the merge queue (REQ-o00066-L+M)** -- `docs/stacked-pull-requests.md` describes the flow: the maintainers keep one ordered stack of open pull requests, at most three deep; a branch takes the next slot only after every tier passes locally, and is then squashed to one commit whose subject is the pull request title; after that its history only grows; and each pull request lands as a merge commit whose message is its title and description, so git alone shows whether a branch has merged. REQ-o00066-F no longer cites squash merges.
+
 ### TOOL-147 follow-up
 
 - **A named fix reports an INDEX.md row it could not update (REQ-d00330-C)** -- where the row listing the requirement had another column count than the table elspais writes, `elspais fix REQ-ID` left the row's stale hash in place without a word. It now says so and names the full fix that regenerates the index.

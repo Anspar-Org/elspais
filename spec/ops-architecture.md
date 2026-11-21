@@ -111,6 +111,10 @@ The pipeline validates at three levels:
 
 These checks are required status checks on the main branch, preventing merges that do not meet the standards.
 
+F holds because the title of a pull request becomes the subject of the merge commit that lands it on main.
+
+L and M serve the flow `docs/stacked-pull-requests.md` describes. The maintainers keep one ordered stack of open pull requests, each pull request lands on main as a merge commit, and the merge queue tests the exact result of each merge before main changes. The commits of a pull request keep their identity on main, so git alone shows whether a branch has merged.
+
 I, J and O divide the test suite by trigger. The project supports one Python version, the one its consumers run, so every tier runs on that version. A pull request and a push to main run only each *Impacted Test* of the change, which keeps the time CI consumes in proportion to the change. The full suite runs on every commit a release publishes (N), on a change its author marks for release or for a fresh selection record, and once a day where main changed since the last full run. The daily run keeps the record that selects each *Impacted Test* close to main, and it finds a failure that a selection missed.
 
 H is stated apart from B because formatting and linting are enforced by the same tool and were not enforced in the same places. A local hook cannot be the only gate for a standard: it is absent from a fresh clone until configured, a contributor may bypass it, and it never runs at all for a commit created on the forge -- an automated version bump, or an edit accepted through the web. A standard enforced only there reaches main unenforced, and is then inherited by whoever next touches the tree.
@@ -129,7 +133,7 @@ D. The CI pipeline SHALL scan for leaked secrets in the git history using gitlea
 
 E. The CI pipeline SHALL audit dependencies for known security vulnerabilities.
 
-F. The PR validation pipeline SHALL require a Linear ticket reference in PR titles — a bracketed uppercase team prefix and issue number (e.g. `[TOOL-38]`, `[CUR-514]`) — to maintain commit *Traceability* through squash merges.
+F. The PR validation pipeline SHALL require a Linear ticket reference in PR titles — a bracketed uppercase team prefix and issue number (e.g. `[TOOL-38]`, `[CUR-514]`).
 
 G. The PR validation pipeline SHALL require both a ticket reference (uppercase team prefix and issue number) and a requirement reference (REQ-XXXXX) in commit messages.
 
@@ -151,6 +155,7 @@ O. For every push to main, the CI pipeline SHALL run every *Impacted Test* of th
 
 ## Changelog
 
+- 2026-11-21 | e971b126 | - | Michael Lewis (<michael@anspar.org>) | F: the ticket reference in a PR title no longer cites squash merges
 - 2026-10-13 | d024e6c1 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-10-13 | - | - | Michael Lewis (<michael@anspar.org>) | I and O: a pull request and a push to main run each Impacted Test of the change; K retired: the full suite runs before a release (N), on a marked change, and daily
 - 2026-10-12 | 1f14a101 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
@@ -165,7 +170,7 @@ O. For every push to main, the CI pipeline SHALL run every *Impacted Test* of th
 - 2026-07-31 | - | - | Michael Lewis (<michael@anspar.org>) | TOOL-37: F/G accept any Linear team prefix, not only CUR — the repo's team moved to TOOL; matches the commit-msg hook's existing pattern
 - 2026-03-30 | 315accce | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: canonicalize term forms
 
-*End* *CI/CD Pipeline Enforcement* | **Hash**: d024e6c1
+*End* *CI/CD Pipeline Enforcement* | **Hash**: e971b126
 ---
 
 # REQ-o00078: Release Completeness Across Distribution Channels
