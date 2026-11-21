@@ -249,13 +249,14 @@ class TestWhichJobsRun:
         """A push to automain runs every job a push to main runs in the same
         mode, except what a run of main publishes: the promoted CI image and
         the recorded baseline. The plan records only for main, so the automain
-        run carries `record=false` (TestPlanScript runs that decision)."""
+        run carries `record=false` (TestPlanScript runs that decision). The
+        one job automain runs beyond main's builds its pre-release package."""
         main = _jobs_that_run(ci_config, _context("push", full=full, record=full))
         automain = _jobs_that_run(
             ci_config, _context("push", ref="refs/heads/automain", full=full, record=False)
         )
-        assert automain <= main
         assert main - automain == ({"promote-image", "save-baseline"} if full else set())
+        assert automain - main == {"prerelease-build"}
 
     # Verifies: REQ-o00080-E
     @pytest.mark.parametrize("event", ["push", "schedule"])
@@ -449,8 +450,10 @@ def _executable(path: Path, text: str) -> None:
     path.chmod(0o755)
 
 
-def _run_step(step: dict, env: dict, tmp_path: Path, fakes: dict[str, str]):
-    """Run one step's script with stand-ins first on PATH.
+def _run_step(
+    step: dict, env: dict, tmp_path: Path, fakes: dict[str, str], cwd: Path | None = None
+):
+    """Run one step's script with stand-ins first on PATH, in `cwd` if given.
 
     Returns the finished process, the outputs written to GITHUB_OUTPUT, and
     the arguments of every `gh` call.
@@ -471,7 +474,7 @@ def _run_step(step: dict, env: dict, tmp_path: Path, fakes: dict[str, str]):
         **env,
     }
     result = subprocess.run(
-        [*_BASH, str(script)], env=full_env, capture_output=True, text=True, timeout=30
+        [*_BASH, str(script)], env=full_env, capture_output=True, text=True, timeout=30, cwd=cwd
     )
     outputs = dict(line.split("=", 1) for line in output.read_text().splitlines() if line)
     calls = log.read_text().splitlines() if log.exists() else []
@@ -904,12 +907,14 @@ class TestReleaseRunsTheFullSuite:
     # Verifies: REQ-o00066-N
     @pytest.mark.parametrize("caller_event", sorted(_CALLER_EVENTS))
     def test_REQ_o00066_N_called_run_checks_out_the_released_commit(self, ci_config, caller_event):
-        """Every checkout in a called run is at the commit the release names,
-        never at the caller's own commit."""
+        """Every checkout of a job a called run executes is at the commit the
+        release names, never at the caller's own commit."""
         context = _called_context(caller_event)
+        ran = _jobs_that_run(ci_config, context)
         checkouts = [
             step
-            for job in ci_config["jobs"].values()
+            for name, job in ci_config["jobs"].items()
+            if name in ran
             for step in job.get("steps", [])
             if str(step.get("uses", "")).startswith("actions/checkout@")
         ]
@@ -1236,6 +1241,150 @@ class TestCIImageFromMain:
 # --- REQ-o00081: automain's pre-releases ---
 
 
+# --- REQ-o00081-A+D: CI builds the pre-release package, without the credential ---
+
+_FAKE_BUILD_GIT = """#!/bin/sh
+printf 'git %s\\n' "$*" >> "$GH_LOG"
+echo 812
+"""
+
+_FAKE_BUILD_CURL = """#!/bin/sh
+printf 'curl %s\\n' "$*" >> "$GH_LOG"
+if [ -n "$FAKE_CURL_FAIL" ]; then echo "curl: (22) 503" >&2; exit 22; fi
+while [ $# -gt 0 ]; do
+  if [ "$1" = "-o" ]; then printf '{"releases": {}}' > "$2"; fi
+  shift
+done
+"""
+
+_FAKE_BUILD_PYTHON = """#!/bin/sh
+printf 'python %s\\n' "$*" >> "$GH_LOG"
+if [ "$FAKE_TOOL_RC" -eq 0 ]; then echo 0.130.0.dev812; else echo "refused" >&2; fi
+exit "$FAKE_TOOL_RC"
+"""
+
+
+def _after(call: str, option: str) -> str:
+    words = call.split()
+    return words[words.index(option) + 1]
+
+
+class TestPrereleaseBuild:
+    # Verifies: REQ-o00081-A+D
+    @pytest.mark.parametrize(
+        "event,ref,inputs_ref,runs",
+        [
+            pytest.param("push", "refs/heads/automain", None, True, id="automain-push"),
+            pytest.param("push", "refs/heads/main", None, False, id="main-push"),
+            pytest.param("pull_request", None, None, False, id="pull-request"),
+            pytest.param(
+                "merge_group",
+                "refs/heads/gh-readonly-queue/automain/pr-7-0123456789abcdef",
+                None,
+                False,
+                id="automain-queue",
+            ),
+            pytest.param("schedule", None, None, False, id="schedule"),
+            pytest.param("workflow_dispatch", "refs/heads/automain", None, False, id="dispatch"),
+            pytest.param(
+                "push", "refs/heads/automain", _RELEASED_SHA, False, id="called-from-a-push"
+            ),
+        ],
+    )
+    def test_REQ_o00081_A_builds_only_for_a_push_to_automain(
+        self, ci_config, event, ref, inputs_ref, runs
+    ):
+        """Only a push to automain builds a pre-release package; a called run
+        carries its caller's event and ref, so `inputs.ref` must rule it out."""
+        context = {**_context(event, ref=ref), "inputs.ref": inputs_ref}
+        assert _runs(ci_config["jobs"]["prerelease-build"], context) == runs
+
+    # Verifies: REQ-o00081-D
+    def test_REQ_o00081_D_the_build_job_holds_no_credential(self, ci_config):
+        job = ci_config["jobs"]["prerelease-build"]
+        assert job["permissions"] == {"contents": "read"}
+        assert not any("secrets." in t for t in _strings(job))
+
+    # Verifies: REQ-o00081-A+B
+    def test_REQ_o00081_A_builds_the_computed_version_and_uploads_it(self, ci_config):
+        job = ci_config["jobs"]["prerelease-build"]
+        (checkout,) = [
+            s for s in job["steps"] if str(s.get("uses", "")).startswith("actions/checkout@")
+        ]
+        assert str(checkout["with"]["fetch-depth"]) == "0"
+        version = _step_with_id(job, "version")
+        for option in (
+            "python -m tools.prerelease_version",
+            "--pyproject pyproject.toml",
+            "--write",
+        ):
+            assert option in version["run"], option
+        build = _step_running(job, "python -m build")
+        (upload,) = [
+            s for s in job["steps"] if str(s.get("uses", "")).startswith("actions/upload-artifact@")
+        ]
+        assert upload["with"]["name"] == "prerelease-dist"
+        assert upload["with"]["if-no-files-found"] == "error"
+        steps = job["steps"]
+        assert steps.index(version) < steps.index(build) < steps.index(upload)
+
+    # Verifies: REQ-o00081-A+C
+    @pytest.mark.parametrize("built", [True, False])
+    def test_REQ_o00081_C_a_refused_version_builds_nothing(self, ci_config, built):
+        job = ci_config["jobs"]["prerelease-build"]
+        context = {"steps.version.outputs.built": "true" if built else "false"}
+        build = _step_running(job, "python -m build")
+        (upload,) = [
+            s for s in job["steps"] if str(s.get("uses", "")).startswith("actions/upload-artifact@")
+        ]
+        assert _runs(build, context) == built
+        assert _runs(upload, context) == built
+
+    # Verifies: REQ-o00081-A+C
+    @pytest.mark.parametrize(
+        "tool_rc,curl_fails,rc,built",
+        [
+            pytest.param(0, False, 0, "true", id="computed"),
+            pytest.param(1, False, 0, "false", id="refused"),
+            pytest.param(2, False, 2, None, id="tool-broke"),
+            pytest.param(0, True, None, None, id="index-unreachable"),
+        ],
+    )
+    def test_REQ_o00081_C_version_step_tolerates_only_a_refusal(
+        self, ci_config, tmp_path, tool_rc, curl_fails, rc, built
+    ):
+        """A refusal -- a re-run for a commit already published -- builds
+        nothing and passes with a warning; any other failure fails the job.
+        The tool reads the index the step fetched and the commit's count."""
+        step = _step_with_id(ci_config["jobs"]["prerelease-build"], "version")
+        env = {
+            "GITHUB_SHA": _SHA,
+            "RUNNER_TEMP": str(tmp_path),
+            "FAKE_TOOL_RC": str(tool_rc),
+            **({"FAKE_CURL_FAIL": "1"} if curl_fails else {}),
+        }
+        fakes = {"git": _FAKE_BUILD_GIT, "curl": _FAKE_BUILD_CURL, "python": _FAKE_BUILD_PYTHON}
+        result, outputs, calls = _run_step(step, env, tmp_path, fakes)
+        said = result.stdout + result.stderr
+        if rc is None:
+            assert result.returncode != 0, said
+        else:
+            assert result.returncode == rc, said
+        assert outputs.get("built") == built
+        assert ("::warning::" in said) == (built == "false")
+        (git,) = [c for c in calls if c.startswith("git ")]
+        assert "rev-list --count --first-parent" in git and _SHA in git
+        tools = [c for c in calls if c.startswith("python ")]
+        if curl_fails:
+            assert tools == []
+            return
+        (curl,) = [c for c in calls if c.startswith("curl ")]
+        (tool,) = tools
+        assert "-m tools.prerelease_version" in tool
+        assert _after(tool, "--count") == "812"
+        assert _after(tool, "--index") == _after(curl, "-o")
+
+
 @pytest.fixture(scope="module")
 def prerelease_config():
     return _load_path(PRERELEASE_WORKFLOW)
@@ -1314,41 +1463,118 @@ class TestPrereleaseWorkflow:
         assert _runs(prerelease_config["jobs"]["prerelease"], context) == expected
 
     # Verifies: REQ-o00081-A
-    def test_REQ_o00081_A_builds_the_commit_ci_tested(self, prerelease_config):
-        """The checkout is the commit the CI run tested, with the history the
-        first-parent count is read from."""
-        job = prerelease_config["jobs"]["prerelease"]
-        context = {"github.event.workflow_run.head_sha": _RELEASED_SHA}
-        (checkout,) = [
-            s for s in job["steps"] if str(s.get("uses", "")).startswith("actions/checkout@")
-        ]
-        assert _evaluate(checkout["with"]["ref"], context) == _RELEASED_SHA
-        assert str(checkout["with"]["fetch-depth"]) == "0"
-
-    # Verifies: REQ-o00081-A
     def test_REQ_o00081_A_confirms_automain_contains_the_commit(self, prerelease_config):
         job = prerelease_config["jobs"]["prerelease"]
-        run = _step_run_containing(job, "git merge-base --is-ancestor")
+        run = _step_run_containing(job, "merge-base --is-ancestor")
         assert "origin/automain" in run
-        assert _index_of_step_running(job, "git merge-base --is-ancestor") < (
+        assert _index_of_step_running(job, "merge-base --is-ancestor") < (
             _index_of_step_running(job, "twine upload")
         )
 
     # Verifies: REQ-o00081-B+C, REQ-o00080-E
-    def test_REQ_o00081_B_builds_the_computed_pre_release_version(self, prerelease_config):
-        """The version written into the build is the one the pre-release
-        module computes from the index and the first-parent count."""
+    def test_REQ_o00081_B_publishes_the_package_ci_built_at_the_computed_version(
+        self, prerelease_config
+    ):
+        """The version is computed here, from the index and the first-parent
+        count, without writing anything; the package is the one this commit's
+        CI run built, and the check reads the version computed here."""
         job = prerelease_config["jobs"]["prerelease"]
-        compute = _step_run_containing(job, "python -m tools.prerelease_version")
-        for option in ("--pyproject pyproject.toml", "--index", "--count", "--write"):
-            assert option in compute, option
-        assert "git rev-list --count --first-parent" in _step_runs(job)
-        assert _index_of_step_running(job, "python -m tools.prerelease_version") < (
-            _index_of_step_running(job, "python -m build")
+        compute = _step_with_id(job, "version")
+        assert "python -m tools.prerelease_version" in compute["run"]
+        for option in ("--pyproject", "--index", "--count"):
+            assert option in compute["run"], option
+        assert "--write" not in compute["run"]
+        assert "rev-list --count --first-parent" in compute["run"]
+        (download,) = [
+            s
+            for s in job["steps"]
+            if str(s.get("uses", "")).startswith("actions/download-artifact@")
+        ]
+        assert download["with"]["name"] == "prerelease-dist"
+        run_id = {"github.event.workflow_run.id": "4242"}
+        assert str(_evaluate(download["with"]["run-id"], run_id)) == "4242"
+        check = _step_running(job, "twine check")
+        computed = {"steps.version.outputs.version": "0.130.0.dev812"}
+        assert _evaluate(check["env"]["VERSION"], computed) == "0.130.0.dev812"
+        steps = job["steps"]
+        assert (
+            steps.index(compute)
+            < steps.index(download)
+            < steps.index(check)
+            < _index_of_step_running(job, "twine upload")
         )
-        assert _index_of_step_running(job, "python -m build") < (
-            _index_of_step_running(job, "twine upload")
-        )
+
+    # Verifies: REQ-o00081-D
+    def test_REQ_o00081_D_only_the_publishing_job_reads_the_credential(self, prerelease_config):
+        jobs = prerelease_config["jobs"]
+        holders = [
+            name for name, job in jobs.items() if any("secrets." in t for t in _strings(job))
+        ]
+        assert holders == ["prerelease"]
+        assert jobs["prerelease"]["permissions"] == {"contents": "read", "actions": "read"}
+        assert any("secrets.PYPI_TOKEN" in t for t in _strings(jobs["prerelease"]))
+
+    # Verifies: REQ-o00081-D
+    def test_REQ_o00081_D_the_commit_is_checked_out_as_data_beside_the_tool(
+        self, prerelease_config
+    ):
+        """Nothing is checked out into the workspace root: the published
+        commit lands in `commit/` with no credential left in it, and the code
+        that runs comes from main, in `tool/`."""
+        job = prerelease_config["jobs"]["prerelease"]
+        context = {"github.event.workflow_run.head_sha": _RELEASED_SHA}
+        checkouts = [
+            s for s in job["steps"] if str(s.get("uses", "")).startswith("actions/checkout@")
+        ]
+        paths = [s.get("with", {}).get("path", "") for s in checkouts]
+        assert sorted(paths) == ["commit", "tool"]
+        by_path = dict(zip(paths, checkouts, strict=True))
+        commit = by_path["commit"]["with"]
+        assert _evaluate_template(commit["ref"], context) == _RELEASED_SHA
+        assert commit["persist-credentials"] is False
+        assert str(commit["fetch-depth"]) == "0"
+        tool = by_path["tool"]["with"]
+        assert _evaluate_template(tool["ref"], context) == "main"
+        for step in checkouts:
+            if _evaluate_template(step["with"]["ref"], context) == _RELEASED_SHA:
+                assert step["with"]["path"] == "commit"
+
+    # Verifies: REQ-o00081-D
+    def test_REQ_o00081_D_every_module_run_is_main_s_tool(self, prerelease_config):
+        job = prerelease_config["jobs"]["prerelease"]
+        assert "defaults" not in job
+        modules = [s for s in job["steps"] if "python -m" in s.get("run", "")]
+        assert modules
+        for step in modules:
+            assert step.get("working-directory") == "tool", step["name"]
+
+    # Verifies: REQ-o00081-D
+    def test_REQ_o00081_D_no_step_executes_the_commit(self, prerelease_config):
+        """The commit is read with git and its pyproject.toml is passed as
+        data; nothing runs from inside it, and no step builds or installs it."""
+        job = prerelease_config["jobs"]["prerelease"]
+        runs = [s for s in job["steps"] if "run" in s]
+        assert runs
+        reads = re.compile(r"git -C (?:\.\./)?commit\b|--pyproject \.\./commit/pyproject\.toml")
+        for step in runs:
+            rest = reads.sub("", step["run"])
+            assert "commit/" not in rest, step["name"]
+            assert not re.search(r"(?:\bcd|-C)\s+(?:\.\./)?commit\b", rest), step["name"]
+            assert "commit" not in str(step.get("working-directory", "")), step["name"]
+            assert not re.search(r"\bmake\b", step["run"]), step["name"]
+        assert not any(str(s.get("uses", "")).startswith(".") for s in job["steps"])
+        texts = list(_strings(prerelease_config))
+        for forbidden in ("python -m build", "pip install -e", "pip install ."):
+            assert not any(forbidden in t for t in texts), forbidden
+
+    # Verifies: REQ-o00081-D
+    def test_REQ_o00081_D_installs_against_main_s_lock(self, prerelease_config):
+        job = prerelease_config["jobs"]["prerelease"]
+        installs = [s["run"] for s in job["steps"] if "pip install" in s.get("run", "")]
+        assert installs
+        for run in installs:
+            assert "-c tool/requirements/dev.lock" in run
+            assert not re.search(r"(?:-c|-r|--constraint|--requirement)[ =](?!tool/)", run), run
 
     # Verifies: REQ-o00081-C
     def test_REQ_o00081_C_an_upload_never_passes_over_a_taken_number(self, prerelease_config):
@@ -1371,6 +1597,182 @@ class TestPrereleaseWorkflow:
         texts = list(_strings(prerelease_config["jobs"]))
         assert any("twine upload" in t for t in texts)
         assert not any(publication in t for t in texts)
+
+
+# --- REQ-o00081-B+D: the publishing job's check of the package CI built ---
+
+#: Stands in for pkginfo where the venv lacks it: it reads a wheel's
+#: METADATA and an sdist's top-level PKG-INFO, as pkginfo does.
+_PKGINFO_STAND_IN = """
+import email.parser
+import tarfile
+import zipfile
+
+
+class _Distribution:
+    def __init__(self, text):
+        message = email.parser.Parser().parsestr(text)
+        self.name = message["Name"]
+        self.version = message["Version"]
+
+
+class Wheel(_Distribution):
+    def __init__(self, path):
+        with zipfile.ZipFile(path) as archive:
+            (name,) = [n for n in archive.namelist() if n.endswith(".dist-info/METADATA")]
+            super().__init__(archive.read(name).decode())
+
+
+class SDist(_Distribution):
+    def __init__(self, path):
+        with tarfile.open(path) as archive:
+            (member,) = [
+                m for m in archive.getmembers()
+                if m.name.count("/") == 1 and m.name.endswith("/PKG-INFO")
+            ]
+            super().__init__(archive.extractfile(member).read().decode())
+"""
+
+_FAKE_TWINE = """#!/bin/sh
+printf '%s\\n' "$*" >> "$GH_LOG"
+exit "${FAKE_TWINE_RC:-0}"
+"""
+
+
+def _metadata(name: str, version: str) -> bytes:
+    return f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n".encode()
+
+
+def _wheel(path: Path, name: str, version: str) -> None:
+    import zipfile
+
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(f"{name}-{version}.dist-info/METADATA", _metadata(name, version))
+
+
+def _sdist(path: Path, name: str, version: str) -> None:
+    import io
+    import tarfile
+
+    data = _metadata(name, version)
+    with tarfile.open(path, "w:gz") as archive:
+        info = tarfile.TarInfo(f"{name}-{version}/PKG-INFO")
+        info.size = len(data)
+        archive.addfile(info, io.BytesIO(data))
+
+
+_DEV = "0.130.0.dev812"
+
+#: (expected VERSION, [(file name, metadata name, metadata version)], twine rc, passes)
+_PACKAGES = [
+    pytest.param(
+        _DEV,
+        [
+            (f"elspais-{_DEV}-py3-none-any.whl", "elspais", _DEV),
+            (f"elspais-{_DEV}.tar.gz", "elspais", _DEV),
+        ],
+        0,
+        True,
+        id="the-package",
+    ),
+    pytest.param(
+        _DEV,
+        [
+            (f"elspais-{_DEV}-py3-none-any.whl", "elspais", _DEV),
+            (f"elspais-{_DEV}.tar.gz", "elspais", _DEV),
+            ("notes.txt", None, None),
+        ],
+        0,
+        False,
+        id="extra-file",
+    ),
+    pytest.param(
+        _DEV,
+        [(f"elspais-{_DEV}-py3-none-any.whl", "elspais", _DEV)],
+        0,
+        False,
+        id="sdist-missing",
+    ),
+    pytest.param(
+        _DEV,
+        [
+            (f"elspais-{_DEV}-py3-none-any.whl", "elspais", "9.9.9"),
+            (f"elspais-{_DEV}.tar.gz", "elspais", _DEV),
+        ],
+        0,
+        False,
+        id="final-release-renamed",
+    ),
+    pytest.param(
+        _DEV,
+        [
+            (f"elspais-{_DEV}-py3-none-any.whl", "elspais", _DEV),
+            (f"elspais-{_DEV}.tar.gz", "not-elspais", _DEV),
+        ],
+        0,
+        False,
+        id="other-project",
+    ),
+    pytest.param(
+        "0.130.0",
+        [
+            ("elspais-0.130.0-py3-none-any.whl", "elspais", "0.130.0"),
+            ("elspais-0.130.0.tar.gz", "elspais", "0.130.0"),
+        ],
+        0,
+        False,
+        id="expected-is-a-release",
+    ),
+    pytest.param(
+        _DEV,
+        [
+            (f"elspais-{_DEV}-py3-none-any.whl", "elspais", _DEV),
+            (f"elspais-{_DEV}.tar.gz", "elspais", _DEV),
+        ],
+        1,
+        False,
+        id="twine-check-fails",
+    ),
+]
+
+
+class TestPrereleasePackageCheck:
+    # Verifies: REQ-o00081-B+D
+    @pytest.mark.parametrize("expected,files,twine_rc,passes", _PACKAGES)
+    def test_REQ_o00081_D_publishes_only_the_package_at_the_computed_version(
+        self, prerelease_config, tmp_path, expected, files, twine_rc, passes
+    ):
+        """The package came from a job that ran the commit's code, so it is
+        read as data: the dist directory holds exactly the wheel and sdist of
+        elspais at the computed developmental version, or nothing ships."""
+        step = _step_running(prerelease_config["jobs"]["prerelease"], "twine check")
+        work = tmp_path / "work"
+        dist = work / "dist"
+        dist.mkdir(parents=True)
+        for file_name, name, version in files:
+            if file_name.endswith(".whl"):
+                _wheel(dist / file_name, name, version)
+            elif file_name.endswith(".tar.gz"):
+                _sdist(dist / file_name, name, version)
+            else:
+                (dist / file_name).write_text("x")
+        env = {"VERSION": expected, "FAKE_TWINE_RC": str(twine_rc)}
+        try:
+            import pkginfo  # noqa: F401
+        except ImportError:
+            stand_in = tmp_path / "stand_in"
+            stand_in.mkdir()
+            (stand_in / "pkginfo.py").write_text(_PKGINFO_STAND_IN)
+            env["PYTHONPATH"] = str(stand_in)
+        fakes = {"twine": _FAKE_TWINE, "python": f'#!/bin/sh\nexec "{sys.executable}" "$@"\n'}
+        result, _, calls = _run_step(step, env, tmp_path, fakes, cwd=work)
+        said = result.stdout + result.stderr
+        assert (result.returncode == 0) == passes, said
+        assert calls and calls[0].startswith("check dist/"), calls
+        if passes:
+            assert f"elspais {expected}" in result.stdout
+        elif twine_rc == 0:
+            assert "::error::" in said
 
 
 def _pr_check_steps(pr_config) -> list[dict]:

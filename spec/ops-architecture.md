@@ -240,6 +240,8 @@ The package index keeps a version for ever: a bad version can be yanked, but its
 
 A pre-release has the PEP 440 developmental-release form `X.Y.Z.devN`. `X.Y.Z` is the version that the commit declares, or the patch after the newest release where the commit declares a released version, so the pre-release sorts above every release. `N` is the count of first-parent commits on `automain` at that commit. That count increases with every merge, because `automain` is never rewritten, and it names one commit. An installer selects a developmental release only for a requirement that names a pre-release, for example an exact pin, so an ordinary install or upgrade never reaches one.
 
+D keeps the credential that publishes releases away from unreviewed code. A commit on `automain` has passed CI, but no maintainer has reviewed it. If its code ran where the publishing credential is readable, it could publish a final release to every user, or take the credential. So CI builds the package of the commit without that credential, and the publishing job runs only code from main: it computes the version again, reads the commit as data, and publishes the built files only where their version is that pre-release version.
+
 ## Assertions
 
 A. For each `automain` commit whose CI push run passes, the pre-release process SHALL publish a pre-release version of that commit to the package index.
@@ -248,9 +250,12 @@ B. A pre-release version SHALL be a version that an installer never selects for 
 
 C. Each pre-release version SHALL differ from every version that the package index carries or has carried.
 
+D. The pre-release process SHALL run no code from the published commit in a job that can read the credential that publishes to the package index.
+
 ## Changelog
 
+- 2026-11-21 | d5b46ad7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 - 2026-11-21 | 5c7b45d7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: write in canonical form, update hash, add missing changelog section
 
-*End* *Automain Pre-releases* | **Hash**: 5c7b45d7
+*End* *Automain Pre-releases* | **Hash**: d5b46ad7
 ---

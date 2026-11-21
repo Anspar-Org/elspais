@@ -1,4 +1,4 @@
-# Implements: REQ-o00066-B+C+D+E+I+J+L+M+O, REQ-o00080-A+B+C+E
+# Implements: REQ-o00066-B+C+D+E+I+J+L+M+O, REQ-o00080-A+B+C+E, REQ-o00081-A+D
 name: CI
 
 # Every job runs on the one Python the project supports.
@@ -13,7 +13,10 @@ name: CI
 # `automain` is a second trunk that a maintainer promotes to main
 # (REQ-o00080). A pull request, a merge-queue candidate and a push targeting it
 # run every check they run for main. Only main publishes: a full run of
-# automain records no TIA baseline, and only main promotes the CI image.
+# automain records no TIA baseline, and only main promotes the CI image. A
+# push to automain also builds the commit's pre-release package, without any
+# publishing credential; prerelease-pypi.yml publishes it once this run passes
+# (REQ-o00081).
 #
 # The `plan` job decides whether a run is FULL. A full run executes every
 # tier with no path filter. Any other run executes only the unit tests Test
@@ -481,6 +484,71 @@ jobs:
           PRODUCTION="py${{ matrix.python-version }}"
           echo "Promoting $CANDIDATE -> $PRODUCTION"
           crane tag "${{ env.IMAGE_BASE }}:${CANDIDATE}" "${PRODUCTION}"
+
+  prerelease-build:
+    # Builds the pre-release package of an automain commit and uploads it as
+    # the `prerelease-dist` artifact. It holds no publishing credential: the
+    # package is built here because this run may execute the commit's code,
+    # and prerelease-pypi.yml, which holds the credential, executes none
+    # (REQ-o00081-D). The version is computed again there, and a package
+    # carrying any other version is refused.
+    name: Build Pre-release
+    # A called run carries its caller's event and ref, so `inputs.ref` marks it.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/automain' && !inputs.ref
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      # The whole history: N is the commit's first-parent count.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install build tools
+        run: pip install -c requirements/dev.lock build packaging
+
+      # A refusal (exit 1) is not a CI failure: a re-run for a commit whose
+      # pre-release is already published is refused, and prerelease-pypi.yml
+      # reports every refusal when it computes the version itself.
+      - name: Write the pre-release version
+        id: version
+        run: |
+          COUNT=$(git rev-list --count --first-parent "$GITHUB_SHA")
+          INDEX="${RUNNER_TEMP}/pypi-elspais.json"
+          curl -fsS --retry 3 -o "$INDEX" https://pypi.org/pypi/elspais/json
+          rc=0
+          VERSION=$(python -m tools.prerelease_version \
+            --pyproject pyproject.toml --index "$INDEX" --count "$COUNT" --write) || rc=$?
+          if [ "$rc" -eq 1 ]; then
+            echo "::warning::No pre-release package is built for ${GITHUB_SHA} (tolerated: the refusal above is reported again by prerelease-pypi.yml)"
+            echo "built=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          elif [ "$rc" -ne 0 ]; then
+            exit "$rc"
+          fi
+          echo "built=true" >> "$GITHUB_OUTPUT"
+          echo "Building ${GITHUB_SHA} as elspais ${VERSION}"
+
+      - name: Build package
+        if: steps.version.outputs.built == 'true'
+        run: python -m build
+
+      - name: Upload the package
+        if: steps.version.outputs.built == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: prerelease-dist
+          path: dist/
+          retention-days: 7
+          if-no-files-found: error
 
   lint:
     name: Lint

@@ -73,7 +73,7 @@
 | REQ-o00078 | Release Completeness Across Distribution Channels | ops-architecture.md | 3f2d4577 |
 | REQ-o00079 | Serving a Browser Session                         | ops-mcp.md          | abe6acb7 |
 | REQ-o00080 | Automain Trunk                                    | ops-architecture.md | 949598ba |
-| REQ-o00081 | Automain Pre-releases                             | ops-architecture.md | 5c7b45d7 |
+| REQ-o00081 | Automain Pre-releases                             | ops-architecture.md | d5b46ad7 |
 
 ## DEVELOPMENT
 

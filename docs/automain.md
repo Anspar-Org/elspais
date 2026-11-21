@@ -34,7 +34,7 @@ nothing else (REQ-o00080-D+E):
 | `ci.yml`, `promote-image` | the production CI image tag | `main` |
 | `ci.yml`, baseline recording | the TIA baseline that runs select from | a full run of `main` |
 | `build-ci-image.yml` | the production CI image tag | `main` |
-| `prerelease-pypi.yml` | the pre-release on PyPI | a passing push run of CI on `automain` |
+| `prerelease-pypi.yml` | the pre-release on PyPI, built by `ci.yml`'s `prerelease-build` | a passing push run of CI on `automain` |
 
 ## Pre-releases
 
@@ -55,8 +55,23 @@ passed. It publishes that commit to PyPI as the PEP 440 developmental release
   nothing.
 
 `python -m tools.prerelease_version` computes the version. The workflow
-writes it into its own checkout of `pyproject.toml` for the build and never
-commits it. It makes no tag, no GitHub release and no Homebrew update.
+makes no tag, no GitHub release and no Homebrew update.
+
+### Who runs what
+
+A commit on `automain` has passed CI, but no maintainer has reviewed it. So
+its code never runs where the PyPI credential is readable
+(REQ-o00081-D):
+
+- The `prerelease-build` job of `ci.yml` runs on a push to `automain`. It
+  holds no publishing credential. It writes the pre-release version into its
+  checkout of `pyproject.toml`, builds the package and uploads it as the
+  `prerelease-dist` artifact. The version is never committed.
+- `prerelease-pypi.yml` holds the credential and runs only code from `main`:
+  the version tool, the lock and the workflow itself. It reads the commit as
+  data, computes the version again, and downloads the artifact. It publishes
+  the files only where they are one wheel and one sdist of elspais whose
+  metadata carries that version.
 
 ### Installing a pre-release
 
@@ -67,7 +82,7 @@ one:
 ```sh
 pip install elspais                    # the newest release
 pip install --upgrade elspais          # the newest release
-pip install "elspais==0.130.7.dev812"  # that pre-release
+pip install "elspais==0.130.8.dev812"  # that pre-release
 ```
 
 A repository's `automain` work may pin a pre-release this way. Its `main`
@@ -78,7 +93,8 @@ pin to a released version. elspais is promoted and released first.
 
 A repository administrator sets these, not a pull request:
 
-- The `automain` branch, created from `main`.
+- The `automain` branch, created from `main`. Its creation is a push, so
+  the first pre-release is of the commit `main` held then.
 - A ruleset on `automain` with the protection of `main`: the same required
   status checks, the merge queue, no deletion and no force-push.
 - Every change reaches `automain` through a merge commit, the merge of
