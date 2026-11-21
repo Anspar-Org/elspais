@@ -1,4 +1,4 @@
-# Implements: REQ-o00066-B+C+D+E+I+J+L+M+O
+# Implements: REQ-o00066-B+C+D+E+I+J+L+M+O, REQ-o00080-A+B+C+E
 name: CI
 
 # Every job runs on the one Python the project supports.
@@ -9,6 +9,11 @@ name: CI
 # the commit that will actually land, with the checks a pull request into main
 # gets (REQ-o00066-M). Path-filtered tiers always run there, because the queue
 # is the last gate before main.
+#
+# `automain` is a second trunk that a maintainer promotes to main
+# (REQ-o00080). A pull request, a merge-queue candidate and a push targeting it
+# run every check they run for main. Only main publishes: a full run of
+# automain records no TIA baseline, and only main promotes the CI image.
 #
 # The `plan` job decides whether a run is FULL. A full run executes every
 # tier with no path filter. Any other run executes only the unit tests Test
@@ -29,7 +34,7 @@ on:
   pull_request:
   merge_group:
   push:
-    branches: [main]
+    branches: [main, automain]
   schedule:
     - cron: '23 5 * * *'
   workflow_dispatch:
@@ -448,6 +453,8 @@ jobs:
       - run: echo "Every tier ran in full and passed."
 
   promote-image:
+    # Publishes the production CI image tag, so it runs for main alone
+    # (REQ-o00080-E).
     name: Promote CI Image (Python ${{ matrix.python-version }})
     needs: [compute-hash, full-suite]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule') && !inputs.ref

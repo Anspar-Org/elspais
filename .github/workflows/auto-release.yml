@@ -22,12 +22,15 @@ jobs:
   release:
     name: Create Release
 
-    # Implements: REQ-o00066-N
+    # Implements: REQ-o00066-N, REQ-o00080-D
     # Only a push run on main that concluded success can start a release, and
-    # the release targets the commit that run tested.
+    # the release targets the commit that run tested. The trigger already
+    # names main; the condition names it too, so a run of CI on automain can
+    # never start a release.
     if: >-
       github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.conclusion == 'success'
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:

@@ -1,4 +1,4 @@
-# Implements: REQ-o00078-A+B+C
+# Implements: REQ-o00078-A+B+C, REQ-o00080-D
 # The Homebrew half of REQ-o00078 is carried by the tap repository, which
 # this graph does not index; only the index channel's evidence lives here.
 name: Publish to PyPI & Update Homebrew
@@ -80,6 +80,29 @@ jobs:
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
           echo "pending_version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Publishing ${SHA}, resolved from ${SOURCE}"
+
+      # Implements: REQ-o00080-D
+      # A release is a decision about main. A tag or a dispatch can name a
+      # commit on automain or any other branch, so the gate asks the forge
+      # whether main contains the commit and refuses one it does not.
+      - name: Confirm main contains the commit
+        id: on-main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          if ! STATUS=$(gh api "repos/${REPOSITORY}/compare/main...${SHA}" --jq .status); then
+            echo "::error::Could not ask the forge whether main contains ${SHA}"
+            exit 1
+          fi
+          case "$STATUS" in
+            identical|behind)
+              echo "main contains ${SHA}" ;;
+            *)
+              echo "::error::Refusing to publish ${SHA}: main does not contain it (compare status ${STATUS}). Only a commit on main is released."
+              exit 1 ;;
+          esac
 
       - uses: actions/checkout@v4
         with:

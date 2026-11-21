@@ -196,3 +196,61 @@ C. The release process SHALL NOT report a release complete while the outcome of 
 
 *End* *Release Completeness Across Distribution Channels* | **Hash**: 3f2d4577
 ---
+
+# REQ-o00080: Automain Trunk
+
+**Level**: ops | **Status**: Active | **Implements**: -
+**Refines**: REQ-o00066
+
+## Rationale
+
+`automain` is a second trunk beside main. Autonomous agents merge their pull requests into it, and a maintainer promotes it to main through a pull request that the maintainer reviews. The trunk is useful only if a change that passes there would also pass on main, so A, B and C give it the checks of main for each trigger. A pull request that promotes `automain` targets main, so the checks of main apply to it in full.
+
+D and E keep `automain` apart from what users install. A release is a decision about main, and the promotion pull request is where the maintainer makes it. The one publication that a change to `automain` causes is its pre-release, which REQ-o00081 governs. A pre-release reaches only a consumer that names it, so it affects no user who installs or upgrades in the ordinary way. Other publications, for example the release itself or the CI image that a full run of main promotes, start only from main.
+
+## Assertions
+
+A. For every pull request targeting `automain`, the CI pipeline SHALL run every check that it runs for a pull request targeting main.
+
+B. For every merge-queue candidate targeting `automain`, the CI pipeline SHALL run every check that it runs for a merge-queue candidate targeting main.
+
+C. For every push to `automain`, the CI pipeline SHALL run every check that it runs for a push to main.
+
+D. The release process SHALL publish only a commit that main contains.
+
+E. Every publication that a change to `automain` causes SHALL be a pre-release version.
+
+## Changelog
+
+- 2026-11-21 | 949598ba | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: write in canonical form, update hash, add missing changelog section
+
+*End* *Automain Trunk* | **Hash**: 949598ba
+---
+
+# REQ-o00081: Automain Pre-releases
+
+**Level**: ops | **Status**: Active | **Implements**: -
+**Refines**: REQ-o00080-E
+
+## Rationale
+
+Work often crosses repositories: a consumer's `automain` work can need a change that is on the `automain` of elspais and not yet released. A consumer can pin only a version that the package index carries. A pre-release of each passing `automain` commit lets the consumer pin the change at once, without a release.
+
+The package index keeps a version for ever: a bad version can be yanked, but its number stays taken. So a pre-release number is never used twice, and a re-run for a commit that already has its pre-release publishes nothing new.
+
+A pre-release has the PEP 440 developmental-release form `X.Y.Z.devN`. `X.Y.Z` is the version that the commit declares, or the patch after the newest release where the commit declares a released version, so the pre-release sorts above every release. `N` is the count of first-parent commits on `automain` at that commit. That count increases with every merge, because `automain` is never rewritten, and it names one commit. An installer selects a developmental release only for a requirement that names a pre-release, for example an exact pin, so an ordinary install or upgrade never reaches one.
+
+## Assertions
+
+A. For each `automain` commit whose CI push run passes, the pre-release process SHALL publish a pre-release version of that commit to the package index.
+
+B. A pre-release version SHALL be a version that an installer never selects for a requirement that names no pre-release.
+
+C. Each pre-release version SHALL differ from every version that the package index carries or has carried.
+
+## Changelog
+
+- 2026-11-21 | 5c7b45d7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: write in canonical form, update hash, add missing changelog section
+
+*End* *Automain Pre-releases* | **Hash**: 5c7b45d7
+---

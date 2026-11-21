@@ -10,6 +10,9 @@ env:
 
 jobs:
   build:
+    # Implements: REQ-o00080-E
+    # Pushes the production image tag, so only main may build it.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read

@@ -4,6 +4,11 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### Automain trunk and pre-releases
+
+- **`automain` has the checks of main and publishes only its pre-releases (REQ-o00080)** -- CI runs on a push to `automain` as it does on a push to main, and every pull request and merge-queue candidate targeting it runs main's checks. The release, the CI image and the TIA baseline start only from main: the release gate refuses a commit main does not contain. `docs/automain.md` describes the trunk.
+- **Each passing `automain` commit is published to PyPI as a pre-release (REQ-o00081)** -- `prerelease-pypi.yml` publishes the developmental release `X.Y.Z.devN` of the commit, where `N` is its first-parent count on `automain`, so another repository can pin it before a release. An installer selects it only for a requirement that names a pre-release, and a number PyPI carries or carried is refused, never reused.
+
 ### TOOL-147 follow-up
 
 - **A named fix reports an INDEX.md row it could not update (REQ-d00330-C)** -- where the row listing the requirement had another column count than the table elspais writes, `elspais fix REQ-ID` left the row's stale hash in place without a word. It now says so and names the full fix that regenerates the index.

@@ -332,8 +332,8 @@ cache steps save and restore.
 Every job runs on the one Python the project supports. The `plan` job
 decides whether a run is full:
 
-- A pull request, a merge-queue candidate and a push to main are full where
-  the pull request carries the label `publish` or `baseline`. For a push, the
+- A pull request, a merge-queue candidate and a push to main or `automain`
+  are full where the pull request carries the label `publish` or `baseline`. For a push, the
   label is read from the pull request that was merged. Labels are read when
   the run starts, so a label added later takes effect on a re-run.
 - The daily schedule is full where no full run of main's newest commit is
@@ -346,8 +346,10 @@ newest baseline from `main`, runs `python -m tools.tia run`, and uploads the
 manifest as the `tia-manifest` artifact. A full run of `main` also records a
 baseline and, when the run passed outright, saves it to the Actions cache
 under the key `tia-baseline-v2-py3.14-<sha>` and uploads it as the artifact
-`tia-baseline-<sha>`, which `baseline fetch` downloads. A push to main that
-is not full runs no e2e, stress or browser tier. The `Full Suite` job passes
+`tia-baseline-<sha>`, which `baseline fetch` downloads. A full run of
+`automain` records no baseline, so every selection diffs against a tree of
+`main` (see [the automain trunk](automain.md)). A push to main or `automain`
+that is not full runs no e2e, stress or browser tier. The `Full Suite` job passes
 only in a full run whose every tier passed, and the release gate accepts a
 push run as its verdict only where that job passed.
 

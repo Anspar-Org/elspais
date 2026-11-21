@@ -28,6 +28,8 @@ CI_WORKFLOW = WORKFLOWS / "ci.yml"
 PR_WORKFLOW = WORKFLOWS / "pr-validation.yml"
 PUBLISH_WORKFLOW = WORKFLOWS / "publish-pypi.yml"
 RELEASE_WORKFLOW = WORKFLOWS / "auto-release.yml"
+IMAGE_WORKFLOW = WORKFLOWS / "build-ci-image.yml"
+PRERELEASE_WORKFLOW = WORKFLOWS / "prerelease-pypi.yml"
 
 
 @pytest.fixture(scope="module")
@@ -87,17 +89,29 @@ def _plan(full: bool = False, skip: bool = False, record: bool = False) -> dict:
     }
 
 
-def _context(event: str, filter_output: str = "", **plan) -> dict:
+def _context(
+    event: str,
+    filter_output: str = "",
+    ref: str | None = None,
+    base_ref: str | None = None,
+    **plan,
+) -> dict:
     """A run of ci.yml its own trigger started, with the plan job's outputs.
 
-    A run its own trigger started holds no inputs, and GitHub reads a property
-    of the empty `inputs` object as null. A skipped step reports no outputs:
-    GitHub reads them as the empty string. The run is not cancelled.
+    `ref` replaces the event's usual ref, and `base_ref` the branch a pull
+    request targets (GitHub sets `github.base_ref` only for a pull request,
+    and reads it as the empty string otherwise). A run its own trigger started
+    holds no inputs, and GitHub reads a property of the empty `inputs` object
+    as null. A skipped step reports no outputs: GitHub reads them as the empty
+    string. The run is not cancelled.
     """
+    if base_ref is None:
+        base_ref = "main" if event == "pull_request" else ""
     return {
         "run.cancelled": False,
         "github.event_name": event,
-        "github.ref": _REFS[event],
+        "github.ref": _REFS[event] if ref is None else ref,
+        "github.base_ref": base_ref,
         "inputs.ref": None,
         "steps.filter.outputs.concurrency": filter_output,
         "steps.filter.outputs.viewer": filter_output,
@@ -229,6 +243,32 @@ class TestWhichJobsRun:
         the image it tested; only a recording run saves a baseline."""
         assert _jobs_that_run(ci_config, _context(event, **plan)) == expected
 
+    # Verifies: REQ-o00080-C+E
+    @pytest.mark.parametrize("full", [False, True], ids=["impacted", "full"])
+    def test_REQ_o00080_C_automain_push_runs_what_a_main_push_runs(self, ci_config, full):
+        """A push to automain runs every job a push to main runs in the same
+        mode, except what a run of main publishes: the promoted CI image and
+        the recorded baseline. The plan records only for main, so the automain
+        run carries `record=false` (TestPlanScript runs that decision)."""
+        main = _jobs_that_run(ci_config, _context("push", full=full, record=full))
+        automain = _jobs_that_run(
+            ci_config, _context("push", ref="refs/heads/automain", full=full, record=False)
+        )
+        assert automain <= main
+        assert main - automain == ({"promote-image", "save-baseline"} if full else set())
+
+    # Verifies: REQ-o00080-E
+    @pytest.mark.parametrize("event", ["push", "schedule"])
+    def test_REQ_o00080_E_automain_never_promotes_the_image(self, ci_config, event):
+        """Promoting the production CI image tag is a publication of main: a
+        full run of automain does not promote it even where the plan's outputs
+        would ask a run of main to, while the same run of main does."""
+        plan = {"full": True, "record": True}
+        main = _jobs_that_run(ci_config, _context(event, ref="refs/heads/main", **plan))
+        automain = _jobs_that_run(ci_config, _context(event, ref="refs/heads/automain", **plan))
+        assert "promote-image" in main
+        assert "promote-image" not in automain
+
     # Verifies: REQ-o00066-N
     def test_REQ_o00066_N_full_suite_job_runs_after_every_tier(self, ci_config):
         """`Full Suite` stands for the whole suite: it needs every tier job,
@@ -262,10 +302,13 @@ class TestCITestSuite:
     def test_REQ_o00066_I_test_job_exists(self, ci_config):
         assert "test" in ci_config["jobs"]
 
-    # Verifies: REQ-o00066-O
-    def test_REQ_o00066_O_push_trigger_is_main_only(self, ci_config):
-        """Other branches run through their pull requests."""
-        assert _triggers(ci_config)["push"]["branches"] == ["main"]
+    # Verifies: REQ-o00066-O, REQ-o00080-C
+    def test_REQ_o00080_C_push_trigger_names_both_trunks(self, ci_config):
+        """A push to either trunk runs CI; other branches run through their
+        pull requests."""
+        push = _triggers(ci_config)["push"]
+        assert sorted(push["branches"]) == ["automain", "main"]
+        assert "branches-ignore" not in push
 
     # Verifies: REQ-o00066-I+O
     @pytest.mark.parametrize("event", ["pull_request", "merge_group", "push"])
@@ -499,6 +542,15 @@ _PLANS = [
     ),
     pytest.param(
         "merge_group",
+        "refs/heads/gh-readonly-queue/automain/pr-42-" + _SHA,
+        {"QUEUE_REF": "refs/heads/gh-readonly-queue/automain/pr-42-" + _SHA},
+        "baseline",
+        ("true", "false", "false"),
+        "repos/o/r/issues/42/labels",
+        id="automain-queue-labelled",
+    ),
+    pytest.param(
+        "merge_group",
         "refs/heads/elsewhere",
         {"QUEUE_REF": "refs/heads/elsewhere"},
         "publish",
@@ -617,6 +669,22 @@ class TestPlanScript:
         assert (outputs["full"], outputs["skip"], outputs["record"]) == expected
         assert [c.split()[1] for c in calls] == ([endpoint] if endpoint else [])
 
+    # Verifies: REQ-o00080-C+E
+    @pytest.mark.parametrize("labels", ["publish", "baseline"])
+    @pytest.mark.parametrize("branch,record", [("main", "true"), ("automain", "false")])
+    def test_REQ_o00080_E_a_full_push_run_records_only_on_main(
+        self, ci_config, tmp_path, branch, record, labels
+    ):
+        """A labelled push to automain is full, as one to main is, and reads
+        the merged pull request's labels the same way; only main's run records
+        the baseline every later run selects from."""
+        step = _step_with_id(ci_config["jobs"]["plan"], "mode")
+        env = {**_plan_env("push", f"refs/heads/{branch}", {}), "FAKE_LABELS": labels}
+        result, outputs, calls = _run_step(step, env, tmp_path, {"gh": _FAKE_LABELS_GH})
+        assert result.returncode == 0, result.stderr
+        assert (outputs["full"], outputs["skip"], outputs["record"]) == ("true", "false", record)
+        assert [c.split()[1] for c in calls] == [f"repos/o/r/commits/{_SHA}/pulls"]
+
     # Verifies: REQ-o00066-I
     @pytest.mark.parametrize("event", ["pull_request", "push"])
     def test_REQ_o00066_I_a_failed_label_lookup_fails_the_plan(self, ci_config, tmp_path, event):
@@ -689,7 +757,7 @@ def _load(name: str) -> dict:
 
 
 class TestTriggers:
-    # Verifies: REQ-o00066-L+F+G
+    # Verifies: REQ-o00066-L+F+G, REQ-o00080-A
     @pytest.mark.parametrize("workflow", sorted(_WORKFLOWS))
     def test_REQ_o00066_L_pull_request_runs_whatever_its_base(self, workflow):
         """A pull request stacked on another one's branch is checked too: the
@@ -699,7 +767,7 @@ class TestTriggers:
         pr_trigger = triggers["pull_request"] or {}
         assert not {"branches", "branches-ignore"} & set(pr_trigger), pr_trigger
 
-    # Verifies: REQ-o00066-M
+    # Verifies: REQ-o00066-M, REQ-o00080-B
     @pytest.mark.parametrize("workflow", sorted(_WORKFLOWS))
     def test_REQ_o00066_M_runs_on_merge_group(self, workflow):
         triggers = _triggers(_load(workflow))
@@ -721,6 +789,37 @@ class TestTriggers:
             assert _runs(job, {**_context("merge_group", full=full), **results}) == _runs(
                 job, {**_context("pull_request", full=full), **results}
             ), name
+
+    # Verifies: REQ-o00080-A+B
+    @pytest.mark.parametrize("full", [False, True], ids=["impacted", "full"])
+    @pytest.mark.parametrize("workflow", sorted(_WORKFLOWS))
+    @pytest.mark.parametrize(
+        "event,main,automain",
+        [
+            pytest.param(
+                "pull_request",
+                {"base_ref": "main"},
+                {"base_ref": "automain"},
+                id="pull-request",
+            ),
+            pytest.param(
+                "merge_group",
+                {"ref": "refs/heads/gh-readonly-queue/main/pr-7-0123456789abcdef"},
+                {"ref": "refs/heads/gh-readonly-queue/automain/pr-7-0123456789abcdef"},
+                id="merge-queue",
+            ),
+        ],
+    )
+    def test_REQ_o00080_A_automain_target_runs_the_checks_main_gets(
+        self, workflow, full, event, main, automain
+    ):
+        """A pull request, or a merge-queue candidate, targeting automain runs
+        every job one targeting main runs: no condition reads the base."""
+        config = _load(workflow)
+        into_main = _jobs_that_run(config, _context(event, full=full, **main))
+        into_automain = _jobs_that_run(config, _context(event, full=full, **automain))
+        assert into_main
+        assert into_automain == into_main
 
 
 # --- Assertion N: a release publishes only a commit that passed the full suite ---
@@ -1017,17 +1116,21 @@ class TestAutoRelease:
         assert trigger["types"] == ["completed"]
         assert trigger["branches"] == ["main"]
 
-    # Verifies: REQ-o00066-N
+    # Verifies: REQ-o00066-N, REQ-o00080-D
+    @pytest.mark.parametrize("head_branch", ["main", "automain"])
     @pytest.mark.parametrize("conclusion", ["success", "failure", "cancelled", "skipped"])
     @pytest.mark.parametrize("event", ["push", "pull_request", "merge_group", "workflow_dispatch"])
-    def test_REQ_o00066_N_release_starts_only_from_a_passing_push_run(
-        self, release_config, event, conclusion
+    def test_REQ_o00080_D_release_starts_only_from_a_passing_push_run_of_main(
+        self, release_config, event, conclusion, head_branch
     ):
+        """Only a passing push run of main starts a release; a passing push
+        run of automain does not, whatever the trigger's branch filter says."""
         context = {
             "github.event.workflow_run.event": event,
             "github.event.workflow_run.conclusion": conclusion,
+            "github.event.workflow_run.head_branch": head_branch,
         }
-        expected = event == "push" and conclusion == "success"
+        expected = event == "push" and conclusion == "success" and head_branch == "main"
         assert _runs(release_config["jobs"]["release"], context) == expected
 
     # Verifies: REQ-o00066-N
@@ -1047,6 +1150,208 @@ class TestAutoRelease:
         assert (
             release_config["jobs"]["publish"]["with"]["sha"] == "${{ needs.release.outputs.sha }}"
         )
+
+
+# --- REQ-o00080-D: the release publishes only a commit main contains ---
+
+_FAKE_COMPARE_GH = """#!/bin/sh
+printf '%s\\n' "$*" >> "$GH_LOG"
+if [ -n "$FAKE_GH_FAIL" ]; then echo "gh: HTTP 404: Not Found" >&2; exit 1; fi
+printf '%s\\n' "$FAKE_STATUS"
+"""
+
+
+class TestReleaseOnMain:
+    # Verifies: REQ-o00080-D
+    def test_REQ_o00080_D_gate_confirms_main_before_reading_the_commit(self, publish_jobs):
+        """The gate asks whether main contains the resolved commit before it
+        checks that commit out, and asks about the commit it resolved."""
+        steps = publish_jobs["gate"]["steps"]
+        ids = [s.get("id") for s in steps]
+        checkouts = [
+            i for i, s in enumerate(steps) if str(s.get("uses", "")).startswith("actions/checkout@")
+        ]
+        assert checkouts
+        assert ids.index("commit") < ids.index("on-main") < checkouts[0]
+        step = _step_with_id(publish_jobs["gate"], "on-main")
+        assert set(step["env"]) == {"GH_TOKEN", "REPOSITORY", "SHA"}
+        context = {"steps.commit.outputs.sha": _RELEASED_SHA}
+        assert _evaluate(step["env"]["SHA"], context) == _RELEASED_SHA
+
+    # Verifies: REQ-o00080-D
+    @pytest.mark.parametrize(
+        "status,gh_fails,passes",
+        [
+            pytest.param("identical", False, True, id="main-is-the-commit"),
+            pytest.param("behind", False, True, id="main-contains-the-commit"),
+            pytest.param("ahead", False, False, id="commit-is-past-main"),
+            pytest.param("diverged", False, False, id="commit-is-off-main"),
+            pytest.param("", True, False, id="forge-unreachable"),
+        ],
+    )
+    def test_REQ_o00080_D_gate_refuses_a_commit_main_does_not_contain(
+        self, publish_jobs, tmp_path, status, gh_fails, passes
+    ):
+        """A commit on automain, or anywhere else main does not reach, is
+        refused naming the commit; an unanswered question refuses too."""
+        step = _step_with_id(publish_jobs["gate"], "on-main")
+        env = {
+            "GH_TOKEN": "token",
+            "REPOSITORY": "o/r",
+            "SHA": _RELEASED_SHA,
+            "FAKE_STATUS": status,
+            **({"FAKE_GH_FAIL": "1"} if gh_fails else {}),
+        }
+        result, _, calls = _run_step(step, env, tmp_path, {"gh": _FAKE_COMPARE_GH})
+        said = result.stdout + result.stderr
+        assert (result.returncode == 0) == passes, said
+        assert [c.split()[:2] for c in calls] == [
+            ["api", f"repos/o/r/compare/main...{_RELEASED_SHA}"]
+        ]
+        if not passes and not gh_fails:
+            assert "::error::" in said
+            assert _RELEASED_SHA in said
+
+
+# --- REQ-o00080-E: the production CI image is built only from main ---
+
+
+class TestCIImageFromMain:
+    # Verifies: REQ-o00080-E
+    @pytest.mark.parametrize(
+        "ref,builds",
+        [
+            ("refs/heads/main", True),
+            ("refs/heads/automain", False),
+            ("refs/heads/feature", False),
+        ],
+    )
+    def test_REQ_o00080_E_production_image_is_pushed_only_from_main(self, ref, builds):
+        """The manual build pushes the image tag every CI job runs in, so a
+        dispatch from any branch but main builds nothing."""
+        job = _load_path(IMAGE_WORKFLOW)["jobs"]["build"]
+        assert _runs(job, {"github.ref": ref}) == builds
+
+
+# --- REQ-o00081: automain's pre-releases ---
+
+
+@pytest.fixture(scope="module")
+def prerelease_config():
+    return _load_path(PRERELEASE_WORKFLOW)
+
+
+def _strings(value):
+    """Every string a parsed workflow value holds, keys included."""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            yield from _strings(key)
+            yield from _strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _strings(item)
+
+
+def _index_of_step_running(job: dict, needle: str) -> int:
+    (index,) = [i for i, s in enumerate(job["steps"]) if needle in s.get("run", "")]
+    return index
+
+
+class TestPrereleaseWorkflow:
+    # Verifies: REQ-o00081-A, REQ-o00080-E
+    def test_REQ_o00081_A_follows_ci_on_automain_alone(self, prerelease_config, ci_config):
+        """Only a completed CI run on automain starts a pre-release: no person,
+        tag, push or caller can start one."""
+        triggers = _triggers(prerelease_config)
+        assert set(triggers) == {"workflow_run"}
+        run = triggers["workflow_run"]
+        assert run["workflows"] == [ci_config["name"]]
+        assert run["types"] == ["completed"]
+        assert run["branches"] == ["automain"]
+
+    # Verifies: REQ-o00081-A+C
+    def test_REQ_o00081_A_holds_no_default_permissions_and_never_cancels(self, prerelease_config):
+        """A run in progress is never cancelled by the next: a half-finished
+        upload would leave a number taken with nothing behind it."""
+        assert prerelease_config["permissions"] == {}
+        assert prerelease_config["concurrency"]["cancel-in-progress"] is False
+        assert set(prerelease_config["jobs"]) == {"prerelease"}
+
+    # Verifies: REQ-o00081-A, REQ-o00080-E
+    @pytest.mark.parametrize("head_branch", ["automain", "main"])
+    @pytest.mark.parametrize("conclusion", ["success", "failure"])
+    @pytest.mark.parametrize("event", ["push", "pull_request"])
+    def test_REQ_o00081_A_publishes_only_after_a_passing_automain_push_run(
+        self, prerelease_config, event, conclusion, head_branch
+    ):
+        context = {
+            "github.event.workflow_run.event": event,
+            "github.event.workflow_run.conclusion": conclusion,
+            "github.event.workflow_run.head_branch": head_branch,
+        }
+        expected = event == "push" and conclusion == "success" and head_branch == "automain"
+        assert _runs(prerelease_config["jobs"]["prerelease"], context) == expected
+
+    # Verifies: REQ-o00081-A
+    def test_REQ_o00081_A_builds_the_commit_ci_tested(self, prerelease_config):
+        """The checkout is the commit the CI run tested, with the history the
+        first-parent count is read from."""
+        job = prerelease_config["jobs"]["prerelease"]
+        context = {"github.event.workflow_run.head_sha": _RELEASED_SHA}
+        (checkout,) = [
+            s for s in job["steps"] if str(s.get("uses", "")).startswith("actions/checkout@")
+        ]
+        assert _evaluate(checkout["with"]["ref"], context) == _RELEASED_SHA
+        assert str(checkout["with"]["fetch-depth"]) == "0"
+
+    # Verifies: REQ-o00081-A
+    def test_REQ_o00081_A_confirms_automain_contains_the_commit(self, prerelease_config):
+        job = prerelease_config["jobs"]["prerelease"]
+        run = _step_run_containing(job, "git merge-base --is-ancestor")
+        assert "origin/automain" in run
+        assert _index_of_step_running(job, "git merge-base --is-ancestor") < (
+            _index_of_step_running(job, "twine upload")
+        )
+
+    # Verifies: REQ-o00081-B+C, REQ-o00080-E
+    def test_REQ_o00081_B_builds_the_computed_pre_release_version(self, prerelease_config):
+        """The version written into the build is the one the pre-release
+        module computes from the index and the first-parent count."""
+        job = prerelease_config["jobs"]["prerelease"]
+        compute = _step_run_containing(job, "python -m tools.prerelease_version")
+        for option in ("--pyproject pyproject.toml", "--index", "--count", "--write"):
+            assert option in compute, option
+        assert "git rev-list --count --first-parent" in _step_runs(job)
+        assert _index_of_step_running(job, "python -m tools.prerelease_version") < (
+            _index_of_step_running(job, "python -m build")
+        )
+        assert _index_of_step_running(job, "python -m build") < (
+            _index_of_step_running(job, "twine upload")
+        )
+
+    # Verifies: REQ-o00081-C
+    def test_REQ_o00081_C_an_upload_never_passes_over_a_taken_number(self, prerelease_config):
+        """An upload of a version the index already holds fails the run rather
+        than reading as success."""
+        job = prerelease_config["jobs"]["prerelease"]
+        assert "twine upload" in _step_run_containing(job, "twine upload")
+        assert not any("--skip-existing" in text for text in _strings(prerelease_config))
+
+    # Verifies: REQ-o00080-E
+    @pytest.mark.parametrize(
+        "publication",
+        ["gh release", "git tag", "git push", "repository-dispatch", "/dispatches"],
+    )
+    def test_REQ_o00080_E_publishes_nothing_but_the_pre_release(
+        self, prerelease_config, publication
+    ):
+        """No tag, no GitHub release and no Homebrew dispatch: those publish
+        a release, and a release is a decision about main."""
+        texts = list(_strings(prerelease_config["jobs"]))
+        assert any("twine upload" in t for t in texts)
+        assert not any(publication in t for t in texts)
 
 
 def _pr_check_steps(pr_config) -> list[dict]:

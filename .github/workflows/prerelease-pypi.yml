@@ -1,0 +1,105 @@
+# Implements: REQ-o00081-A+B+C, REQ-o00080-E
+name: Pre-release to PyPI
+
+# Each automain commit whose CI push run passed is published to PyPI as the
+# developmental release X.Y.Z.devN (REQ-o00081, docs/automain.md), so another
+# repository's automain work can pin it before any release. An installer
+# selects it only for a requirement that names a pre-release, such as
+# `elspais==X.Y.Z.devN`. This is the one publication automain causes: it
+# makes no tag, no GitHub release and no Homebrew update, and it announces
+# nothing (REQ-o00080-E).
+#
+# GitHub reads a `workflow_run` workflow from the default branch, so this file
+# takes effect once main carries it. It has no other trigger: nobody starts a
+# pre-release by hand.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [automain]
+
+permissions: {}
+
+# One pre-release at a time, in the order automain received its commits. A
+# run is never cancelled part-way through an upload.
+concurrency:
+  group: prerelease-pypi
+  cancel-in-progress: false
+
+jobs:
+  prerelease:
+    name: Publish Pre-release
+    if: >-
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'automain'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      # The whole history: N is the commit's first-parent count, and the
+      # check below reads automain's tip.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Confirm automain contains the commit
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if ! git merge-base --is-ancestor "$SHA" origin/automain; then
+            echo "::error::Refusing to publish ${SHA}: automain does not contain it"
+            exit 1
+          fi
+          echo "automain contains ${SHA}"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Install build tools
+        run: pip install -c requirements/dev.lock build twine packaging
+
+      # The version is computed from what the package index lists now, so a
+      # number it carries or carried is refused rather than used twice
+      # (REQ-o00081-C). The version is written into this checkout's
+      # pyproject.toml for the build, and is never committed.
+      - name: Compute the pre-release version
+        id: version
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          COUNT=$(git rev-list --count --first-parent "$SHA")
+          INDEX="${RUNNER_TEMP}/pypi-elspais.json"
+          curl -fsS --retry 3 -o "$INDEX" https://pypi.org/pypi/elspais/json
+          VERSION=$(python -m tools.prerelease_version \
+            --pyproject pyproject.toml --index "$INDEX" --count "$COUNT" --write)
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Publishing ${SHA} as elspais ${VERSION}"
+
+      - name: Build package
+        run: python -m build
+
+      - name: Check package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          twine check dist/*
+          for FILE in dist/*; do
+            case "$(basename "$FILE")" in
+              elspais-"${VERSION}"-*.whl|elspais-"${VERSION}".tar.gz) ;;
+              *)
+                echo "::error::${FILE} does not carry the version ${VERSION}"
+                exit 1 ;;
+            esac
+          done
+
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: twine upload dist/*
