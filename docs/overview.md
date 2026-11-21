@@ -55,7 +55,7 @@ A. The system SHALL use bcrypt with cost factor 12.
 ```bash
 elspais checks            # Check format, hierarchy, unresolved links
 elspais fix               # Fix hashes and formatting
-elspais changed           # Show uncommitted spec changes
+elspais changed           # List changed requirements and the files to review
 ```
 
 ### 4. Traceability During Development
@@ -88,7 +88,7 @@ elspais graph                  # Full DAG as JSON: requirements, assertions, cod
 
 When requirements change:
 
-- Hash changes trigger review (visible in `elspais changed`)
+- A changed requirement or *Assertion* puts each code and test file citing it up for review: `elspais changed` lists them, and `elspais changed --review PATH` records a review in `.elspais/changes.md`, committed with the work
 - Old assertions can be marked as "Removed" placeholders to maintain label sequence
 - Multi-repo support via `[associates.<name>]` config (each with `path` and `namespace`) for associated repositories (e.g., `REQ-TTN-p00001`)
 

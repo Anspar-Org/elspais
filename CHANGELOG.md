@@ -6,6 +6,10 @@ All notable changes to elspais will be documented in this file.
 
 ### TOOL-149
 
+- **`elspais changed` lists the code and test files to review for each changed requirement and *Assertion* (REQ-d00336)** -- it compares the working tree with the commit where HEAD meets `origin/<base>` (the local base branch only where no remote copy exists) and names that base, reports an *Assertion* whose text changed and a requirement whose hash moved, and lists under each every code and test file citing it with the line of each citation, marked reviewed or awaiting review, and the expected reviewer from the requirement's changelog. `--write-record` writes the files awaiting review into the committed record `.elspais/changes.md`, and `--review PATH` records your review there; a later edit to the file or to what changed makes it await review again. The MCP tool `get_changed_requirements` returns the same report. A base that cannot be read is reported as unverifiable. The `-a`/`--all` flag is gone.
+- **The hash utility module imports as the first elspais module a process loads (REQ-p00004-A)** -- importing it before the graph package no longer fails with a circular import.
+- **Every canonical form the build applies has its fixed point tested (REQ-d00248-B)** -- the parse-dirty reasons are one vocabulary that marking a node enforces, and the fix idempotency fixture holds a construct for each canonical form in it.
+
 - **The files to review after a requirement change are specified (REQ-d00336)** -- a change is detected per *Assertion* and per requirement against the point where the branch meets the remote base branch, each code and test file citing what changed is listed with the line of its citation, and a committed record at `.elspais/changes.md` names the files awaiting review and each review a person recorded, with who and when; a later edit to the file or the requirement makes the file await review again.
 
 ### TOOL-166

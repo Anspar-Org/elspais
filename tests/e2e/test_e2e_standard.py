@@ -1119,7 +1119,8 @@ class TestMCPChangedRequirements:
         from .helpers import mcp_call
 
         result = mcp_call(mcp_server, "get_changed_requirements", {})
-        assert isinstance(result, (list, dict))
+        assert result["verifiable"] is True, result
+        assert result["changes"] == []
 
 
 # ===================================================================
@@ -1295,17 +1296,21 @@ class TestStandardCLIMutations:
             assert "Draft" in content
 
     def test_10_changed_detects_uncommitted_edit(self, project):
-        """Changed command detects uncommitted spec file edits."""
+        """Changed command reports an uncommitted edit to an Assertion."""
         spec = project / "spec" / "prd-core.md"
         content = spec.read_text()
-        spec.write_text(content.replace("User Authentication", "Modified Authentication"))
+        assert "The system SHALL enforce password policies." in content
+        spec.write_text(
+            content.replace(
+                "The system SHALL enforce password policies.",
+                "The system SHALL enforce strong password policies.",
+            )
+        )
 
         result = run_elspais("changed", "--format", "json", cwd=project)
-        assert result.returncode == 0
-        output = result.stdout.strip()
-        if output:
-            data = json.loads(output)
-            assert isinstance(data, (list, dict))
+        assert result.returncode == 0, result.stderr
+        data = json.loads(result.stdout)
+        assert "REQ-p00001-B" in {change["id"] for change in data["changes"]}
 
     def test_11_changed_no_changes_after_commit(self, project):
         """Changed shows nothing after committing."""
@@ -1325,7 +1330,8 @@ class TestStandardCLIMutations:
         )
 
         result = run_elspais("changed", "--format", "json", cwd=project)
-        assert result.returncode == 0
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout)["changes"] == []
 
     def test_12_changed_base_branch(self, project):
         """Changed with --base-branch flag."""
@@ -1347,7 +1353,8 @@ class TestStandardCLIMutations:
             "json",
             cwd=project,
         )
-        assert result.returncode == 0
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout)["base"]["branch"] == branch
 
 
 # ===================================================================

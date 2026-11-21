@@ -52,7 +52,7 @@ elspais mcp serve --transport sse
 |------|-------------|
 | `get_workspace_info(detail=...)` | Project info with use-case profiles (see below) |
 | `get_project_summary()` | Coverage stats, level counts, change metrics |
-| `get_changed_requirements()` | Requirements with uncommitted or branch changes |
+| `get_changed_requirements(base_branch="main")` | Requirements and *Assertions* changed since the base branch, and the code and test files to review for each (the JSON of `elspais changed --format json`) |
 
 The `detail` parameter on `get_workspace_info` selects a use-case profile:
 `"default"`, `"testing"`, `"code-refs"`, `"coverage"`, `"retrofit"`,

@@ -41,8 +41,10 @@ target and the reason, with exit 1, where:
 A run whose tests failed is packed. Its failures are its results.
 
 Every untracked file that git does not ignore counts as a change no commit
-holds. Ignore the output root and `.elspais/` in `.gitignore`, or every pack is
-refused.
+holds. Ignore the output root and the machine-local files elspais writes under
+`.elspais/` (its daemon and save records) in `.gitignore`, and commit the files
+there that travel with the work (comments, the review record
+`.elspais/changes.md`), or every pack is refused.
 
 A selection naming a federation member's targets is refused (exit 2): a pack
 holds the runs of one repository.

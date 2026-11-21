@@ -153,7 +153,7 @@ elspais trace          Generate traceability matrix (markdown, html, csv)
 elspais viewer         Start interactive viewer server
 elspais doctor         Diagnose environment and installation health
 elspais analysis       Analyze foundational requirement importance
-elspais changed        Detect git changes to spec files
+elspais changed        List changed requirements and the files to review
 elspais edit           Edit requirements in-place
 elspais config         View and modify configuration
 elspais associate      Manage associate repository links

@@ -6860,9 +6860,8 @@ class GraphBuilder:
         if section_too_shallow and not unfixable:
             parse_dirty_reasons.append("section_header_depth")
 
-        if parse_dirty_reasons:
-            node._content["parse_dirty"] = True
-            node._content["parse_dirty_reasons"] = parse_dirty_reasons
+        for reason in parse_dirty_reasons:
+            node.mark_parse_dirty(reason)
 
         if unfixable:
             existing = node._content.get("parse_unfixable_reasons", [])

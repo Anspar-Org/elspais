@@ -49,7 +49,9 @@ def _git_init(root: Path) -> None:
         "GIT_COMMITTER_NAME": "test",
         "GIT_COMMITTER_EMAIL": "t@t",
     }
-    subprocess.run(["git", "init"], cwd=root, capture_output=True, env=env)
+    # The branch is named, not left to the machine's init.defaultBranch:
+    # `elspais changed` compares against main and is unverifiable without it.
+    subprocess.run(["git", "init", "-b", "main"], cwd=root, capture_output=True, env=env)
     subprocess.run(["git", "add", "."], cwd=root, capture_output=True, env=env)
     subprocess.run(["git", "commit", "-m", "init"], cwd=root, capture_output=True, env=env)
 

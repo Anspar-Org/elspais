@@ -1900,74 +1900,48 @@ class TestGetProjectSummaryChanges:
 class TestGetChangedRequirements:
     """Tests for get_changed_requirements() tool."""
 
-    # Verifies: REQ-o00061-B
-    def test_get_changed_requirements_returns_changed(self, sample_graph):
-        """get_changed_requirements returns changed requirements."""
+    # Verifies: REQ-d00336-A
+    def test_get_changed_requirements_returns_changed(self, tmp_path):
+        """get_changed_requirements lists an edited Assertion and the files citing it."""
         pytest.importorskip("mcp")
-        from unittest.mock import patch
-
-        from elspais.graph.GraphNode import FileType
+        from elspais.graph.factory import build_graph
         from elspais.mcp.server import _get_changed_requirements
-        from elspais.utilities.git import GitChangeInfo
+        from tests.commands.test_changed_review import ALPHA, _make_project, _spec
 
-        inner = sample_graph.repo_for("REQ-p00001").graph
-        for node_id, path in [
-            ("REQ-p00001", "spec/prd.md"),
-            ("REQ-o00001", "spec/ops.md"),
-            ("REQ-d00001", "spec/dev.md"),
-        ]:
-            node = sample_graph.find_by_id(node_id)
-            if node:
-                fn = GraphNode(id=f"file:{path}", kind=NodeKind.FILE, label=path)
-                fn.set_field("relative_path", path)
-                fn.set_field("file_type", FileType.SPEC)
-                fn.set_field("repo", None)
-                fn.link(node, EdgeKind.CONTAINS)
-                inner._index[fn.id] = fn
-                node.set_field("parse_line", 1)
-        sample_graph._rebuild_ownership()
-
-        git_info = GitChangeInfo(
-            modified_files={"spec/prd.md"},
-            branch_changed_files={"spec/prd.md", "spec/ops.md"},
+        root = _make_project(tmp_path / "repo")
+        (root / "spec" / "dev.md").write_text(
+            _spec({**ALPHA, "A": "The tool SHALL do alpha one, edited."})
         )
+        graph = build_graph(repo_root=root, config_path=root / ".elspais.toml")
 
-        with patch("elspais.utilities.git.get_git_changes", return_value=git_info):
-            result = _get_changed_requirements(sample_graph)
+        result = _get_changed_requirements(graph, root)
 
-        assert result["count"] >= 2
-        ids = {r["id"] for r in result["requirements"]}
-        assert "REQ-p00001" in ids  # modified
-        assert "REQ-o00001" in ids  # branch changed
+        assert result["verifiable"] is True
+        changes = {c["id"]: c for c in result["changes"]}
+        assert set(changes) == {"REQ-d00001", "REQ-d00001-A"}
+        assert {f["path"] for f in changes["REQ-d00001-A"]["files"]} == {
+            "src/mod.py",
+            "tests/test_alpha.py",
+        }
+        assert result["summary"]["changes"] == 2
 
-        # Check git_state dict is present
-        prd_entry = next(r for r in result["requirements"] if r["id"] == "REQ-p00001")
-        assert prd_entry["git_state"]["is_modified"] is True
-        assert prd_entry["git_state"]["is_uncommitted"] is True
-        assert prd_entry["source"] == "spec/prd.md"
-
-        # Check summary is present
-        assert "summary" in result
-        assert result["summary"]["uncommitted"] >= 1
-
-    # Verifies: REQ-o00061-B
-    def test_get_changed_requirements_empty_when_clean(self, sample_graph):
-        """get_changed_requirements returns empty when no changes."""
+    # Verifies: REQ-d00336-A
+    def test_get_changed_requirements_empty_when_clean(self, tmp_path):
+        """get_changed_requirements reports no change where nothing moved from the base."""
         pytest.importorskip("mcp")
-        from unittest.mock import patch
-
+        from elspais.graph.factory import build_graph
         from elspais.mcp.server import _get_changed_requirements
-        from elspais.utilities.git import GitChangeInfo
+        from tests.commands.test_changed_review import _make_project
 
-        git_info = GitChangeInfo()  # No changes
+        root = _make_project(tmp_path / "repo")
+        graph = build_graph(repo_root=root, config_path=root / ".elspais.toml")
 
-        with patch("elspais.utilities.git.get_git_changes", return_value=git_info):
-            result = _get_changed_requirements(sample_graph)
+        result = _get_changed_requirements(graph, root)
 
-        assert result["count"] == 0
-        assert result["requirements"] == []
-        assert result["summary"]["uncommitted"] == 0
-        assert result["summary"]["branch_changed"] == 0
+        assert result["verifiable"] is True
+        assert result["changes"] == []
+        assert result["carried"] == []
+        assert result["summary"]["changes"] == 0
 
 
 # ─────────────────────────────────────────────────────────────────────────────

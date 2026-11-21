@@ -17,23 +17,69 @@ Use `-v` to see the root and where each associate path resolved:
 
 ## Detecting Changes
 
-  $ elspais changed                    # Show all spec changes
-  $ elspais changed --format json     # Output as JSON
-  $ elspais changed -a                # Include non-spec files
-  $ elspais changed --base-branch develop  # Compare to different branch
+`elspais changed` answers "which code and test files must someone review
+because a requirement changed". It reports each requirement and each
+*Assertion* whose content differs from the comparison base, and for each
+change lists every code and test file citing it.
+
+  $ elspais changed                        # Changes and the files to review
+  $ elspais changed --format json          # Output as JSON
+  $ elspais changed --base-branch develop  # Compare to a different branch
+  $ elspais changed --write-record         # Write the awaiting files to the record
+  $ elspais changed --review src/auth.py   # Record your review of a file
+  $ elspais changed --review tests/test_auth.py --change REQ-d00012-B
 
 ## Command Options
 
-  `--base-branch BRANCH`  Base branch for comparison (default: main)
+  `--base-branch BRANCH`  Branch to compare against (default: main)
   `--format {text,json}`  Output format (default: text)
-  `-a, --all`             Include all changed files (not just spec)
+  `-o, --output PATH`     Write output to file instead of stdout
+  `--write-record`        Write the files awaiting review into the record
+  `--review PATH ...`     Record your review of these files (repo-relative)
+  `--change ID ...`       With `--review`, record it only for these changes
 
 ## What 'Changed' Detects
 
-  **Uncommitted** - Modified/untracked spec files
-  **Hash mismatch** - Content changed but hash not updated
-  **Moved** - Requirement relocated to different file
-  **vs Main** - Changes compared to main/master branch
+- **Comparison base** - The commit where HEAD meets `origin/BRANCH`, or the
+  local `BRANCH` where no remote copy exists. The report names the base ref
+  and the commit. The working tree is compared, uncommitted edits included.
+- **Changed Assertion** - Its text differs from its text at the base, or it
+  is absent at the base.
+- **Changed requirement** - The set of its *Assertion* texts differs from the
+  set at the base. An edit to a title or a rationale is not a change.
+
+Where the base cannot be read, the report says the changes are unverifiable
+and the command exits 1.
+
+## Files to Review
+
+For each change the report lists each code and test file citing it, with the
+line of each citation. A citation of an *Assertion* is listed under that
+*Assertion*'s change; a citation of the whole requirement is listed under the
+requirement's change. Each file is marked `reviewed` (by whom, and when) or
+`awaiting review`. Each change also names its expected reviewer: the author
+of the requirement's newest changelog entry.
+
+## The Review Record
+
+The record is `.elspais/changes.md`, committed with the work it describes. It
+holds two tables:
+
+- **Awaiting review** - Each file citing a change that nobody has reviewed.
+- **Reviewed** - Each recorded review: the change, the digest of its content,
+  the file, the digest of the file, the reviewer and the date.
+
+`--write-record` writes the files awaiting review into the record and records
+no review. `--review PATH` records your review of every awaiting consequence of
+each file, under your git identity (`user.name` and `user.email`), the one
+the commit of the record carries; `--change ID` narrows it to the named
+changes. A file awaiting no review is refused. A later edit to the file, or to
+the changed requirement or *Assertion*, makes the file await review again.
+
+The record keeps listing a file as awaiting review, and the report shows it,
+until someone reviews it, even after its change has merged and the base has
+moved past it. A review is a person's act: `elspais fix` never touches the
+record, and no MCP tool records a review.
 
 ## In Trace View
 
@@ -118,5 +164,6 @@ elspais checks || exit 1
 1. Edit requirements
 2. $ elspais checks  # Check format
 3. $ elspais fix  # Fix hashes and formatting
-4. $ elspais changed  # Review what changed
-5. Commit with message referencing requirement IDs
+4. $ elspais changed  # List the code and test files to review
+5. $ elspais changed --review PATH  # Record each review
+6. Commit, `.elspais/changes.md` included, with a message referencing requirement IDs

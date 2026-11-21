@@ -12,7 +12,7 @@ Complete reference for all elspais commands.
 | `checks` | Reports | Verify requirements traceability and configuration |
 | `summary` | Reports | Coverage summary by level (Implemented, Tested, Passing, UAT Covered, UAT Passed) |
 | `trace` | Reports | Generate traceability matrix |
-| `changed` | Reports | Detect git changes to spec files |
+| `changed` | Reports | List changed requirements and the code and test files to review for each |
 | `pdf` | Reports | Compile spec files into a PDF document |
 | `search` | Reports | Search requirements by keyword |
 | `test` | Reports | Execute test targets and record their results, evaluating no check |
@@ -874,23 +874,50 @@ uncovered.
 
 ## changed
 
-Detect git changes to spec files.
+List the requirements and *Assertions* changed since the comparison base, and
+the code and test files to review for each.
 
-  $ elspais changed                       # Show all spec changes
-  $ elspais changed --format json         # Output as JSON
-  $ elspais changed -a                    # Include non-spec files
+  $ elspais changed                        # Changes and the files to review
+  $ elspais changed --format json          # Output as JSON
+  $ elspais changed --base-branch develop  # Compare to a different branch
+  $ elspais changed --write-record         # Write the awaiting files to the record
+  $ elspais changed --review src/auth.py   # Record your review of a file
 
 **Options:**
 
-  `--base-branch BRANCH`  Base branch for comparison (default: main)
+  `--base-branch BRANCH`  Branch to compare against (default: main)
   `--format {text,json}`  Output format (default: text)
-  `-a, --all`             Include all changed files, not just spec
+  `-o, --output PATH`     Write output to file instead of stdout
+  `--write-record`        Write the files awaiting review into `.elspais/changes.md`
+  `--review PATH ...`     Record your review of these files (repo-relative)
+  `--change ID ...`       With `--review`, record it only for these changes
 
-**What's Detected:**
+**What's Reported:**
 
-  Uncommitted changes (modified/new spec files)
-  Changes vs main/master branch
-  Moved requirements (relocated to different file)
+- The base ref and commit compared against: where HEAD meets `origin/BRANCH`,
+  or the local `BRANCH` where no remote copy exists
+- Each *Assertion* whose text changed, and each requirement whose set of
+  *Assertion* texts changed
+- For each change, every code and test file citing it, the line of each
+  citation, and whether the file is `reviewed` (by whom, when) or
+  `awaiting review`; and the expected reviewer, the author of the
+  requirement's newest changelog entry
+- Files the review record holds as awaiting review from earlier changes
+
+A citation of an *Assertion* is listed under that *Assertion*'s change, and a
+citation of the whole requirement under the requirement's change. Where the
+base cannot be read, the report says the changes are unverifiable and the
+command exits 1.
+
+The review record, `.elspais/changes.md`, is committed with the work. Its
+"Awaiting review" table names the files nobody has reviewed; its "Reviewed"
+table holds each review (change, content digest, file, file digest, reviewer,
+date). `--write-record` writes the awaiting files and records no review.
+`--review` records your review, under your git identity, of
+every awaiting consequence of each file, and refuses a file awaiting none. A
+later edit to the file, or to the changed requirement or *Assertion*, makes it
+await review again. `elspais fix` never touches the record. See
+`elspais docs git`.
 
 ## analysis
 

@@ -67,45 +67,42 @@ def _init_fixture_repo(tmp_path):
 class TestGitSyncWorkflowE2E:
     """E2E tests for git change detection workflow.
 
-    Validates REQ-p00004-C, REQ-p00004-D, REQ-p00004-E via CLI subprocess.
+    Validates REQ-p00004-B and REQ-p00004-E via CLI subprocess.
     """
 
-    # Verifies: REQ-p00004-C
-    def test_REQ_p00004_C_changed_detects_modified_spec(self, tmp_path) -> None:
-        """elspais changed detects modified spec files."""
+    # Verifies: REQ-p00004-B
+    def test_REQ_p00004_B_changed_detects_uncommitted_edit(self, tmp_path) -> None:
+        """elspais changed reports an uncommitted edit to an Assertion."""
         _init_fixture_repo(tmp_path)
 
         # Clean state: no changes
         result = run_elspais("changed", "--format", "json", cwd=tmp_path)
-        assert result.returncode == 0
+        assert result.returncode == 0, result.stderr
         data = json.loads(result.stdout)
-        assert len(data.get("changed", [])) == 0
+        assert data["verifiable"] is True
+        assert data["changes"] == []
 
-        # Modify a spec file
+        # Edit the Assertion, leaving it uncommitted
         (tmp_path / "spec" / "prd.md").write_text(
-            "# REQ-p00001: Modified Requirement\n\n"
+            "# REQ-p00001: Original Requirement\n\n"
             "**Level**: PRD | **Status**: Active\n\n"
-            "The system SHALL do something different.\n\n"
+            "The system SHALL do something.\n\n"
             "## Assertions\n\n"
-            "A. The system SHALL work correctly.\n\n"
-            "*End* *Modified Requirement* | **Hash**: 00000000\n"
+            "A. The system SHALL work correctly and quickly.\n\n"
+            "*End* *Original Requirement* | **Hash**: 00000000\n"
         )
 
-        # Changed should detect the modification in uncommitted files
         result = run_elspais("changed", "--format", "json", cwd=tmp_path)
-        assert result.returncode == 0
-        data = json.loads(result.stdout)
-        modified_files = data.get("uncommitted", {}).get("modified", [])
-        assert any("prd.md" in f for f in modified_files), (
-            f"Expected prd.md in modified files, got: {modified_files}"
-        )
+        assert result.returncode == 0, result.stderr
+        ids = {change["id"] for change in json.loads(result.stdout)["changes"]}
+        assert ids == {"REQ-p00001", "REQ-p00001-A"}
 
-    # Verifies: REQ-p00004-D
-    def test_REQ_p00004_D_changed_on_branch(self, tmp_path) -> None:
-        """elspais changed works correctly on a feature branch."""
+    # Verifies: REQ-p00004-B
+    def test_REQ_p00004_B_changed_on_branch(self, tmp_path) -> None:
+        """elspais changed reports an Assertion edit committed on a feature branch."""
         _init_fixture_repo(tmp_path)
 
-        # Create a branch and modify
+        # Create a branch and commit an Assertion edit
         _git(tmp_path, "checkout", "-b", "feature-edit")
         (tmp_path / "spec" / "prd.md").write_text(
             "# REQ-p00001: Branch Edit\n\n"
@@ -118,9 +115,12 @@ class TestGitSyncWorkflowE2E:
         _git(tmp_path, "add", ".")
         _git(tmp_path, "commit", "-m", "branch edit")
 
-        # Changed should detect branch-level changes
         result = run_elspais("changed", "--format", "json", cwd=tmp_path)
-        assert result.returncode == 0
+        assert result.returncode == 0, result.stderr
+        data = json.loads(result.stdout)
+        assert data["base"]["branch"] == "main"
+        assert data["base"]["commit"] == _git(tmp_path, "rev-parse", "main").stdout.strip()
+        assert "REQ-p00001-A" in {change["id"] for change in data["changes"]}
 
     # Verifies: REQ-p00004-E
     def test_REQ_p00004_E_health_after_edit(self, tmp_path) -> None:

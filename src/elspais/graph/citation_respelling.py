@@ -243,6 +243,26 @@ def _read_as_built(text: str, path: str, kind: NodeKind, reader: FederatedIdRead
     )
 
 
+# Implements: REQ-d00336-G
+def citation_lines_naming(node: GraphNode, reference: str, reader: FederatedIdReader) -> list[int]:
+    """The line of each citation comment *node* holds that names *reference*.
+
+    Each comment is read as the build reads it, so *reference* is matched
+    against the references the comment yields (a multi-*Assertion* list
+    expanded), never against its text.
+    """
+    file_node = containing_file(node)
+    path = _path_of(file_node) if file_node is not None else ""
+    lines: list[int] = []
+    for line, text in sorted(citation_texts(node).items()):
+        read = _read_as_built(text, path, node.kind, reader)
+        if read is None or read[2]:
+            continue
+        if reference in read[0]:
+            lines.append(line)
+    return lines
+
+
 # Implements: REQ-p00017-B, REQ-p00017-O
 def plan_respellings(
     citers: Iterable[tuple[GraphNode, bool]],

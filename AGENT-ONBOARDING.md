@@ -521,6 +521,6 @@ Before finalizing an assertion, verify:
 | `elspais trace`      | Generate traceability matrix               |
 | `elspais viewer`     | Interactive HTML traceability viewer       |
 | `elspais search`     | Find requirements by keyword               |
-| `elspais changed`    | Show requirements with uncommitted changes |
+| `elspais changed`    | Changed requirements and files to review   |
 | `elspais docs`       | Browse built-in documentation              |
 | `elspais mcp serve`  | Start the MCP server                       |

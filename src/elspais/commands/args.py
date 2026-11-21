@@ -639,19 +639,25 @@ class SummaryArgs(ScopeOptions):
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
 class ChangedArgs:
-    """Detect git changes to spec files."""
+    """List changed requirements and the code and test files to review for each."""
 
     base_branch: str = "main"
-    """Base branch for comparison."""
+    """Branch compared against: where HEAD meets origin/BRANCH, else BRANCH."""
 
     format: Literal["text", "json"] = "text"
     """Output format."""
 
-    all: Annotated[bool, tyro.conf.arg(aliases=["-a"])] = False
-    """Include all changed files (not just spec)."""
-
     output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
     """Write output to file instead of stdout."""
+
+    write_record: bool = False
+    """Write the files awaiting review into .elspais/changes.md (records no review)."""
+
+    review: tuple[str, ...] = ()
+    """Record your review of these files (repo-relative paths) in .elspais/changes.md."""
+
+    change: tuple[str, ...] = ()
+    """With --review, record the review only for these changed requirement or Assertion ids."""
 
 
 # ---------------------------------------------------------------------------

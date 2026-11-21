@@ -2402,46 +2402,19 @@ def _get_project_summary(
     return result
 
 
-def _get_changed_requirements(graph: FederatedGraph) -> dict[str, Any]:
-    """Get requirements with git changes.
+# Implements: REQ-d00336-H
+def _get_changed_requirements(
+    graph: FederatedGraph, repo_root: Path, base_branch: str = "main"
+) -> dict[str, Any]:
+    """The changes since the comparison base and the files to review for each.
 
-    Annotates the graph with git state, then filters for requirement nodes
-    where any git flag is True.
-
-    Args:
-        graph: The TraceGraph to analyze.
-
-    Returns:
-        Dict with 'requirements' list and 'summary' counts.
+    This is the changed command's own computation, so the tool and the
+    command report the same list. Recording a review is a person's act and
+    is left to the command line.
     """
-    annotate_graph_git_state(graph)
+    from elspais.commands.changed import compute_changes
 
-    changed: list[dict[str, Any]] = []
-    for node in graph.nodes_by_kind(NodeKind.REQUIREMENT):
-        is_uncommitted = node.get_metric("is_uncommitted", False)
-        is_branch_changed = node.get_metric("is_branch_changed", False)
-        is_moved = node.get_metric("is_moved", False)
-
-        if is_uncommitted or is_branch_changed or is_moved:
-            entry = _serialize_requirement_summary(node)
-            entry["git_state"] = {
-                "is_uncommitted": is_uncommitted,
-                "is_untracked": node.get_metric("is_untracked", False),
-                "is_modified": node.get_metric("is_modified", False),
-                "is_branch_changed": is_branch_changed,
-                "is_moved": is_moved,
-                "is_new": node.get_metric("is_new", False),
-            }
-            entry["source"] = _relative_source_path(node, graph) or None
-            changed.append(entry)
-
-    summary = count_by_git_status(graph)
-
-    return {
-        "requirements": changed,
-        "count": len(changed),
-        "summary": summary,
-    }
+    return compute_changes(graph, Path(repo_root), base_branch)
 
 
 # Built-in protocol guidance served alongside project content rules. This is
@@ -6491,7 +6464,8 @@ The graph is the single source of truth - all tools read directly from it.
   - "worktree": associate paths (with local overrides), ID patterns, hierarchy rules
   - "all": everything from all profiles combined
 - `get_project_summary()` - Counts by level, coverage stats, change metrics
-- `get_changed_requirements()` - Requirements with uncommitted or branch changes
+- `get_changed_requirements(base_branch)` - Changed requirements and Assertions,
+  and the code and test files to review for each
 - `agent_instructions()` - Content rules providing authoring guidance for AI agents
 
 ### Node Mutations (in-memory)
@@ -7174,13 +7148,20 @@ def create_server(
         return _get_project_summary(_state["graph"], _state["working_dir"], _state["config"])
 
     @mcp.tool()
-    def get_changed_requirements() -> dict[str, Any]:
-        """Detect which requirements have been modified since last commit or branch point.
+    def get_changed_requirements(base_branch: str = "main") -> dict[str, Any]:
+        """The requirements and Assertions changed since the base branch, and the files to review.
 
-        Use when: checking what changed in the current working tree or feature branch,
-        reviewing spec modifications before commit, or finding moved requirements.
+        Use when: finding which code and test files a requirement change may have
+        made wrong. Each change lists every code and test file citing it, with the
+        line of each citation, and whether a person has reviewed it since
+        (from .elspais/changes.md). Reviews are recorded on the command line
+        with `elspais changed --review PATH`, not by this tool.
+
+        Args:
+            base_branch: The branch compared against: the point where HEAD meets
+                origin/<base_branch>, or <base_branch> where no remote copy exists.
         """
-        return _get_changed_requirements(_state["graph"])
+        return _get_changed_requirements(_state["graph"], _state["working_dir"], base_branch)
 
     @mcp.tool()
     def agent_instructions() -> dict[str, Any]:

@@ -430,6 +430,67 @@ def list_uncommitted_files(repo_root: Path) -> list[str]:
     return paths
 
 
+@dataclass(frozen=True)
+class ComparisonBase:
+    """The commit a change report compares the working tree against.
+
+    Attributes:
+        branch: The base branch asked for (e.g. ``main``).
+        ref: The ref the base was read from: the remote copy of the branch
+            where it exists, else the local branch, else None.
+        commit: The commit where HEAD meets *ref*, or None where none could
+            be read.
+        error: Why no base could be read, or None where one was.
+    """
+
+    branch: str
+    ref: str | None
+    commit: str | None
+    error: str | None
+
+
+def _git_output(repo_root: Path, *args: str) -> str | None:
+    """A git command's stripped output, or None where it fails."""
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=repo_root,
+            env=_clean_git_env(),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError, FileNotFoundError:
+        return None
+    return result.stdout.strip()
+
+
+# Implements: REQ-d00336-C, REQ-p00004-M
+def comparison_base(repo_root: Path, base_branch: str = "main") -> ComparisonBase:
+    """The commit where the current branch meets the base branch.
+
+    The remote copy of the base branch is preferred: a local base branch that
+    is behind it would add the changes of every commit the current branch
+    already holds from the remote. The local branch is read only where no
+    remote copy exists.
+    """
+    for ref in (f"origin/{base_branch}", base_branch):
+        if _git_output(repo_root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}") is None:
+            continue
+        commit = _git_output(repo_root, "merge-base", "HEAD", ref)
+        if not commit:
+            return ComparisonBase(
+                base_branch, ref, None, f"HEAD and {ref} share no commit, so there is no base"
+            )
+        return ComparisonBase(base_branch, ref, commit, None)
+    return ComparisonBase(
+        base_branch,
+        None,
+        None,
+        f"neither origin/{base_branch} nor {base_branch} exists, so there is no base to compare",
+    )
+
+
 # Implements: REQ-p00004-B
 def get_changed_vs_branch(repo_root: Path, base_branch: str = "main") -> set[str]:
     """Get set of files changed between current branch and base branch.

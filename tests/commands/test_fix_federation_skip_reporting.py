@@ -318,9 +318,6 @@ def _block(req_id: str, title: str, assertion: str, status: str, *, stale: bool)
     shallow and no blank line beneath it, so it needs a canonical-form rewrite
     and nothing else.
     """
-    # The graph package is loaded first: importing the hasher before it is a
-    # circular import.
-    import elspais.graph  # noqa: F401
     from elspais.utilities.hasher import compute_normalized_hash
 
     meta = f"**Level**: PRD | **Status**: {status} | **Implements**: -"

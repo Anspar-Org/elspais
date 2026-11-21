@@ -736,14 +736,7 @@ def _mark_req_dirty(
     # For ASSERTION/REMAINDER, the parent REQ is via STRUCTURES edge
     for parent in node.iter_parents(edge_kinds={EdgeKind.STRUCTURES}):
         if parent.kind == NodeKind.REQUIREMENT:
-            parent._content.setdefault("parse_dirty", False)
-            if not parent._content["parse_dirty"]:
-                parent._content["parse_dirty"] = True
-                parent._content.setdefault("parse_dirty_reasons", [])
-            reasons = parent._content.get("parse_dirty_reasons", [])
-            if reason not in reasons:
-                reasons.append(reason)
-                parent._content["parse_dirty_reasons"] = reasons
+            parent.mark_parse_dirty(reason)
             if replacements:
                 existing = parent._content.get("term_replacements", [])
                 existing.extend(replacements)

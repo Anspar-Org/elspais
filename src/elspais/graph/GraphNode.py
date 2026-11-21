@@ -249,6 +249,37 @@ def make_step_id(journey_id: str, n: int) -> str:
     return f"{journey_id}/{n}"
 
 
+# Implements: REQ-d00248-B
+# The constructs the build brings into canonical form, each named by the
+# parse-dirty reason a node carries when it holds one. This is the one
+# vocabulary: a node is marked only through ``GraphNode.mark_parse_dirty``,
+# which refuses a reason outside ``PARSE_DIRTY_REASONS``, and the fix
+# idempotency fixture holds a construct for every member, so a construct
+# cannot gain a canonical form without its fixed point being tested.
+CANONICAL_FORM_REASONS: frozenset[str] = frozenset(
+    {
+        "duplicate_refs",
+        "assertion_spacing",
+        "list_spacing",
+        "section_header_depth",
+        "non_canonical_term",
+        "canonical_form",
+    }
+)
+
+# Every reason a node is marked parse-dirty for: the canonical-form
+# constructs, and the fixes that change what a requirement records rather
+# than its form -- a stored hash that no longer matches, a changelog entry
+# whose hash disagrees with the requirement's, and a missing changelog
+# section.
+PARSE_DIRTY_REASONS: frozenset[str] = CANONICAL_FORM_REASONS | {
+    "stale_hash",
+    "hash_mismatch",
+    "changelog_drift",
+    "missing_changelog",
+}
+
+
 @dataclass
 class GraphNode:
     """A node in the traceability graph.
@@ -423,6 +454,7 @@ class GraphNode:
         """Set a metric value."""
         self._metrics[key] = value
 
+    # Implements: REQ-d00248-B
     def mark_parse_dirty(self, reason: str) -> None:
         """Flag this node for re-parse/re-render and record why.
 
@@ -430,7 +462,15 @@ class GraphNode:
         ``parse_dirty_reasons`` (creating the list if absent, deduplicating
         so the same reason isn't recorded twice). The fix/render pipeline
         consumes these fields to decide which files to rewrite.
+
+        Raises:
+            ValueError: *reason* is not in ``PARSE_DIRTY_REASONS``.
         """
+        if reason not in PARSE_DIRTY_REASONS:
+            raise ValueError(
+                f"{reason!r} is not a parse-dirty reason; a construct the build brings "
+                f"into canonical form is named in CANONICAL_FORM_REASONS first."
+            )
         self._content["parse_dirty"] = True
         reasons = self._content.get("parse_dirty_reasons")
         if reasons is None:

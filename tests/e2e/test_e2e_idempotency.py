@@ -17,6 +17,11 @@ includes the bug-trigger content classes:
     after a definition list (REQ-d00248-B, REQ-d00132-O)
   - a metadata block written in another spelling than its canonical one
     (REQ-d00248-B, REQ-d00132-P)
+  - a requirement holding every other construct the build brings into
+    canonical form: a reference repeated on a second metadata line, a term
+    in a non-canonical form, a list with no blank line above it, Assertions
+    with no blank line between them and an Assertions heading too shallow
+    (REQ-d00248-B)
 """
 
 from __future__ import annotations
@@ -148,16 +153,38 @@ _RESPELLED_METADATA_REQ = (
     "*End* *Respelled* | **Hash**: 00000000\n"
 )
 
+# A requirement written out of canonical form in each way the build marks:
+# Implements repeated on a second metadata line (duplicate_refs), a term
+# spelled in another case (non_canonical_term), a list directly under a line
+# of text (list_spacing), Assertions with no blank line between them
+# (assertion_spacing) and an Assertions heading as deep as the requirement's
+# own (section_header_depth).
+_CANONICAL_FORM_REQ = (
+    "## REQ-p00005: Canonical Layout\n"
+    "\n"
+    "**Level**: PRD | **Status**: Active | **Implements**: REQ-p00002\n"
+    "**Implements**: REQ-p00002\n"
+    "\n"
+    "Users sign in with *authentication* each shift.\n"
+    "Each sign-in records:\n"
+    "- the time\n"
+    "- the site\n"
+    "\n"
+    "## Assertions\n"
+    "\n"
+    "A. The system SHALL record the time.\n"
+    "B. The system SHALL record the site.\n"
+    "\n"
+    "*End* *Canonical Layout* | **Hash**: 00000000\n"
+)
+
 # ---------------------------------------------------------------------------
 # Module-scoped fixture: build the project once with the bug-trigger surface.
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
-def project(tmp_path_factory):
-    """Build a minimal project that exercises the render-hygiene bug-trigger content."""
-    root = tmp_path_factory.mktemp("e2e_idempotency")
-
+def _build_fixture(root: Path) -> Path:
+    """Write the project that exercises the render-hygiene bug-trigger content."""
     cfg = base_config(
         name="e2e-idempotency",
         # Allow REMAINDER + journeys without hierarchy noise.
@@ -213,6 +240,8 @@ def project(tmp_path_factory):
         + prd3.render()
         + "\n"
         + _RESPELLED_METADATA_REQ
+        + "\n"
+        + _CANONICAL_FORM_REQ
     )
     spec_path.write_text(spec_text)
 
@@ -228,6 +257,12 @@ def project(tmp_path_factory):
     )
 
     return root
+
+
+@pytest.fixture(scope="module")
+def project(tmp_path_factory):
+    """The fixture project, shared by the fix runs below."""
+    return _build_fixture(tmp_path_factory.mktemp("e2e_idempotency"))
 
 
 # ---------------------------------------------------------------------------
@@ -275,6 +310,28 @@ def _commit_settled_state(root: Path) -> None:
 # ---------------------------------------------------------------------------
 # Test
 # ---------------------------------------------------------------------------
+
+
+class TestFixtureCoverage:
+    """Validates REQ-d00248-B: the fixture holds every canonicalized construct."""
+
+    def test_REQ_d00248_B_fixture_holds_every_canonical_form_reason(self, tmp_path):
+        # Verifies: REQ-d00248-B
+        # A fresh copy, read before any fix: each construct the build brings
+        # into canonical form is marked with its reason somewhere in it, so a
+        # reason added to the vocabulary without a fixture construct fails.
+        from elspais.graph.factory import build_graph
+        from elspais.graph.GraphNode import CANONICAL_FORM_REASONS
+
+        root = _build_fixture(tmp_path)
+        graph = build_graph(repo_root=root)
+        seen = {
+            reason
+            for node in graph.all_nodes()
+            for reason in node.get_field("parse_dirty_reasons") or ()
+        }
+        missing = CANONICAL_FORM_REASONS - seen
+        assert not missing, f"no fixture construct is marked with: {sorted(missing)}"
 
 
 class TestFixIdempotency:
