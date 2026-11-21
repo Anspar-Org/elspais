@@ -6,7 +6,7 @@ All notable changes to elspais will be documented in this file.
 
 ### TOOL-170
 
-- **Stacked pull requests land as merge commits through the merge queue (REQ-o00066-L+M)** -- `docs/stacked-pull-requests.md` describes the flow: the maintainers keep one ordered stack of open pull requests, at most three deep; a branch takes the next slot only after every tier passes locally, and is then squashed to one commit whose subject is the pull request title; after that its history only grows; and each pull request lands as a merge commit whose message is its title and description, so git alone shows whether a branch has merged. REQ-o00066-F no longer cites squash merges.
+- **Stacked pull requests land as merge commits through the merge queue (REQ-o00066-L+M)** -- `docs/stacked-pull-requests.md` describes the flow: the maintainers keep one ordered stack of open pull requests, at most three deep; a branch takes the next slot only after every tier passes locally, and is then squashed to one commit whose subject is the pull request title; after that its history only grows; and each pull request lands as a merge commit whose message is its title and description, so git alone shows whether a branch has merged. REQ-o00066-F no longer cites squash merges, and the pre-push hook asks for a branch behind `origin/main` to merge it, not to rebase.
 
 ### TOOL-147 follow-up
 

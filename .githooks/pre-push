@@ -4,7 +4,7 @@
 # =====================================================
 #
 # Runs ONLY checks that pre-commit doesn't already cover:
-#   1. Branch freshness (must be rebased on origin/main)
+#   1. Branch freshness (must contain origin/main)
 #   2. Version bump (auto-bumps if same as main)
 #   3. E2E tests (cached) for the pushed tree
 #   4. Secret detection (gitleaks)
@@ -74,8 +74,8 @@ if git rev-parse origin/main >/dev/null 2>&1; then
         echo -e "${RED}  Branch is $BEHIND_COUNT commit(s) behind origin/main${NC}"
         echo -e "${RED}======================================${NC}"
         echo ""
-        echo "Please rebase before pushing:"
-        echo "  git pull --rebase origin main"
+        echo "Merge origin/main into the branch before pushing (never rebase it):"
+        echo "  git merge origin/main"
         echo ""
         exit 1
     fi

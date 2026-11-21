@@ -8,8 +8,9 @@ builds on the branch of the slot below it:
 main  <-  #A (base: main)  <-  #B (base: A's branch)  <-  #C (base: B's branch)
 ```
 
-Each pull request holds its own work as one commit, and it lands on `main` as
-a merge commit. Its commit therefore keeps its identity on `main`, and git
+Each pull request takes its slot with its own work as one commit, and it lands
+on `main` as a merge commit. Its commits therefore keep their identity on
+`main`, and git
 alone shows whether a branch has merged: `git branch --merged origin/main`
 lists it. The first-parent history of `main` (`git log --first-parent main`)
 shows one merge commit for each pull request, and the message of that merge
@@ -39,25 +40,29 @@ pull requests are supported) and M (the merge queue).
 
 ## Taking a slot
 
-1. **Finish and verify the work.** Commit as often as useful while the branch
-   is private. Run `make test-all` and fix what fails.
-2. **Bring in the slot below.** Merge the branch of the top slot (or
-   `origin/main` when the stack is empty) into the work branch, and run the
-   tiers again if the merge changed anything.
+1. **Bring the stack up to date first** when `main` has moved: merge
+   `origin/main` into the bottom branch, then each branch into the one above
+   it, and push each. A branch behind `origin/main` cannot be pushed, and
+   merging `main` in after the squash would put `main`'s changes into the
+   pull request's own commit.
+2. **Finish and verify the work.** Commit as often as useful while the branch
+   is private. Bring in the slot below: merge the branch of the top slot (or
+   `origin/main` when the stack is empty) into the work branch. Then run
+   `make test-all` and fix what fails.
 3. **Squash the work to one commit**, with the pull request title as its
    subject and the requirement references in its body:
 
    ```bash
-   git fetch origin
-   git merge --no-ff origin/<top-slot-branch>    # or origin/main
-   git reset --soft origin/<top-slot-branch>      # the same base
-   git commit                                     # subject: the PR title
+   git reset --soft origin/<top-slot-branch>   # the base merged in step 2
+   git commit                                  # subject: the PR title
    ```
 
-   The squash does not change the tree, so the verification in step 1 still
-   applies. This is the one planned rewrite of a branch. A branch that was
-   pushed before it took its slot is pushed under a new name, so no pushed
-   branch is rewritten.
+   The squash does not change the tree, so the verification in step 2 still
+   applies. The version bump belongs in this commit: bump the version before
+   the verification, so the pre-push hook adds no commit of its own. This is
+   the one planned rewrite of a branch. A branch that was pushed before it
+   took its slot is pushed under a new name, so no pushed branch is
+   rewritten.
 4. **Push and open the pull request** against the slot below:
    `gh pr create --base <top-slot-branch>` (or `--base main`). Its title is the
    subject of the commit, and its `[TEAM-NNN]` reference is required.
@@ -77,9 +82,6 @@ pull requests are supported) and M (the merge queue).
   in the queue, so they pass there as not applicable. They already ran on the
   pull request.
 
-In the normal case a pull request runs CI once as a pull request and once in
-the queue.
-
 ## Review fixes
 
 Fix a review comment on the branch that owns the code, as a new commit, and
@@ -96,8 +98,8 @@ message is the pull request's title and description.
 The repository then deletes the merged branch, and GitHub retargets the pull
 request above it to `main`. That branch already contains every commit that
 merged, so git sees nothing twice: there is no false conflict and nothing to
-repair. Its diff on GitHub shows only its own work. Retargeting runs the
-title check again, not the tests. The next pull request in the stack then
+repair. Its diff on GitHub shows only its own work. Retargeting runs
+PR Validation again, not the tests. The next pull request in the stack then
 enters the queue in the same way.
 
 The pre-push hook refuses a branch that is behind `origin/main`. Before the
