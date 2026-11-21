@@ -1073,3 +1073,61 @@ The answer reflects the working tree, uncommitted changes included. Where the gr
 - 2026-11-21 | e9867ad7 | - | Michael Lewis (<michael@anspar.org>) | Requirement authored: the requirements each named file defines, implements, verifies or validates
 
 *End* *Requirements a File Names* | **Hash**: e9867ad7
+
+---
+
+## REQ-d00336: Files to Review After a Requirement Change
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00004-B+M
+
+A change to a requirement can make wrong the code that implements it and the test that verifies it. This requirement covers the answer to "which code and test files must someone review because of this change": how a change is detected, what the answer lists for each change, and the committed record of which listed files a person has reviewed.
+
+### Assertions
+
+A. The tool SHALL report an *Assertion* as changed when its text in the working tree differs from its text at the comparison base, an *Assertion* absent at the base included.
+
+B. The tool SHALL report a requirement as changed when the set of its *Assertion* texts differs from that set at the comparison base.
+
+C. The comparison base SHALL be the commit where the current branch meets the remote copy of the base branch, or the local base branch where no remote copy exists.
+
+D. The report SHALL name the base branch and the commit it compared against.
+
+E. For each changed *Assertion*, the report SHALL list each code and test file that holds a citation naming that *Assertion*.
+
+F. For each changed requirement, the report SHALL list each code and test file that holds a citation naming the whole requirement.
+
+G. For each listed file, the report SHALL name the line of each citation that put the file on the list.
+
+H. The agent tool SHALL report the same list of files to review as the changed command.
+
+I. The tool SHALL keep the review record in a file that version control tracks.
+
+J. The tool SHALL record a review of a listed file only when a reviewer asks the tool to record it.
+
+K. Each recorded review SHALL name the person who reviewed the file.
+
+L. Each recorded review SHALL state the date of the review.
+
+M. The report SHALL show a listed file as reviewed only while the file and the changed requirement or *Assertion* still hold the content they held when the review was recorded.
+
+N. The report SHALL mark each listed file as reviewed or as awaiting review.
+
+O. The review record SHALL name each file that awaits review because of a change.
+
+P. The report SHALL list each file that the review record holds as awaiting review until a reviewer records a review of it.
+
+### Rationale
+
+A citation names either one *Assertion* or a whole requirement, and a change is detected at the same granularity (REQ-p00004-K). A, B, E and F follow from that: a citation of an *Assertion* is a consequence of a change to that *Assertion* alone, and a citation of the whole requirement is a consequence of any change to the requirement's *Assertions*. A requirement's content hash covers its *Assertions* alone, so B reports a requirement exactly when its hash moves, and a requirement whose *Assertions* are as they were at the base is not reported. A requirement that only shares a spec file with a changed requirement is therefore not a change, and neither is an edit to a title or a rationale. A citation that names an *Assertion* or requirement the working tree no longer holds names nothing, and the checks report it as an unresolved reference rather than this report.
+
+C and D keep the report honest about what it compared. A local base branch that is behind its remote copy would add the changes of every commit the branch has not yet seen, so the remote copy is preferred where it exists, and the report names the base and the commit so a reader can see what was compared. The working tree is compared, uncommitted edits included. Where the base cannot be read at all, the report says the changes are unverifiable rather than reporting no change (REQ-p00004-M).
+
+G lets a reviewer go straight to the citation. The report also names, for each change, the person on the requirement's latest changelog entry as the expected reviewer; the record states who actually reviewed the file, which need not be the same person. H holds because the command line and the agent tool compute the list in one place.
+
+I through P govern the review record. The record is a Markdown file at `.elspais/changes.md`, committed with the work it describes, so a reader of the repository sees which consequences of a change nobody has reviewed yet without running the tool. It names the files awaiting review as well as the reviews (O), so a record nobody has acted on never reads like a record of completed reviews. A review is a human act, in the same way that only an explicit review action clears a requirement's review flag (REQ-p00004-L): the review command records one, and automated fixing never does. The changed command writes the files awaiting review into the record when asked, and so does the review command; the fix command does not touch the record, so a fix run stays a function of the spec alone (REQ-d00248-A). A review records the content of the file and of the changed requirement or *Assertion* at the time, so a later edit to either one makes the file await review again (M). A file stays awaiting review in the record after its change has merged and the comparison base has moved past it (P): a consequence nobody reviewed does not stop being one because the branch that caused it is gone.
+
+### Changelog
+
+- 2026-11-21 | 9fb0eb95 | - | Michael Lewis (<michael@anspar.org>) | Requirement authored: the code and test files to review after a requirement change, and the committed record of each review
+
+*End* *Files to Review After a Requirement Change* | **Hash**: 9fb0eb95

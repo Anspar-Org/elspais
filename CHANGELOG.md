@@ -4,6 +4,10 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-149
+
+- **The files to review after a requirement change are specified (REQ-d00336)** -- a change is detected per *Assertion* and per requirement against the point where the branch meets the remote base branch, each code and test file citing what changed is listed with the line of its citation, and a committed record at `.elspais/changes.md` names the files awaiting review and each review a person recorded, with who and when; a later edit to the file or the requirement makes the file await review again.
+
 ### TOOL-166
 
 - **The requirements a file names are specified (REQ-d00335)** -- given file paths, elspais answers for each with the requirements and *Assertions* the file defines, implements, verifies or validates, and the kind of each link; a path with no file, a file elspais does not scan, and a scanned file citing nothing each have an answer of their own.
