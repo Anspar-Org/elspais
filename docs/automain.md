@@ -67,7 +67,7 @@ one:
 ```sh
 pip install elspais                    # the newest release
 pip install --upgrade elspais          # the newest release
-pip install "elspais==0.130.6.dev812"  # that pre-release
+pip install "elspais==0.130.7.dev812"  # that pre-release
 ```
 
 A repository's `automain` work may pin a pre-release this way. Its `main`

@@ -82,11 +82,15 @@ def prerelease_version(declared: str, carried: Iterable[str], count: int) -> str
         base = ".".join(str(p) for p in parts)
 
     result = f"{base}.dev{count}"
-    if Version(result) in carried_versions:
+    # N names one automain commit whatever the base, so a carried pre-release
+    # with this N is this commit's, published under an earlier base.
+    same_commit = [str(v) for v in carried_versions if v.dev == count]
+    if same_commit:
         raise PrereleaseRefused(
-            f"the package index already carries or carried {result}; a number is never "
-            "reused. Either this commit's pre-release is already published (a re-run "
-            "publishes nothing), or automain's first-parent history was rewritten"
+            f"the package index already carries or carried {same_commit[0]}, the "
+            f"pre-release with number {count}; a number is never reused. Either this "
+            "commit's pre-release is already published (a re-run publishes nothing), "
+            "or automain's first-parent history was rewritten"
         )
     return result
 

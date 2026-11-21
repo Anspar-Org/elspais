@@ -1254,6 +1254,11 @@ def _strings(value):
             yield from _strings(item)
 
 
+def _evaluate_template(text: str, context: dict) -> str:
+    """A string value with `${{ ... }}` expressions in it, as GitHub fills it."""
+    return re.sub(r"\$\{\{(.*?)\}\}", lambda m: str(_evaluate(m.group(1), context)), text)
+
+
 def _index_of_step_running(job: dict, needle: str) -> int:
     (index,) = [i for i, s in enumerate(job["steps"]) if needle in s.get("run", "")]
     return index
@@ -1272,11 +1277,25 @@ class TestPrereleaseWorkflow:
         assert run["branches"] == ["automain"]
 
     # Verifies: REQ-o00081-A+C
-    def test_REQ_o00081_A_holds_no_default_permissions_and_never_cancels(self, prerelease_config):
-        """A run in progress is never cancelled by the next: a half-finished
-        upload would leave a number taken with nothing behind it."""
+    @pytest.mark.parametrize(
+        "first,second", [(_SHA, _RELEASED_SHA[::-1]), (_RELEASED_SHA, _RELEASED_SHA)]
+    )
+    def test_REQ_o00081_A_holds_no_default_permissions_and_never_cancels(
+        self, prerelease_config, first, second
+    ):
+        """A run is never cancelled, in progress or pending: GitHub keeps one
+        pending run per group and cancels the older, so runs of two commits
+        never share a group, and two runs of one commit do."""
         assert prerelease_config["permissions"] == {}
-        assert prerelease_config["concurrency"]["cancel-in-progress"] is False
+        concurrency = prerelease_config["concurrency"]
+        assert concurrency["cancel-in-progress"] is False
+
+        def group(sha: str) -> str:
+            return _evaluate_template(
+                concurrency["group"], {"github.event.workflow_run.head_sha": sha}
+            )
+
+        assert (group(first) == group(second)) == (first == second)
         assert set(prerelease_config["jobs"]) == {"prerelease"}
 
     # Verifies: REQ-o00081-A, REQ-o00080-E

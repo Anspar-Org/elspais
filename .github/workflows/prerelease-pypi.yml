@@ -20,10 +20,11 @@ on:
 
 permissions: {}
 
-# One pre-release at a time, in the order automain received its commits. A
-# run is never cancelled part-way through an upload.
+# One run per commit. N fixes each commit's version, so runs for different
+# commits need no order and never wait for or cancel one another. A run is
+# never cancelled part-way through an upload.
 concurrency:
-  group: prerelease-pypi
+  group: prerelease-pypi-${{ github.event.workflow_run.head_sha }}
   cancel-in-progress: false
 
 jobs:

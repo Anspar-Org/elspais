@@ -70,6 +70,16 @@ _COMPUTED = [
         id="legacy-ignored",
     ),
     pytest.param("1.2.3", ["1.2.3.4", "1.2.2"], 7, "1.2.3.5.dev7", id="four-part-release"),
+    pytest.param(
+        "0.130.0", ["0.129.17", "0.130.0.dev4"], 5, "0.130.0.dev5", id="other-number-same-base"
+    ),
+    pytest.param(
+        "0.130.7",
+        ["0.130.7.dev811", "0.130.7"],
+        812,
+        "0.130.8.dev812",
+        id="other-number-earlier-base",
+    ),
 ]
 
 
@@ -124,11 +134,20 @@ class TestRefusal:
                 "0.129.17", ["0.129.17", "0.129.18.dev12"], 12, id="bumped-version-published"
             ),
             pytest.param("0.129.17", ["0.129.17", "0.129.18.DEV12"], 12, id="other-case"),
+            pytest.param(
+                "0.130.7", ["0.130.7", "0.130.7.dev812"], 812, id="same-number-earlier-base"
+            ),
+            pytest.param(
+                "0.131.0", ["0.130.7", "0.129.3.dev812"], 812, id="same-number-other-base"
+            ),
         ],
     )
     def test_REQ_o00081_C_a_carried_version_is_refused(self, declared, carried, count):
-        """A number the index holds or held is never computed again; the
-        refusal names it."""
+        """A version the index holds or held is never computed again, and
+        neither is a second version for one commit: N names one automain
+        commit, so a carried pre-release numbered N refuses whatever its base,
+        as after a release moved the base under a re-run. The refusal names
+        the carried version."""
         with pytest.raises(PrereleaseRefused) as refused:
             prerelease_version(declared, carried, count)
         assert isinstance(refused.value, ValueError)
@@ -228,11 +247,18 @@ class TestCommand:
 
     # Verifies: REQ-o00081-C
     @pytest.mark.parametrize("write", [False, True])
-    def test_REQ_o00081_C_refusal_exits_1_and_leaves_the_file(self, tmp_path, write):
-        """A re-run for a commit whose pre-release is published computes the
-        number it already took: it is refused, naming it, and nothing is
-        written."""
-        result, pyproject = _command(tmp_path, ["0.129.17", "0.130.0.dev7"], 7, write=write)
+    @pytest.mark.parametrize(
+        "versions",
+        [
+            pytest.param(["0.129.17", "0.130.0.dev7"], id="same-version"),
+            pytest.param(["0.130.0", "0.130.0.dev7"], id="released-since"),
+        ],
+    )
+    def test_REQ_o00081_C_refusal_exits_1_and_leaves_the_file(self, tmp_path, versions, write):
+        """A re-run for a commit whose pre-release is published -- before or
+        after a release moved the base -- is refused, naming the version it
+        already took, and nothing is written."""
+        result, pyproject = _command(tmp_path, versions, 7, write=write)
         assert result.returncode == 1, result.stdout + result.stderr
         assert "0.130.0.dev7" in result.stderr
         assert result.stdout.strip() == ""
