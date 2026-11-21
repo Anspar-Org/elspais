@@ -31,7 +31,7 @@ from pathlib import Path
 import pytest
 
 from elspais.commands._requests import FilesRequest, files_request_from_params
-from elspais.commands.files_cmd import compute_files
+from elspais.commands.files_cmd import compute_files, render_files
 from elspais.graph.factory import build_graph
 from elspais.graph.reference_faults import FaultClass
 from tests.e2e.helpers import (
@@ -46,10 +46,14 @@ from tests.e2e.helpers import (
 FIXTURE_ROOT = (Path(__file__).parent.parent / "fixtures" / "hht-like").resolve()
 
 
-def _answer(graph, config, *paths: str, built_at: float | None = None) -> dict:
+def _answer(
+    graph, config, *paths: str, built_at: float | None = None, changed: tuple[Path, ...] = ()
+) -> dict:
     """The answer for ``paths``, from a graph built before now."""
     when = time.time() if built_at is None else built_at
-    return compute_files(graph, config, FilesRequest(paths=tuple(paths)), built_at=when)
+    return compute_files(
+        graph, config, FilesRequest(paths=tuple(paths)), built_at=when, changed=changed
+    )
 
 
 def _entry(graph, config, path: str, built_at: float | None = None) -> dict:
@@ -213,7 +217,7 @@ def test_a_spec_file_defines_its_requirements_and_reports_no_metadata_reference(
     assert links == sorted(set(links))
 
 
-# Verifies: REQ-d00335-D
+# Verifies: REQ-d00335-H
 @pytest.mark.parametrize(
     ("path", "role"),
     [
@@ -523,7 +527,7 @@ def test_a_file_outside_every_member_is_not_scanned_and_belongs_to_none(federati
     assert entry["links"] == []
 
 
-# Verifies: REQ-d00335-C
+# Verifies: REQ-d00335-I
 def test_an_absolute_path_into_an_associate_names_what_it_defines(federation):
     _core, assoc, graph, config = federation
     entry = _entry(graph, config, str(assoc / "spec" / "prd-assoc.md"))
@@ -612,3 +616,150 @@ def test_asking_changes_no_file_and_no_graph_state(private_federation):
     assert graph.node_count() == nodes_before
     assert len(graph.mutation_log) == log_before
     assert os.path.exists(core / "src" / "linked.py")
+
+
+# Verifies: REQ-p00015-E
+def test_a_file_the_watch_found_changed_is_not_current_whatever_its_mtime(federation):
+    """A file put in place with an older modification time than the build is
+    still stale once the serving process's watch names it."""
+    core, _assoc, graph, config = federation
+    moved = core / "src" / "linked.py"
+    built_at = moved.stat().st_mtime + 60
+    named, untouched = _answer(
+        graph,
+        config,
+        "src/linked.py",
+        "src/empty.py",
+        built_at=built_at,
+        changed=(moved,),
+    )["files"]
+    assert named["status"] == "scanned"
+    assert named["current"] is False
+    assert untouched["current"] is True
+
+
+# Verifies: REQ-p00015-E
+def test_a_file_appearing_after_the_build_is_not_scanned_and_not_current(private_federation):
+    """The graph holds no node for a file written after it was built; the
+    answer says it was not scanned and that the graph is behind it."""
+    core, _assoc, graph, config = private_federation
+    built_at = time.time() - 60
+    write_python_code(core / "src" / "new_after_build.py", implements=["REQ-d00001"])
+    entry = _entry(graph, config, "src/new_after_build.py", built_at=built_at)
+    assert entry["status"] == "not_scanned"
+    assert entry["current"] is False
+    assert entry["links"] == []
+
+
+@pytest.fixture(scope="module")
+def nested_federation(tmp_path_factory):
+    """A core repository holding its associate inside its own directory.
+
+    core/                 namespace REQ, scans spec/
+      spec/prd.md         REQ-p00001 (A)
+      libs/inner/         the associate, namespace YY
+        spec/prd-inner.md YY-p00007 (A)
+    """
+    core = tmp_path_factory.mktemp("files_nested") / "core"
+    cfg = base_config(name="files-nested-core")
+    cfg["associates"] = {"inner": {"path": "libs/inner", "namespace": "YY"}}
+    build_project(
+        core,
+        cfg,
+        spec_files={
+            "spec/prd.md": [
+                Requirement("REQ-p00001", "Core", "PRD", assertions=[("A", "The system SHALL a.")])
+            ]
+        },
+        init_git=False,
+    )
+    build_associate(
+        core / "libs" / "inner",
+        "inner",
+        "YY",
+        "../..",
+        spec_files={
+            "spec/prd-inner.md": [
+                Requirement("YY-p00007", "Inner", "PRD", assertions=[("A", "The system SHALL y.")])
+            ]
+        },
+    )
+    graph, config = _built(core)
+    return core, graph, config
+
+
+# Verifies: REQ-d00335-I
+@pytest.mark.parametrize("spelling", ["relative", "absolute"])
+def test_a_path_under_a_nested_member_is_answered_by_that_member(nested_federation, spelling):
+    """The deepest member root above a path holds it, though the core's
+    directory contains it too."""
+    core, graph, config = nested_federation
+    relative = "libs/inner/spec/prd-inner.md"
+    path = relative if spelling == "relative" else str(core / relative)
+    entry = _entry(graph, config, path)
+    assert entry["namespace"] == "YY"
+    assert entry["relative_path"] == "spec/prd-inner.md"
+    assert entry["status"] == "scanned"
+    assert ("defines", "YY-p00007", "YY-p00007") in _links(entry)
+
+
+def _rendered_blocks(graph, config, *paths: str, changed: tuple[Path, ...] = ()):
+    """The text rendering, divided into one block of lines per path named."""
+    text = render_files(_answer(graph, config, *paths, changed=changed))
+    blocks: dict[str, list[str]] = {}
+    current: list[str] = []
+    for line in text.splitlines():
+        if not line.startswith(" "):
+            current = blocks.setdefault(line.split(":", 1)[0], [])
+        current.append(line.strip())
+    return blocks
+
+
+@pytest.fixture(scope="module")
+def rendered(federation):
+    """One rendering naming a linked, an unlinked, a not-scanned and a
+    missing file; the watch names the linked file as changed since the build."""
+    core, _assoc, graph, config = federation
+    return _rendered_blocks(
+        graph,
+        config,
+        "src/linked.py",
+        "src/empty.py",
+        "README.md",
+        "src/never.py",
+        changed=(core / "src" / "linked.py",),
+    )
+
+
+# Verifies: REQ-d00335-G
+def test_text_says_a_scanned_file_without_a_link_has_no_link(rendered):
+    assert rendered["src/empty.py"] == ["src/empty.py: scanned, code", "no link"]
+    assert "no link" not in rendered["src/linked.py"]
+
+
+# Verifies: REQ-d00335-D
+def test_text_lists_each_link_with_its_kind(rendered):
+    links = [line.split() for line in rendered["src/linked.py"][1:] if line.startswith("impl")]
+    assert links == [
+        ["implements", "REQ-d00001-A"],
+        ["implements", "REQ-d00001-B"],
+        ["implements", "REQ-p00001"],
+    ]
+
+
+# Verifies: REQ-d00335-E
+def test_text_says_no_file_exists_at_a_missing_path(rendered):
+    assert rendered["src/never.py"] == ["src/never.py: no file at this path"]
+
+
+# Verifies: REQ-d00335-F
+def test_text_says_a_file_outside_the_scan_is_not_scanned(rendered):
+    (heading,) = [line for line in rendered["README.md"] if line.startswith("README.md")]
+    assert heading == "README.md: not scanned"
+    assert not any(line.startswith(("implements", "no link")) for line in rendered["README.md"])
+
+
+# Verifies: REQ-p00015-E
+def test_text_marks_a_file_newer_than_the_graph_as_stale(rendered):
+    assert any(line.startswith("stale") for line in rendered["src/linked.py"])
+    assert not any(line.startswith("stale") for line in rendered["src/empty.py"])

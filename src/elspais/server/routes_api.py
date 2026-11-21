@@ -744,8 +744,13 @@ async def api_files(request: Request) -> JSONResponse:
         files_request = files_request_from_params(dict(request.query_params))
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
+    watched = getattr(state.shared, "graph_predates", None)
     result = compute_files(
-        state.graph, state.config, files_request, built_at=state.shared["build_time"]
+        state.graph,
+        state.config,
+        files_request,
+        built_at=state.shared["build_time"],
+        changed=watched() if watched is not None else (),
     )
     return _served(state, result)
 

@@ -47,3 +47,19 @@ def test_the_route_answers_with_the_files_compute_files_gives(
     assert body["files"] == expected["files"]
     verifies = [link for link in body["files"][1]["links"] if link["kind"] == "verifies"]
     assert [link["id"] for link in verifies] == ["REQ-d00001-A", "REQ-d00001-B"]
+
+
+# Verifies: REQ-d00335-A
+@pytest.mark.parametrize(
+    "paths",
+    [
+        pytest.param("src/a.py", id="not-json"),
+        pytest.param('{"paths": ["src/a.py"]}', id="object"),
+        pytest.param('"src/a.py"', id="string"),
+        pytest.param('["src/a.py", 3]', id="non-string-item"),
+    ],
+)
+def test_paths_that_are_not_a_json_array_of_strings_are_refused(client, paths):
+    response = client.get("/api/files", params={"paths": paths})
+    assert response.status_code == 400
+    assert response.json()["error"]

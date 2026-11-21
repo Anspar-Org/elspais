@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -53,19 +54,27 @@ def compute_files(
     request: FilesRequest,
     *,
     built_at: float,
+    changed: Iterable[Path] = (),
 ) -> dict[str, Any]:
     """Answer for each path in *request*, in the order named.
 
-    *built_at* is when the answering graph was built. A file that changed,
-    appeared or went away after it is reported as not current, so the
-    answer never presents an older reading as the working tree's.
+    *built_at* is when the answering graph was built. A file written after
+    it, or gone since, is reported as not current, so the answer never
+    presents an older reading as the working tree's. *changed* is what a
+    serving process's watch found changed since it built the graph
+    (``changed_files()`` in ``server/watch.py``); a file named there is not
+    current either, which catches a file put in place with an older
+    modification time than the build.
 
     Reads the graph and the file system only; it changes neither.
     """
     members = _members_by_depth(graph)
     unresolved = _unresolved_by_source(graph)
+    moved = frozenset(Path(p).resolve() for p in changed)
     return {
-        "files": [_answer_for(graph, path, members, unresolved, built_at) for path in request.paths]
+        "files": [
+            _answer_for(graph, path, members, unresolved, built_at, moved) for path in request.paths
+        ]
     }
 
 
@@ -94,7 +103,7 @@ def _unresolved_by_source(graph: FederatedGraph) -> dict[str, list[dict[str, str
     return held
 
 
-# Implements: REQ-d00335-B
+# Implements: REQ-d00335-B+I
 def _locate(
     graph: FederatedGraph, path: str, members: list[tuple[Path, RepoEntry]]
 ) -> tuple[Path, RepoEntry | None, str | None]:
@@ -119,6 +128,7 @@ def _answer_for(
     members: list[tuple[Path, RepoEntry]],
     unresolved: dict[str, list[dict[str, str]]],
     built_at: float,
+    changed: frozenset[Path],
 ) -> dict[str, Any]:
     from elspais.graph.GraphNode import make_file_id
     from elspais.server.watch import changed_since
@@ -138,7 +148,8 @@ def _answer_for(
         # Implements: REQ-p00015-E
         # A file the graph holds and the disk no longer does is the graph
         # being behind the disk, as a file written after the build is.
-        "current": (not changed_since(absolute, built_at)) if exists else file_node is None,
+        "current": absolute not in changed
+        and ((not changed_since(absolute, built_at)) if exists else file_node is None),
         "links": [],
         "unresolved": [],
         "unbound": [],
@@ -157,7 +168,7 @@ def _answer_for(
             )
         return entry
 
-    # Implements: REQ-d00335-C+D+G
+    # Implements: REQ-d00335-C+D+G+H
     entry["status"] = SCANNED
     file_type = file_node.get_field("file_type")
     entry["role"] = file_type.value if file_type is not None else None

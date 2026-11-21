@@ -7206,11 +7206,13 @@ def create_server(
         from elspais.commands.files_cmd import compute_files
         from elspais.server.watch import graph_predates
 
+        watched = getattr(_state, "graph_predates", None)
         result = compute_files(
             _state["graph"],
             _state["config"],
             FilesRequest(paths=tuple(paths)),
             built_at=_state["build_time"],
+            changed=watched() if watched is not None else (),
         )
         # Implements: REQ-d00313-C
         predates = graph_predates(_state)
