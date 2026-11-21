@@ -950,7 +950,7 @@ the code and test files to review for each.
   `--format {text,json}`  Output format (default: text)
   `-o, --output PATH`     Write output to file instead of stdout
   `--write-record`        Write the files awaiting review into `.elspais/changes.md`
-  `--review PATH ...`     Record your review of these files (repo-relative)
+  `--review PATH ...`     Record your review of these files (the report's name, or an absolute path)
   `--change ID ...`       With `--review`, record it only for these changes
 
 **What's Reported:**
@@ -962,13 +962,17 @@ the code and test files to review for each.
 - For each change, every code and test file citing it, the line of each
   citation, and whether the file is `reviewed` (by whom, when) or
   `awaiting review`; and the expected reviewer, the author of the
-  requirement's newest changelog entry
+  requirement's newest changelog entry; a file of another federation member
+  is named `NAMESPACE:path`
 - Files the review record holds as awaiting review from earlier changes
+- Files awaiting review that the record does not yet name (`record_behind` in
+  JSON); run `--write-record` before committing
 
 A citation of an *Assertion* is listed under that *Assertion*'s change, and a
 citation of the whole requirement under the requirement's change. Where the
 base cannot be read, the report says the changes are unverifiable and the
-command exits 1.
+command exits 1, and `--review` and `--write-record` leave the record as it
+is.
 
 The review record, `.elspais/changes.md`, is committed with the work. Its
 "Awaiting review" table names the files nobody has reviewed; its "Reviewed"

@@ -52,7 +52,7 @@ elspais mcp serve --transport sse
 |------|-------------|
 | `get_workspace_info(detail=...)` | Project info with use-case profiles (see below) |
 | `get_project_summary()` | Coverage stats, level counts, change metrics |
-| `get_changed_requirements(base_branch="main")` | Requirements and *Assertions* changed since the base branch, and the code and test files to review for each (the JSON of `elspais changed --format json`) |
+| `get_changed_requirements(base_branch="main")` | Requirements and *Assertions* changed since the base branch, the code and test files to review for each (another member's file named `NAMESPACE:path`), and the awaiting files the review record does not yet name (`record_behind`); unverifiable where the base cannot be read (the JSON of `elspais changed --format json`) |
 
 The `detail` parameter on `get_workspace_info` selects a use-case profile:
 `"default"`, `"testing"`, `"code-refs"`, `"coverage"`, `"retrofit"`,

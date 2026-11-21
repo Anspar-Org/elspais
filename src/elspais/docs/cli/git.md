@@ -80,7 +80,9 @@ A file awaiting no review is refused. A later edit to the file, or to
 the changed requirement or *Assertion*, makes the file await review again.
 The record names only what it held when it was last written, so the report
 says when a file awaiting review is missing from it; run `--write-record`
-before committing so the record carries every file nobody has reviewed.
+before committing so the record carries every file nobody has reviewed
+(`record_behind` in the JSON report names them). Where the base cannot be
+read, `--review` and `--write-record` leave the record as it is.
 
 The record keeps listing a file as awaiting review, and the report shows it,
 until someone reviews it, even after its change has merged and the base has

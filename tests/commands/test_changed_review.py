@@ -796,16 +796,23 @@ def test_a_record_behind_the_report_says_so_until_written(tmp_path, monkeypatch,
     _write(root, "src/mod.py", _MOD + "\n\ndef added_later():\n    return 6\n")
 
     rc, out, _err = _run(monkeypatch, capsys, root, "changed", "--format", "json")
-    behind = {(b["id"], b["path"]) for b in json.loads(out)["record_behind"]}
+    report = json.loads(out)
+    behind = {(b["id"], b["path"]) for b in report["record_behind"]}
     rc_text, text, _err = _run(monkeypatch, capsys, root, "changed")
 
-    # Verifies: REQ-d00336-O
+    # Verifies: REQ-d00336-N
+    # The edit makes the reviewed file await review again, and the report
+    # marks it so, naming it among the files the record does not yet name.
+    for cid in ("REQ-d00001", "REQ-d00001-A"):
+        assert _files(_changes(report)[cid])["src/mod.py"]["status"] == "awaiting", cid
     assert behind == {("REQ-d00001", "src/mod.py"), ("REQ-d00001-A", "src/mod.py")}
     assert "does not name" in text
     assert "--write-record" in text
 
     rc, _out, err = _run(monkeypatch, capsys, root, "changed", "--write-record")
     assert rc == 0, err
+    # Verifies: REQ-d00336-O
+    # Once written, the record names each file awaiting review.
     assert _compute(root)["record_behind"] == []
     awaiting_section = _record_text(root).split("## Awaiting review")[1].split("## Reviewed")[0]
     assert "src/mod.py" in awaiting_section
@@ -830,3 +837,86 @@ def test_agent_tool_reads_the_record_at_the_git_root(tmp_path, monkeypatch, caps
     assert from_sub == from_root
     entry = _files(_changes(from_sub)["REQ-d00001-A"])["src/mod.py"]
     assert entry["status"] == "reviewed"
+
+
+# ---------------------------------------------------------------------------
+# A configuration file at a path other than the repository's own
+# ---------------------------------------------------------------------------
+
+
+def _make_moved_config_project(root: Path) -> Path:
+    """A committed project whose spec lives under ``requirements/``, which only
+    ``config/elspais.toml`` scans: the repository's own ``.elspais.toml`` scans
+    ``spec/``, which holds no requirement, so a base read without the named
+    file finds no requirement at all."""
+    _make_project(root)
+    named = _CONFIG.replace('directories = ["spec"]', 'directories = ["requirements"]')
+    _write(root, "config/elspais.toml", named)
+    (root / "requirements").mkdir()
+    (root / "spec" / "dev.md").rename(root / "requirements" / "dev.md")
+    _write(root, "spec/README.md", "# Specifications\n\nThe requirements live elsewhere.\n")
+    _commit_all(root, "scan the spec through a named configuration")
+    _git(root, "checkout", "-q", "-b", "feature")
+    _write(
+        root,
+        "requirements/dev.md",
+        _spec({**ALPHA, "A": "The tool SHALL do alpha one, twice."}),
+    )
+    return root
+
+
+def test_a_named_configuration_file_reads_the_base_with_its_copy(tmp_path, monkeypatch, capsys):
+    root = _make_moved_config_project(tmp_path / "repo")
+
+    rc, out, err = _run(
+        monkeypatch, capsys, root, "--config", "config/elspais.toml", "changed", "--format", "json"
+    )
+    assert rc == 0, err
+    report = json.loads(out)
+    changes = _changes(report)
+
+    assert report["verifiable"] is True
+    # Verifies: REQ-d00336-A
+    # Only the edited Assertion differs from the base read with the same file;
+    # requirements the edit left alone are neither new nor changed.
+    assert changes["REQ-d00001-A"]["added"] is False
+    assert {"REQ-d00001-B", "REQ-d00001-C"}.isdisjoint(changes)
+    assert not any(cid.startswith(("REQ-d00002", "REQ-d00003")) for cid in changes)
+
+
+def test_a_configuration_outside_the_repository_is_unverifiable(tmp_path, monkeypatch, capsys):
+    root = _make_moved_config_project(tmp_path / "repo")
+    outside = tmp_path / "elsewhere" / "elspais.toml"
+    _write(tmp_path / "elsewhere", "elspais.toml", (root / "config/elspais.toml").read_text())
+
+    rc, out, err = _run(
+        monkeypatch, capsys, root, "--config", str(outside), "changed", "--format", "json"
+    )
+    report = json.loads(out)
+
+    # Verifies: REQ-p00004-M
+    assert rc == 1, err
+    assert report["verifiable"] is False
+    assert "outside the repository" in report["unverifiable_reason"]
+    assert report["changes"] == []
+
+
+def test_a_review_given_an_absolute_path_is_recorded_under_the_report_name(
+    tmp_path, monkeypatch, capsys
+):
+    root = _make_project(tmp_path / "repo")
+    _change_alpha(root, "The tool SHALL do alpha one, twice.")
+    _reviewer_from_config_only(monkeypatch)
+
+    rc, _out, err = _run(
+        monkeypatch, capsys, root, "changed", "--review", str((root / "src" / "mod.py").resolve())
+    )
+    assert rc == 0, err
+    reviewed = {(r.change_id, r.path) for r in read_record(root).reviews}
+    changes = _changes(_compute(root))
+
+    # Verifies: REQ-d00336-J
+    assert reviewed == {("REQ-d00001", "src/mod.py"), ("REQ-d00001-A", "src/mod.py")}
+    for cid in ("REQ-d00001", "REQ-d00001-A"):
+        assert _files(changes[cid])["src/mod.py"]["status"] == "reviewed", cid
+    assert _files(changes["REQ-d00001-A"])["tests/test_alpha.py"]["status"] == "awaiting"
