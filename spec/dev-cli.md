@@ -1033,3 +1033,43 @@ G is B read about a reader who has narrowed what they are looking at. A narrowed
 - 2026-09-17 | 071538b7 | - | Michael Lewis (<michael@anspar.org>) | Auto-fix: update hash
 
 *End* *Report Export* | **Hash**: 8c1b78eb
+
+---
+
+## REQ-d00335: Requirements a File Names
+
+**Level**: dev | **Status**: Active | **Implements**: REQ-p00001-B, REQ-p00060-C
+
+A caller holding a set of files asks which requirements those files bear on. A spec file defines requirements, a code file implements them, a test file verifies them and a journey file validates them. This requirement covers that question asked from the file side: its input, what the answer holds for each file, and how the answer tells apart the paths that carry no requirement for different reasons.
+
+### Assertions
+
+A. When a caller names one or more paths, the tool SHALL give one answer for each path named.
+
+B. The tool SHALL read a relative path against the root of the repository the tool runs in.
+
+C. For each scanned file, the answer SHALL name every identifier of a requirement or *Assertion* that the file defines, implements, verifies or validates.
+
+D. For each requirement or *Assertion* that the answer names, the answer SHALL state whether the file defines, implements, verifies or validates it.
+
+E. If no file exists at a path named, then the answer for that path SHALL state that no file exists there.
+
+F. If a file at a path named is outside every scan the tool performs, then the answer for that path SHALL state that the tool does not scan the file.
+
+G. If a scanned file names no requirement, then the answer for that file SHALL state that the tool scanned the file and found no link in it.
+
+### Rationale
+
+Two people can change different files that bear on one requirement: one edits the code that implements it, the other the test that verifies it. A comparison of file names does not see that the two changes meet; a comparison of the requirements each file names does. The question is general, so the answer carries nothing particular to any one caller, and it is read from the graph every other report reads, through the citations the scan already reads. A file's links are the ones the federated graph holds, so an identifier an associate owns names what it names in every other report (REQ-p00005-A).
+
+A, B and C are the question itself. A caller holds paths in whatever form its own tools give it, so a path relative to the repository root and an absolute one are both accepted, and an absolute path may lie in any member of the federation. D is what lets a caller tell an edit to a requirement's text from an edit to the evidence for it. The answer also names the role the scan gave each scanned file -- spec, journey, code, test, or another kind it reads -- because a caller weighing two changes against each other reads that role first.
+
+E, F and G keep apart three answers that would otherwise all read as an empty list. A path with no file is a caller's mistake or a deletion; a file the tool does not scan names nothing the tool can see, which is not the same as naming nothing; and a scanned file without a link is an honest zero. Read as one another, each hides the others: a deleted file looks clean, and a file outside the scan looks unlinked when nobody looked. A citation in a scanned file that produced no link is reported with the file rather than read as no citation at all (REQ-d00241-E), so G applies only where the file truly cites nothing.
+
+The answer reflects the working tree, uncommitted changes included. Where the graph that answers was built before a file named changed, appeared or went away, the answer marks that file as stale rather than presenting the older reading as current (REQ-p00015-E). The command line and the agent tool compute the answer in one place and give the same answer, and asking it changes no file and no graph state.
+
+### Changelog
+
+- 2026-11-21 | e9867ad7 | - | Michael Lewis (<michael@anspar.org>) | Requirement authored: the requirements each named file defines, implements, verifies or validates
+
+*End* *Requirements a File Names* | **Hash**: e9867ad7

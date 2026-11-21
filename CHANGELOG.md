@@ -4,6 +4,10 @@ All notable changes to elspais will be documented in this file.
 
 ## [Unreleased]
 
+### TOOL-166
+
+- **The requirements a file names are specified (REQ-d00335)** -- given file paths, elspais answers for each with the requirements and *Assertions* the file defines, implements, verifies or validates, and the kind of each link; a path with no file, a file elspais does not scan, and a scanned file citing nothing each have an answer of their own.
+
 ### TOOL-147 follow-up
 
 - **A named fix reports an INDEX.md row it could not update (REQ-d00330-C)** -- where the row listing the requirement had another column count than the table elspais writes, `elspais fix REQ-ID` left the row's stale hash in place without a word. It now says so and names the full fix that regenerates the index.
