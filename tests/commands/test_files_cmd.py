@@ -8,8 +8,8 @@ Most cases read the canonical hht-like fixture, which holds:
 
 - ``spec/dev-impl.md`` -- REQ-d00001..REQ-d00003, four assertions each, and
   requirement-level references to other requirements in its metadata lines;
-- ``spec/journeys.md`` -- one journey validating REQ-p00001-A and -B; the scan
-  reads this file as a spec file;
+- ``spec/journeys.md`` -- one journey validating REQ-p00001-A and -B and no
+  requirement, so its role is journey;
 - ``spec/glossary.md`` -- a scanned spec file holding no requirement;
 - ``database/schema.sql`` -- code citing REQ-p00001, REQ-d00001, REQ-p00003 and
   REQ-d00003 as whole requirements, some of them on more than one line;
@@ -222,7 +222,7 @@ def test_a_spec_file_defines_its_requirements_and_reports_no_metadata_reference(
     ("path", "role"),
     [
         ("spec/dev-impl.md", "spec"),
-        ("spec/journeys.md", "spec"),
+        ("spec/journeys.md", "journey"),
         ("database/schema.sql", "code"),
         ("tests/test_auth.py", "test"),
         (".elspais.toml", "config"),

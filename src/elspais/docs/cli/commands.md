@@ -694,7 +694,8 @@ validates.
 Each path named gets one answer, in the order named. Its status is one of:
 
   `scanned`      The scan read the file. The answer gives the role the scan
-                 gave it (spec, journey, code, test, result, config) and
+                 gave it (spec, journey, code, test, result, config; a spec
+                 file holding journeys and no requirement is a journey) and
                  every requirement and assertion it links to, each with the
                  kind of link: `defines`, `implements`, `verifies` or
                  `validates`. A scanned file with no link reads `no link`.
