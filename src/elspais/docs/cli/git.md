@@ -58,7 +58,9 @@ line of each citation. A citation of an *Assertion* is listed under that
 *Assertion*'s change; a citation of the whole requirement is listed under the
 requirement's change. Each file is marked `reviewed` (by whom, and when) or
 `awaiting review`. Each change also names its expected reviewer: the author
-of the requirement's newest changelog entry.
+of the requirement's newest changelog entry. A file of another federation
+member is named by that member's namespace and its path there, as
+`NAMESPACE:path`.
 
 ## The Review Record
 
@@ -73,8 +75,12 @@ holds two tables:
 no review. `--review PATH` records your review of every awaiting consequence of
 each file, under your git identity (`user.name` and `user.email`), the one
 the commit of the record carries; `--change ID` narrows it to the named
-changes. A file awaiting no review is refused. A later edit to the file, or to
+changes. PATH is the name the report gives the file, or its absolute path.
+A file awaiting no review is refused. A later edit to the file, or to
 the changed requirement or *Assertion*, makes the file await review again.
+The record names only what it held when it was last written, so the report
+says when a file awaiting review is missing from it; run `--write-record`
+before committing so the record carries every file nobody has reviewed.
 
 The record keeps listing a file as awaiting review, and the report shows it,
 until someone reviews it, even after its change has merged and the base has
@@ -177,4 +183,5 @@ elspais checks || exit 1
 3. $ elspais fix  # Fix hashes and formatting
 4. $ elspais changed  # List the code and test files to review
 5. $ elspais changed --review PATH  # Record each review
-6. Commit, `.elspais/changes.md` included, with a message referencing requirement IDs
+6. $ elspais changed --write-record  # Name the files still awaiting review
+7. Commit, `.elspais/changes.md` included, with a message referencing requirement IDs

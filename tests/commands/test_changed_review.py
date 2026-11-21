@@ -668,3 +668,165 @@ def test_an_unreadable_base_is_reported_unverifiable(tmp_path, monkeypatch, caps
     said = (out + err).lower()
     assert "unverifiable" in said
     assert "no change" not in said
+
+
+@pytest.mark.parametrize(
+    "argv", [("--review", "src/mod.py"), ("--write-record",)], ids=["review", "write-record"]
+)
+def test_an_unreadable_base_refuses_to_write_the_record(tmp_path, monkeypatch, capsys, argv):
+    root = tmp_path / "repo"
+    _no_base_branch(root)
+    _write(root, "spec/dev.md", _spec({**ALPHA, "A": "The tool SHALL do alpha one, again."}))
+    _reviewer_from_config_only(monkeypatch)
+
+    rc, out, err = _run(monkeypatch, capsys, root, "changed", *argv)
+
+    # Verifies: REQ-p00004-M
+    assert rc == 1
+    assert "unverifiable" in (out + err).lower()
+    assert not (root / RECORD_PATH).exists()
+
+
+# ---------------------------------------------------------------------------
+# Review fixes: associates, escaped cells, a record behind, a subdirectory
+# ---------------------------------------------------------------------------
+
+_LIB_CONFIG = """\
+version = 5
+cli_ttl = 0
+
+[project]
+name = "lib"
+namespace = "LIB"
+
+[scanning.spec]
+directories = ["spec"]
+
+[scanning.code]
+directories = ["src"]
+
+[changelog]
+hash_current = false
+present = false
+"""
+
+# The same relative path as the root's src/mod.py; its citation is on line 3.
+_LIB_MOD = "\n\n# Implements: REQ-d00001-A\ndef lib_alpha():\n    return 7\n"
+
+
+def _make_federated_project(top: Path) -> Path:
+    """A root project declaring an associate whose src/mod.py cites REQ-d00001-A."""
+    lib = top / "lib"
+    _write(lib, ".elspais.toml", _LIB_CONFIG)
+    _write(
+        lib, "spec/lib.md", "# Lib\n\n" + _requirement("LIB-d00001", "Lib", {"A": "The lib SHALL."})
+    )
+    _write(lib, "src/mod.py", _LIB_MOD)
+    _git(lib, "init", "-q", "-b", "main")
+    _git(lib, "config", "user.name", REVIEWER_NAME)
+    _git(lib, "config", "user.email", REVIEWER_EMAIL)
+    _commit_all(lib, "init")
+
+    root = _make_project(top / "repo")
+    config = (root / ".elspais.toml").read_text()
+    _write(
+        root,
+        ".elspais.toml",
+        config + f'\n[associates.lib]\npath = "{lib.as_posix()}"\nnamespace = "LIB"\n',
+    )
+    _commit_all(root, "declare lib")
+    _change_alpha(root, "The tool SHALL do alpha one, twice.")
+    return root
+
+
+def test_an_associate_file_is_listed_under_its_namespace(tmp_path, monkeypatch, capsys):
+    root = _make_federated_project(tmp_path)
+    listed = _files(_changes(_compute(root))["REQ-d00001-A"])
+
+    # Verifies: REQ-d00336-E
+    assert listed["src/mod.py"]["lines"] == [1]
+    assert listed["LIB:src/mod.py"]["lines"] == [3]
+
+    _reviewer_from_config_only(monkeypatch)
+    rc, _out, err = _run(
+        monkeypatch,
+        capsys,
+        root,
+        "changed",
+        "--review",
+        "LIB:src/mod.py",
+        "--change",
+        "REQ-d00001-A",
+    )
+    assert rc == 0, err
+    reviewed = _files(_changes(_compute(root))["REQ-d00001-A"])
+    assert reviewed["LIB:src/mod.py"]["status"] == "reviewed"
+    assert reviewed["src/mod.py"]["status"] == "awaiting"
+
+    _write(tmp_path / "lib", "src/mod.py", _LIB_MOD + "\n\ndef later():\n    return 8\n")
+    entry = _files(_changes(_compute(root))["REQ-d00001-A"])["LIB:src/mod.py"]
+
+    # Verifies: REQ-d00336-M
+    assert (entry["status"], entry["stale"]) == ("awaiting", True)
+
+
+def test_a_reviewer_name_holding_a_pipe_reads_back(tmp_path, monkeypatch, capsys):
+    root = _make_project(tmp_path / "repo")
+    _change_alpha(root, "The tool SHALL do alpha one, twice.")
+    name = "Pat | Pipe \\ Slash"
+    _git(root, "config", "user.name", name)
+    _reviewer_from_config_only(monkeypatch)
+    rc, _out, err = _run(monkeypatch, capsys, root, "changed", "--review", "src/mod.py")
+    assert rc == 0, err
+
+    rc, out, err = _run(monkeypatch, capsys, root, "changed", "--format", "json")
+
+    # Verifies: REQ-d00336-K
+    assert rc == 0, err
+    entry = _files(_changes(json.loads(out))["REQ-d00001-A"])["src/mod.py"]
+    assert entry["review"]["reviewer"] == f"{name} <{REVIEWER_EMAIL}>"
+
+
+def test_a_record_behind_the_report_says_so_until_written(tmp_path, monkeypatch, capsys):
+    root = _make_project(tmp_path / "repo")
+    _change_alpha(root, "The tool SHALL do alpha one, twice.")
+    _reviewer_from_config_only(monkeypatch)
+    rc, _out, err = _run(monkeypatch, capsys, root, "changed", "--review", "src/mod.py")
+    assert rc == 0, err
+    _write(root, "src/mod.py", _MOD + "\n\ndef added_later():\n    return 6\n")
+
+    rc, out, _err = _run(monkeypatch, capsys, root, "changed", "--format", "json")
+    behind = {(b["id"], b["path"]) for b in json.loads(out)["record_behind"]}
+    rc_text, text, _err = _run(monkeypatch, capsys, root, "changed")
+
+    # Verifies: REQ-d00336-O
+    assert behind == {("REQ-d00001", "src/mod.py"), ("REQ-d00001-A", "src/mod.py")}
+    assert "does not name" in text
+    assert "--write-record" in text
+
+    rc, _out, err = _run(monkeypatch, capsys, root, "changed", "--write-record")
+    assert rc == 0, err
+    assert _compute(root)["record_behind"] == []
+    awaiting_section = _record_text(root).split("## Awaiting review")[1].split("## Reviewed")[0]
+    assert "src/mod.py" in awaiting_section
+    awaiting = {(a.change_id, a.path) for a in read_record(root).awaiting}
+    assert {("REQ-d00001", "src/mod.py"), ("REQ-d00001-A", "src/mod.py")} <= awaiting
+
+
+def test_agent_tool_reads_the_record_at_the_git_root(tmp_path, monkeypatch, capsys):
+    pytest.importorskip("mcp")
+    from elspais.mcp.server import _get_changed_requirements
+
+    root = _make_project(tmp_path / "repo")
+    _change_alpha(root, "The tool SHALL do alpha one, twice.")
+    _reviewer_from_config_only(monkeypatch)
+    rc, _out, err = _run(monkeypatch, capsys, root, "changed", "--review", "src/mod.py")
+    assert rc == 0, err
+    graph = build_graph(repo_root=root, config_path=root / ".elspais.toml")
+    from_root = json.loads(json.dumps(_get_changed_requirements(graph, root)))
+    from_sub = json.loads(json.dumps(_get_changed_requirements(graph, root / "src")))
+
+    # Verifies: REQ-d00336-H
+    assert from_sub == from_root
+    entry = _files(_changes(from_sub)["REQ-d00001-A"])["src/mod.py"]
+    assert entry["status"] == "reviewed"

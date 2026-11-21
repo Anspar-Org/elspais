@@ -123,8 +123,44 @@ def _citers(req: GraphNode, label: str | None) -> list[GraphNode]:
     return list(found.values())
 
 
+def _display_path(file_node: GraphNode, repo_root: Path) -> str:
+    """How the report and the record name a file.
+
+    A file of the repository the command runs in is named by its path from
+    that repository's root. A file another federation member holds is named
+    by that member's namespace and its path within the member, so two
+    members' files at one relative path stay apart and the name is the same
+    on every machine.
+    """
+    from elspais.graph.GraphNode import parse_structural_id
+
+    absolute = file_node.get_field("absolute_path")
+    if absolute:
+        try:
+            return Path(absolute).resolve().relative_to(repo_root.resolve()).as_posix()
+        except ValueError:
+            pass
+    _prefix, namespace, relative, _line = parse_structural_id(file_node.id)
+    return f"{namespace}:{relative}"
+
+
+def _file_index(graph: Any, repo_root: Path) -> dict[str, Path]:
+    """Every file the graph holds, by the name the report gives it."""
+    index: dict[str, Path] = {}
+    for file_node in graph.nodes_by_kind(NodeKind.FILE):
+        absolute = file_node.get_field("absolute_path")
+        if absolute:
+            index[_display_path(file_node, repo_root)] = Path(absolute)
+    return index
+
+
 def _files_citing(
-    req: GraphNode, label: str | None, change_id: str, content: str, reader: Any
+    req: GraphNode,
+    label: str | None,
+    change_id: str,
+    content: str,
+    reader: Any,
+    repo_root: Path,
 ) -> list[_Consequence]:
     """Each file citing the change, with the lines of its citations."""
     from elspais.graph.citation_respelling import citation_lines_naming
@@ -135,7 +171,7 @@ def _files_citing(
         file_node = node.file_node()
         if file_node is None:
             continue
-        rel = file_node.get_field("relative_path") or ""
+        rel = _display_path(file_node, repo_root)
         absolute = file_node.get_field("absolute_path")
         lines: list[int] = []
         if reader is not None:
@@ -152,7 +188,9 @@ def _files_citing(
     ]
 
 
-def _base_requirements(repo_root: Path, base: ComparisonBase) -> tuple[dict[str, Any], str | None]:
+def _base_requirements(
+    repo_root: Path, base: ComparisonBase, config_path: Path | None = None
+) -> tuple[dict[str, Any], str | None]:
     """Each requirement at the base, by id, as its *Assertion* digests and hash.
 
     Returns the requirements and None, or nothing and why the base could not
@@ -170,7 +208,21 @@ def _base_requirements(repo_root: Path, base: ComparisonBase) -> tuple[dict[str,
                 # The machine-local overlay names where associates live, and
                 # version control never holds it.
                 shutil.copy2(local, worktree / ".elspais.local.toml")
-            graph = build_graph(repo_root=worktree, scan_code=False, scan_tests=False)
+            base_config = None
+            if config_path is not None:
+                named = Path(config_path)
+                if named.is_absolute():
+                    try:
+                        named = named.resolve().relative_to(repo_root.resolve())
+                    except ValueError:
+                        return {}, (
+                            f"the configuration {config_path} lies outside the repository, "
+                            f"so the base holds no copy of it"
+                        )
+                base_config = worktree / named
+            graph = build_graph(
+                config_path=base_config, repo_root=worktree, scan_code=False, scan_tests=False
+            )
             namespace = graph.root_repo_namespace
             held: dict[str, Any] = {}
             for req in graph.nodes_by_kind(NodeKind.REQUIREMENT, namespace=namespace):
@@ -205,7 +257,9 @@ def _current_content(graph: Any, change_id: str) -> str | None:
     return _assertion_digest(_assertions_of(req)[label])
 
 
-def _consequences(graph: Any, base_reqs: dict[str, Any]) -> list[tuple[dict, list[_Consequence]]]:
+def _consequences(
+    graph: Any, base_reqs: dict[str, Any], repo_root: Path
+) -> list[tuple[dict, list[_Consequence]]]:
     """Each change in the working tree, with the files citing it."""
     reader = _reader(graph)
     namespace = graph.root_repo_namespace
@@ -224,7 +278,8 @@ def _consequences(graph: Any, base_reqs: dict[str, Any]) -> list[tuple[dict, lis
                 "added": label not in base_assertions,
                 "expected_reviewer": reviewer,
             }
-            found.append((change, _files_citing(req, label, assertion.id, digest, reader)))
+            listed = _files_citing(req, label, assertion.id, digest, reader, repo_root)
+            found.append((change, listed))
         digest = _requirement_digest(req)
         if digest != base_hash:
             change = {
@@ -234,7 +289,7 @@ def _consequences(graph: Any, base_reqs: dict[str, Any]) -> list[tuple[dict, lis
                 "added": req.id not in base_reqs,
                 "expected_reviewer": reviewer,
             }
-            found.append((change, _files_citing(req, None, req.id, digest, reader)))
+            found.append((change, _files_citing(req, None, req.id, digest, reader, repo_root)))
     found.sort(key=lambda item: item[0]["id"])
     return found
 
@@ -262,11 +317,12 @@ def _carried(
 ) -> list[Awaiting]:
     """Files the record holds as awaiting review beyond the current change set."""
     index = _change_index(graph)
+    files = _file_index(graph, repo_root)
     carried: list[Awaiting] = []
     for entry in record.awaiting:
         if (entry.change_id, entry.path) in current:
             continue
-        if entry.change_id not in index or not (repo_root / entry.path).is_file():
+        if entry.change_id not in index or entry.path not in files:
             continue
         carried.append(entry)
     return sorted(set(carried), key=lambda a: (a.change_id, a.path))
@@ -280,7 +336,9 @@ class _Computed:
     record: ReviewRecord
 
 
-def _compute(graph: Any, repo_root: Path, base_branch: str) -> _Computed:
+def _compute(
+    graph: Any, repo_root: Path, base_branch: str, config_path: Path | None = None
+) -> _Computed:
     base = comparison_base(repo_root, base_branch)
     record = read_record(repo_root)
     result: dict[str, Any] = {
@@ -292,13 +350,13 @@ def _compute(graph: Any, repo_root: Path, base_branch: str) -> _Computed:
         "summary": {"changes": 0, "files": 0, "awaiting": 0, "reviewed": 0},
         "record": RECORD_PATH.as_posix(),
     }
-    base_reqs, error = _base_requirements(repo_root, base)
+    base_reqs, error = _base_requirements(repo_root, base, config_path)
     consequences: list[_Consequence] = []
     if error is not None:
         result["verifiable"] = False
         result["unverifiable_reason"] = error
     else:
-        for change, files in _consequences(graph, base_reqs):
+        for change, files in _consequences(graph, base_reqs, repo_root):
             listed = []
             for consequence in files:
                 review, stale = _matching_review(record, consequence)
@@ -321,6 +379,16 @@ def _compute(graph: Any, repo_root: Path, base_branch: str) -> _Computed:
     result["carried"] = [
         {"id": a.change_id, "path": a.path, "lines": list(a.lines)} for a in carried
     ]
+    awaiting_now = {
+        (change["id"], f["path"])
+        for change in result["changes"]
+        for f in change["files"]
+        if f["status"] == "awaiting"
+    }
+    recorded = {(a.change_id, a.path) for a in record.awaiting}
+    result["record_behind"] = [
+        {"id": cid, "path": path} for cid, path in sorted(awaiting_now - recorded)
+    ]
     files = [f for change in result["changes"] for f in change["files"]]
     reviewed = sum(1 for f in files if f["status"] == "reviewed")
     result["summary"] = {
@@ -334,15 +402,23 @@ def _compute(graph: Any, repo_root: Path, base_branch: str) -> _Computed:
 
 # Implements: REQ-d00336-C, REQ-d00336-D, REQ-d00336-E, REQ-d00336-F, REQ-d00336-G
 # Implements: REQ-d00336-H, REQ-d00336-M, REQ-d00336-N, REQ-d00336-P
-def compute_changes(graph: Any, repo_root: Path, base_branch: str = "main") -> dict[str, Any]:
+def compute_changes(
+    graph: Any, repo_root: Path, base_branch: str = "main", config_path: Path | None = None
+) -> dict[str, Any]:
     """The changes since the comparison base and the files to review for each.
+
+    ``record_behind`` names each file awaiting review that the review record
+    does not yet name, so a record that would lose one when committed says so.
 
     Args:
         graph: The federated graph of the working tree, code and tests scanned.
         repo_root: The root of the repository the graph was built from.
         base_branch: The branch the current branch is compared against.
+        config_path: The configuration file the graph was built with, where
+            it is not the repository's own; the base is read with its copy
+            at the base commit.
     """
-    return _compute(graph, repo_root, base_branch).result
+    return _compute(graph, repo_root, base_branch, config_path).result
 
 
 def _awaiting_entries(computed: _Computed, reviewed: set[tuple[str, str]]) -> list[Awaiting]:
@@ -360,15 +436,46 @@ def _awaiting_entries(computed: _Computed, reviewed: set[tuple[str, str]]) -> li
 
 
 # Implements: REQ-d00336-O
-def write_awaiting(graph: Any, repo_root: Path, base_branch: str = "main") -> Path:
-    """Write the files awaiting review into the record; record no review."""
-    computed = _compute(graph, repo_root, base_branch)
+def write_awaiting(
+    graph: Any, repo_root: Path, base_branch: str = "main", config_path: Path | None = None
+) -> Path:
+    """Write the files awaiting review into the record; record no review.
+
+    Raises:
+        ReviewRefused: The base cannot be read, so what awaits review is unknown.
+    """
+    computed = _compute(graph, repo_root, base_branch, config_path)
+    _refuse_unverifiable(computed)
     record = ReviewRecord(_awaiting_entries(computed, set()), list(computed.record.reviews))
     return write_record(repo_root, record)
 
 
+def _review_name(path: str, files: dict[str, Path]) -> str:
+    """The report's name for a path a reviewer gave.
+
+    A path relative to the repository root, or a federation member's
+    ``NAMESPACE:path``, is the name itself; an absolute path is the name of
+    the file the graph holds there, in whichever member holds it.
+    """
+    named = Path(path)
+    if named.is_absolute():
+        resolved = named.resolve()
+        for name, absolute in files.items():
+            if absolute.resolve() == resolved:
+                return name
+    return named.as_posix() if ":" not in path else path
+
+
 class ReviewRefused(ValueError):
-    """A review names a file that awaits no review."""
+    """A review names a file that awaits no review, or the base cannot be read."""
+
+
+def _refuse_unverifiable(computed: _Computed) -> None:
+    if not computed.result["verifiable"]:
+        raise ReviewRefused(
+            f"the changes are unverifiable ({computed.result['unverifiable_reason']}), "
+            f"so the record is left as it is."
+        )
 
 
 def _reviewer_identity() -> str:
@@ -390,6 +497,7 @@ def record_reviews(
     paths: list[str],
     *,
     base_branch: str = "main",
+    config_path: Path | None = None,
     changes: list[str] | None = None,
     reviewer: str,
     today: str | None = None,
@@ -400,12 +508,14 @@ def record_reviews(
         ReviewRefused: A path names no file awaiting review (for the changes
             named, where some are).
     """
-    computed = _compute(graph, repo_root, base_branch)
+    computed = _compute(graph, repo_root, base_branch, config_path)
+    _refuse_unverifiable(computed)
+    files = _file_index(graph, repo_root)
     wanted = set(changes or [])
     when = today or date.today().isoformat()
     targets: list[tuple[str, str, str, str]] = []
     for path in paths:
-        rel = Path(path).as_posix()
+        rel = _review_name(path, files)
         hits = 0
         for consequence in computed.consequences:
             if consequence.path != rel or (wanted and consequence.change_id not in wanted):
@@ -421,7 +531,7 @@ def record_reviews(
             if entry.path != rel or (wanted and entry.change_id not in wanted):
                 continue
             content = _current_content(graph, entry.change_id) or ""
-            targets.append((entry.change_id, content, rel, _file_digest(repo_root / rel)))
+            targets.append((entry.change_id, content, rel, _file_digest(files[rel])))
             hits += 1
         if hits == 0:
             named = f" for {', '.join(sorted(wanted))}" if wanted else ""
@@ -482,6 +592,12 @@ def render_text(result: dict[str, Any], quiet: bool = False) -> str:
         for entry in result["carried"]:
             where = ", ".join(str(n) for n in entry["lines"])
             lines.append(f"  {entry['id']}  {entry['path']}:{where}  awaiting review")
+    if result.get("record_behind"):
+        lines.append("")
+        lines.append(
+            f"{result['record']} does not name {len(result['record_behind'])} file(s) "
+            f"awaiting review; run `elspais changed --write-record` before committing."
+        )
     lines.append("")
     lines.append(f"Files to review: {summary['awaiting']} awaiting, {summary['reviewed']} reviewed")
     return "\n".join(lines)
@@ -503,7 +619,8 @@ def run(args: argparse.Namespace) -> int:
     if repo_root is None:
         print("Error: Not in a git repository", file=sys.stderr)
         return 1
-    config = get_config(config_path=getattr(args, "config", None))
+    config_path = getattr(args, "config", None)
+    config = get_config(config_path=config_path)
     if config is None:
         return 1
     base_branch = getattr(args, "base_branch", None) or "main"
@@ -518,6 +635,7 @@ def run(args: argparse.Namespace) -> int:
                 repo_root,
                 review_paths,
                 base_branch=base_branch,
+                config_path=config_path,
                 changes=list(getattr(args, "change", None) or []),
                 reviewer=reviewer,
             )
@@ -532,9 +650,9 @@ def run(args: argparse.Namespace) -> int:
             )
             return 1
         if getattr(args, "write_record", False):
-            path = write_awaiting(graph, repo_root, base_branch)
+            path = write_awaiting(graph, repo_root, base_branch, config_path)
             print(f"Wrote the files awaiting review to {path.relative_to(repo_root).as_posix()}")
-        result = compute_changes(graph, repo_root, base_branch)
+        result = compute_changes(graph, repo_root, base_branch, config_path)
     except (ReviewRefused, ReviewRecordError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

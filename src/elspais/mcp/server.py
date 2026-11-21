@@ -2413,8 +2413,16 @@ def _get_changed_requirements(
     is left to the command line.
     """
     from elspais.commands.changed import compute_changes
+    from elspais.utilities.git import get_repo_root
+    from elspais.utilities.review_record import ReviewRecordError
 
-    return compute_changes(graph, Path(repo_root), base_branch)
+    # The record and every path the report names are read from the git root,
+    # as the command line reads them, wherever the server was started.
+    root = get_repo_root(Path(repo_root)) or Path(repo_root)
+    try:
+        return compute_changes(graph, root, base_branch)
+    except ReviewRecordError as exc:
+        return {"success": False, "error": str(exc)}
 
 
 # Built-in protocol guidance served alongside project content rules. This is

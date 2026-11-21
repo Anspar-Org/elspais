@@ -13,6 +13,7 @@ command decides what goes into it; nothing else writes it.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -70,8 +71,25 @@ class ReviewRecordError(ValueError):
     """The record does not read as the tables this module writes."""
 
 
+# A cell divider is a pipe no backslash escapes; a pipe inside a cell -- in a
+# reviewer's name or a path -- is written escaped, as Markdown tables read it.
+_DIVIDER = re.compile(r"(?<!\\)\|")
+
+
+def _escape(cell: str) -> str:
+    return cell.replace("\\", "\\\\").replace("|", "\\|")
+
+
+def _unescape(cell: str) -> str:
+    return re.sub(r"\\(.)", r"\1", cell)
+
+
 def _cells(line: str) -> list[str]:
-    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+    inner = line.strip()
+    inner = inner[1:] if inner.startswith("|") else inner
+    if inner.endswith("|") and not inner.endswith("\\|"):
+        inner = inner[:-1]
+    return [_unescape(cell.strip()) for cell in _DIVIDER.split(inner)]
 
 
 def _is_rule(cells: list[str]) -> bool:
@@ -143,6 +161,7 @@ def read_record(repo_root: Path) -> ReviewRecord:
 def _table(columns: tuple[str, ...], rows: list[tuple[str, ...]]) -> list[str]:
     if not rows:
         return [_NONE]
+    rows = [tuple(_escape(cell) for cell in row) for row in rows]
     widths = [max(len(columns[i]), *(len(row[i]) for row in rows)) for i in range(len(columns))]
 
     def line(cells: tuple[str, ...]) -> str:
