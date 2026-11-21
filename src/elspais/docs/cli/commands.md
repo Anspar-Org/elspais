@@ -15,6 +15,7 @@ Complete reference for all elspais commands.
 | `changed` | Reports | Detect git changes to spec files |
 | `pdf` | Reports | Compile spec files into a PDF document |
 | `search` | Reports | Search requirements by keyword |
+| `files` | Reports | Name the requirements each given file defines, implements, verifies or validates |
 | `test` | Reports | Execute test targets and record their results, evaluating no check |
 | `fingerprint` | Reports | Record the fingerprint of a test run elspais did not execute |
 | `evidence` | Reports | Write or verify the Evidence Snapshot: one test run's results, bound to the tree |
@@ -670,6 +671,65 @@ has been — an agent that applies a change and then reasons for an hour
 sends nothing the whole time, and still has its daemon at the end of it.
 A daemon auto-started for a session ends when that session's clients are
 gone, whatever `cli_ttl` says — see "Daemon lifetime" below.
+
+## files
+
+Name the requirements each given file defines, implements, verifies or
+validates.
+
+  $ elspais files src/auth/login.py                # One file
+  $ elspais files spec/prd-auth.md tests/test_login.py
+  $ git diff --name-only main | xargs elspais files # Every changed file
+  $ elspais files src/auth/login.py --format json  # JSON output
+
+**Options:**
+
+  `PATH [PATH ...]`       Files to ask about, relative to the repository
+                          root or absolute (an absolute path may lie in any
+                          federation member)
+  `--format {text,json}`  Output format (default: text)
+  `-o, --output PATH`     Write output to file instead of stdout
+  `--no-daemon`           Skip daemon, rebuild graph locally
+
+Each path named gets one answer, in the order named. Its status is one of:
+
+  `scanned`      The scan read the file. The answer gives the role the scan
+                 gave it (spec, journey, code, test, result, config) and
+                 every requirement and assertion it links to, each with the
+                 kind of link: `defines`, `implements`, `verifies` or
+                 `validates`. A scanned file with no link reads `no link`.
+  `not_scanned`  A file exists there, but no scan selects it, so the tool
+                 cannot see what it names. Where the file carries a
+                 Traceability keyword the scan declined, the answer says so
+                 (`declined_citations` in JSON).
+  `no_file`      Nothing exists at that path.
+
+A spec file defines each requirement it holds and each of its assertions;
+the `Implements:` and `Refines:` lines of those requirements are not
+reported as the file's links. Template instances are not reported.
+
+A citation in a scanned file that produced no link is listed with the file
+rather than dropped: `unresolved` for a reference that names nothing the
+federation holds (with its kind and fault), `unbound` for a citation that
+binds to no test (with its line).
+
+The answer reflects the working tree, uncommitted changes included. Through
+a running daemon the command rebuilds a stale graph before answering,
+unless the daemon holds unsaved mutations. A file that changed, appeared or
+went away after the answering graph was built is marked stale
+(`current: false` in JSON) rather than presented as current. The command
+changes no file and no graph state.
+
+**JSON shape:** `{"files": [...]}`, plus `graph_predates` when the serving
+process knows files changed since its build. Each entry carries `path`,
+`relative_path`, `namespace`, `status`, `role` (scanned files only),
+`current`, `links` (`kind`, `id`, `requirement`), `unresolved`
+(`reference`, `kind`, `fault`), `unbound` (`reference`, `line`) and
+`declined_citations`.
+
+The same answer is served to agents as the MCP tool
+`get_file_requirements(paths)`, and over HTTP as
+`GET /api/files?paths=<JSON array>`.
 
 ## viewer
 

@@ -1122,6 +1122,49 @@ class TestMCPChangedRequirements:
         assert isinstance(result, (list, dict))
 
 
+class TestFilesCommandAndTool:
+    """`elspais files` and MCP get_file_requirements give one answer."""
+
+    PATHS = [
+        "src/auth.py",
+        "src/auth_multi.py",
+        "tests/test_auth.py",
+        "spec/NOTES.md",
+        "spec/drafts/wip-ideas.md",
+        "src/no_such_file.py",
+    ]
+
+    # Verifies: REQ-d00335-C
+    def test_cli_json_and_mcp_tool_give_equal_files(self, project, mcp_server):
+        from .helpers import mcp_call
+
+        result = run_elspais("files", *self.PATHS, "--format", "json", cwd=project)
+        assert result.returncode == 0, f"files failed: {result.stderr}"
+        cli_files = json.loads(result.stdout)["files"]
+
+        tool = mcp_call(mcp_server, "get_file_requirements", {"paths": list(self.PATHS)})
+        assert "_error" not in tool, tool
+        assert tool["files"] == cli_files
+
+        by_path = {entry["path"]: entry for entry in cli_files}
+        multi = [(link["kind"], link["id"]) for link in by_path["src/auth_multi.py"]["links"]]
+        assert multi == [("implements", "REQ-d00001-A"), ("implements", "REQ-d00001-B")]
+        assert [e["status"] for e in cli_files] == [
+            "scanned",
+            "scanned",
+            "scanned",
+            "not_scanned",
+            "not_scanned",
+            "no_file",
+        ]
+
+    # Verifies: REQ-d00335-A
+    def test_cli_with_no_path_is_a_usage_error(self, project):
+        result = run_elspais("files", cwd=project)
+        assert result.returncode == 1
+        assert result.stderr.strip()
+
+
 # ===================================================================
 # Group 3: CLI mutation tests (incremental, run on project directly)
 # ===================================================================

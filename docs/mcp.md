@@ -67,6 +67,7 @@ These tools query data without modifying files:
 |------|-------------|
 | `search()` | Search requirements by query pattern in specified fields |
 | `get_requirement()` | Get complete details for a single requirement by ID |
+| `get_file_requirements(paths)` | Requirements each named file defines, implements, verifies or validates |
 
 ### Graph Tools
 

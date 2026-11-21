@@ -710,6 +710,26 @@ class SearchArgs:
 
 
 # ---------------------------------------------------------------------------
+# Files command
+# ---------------------------------------------------------------------------
+@dataclasses.dataclass
+class FilesArgs:
+    """Name the requirements each given file defines, implements, verifies or validates."""
+
+    paths: tyro.conf.Positional[tuple[str, ...]] = ()
+    """Files to ask about, relative to the repository root or absolute."""
+
+    format: Literal["text", "json"] = "text"
+    """Output format."""
+
+    output: Annotated[Path | None, tyro.conf.arg(aliases=["-o"])] = None
+    """Write output to file instead of stdout."""
+
+    no_daemon: bool = False
+    """Skip daemon, rebuild graph locally."""
+
+
+# ---------------------------------------------------------------------------
 # Version command
 # ---------------------------------------------------------------------------
 @dataclasses.dataclass
@@ -1494,6 +1514,7 @@ Command = (
     | Annotated[ChangedArgs, tyro.conf.subcommand("changed")]
     | Annotated[AnalysisArgs, tyro.conf.subcommand("analysis")]
     | Annotated[SearchArgs, tyro.conf.subcommand("search")]
+    | Annotated[FilesArgs, tyro.conf.subcommand("files")]
     | Annotated[VersionArgs, tyro.conf.subcommand("version")]
     | Annotated[InitArgs, tyro.conf.subcommand("init")]
     | Annotated[ExampleArgs, tyro.conf.subcommand("example")]
@@ -1565,6 +1586,7 @@ COMMAND_GROUPS: dict[str, str] = {
     "malformed": "Gaps & Issues",
     "uncited": "Gaps & Issues",
     "search": "Reports",
+    "files": "Reports",
     "analysis": "Authoring",
     "fix": "Authoring",
     "edit": "Authoring",

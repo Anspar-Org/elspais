@@ -6466,6 +6466,11 @@ The graph is the single source of truth - all tools read directly from it.
   - Returns results with scope context metadata
 - `get_requirement(req_id)` - Full details with assertions and relationships
 - `get_hierarchy(req_id)` - Ancestors (to roots) and direct children
+- `get_file_requirements(paths)` - Requirements each named file defines,
+  implements, verifies or validates
+  - paths: relative to the repository root, or absolute in any federation member
+  - each entry: status (scanned / not_scanned / no_file), role, links with
+    their kind, unresolved and unbound citations, and whether it is current
 - `minimize_requirement_set(req_ids, edge_kinds="")` - Prune to most-specific
   - Removes ancestors that are superseded by more-specific descendants
   - Returns minimal_set, pruned items with superseded_by, and stats
@@ -7181,6 +7186,37 @@ def create_server(
         reviewing spec modifications before commit, or finding moved requirements.
         """
         return _get_changed_requirements(_state["graph"])
+
+    # Implements: REQ-d00335-A, REQ-p00015-E
+    @mcp.tool()
+    def get_file_requirements(paths: list[str]) -> dict[str, Any]:
+        """Name the requirements and assertions each given file defines,
+        implements, verifies or validates, read from the working tree.
+
+        Each path is relative to the repository root or absolute (in any
+        federation member). Each entry gives the file's status (scanned,
+        not_scanned or no_file), its role, its links (kind and identifier),
+        any citation that named nothing or bound to no test, and whether the
+        graph is current for it.
+
+        Use when: you hold a set of changed files and need the requirements
+        they bear on, e.g. to find two changes that meet at one requirement.
+        """
+        from elspais.commands._requests import FilesRequest
+        from elspais.commands.files_cmd import compute_files
+        from elspais.server.watch import graph_predates
+
+        result = compute_files(
+            _state["graph"],
+            _state["config"],
+            FilesRequest(paths=tuple(paths)),
+            built_at=_state["build_time"],
+        )
+        # Implements: REQ-d00313-C
+        predates = graph_predates(_state)
+        if predates:
+            result["graph_predates"] = predates
+        return result
 
     @mcp.tool()
     def agent_instructions() -> dict[str, Any]:

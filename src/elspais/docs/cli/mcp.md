@@ -230,6 +230,44 @@ Get requirement hierarchy (ancestors and children).
   Use this to understand where a requirement sits in the hierarchy
   and what depends on it.
 
+**get_file_requirements(paths)**
+
+Name the requirements and assertions each given file defines, implements,
+verifies or validates, read from the working tree. The answer is the one
+`elspais files --format json` prints.
+
+  Parameters:
+    paths (list[str])  Files to ask about, each relative to the repository
+                       root or absolute (in any federation member)
+
+  Returns:
+    files           One entry per path named, in order:
+      - path, relative_path, namespace
+      - status        `scanned`, `not_scanned` (a file the scan does not
+                      select) or `no_file` (nothing at that path)
+      - role          spec, journey, code, test, result or config
+                      (scanned files only)
+      - current       false where the file changed, appeared or went away
+                      after the answering graph was built
+      - links         {kind, id, requirement}; kind is `defines`,
+                      `implements`, `verifies` or `validates`
+      - unresolved    {reference, kind, fault}: citations naming nothing held
+      - unbound       {reference, line}: citations binding to no test
+      - declined_citations  true for a not-scanned file carrying a
+                      Traceability keyword
+    graph_predates  Present when the server knows files changed since its
+                    build
+
+  A spec file defines each requirement it holds and each of its assertions;
+  those requirements' own `Implements:`/`Refines:` lines are not its links.
+  Template instances are not reported. The tool changes nothing.
+
+  Use this when you hold a set of changed files and need the requirements
+  they bear on, e.g. to find two changes that meet at one requirement.
+
+  Example:
+    get_file_requirements(["src/auth/login.py", "tests/test_login.py"])
+
 ### Workspace Context
 
 **get_workspace_info(detail="default")**

@@ -35,6 +35,17 @@ Use `-v` to see the root and where each associate path resolved:
   **Moved** - Requirement relocated to different file
   **vs Main** - Changes compared to main/master branch
 
+## Requirements a Change Touches
+
+`elspais changed` reports spec changes. To ask which requirements a set of
+changed files bears on -- code, tests and journeys as well as spec files --
+hand the paths to `elspais files`:
+
+  $ git diff --name-only main | xargs elspais files
+
+Each file is answered with the requirements it defines, implements,
+verifies or validates (see `elspais docs commands`, section `files`).
+
 ## In Trace View
 
 The interactive viewer (`elspais viewer`) shows:

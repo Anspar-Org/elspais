@@ -128,6 +128,18 @@ def _mtime(path: Path) -> float | None:
         return None
 
 
+# Implements: REQ-p00015-E
+def changed_since(path: Path, built_at: float) -> bool:
+    """Whether the file at *path* was written after a graph built at *built_at*.
+
+    Judges one named file against one build time, for an answer about that
+    file: a graph built before the file's last write may hold an older
+    reading of it. A file that does not exist was not written after anything.
+    """
+    when = _mtime(path)
+    return when is not None and when > built_at
+
+
 def snapshot(watch: WatchSet) -> dict[str, float]:
     """Return the modification time of every file in *watch* that exists now."""
     from elspais.graph.factory import kind_files, scan_plan

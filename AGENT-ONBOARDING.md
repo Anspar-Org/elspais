@@ -101,6 +101,7 @@ for what a stdio server gives up.
 | Orient yourself             | `get_workspace_info()`, `get_project_summary()`|
 | Find requirements           | `search(query)`, `discover_requirements()`     |
 | Read a requirement          | `get_requirement(id)`, `get_hierarchy(id)`     |
+| Requirements a file names   | `get_file_requirements(paths)`                 |
 | Find coverage gaps          | `get_uncovered_assertions()`                   |
 | Get authoring rules         | `agent_instructions()`                         |
 | Browse documentation        | `docs(topic)`, `faq(topic)`                    |
@@ -522,5 +523,6 @@ Before finalizing an assertion, verify:
 | `elspais viewer`     | Interactive HTML traceability viewer       |
 | `elspais search`     | Find requirements by keyword               |
 | `elspais changed`    | Show requirements with uncommitted changes |
+| `elspais files`      | Requirements each named file links to      |
 | `elspais docs`       | Browse built-in documentation              |
 | `elspais mcp serve`  | Start the MCP server                       |
